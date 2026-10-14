@@ -8,7 +8,7 @@ from PyQt6.QtGui import (
 )
 
 class Particle:
-    """浮动特效粒子 (爱心、星星、泡泡、Zzz、进化金辉)"""
+    """浮动特效粒子 (爱心、星星、泡泡、Zzz、进化金辉、小脚印、软萌尘埃)"""
     def __init__(self, x, y, particle_type="heart", text=None, vx=None, vy=None, color=None):
         self.x = x
         self.y = y
@@ -26,6 +26,15 @@ class Particle:
     def update(self):
         self.x += self.vx
         self.y += self.vy
+        if self.particle_type == "dust":
+            # 尘埃减速消散并轻微膨胀
+            self.vx *= 0.88
+            self.vy *= 0.88
+            self.size += 0.35
+        elif self.particle_type == "pawprint":
+            # 脚印贴地静止，仅随时间渐隐
+            self.vx = 0.0
+            self.vy = 0.0
         self.life -= self.decay
         self.alpha = max(0, int(self.life * 255))
         return self.life > 0
@@ -49,6 +58,45 @@ class PetRenderer:
         self.petting_timer = 0.0
         self.bath_timer = 0.0
         self.evolution_aura_timer = 0.0
+
+        # 灵性视觉与动态物理参数
+        self.landing_timer = 0.0      # 落地触地果冻阻尼震颤计时
+        self.drag_vx = 0.0            # 拖拽时水平速度 (用于身体风阻倾角与拉伸)
+        self.target_gaze_x = 0.0      # 视线目标 X (-1.0 ~ 1.0)
+        self.target_gaze_y = 0.0      # 视线目标 Y (-1.0 ~ 1.0)
+        self.current_gaze_x = 0.0     # 当前平滑插值眼神 X
+        self.current_gaze_y = 0.0     # 当前平滑插值眼神 Y
+
+    def set_cursor_gaze(self, gaze_x, gaze_y):
+        """设置鼠标光标引起的眼神注视目标方位"""
+        self.target_gaze_x = gaze_x
+        self.target_gaze_y = gaze_y
+
+    def trigger_landing_bounce(self):
+        """落地触地果冻弹性震颤与地面灰尘冲击环"""
+        self.landing_timer = 0.42
+        for _ in range(5):
+            vx = random.uniform(-2.8, 2.8)
+            vy = random.uniform(-0.9, -0.2)
+            p = Particle(100 + vx * 6, 140, "dust", vx=vx, vy=vy)
+            p.size = random.uniform(9, 15)
+            p.decay = 0.045
+            self.particles.append(p)
+
+    def trigger_step_poof(self, facing_left):
+        """漫步落脚时留下可爱小脚印与微尘烟圈"""
+        foot_x = 100 + (16 if facing_left else -16)
+        foot_y = 142
+        # 生成小肉垫印
+        p_paw = Particle(foot_x, foot_y, "pawprint")
+        p_paw.decay = 0.025
+        p_paw.rotation = random.uniform(-10, 10)
+        self.particles.append(p_paw)
+        # 生成微量轻盈小烟圈
+        p_dust = Particle(foot_x, foot_y - 2, "dust", vx=random.uniform(-0.6, 0.6), vy=random.uniform(-0.5, -0.2))
+        p_dust.size = random.uniform(6, 10)
+        p_dust.decay = 0.06
+        self.particles.append(p_dust)
 
     def trigger_eat(self, food_type):
         food_emojis = {
@@ -88,6 +136,19 @@ class PetRenderer:
 
     def update_animation(self, delta_time, current_state):
         self.anim_time += delta_time
+
+        # 平滑缓动眼神跟随 (注视光标)
+        if self.model.is_sleeping or current_state in ("HAPPY_SPIN", "DIZZY", "WASH_FACE", "STRETCH_YAWN"):
+            target_gx, target_gy = 0.0, 0.0
+        else:
+            target_gx, target_gy = self.target_gaze_x, self.target_gaze_y
+        lerp_factor = min(1.0, delta_time * 9.0)
+        self.current_gaze_x += (target_gx - self.current_gaze_x) * lerp_factor
+        self.current_gaze_y += (target_gy - self.current_gaze_y) * lerp_factor
+
+        # 落地果冻计时更新
+        if self.landing_timer > 0:
+            self.landing_timer -= delta_time
 
         # 眨眼逻辑
         now = time.time()
@@ -144,7 +205,8 @@ class PetRenderer:
 
         self.particles = [p for p in self.particles if p.update()]
 
-    def render(self, painter: QPainter, width, height, state, facing_left=False):
+    def render(self, painter: QPainter, width, height, state, facing_left=False, drag_vx=0.0):
+        self.drag_vx = drag_vx
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
@@ -188,8 +250,12 @@ class PetRenderer:
             squash_x = 1.25
             squash_y = 0.78
         elif state == "DRAGGING":
-            squash_x = 0.90
-            squash_y = 1.12
+            # 抓起悬空拎后颈皮风阻动力学：随拖拽水平速度产生倾角摆动与上下弹性拉伸
+            drag_speed = abs(self.drag_vx)
+            speed_stretch = min(0.15, drag_speed * 0.0003)
+            squash_x = max(0.80, 0.90 - speed_stretch * 0.6)
+            squash_y = min(1.24, 1.12 + speed_stretch)
+            tilt_angle += max(-24.0, min(24.0, -self.drag_vx * 0.06))
         elif state in ("WALK_LEFT", "WALK_RIGHT"):
             breath_offset = abs(math.sin(self.anim_time * 8.0)) * 6.0
             squash_x = 1.0 + math.sin(self.anim_time * 8.0) * 0.05
@@ -222,6 +288,19 @@ class PetRenderer:
             squash_y = 0.95
         elif self.model.is_sleeping:
             breath_offset = math.sin(self.anim_time * 1.8) * 2.0
+        elif state == "IDLE":
+            # 眼神视线微倾头 (目光看哪边，脑袋轻轻微偏向哪边)
+            tilt_angle += self.current_gaze_x * 4.5
+
+        # 落地果冻 Q 弹动力学形变 (阻尼正弦衰减震颤)
+        if self.landing_timer > 0:
+            elapsed = 0.42 - self.landing_timer
+            progress = min(1.0, elapsed / 0.42)
+            decay = max(0.0, 1.0 - progress)
+            jelly_wave = math.sin(progress * math.pi * 3.5) * 0.28 * decay
+            squash_x *= (1.0 + jelly_wave)
+            squash_y *= (1.0 - jelly_wave)
+            breath_offset += jelly_wave * 14.0
 
         if stage == "BABY":
             squash_x *= 0.95
@@ -794,6 +873,12 @@ class PetRenderer:
             draw_single_paw(-35, 40, 22, 14, -28, 45, 8, 6)
             swat_y = -10 + math.sin(self.anim_time * 14.0) * 12.0
             draw_single_paw(20, swat_y, 22, 16, 25, swat_y + 4, 8, 7)
+        elif state in ("DRAGGING", "FALLING"):
+            # 被拎起悬空或自由落体：小肉垫爪爪在空中紧张又可爱地交替快速乱蹬
+            kick_l = math.sin(self.anim_time * 22.0) * 11.0
+            kick_r = math.cos(self.anim_time * 22.0) * 11.0
+            draw_single_paw(-34, 40 + kick_l, 24, 16, -27, 46 + kick_l, 10, 7)
+            draw_single_paw(10, 40 + kick_r, 24, 16, 17, 46 + kick_r, 10, 7)
         else:
             leg_offset = math.sin(self.anim_time * 8.0) * 6.0 if state in ("WALK_LEFT", "WALK_RIGHT") else 0.0
             draw_single_paw(-36, 38 + leg_offset, 25, 17, -29, 44 + leg_offset, 11, 8)
@@ -1350,6 +1435,10 @@ class PetRenderer:
             self._draw_sleeping_face(painter)
             return
 
+        if state in ("DRAGGING", "FALLING"):
+            self._draw_surprised_dangle_face(painter, eye_l_col, eye_r_col)
+            return
+
         if state == "STRETCH_YAWN":
             self._draw_yawn_face(painter)
             return
@@ -1379,6 +1468,35 @@ class PetRenderer:
         else:
             self._draw_normal_eyes(painter, eye_l_col, eye_r_col)
         self._draw_standard_mouth(painter)
+
+    def _draw_surprised_dangle_face(self, painter: QPainter, col_l, col_r):
+        # 拎起/下落时惊萌圆溜溜大眼 (O O) 与圆圆小口 ("o")
+        gaze_ox = getattr(self, "current_gaze_x", 0.0) * 2.5
+        gaze_oy = getattr(self, "current_gaze_y", 0.0) * 2.0
+        for ex, col in [(-19, col_l), (19, col_r)]:
+            # 超圆大眼框
+            painter.setBrush(QBrush(col.darker(120)))
+            painter.setPen(QPen(QColor("#150A06"), 1.8))
+            painter.drawEllipse(QRectF(ex - 9, -15, 18, 20))
+            # 惊吓小闪光大瞳仁 (随视线微动)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 250)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(ex - 5 + gaze_ox, -13 + gaze_oy, 7, 8))
+            painter.drawEllipse(QRectF(ex + 1 + gaze_ox * 0.5, -6 + gaze_oy * 0.5, 4, 4))
+
+        # 害羞/紧张小腮红
+        for bx in [-30, 30]:
+            painter.setBrush(QBrush(QColor(255, 120, 150, 160)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(bx - 8, 4, 16, 10))
+
+        # 紧张张开的圆圆小口 ("o")
+        painter.setBrush(QBrush(QColor("#D94F4F")))
+        painter.setPen(QPen(QColor("#543D37"), 2))
+        painter.drawEllipse(QRectF(-4, 7, 8, 9))
+        painter.setBrush(QBrush(QColor("#FFAAAA")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-2.5, 11, 5, 4))
 
     def _draw_yawn_face(self, painter: QPainter):
         # 眯眼打哈欠 (> <)
@@ -1442,18 +1560,20 @@ class PetRenderer:
         painter.drawEllipse(QRectF(-4, 7, 8, 7))
 
     def _draw_curious_face(self, painter: QPainter, col_l, col_r):
+        gaze_ox = getattr(self, "current_gaze_x", 0.0) * 3.5
+        gaze_oy = getattr(self, "current_gaze_y", 0.0) * 2.5
         # 歪头好奇大眼睛 (左眼水汪汪超大，右眼萌眨)
         painter.setPen(QPen(col_l, 1))
         painter.setBrush(QBrush(col_l))
         painter.drawEllipse(QRectF(-29, -17, 20, 24))
         painter.drawEllipse(QRectF(10, -14, 16, 20))
 
-        # 亮闪闪大高光
+        # 亮闪闪大高光 (随视线微动)
         painter.setBrush(QBrush(QColor(255, 255, 255, 245)))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QRectF(-26, -15, 9, 11))
-        painter.drawEllipse(QRectF(13, -12, 7, 9))
-        painter.drawEllipse(QRectF(-17, -4, 5, 5))
+        painter.drawEllipse(QRectF(-26 + gaze_ox, -15 + gaze_oy, 9, 11))
+        painter.drawEllipse(QRectF(13 + gaze_ox, -12 + gaze_oy, 7, 9))
+        painter.drawEllipse(QRectF(-17 + gaze_ox * 0.5, -4 + gaze_oy * 0.5, 5, 5))
 
         self._draw_standard_mouth(painter)
 
@@ -1558,10 +1678,14 @@ class PetRenderer:
         # 幼年期眼睛更大更萌
         eye_w, eye_h = (18, 23) if self.model.stage == "BABY" else (16, 21)
 
+        # 眼神视线追踪光标微动偏移 (范围：X轴 ±3.8px，Y轴 ±2.8px)
+        gaze_ox = getattr(self, "current_gaze_x", 0.0) * 3.8
+        gaze_oy = getattr(self, "current_gaze_y", 0.0) * 2.8
+
         for ex, col in [(-19, col_l), (19, col_r)]:
             eye_rect = QRectF(ex - eye_w / 2.0, -15, eye_w, eye_h)
 
-            # 3D 琉璃眼眶渐变 (顶部眼睑暗影 -> 中部虹膜色 -> 底部剔透光泽)
+            # 3D 琉璃眼眶渐变 (外轮廓眼眶保持头部原生位置)
             e_grad = QLinearGradient(ex, -15, ex, 6)
             e_grad.setColorAt(0.0, QColor("#1A0C08"))
             e_grad.setColorAt(0.5, col.darker(115))
@@ -1570,22 +1694,28 @@ class PetRenderer:
             painter.setPen(QPen(QColor("#150A06"), 1.2))
             painter.drawEllipse(eye_rect)
 
-            # 下眼眶琉璃月牙光泽 (Caustic Glow)
+            # 内部深色瞳孔 (随眼神注视焦点平滑移动)
+            pupil_w, pupil_h = eye_w * 0.58, eye_h * 0.65
+            pupil_rect = QRectF(ex - pupil_w / 2.0 + gaze_ox, -13 + gaze_oy, pupil_w, pupil_h)
+            painter.setBrush(QBrush(QColor("#110805")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(pupil_rect)
+
+            # 下眼眶琉璃月牙光泽 (Caustic Glow，随虹膜微偏)
             iris_glow = QPainterPath()
-            iris_glow.addEllipse(QRectF(ex - eye_w / 2.0 + 2, -5, eye_w - 4, 9))
+            iris_glow.addEllipse(QRectF(ex - eye_w / 2.0 + 2 + gaze_ox * 0.35, -5 + gaze_oy * 0.35, eye_w - 4, 9))
             g_iris = QLinearGradient(ex, -5, ex, 5)
             g_iris.setColorAt(0.0, QColor(255, 255, 255, 0))
-            g_iris.setColorAt(1.0, QColor(col.red(), col.green(), col.blue(), 155))
+            g_iris.setColorAt(1.0, QColor(col.red(), col.green(), col.blue(), 165))
             painter.setBrush(QBrush(g_iris))
-            painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(iris_glow)
 
-            # 璀璨星芒高光 (主大高光 + 副灵动星芒)
+            # 璀璨星芒高光 (主大高光随角膜光照微偏，次高光跟随瞳孔形成真实晶状体视差)
             painter.setBrush(QBrush(QColor(255, 255, 255, 250)))
-            painter.drawEllipse(QRectF(ex - 6.5, -13, 6.5, 9.0))
-            painter.drawEllipse(QRectF(ex + 1.5, -4.5, 3.8, 3.8))
+            painter.drawEllipse(QRectF(ex - 6.5 + gaze_ox * 0.25, -13 + gaze_oy * 0.25, 6.5, 9.0))
+            painter.drawEllipse(QRectF(ex + 1.5 + gaze_ox * 0.7, -4.5 + gaze_oy * 0.7, 3.8, 3.8))
             painter.setBrush(QBrush(QColor(255, 255, 255, 180)))
-            painter.drawEllipse(QRectF(ex - 4, 1, 2.5, 2.5))
+            painter.drawEllipse(QRectF(ex - 4 + gaze_ox * 0.5, 1 + gaze_oy * 0.5, 2.5, 2.5))
 
     def _draw_standard_mouth(self, painter: QPainter):
         painter.setBrush(QBrush(QColor("#FFA5A5")))
@@ -1937,5 +2067,23 @@ class PetRenderer:
                 painter.setFont(QFont("Comic Sans MS", int(p.size), QFont.Weight.Bold))
                 painter.setPen(QColor(120, 140, 230, p.alpha))
                 painter.drawText(0, 0, p.text)
+
+            elif p.particle_type == "dust":
+                # 漫步或落地触地柔和微尘烟圈
+                painter.setBrush(QBrush(QColor(240, 244, 255, int(p.alpha * 0.75))))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QRectF(-p.size / 2, -p.size * 0.38, p.size, p.size * 0.75))
+
+            elif p.particle_type == "pawprint":
+                # 漫步时留在地面上的粉嫩可爱小肉垫爪印
+                painter.rotate(p.rotation)
+                paw_col = QColor(255, 155, 180, int(p.alpha * 0.65))
+                painter.setBrush(QBrush(paw_col))
+                painter.setPen(Qt.PenStyle.NoPen)
+                # 掌心主肉垫
+                painter.drawEllipse(QRectF(-5, -2, 10, 8))
+                # 4个圆圆小脚趾
+                for tox, toy in [(-5, -6), (-2, -8), (2, -8), (5, -6)]:
+                    painter.drawEllipse(QRectF(tox - 1.5, toy - 1.5, 3.5, 4.0))
 
             painter.restore()

@@ -35,12 +35,16 @@ class PetWindow(QWidget):
         self.gravity = 1800.0  # 像素/秒^2
         self.bounce_damping = 0.38
 
-        # 拖拽相关
+        # 拖拽与动态物理
         self.is_dragging = False
         self.drag_start_pos = QPoint()
         self.mouse_press_pos = QPoint()
         self.stroke_distance = 0.0
         self.anchor_y = None
+        self.drag_vx = 0.0
+        self.drag_vy = 0.0
+        self._last_drag_time = time.time()
+        self.step_accum = 0.0
 
         # 自主漫步AI
         self.walk_target_x = 0
@@ -160,6 +164,18 @@ class PetWindow(QWidget):
         now = time.time()
         dt = min(0.05, now - self.last_tick_time)
         self.last_tick_time = now
+
+        # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪
+        cursor_pos = QCursor.pos()
+        pet_center_x = self.x() + self.width() / 2.0
+        pet_center_y = self.y() + self.height() / 2.0 - 15.0
+        dx = cursor_pos.x() - pet_center_x
+        dy = cursor_pos.y() - pet_center_y
+        if self.facing_left:
+            dx = -dx
+        gaze_x = max(-1.0, min(1.0, dx / 220.0))
+        gaze_y = max(-1.0, min(1.0, dy / 180.0))
+        self.renderer.set_cursor_gaze(gaze_x, gaze_y)
 
         # 更新渲染器与粒子
         self.renderer.update_animation(dt, self.state)
@@ -293,6 +309,7 @@ class PetWindow(QWidget):
             if new_y >= floor_y:
                 new_y = floor_y
                 self.anchor_y = floor_y
+                self.renderer.trigger_landing_bounce()
                 # 落地反弹判断
                 if abs(self.vy) > 280:
                     self.vy = -self.vy * self.bounce_damping
@@ -368,6 +385,7 @@ class PetWindow(QWidget):
                 dx = self.walk_target_x - current_x
                 if abs(dx) < 4.0:
                     self.state = "IDLE"
+                    self.step_accum = 0.0
                     self.next_action_time = now + random.uniform(4.0, 10.0)
                 else:
                     step = speed * dt
@@ -376,6 +394,11 @@ class PetWindow(QWidget):
                     else:
                         new_x = min(avail.right() - self.width() - 20, current_x + step)
                     self.move(int(new_x), int(target_ground_y))
+                    # 漫步步频积累与足印/轻尘微粒发射
+                    self.step_accum += dt * 8.0
+                    if self.step_accum >= math.pi:
+                        self.step_accum -= math.pi
+                        self.renderer.trigger_step_poof(self.facing_left)
 
     def _finish_bounce(self):
         if self.state == "BOUNCE":
@@ -418,6 +441,9 @@ class PetWindow(QWidget):
             self.mouse_press_pos = event.globalPosition().toPoint()
             self.drag_start_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self.stroke_distance = 0.0
+            self.drag_vx = 0.0
+            self.drag_vy = 0.0
+            self._last_drag_time = time.time()
 
         elif event.button() == Qt.MouseButton.RightButton:
             self._open_quick_menu()
@@ -464,10 +490,21 @@ class PetWindow(QWidget):
             move_delta = (current_pos - self.mouse_press_pos).manhattanLength()
 
             if move_delta > 8:
+                now_t = time.time()
+                dt_drag = max(0.001, now_t - self._last_drag_time)
+                new_pos = current_pos - self.drag_start_pos
+                old_x, old_y = self.x(), self.y()
+                # 平滑计算拖拽水平与垂直速度 (以获得生动风阻倾角与抓起蹬腿动效)
+                vx_inst = (new_pos.x() - old_x) / dt_drag
+                vy_inst = (new_pos.y() - old_y) / dt_drag
+                self.drag_vx = self.drag_vx * 0.6 + vx_inst * 0.4
+                self.drag_vy = self.drag_vy * 0.6 + vy_inst * 0.4
+                self._last_drag_time = now_t
+
                 if not self.is_dragging:
                     self.is_dragging = True
                     self.state = "DRAGGING"
-                self.move(current_pos - self.drag_start_pos)
+                self.move(new_pos)
             else:
                 # 鼠标在宠物头上轻微晃动视为“抚摸”
                 self.stroke_distance += move_delta
@@ -499,12 +536,22 @@ class PetWindow(QWidget):
                 self.model.last_pos_y = self.y()
                 self.model.save_to_disk()
 
+                floor_y = self.get_floor_y()
                 if self.model.enable_gravity:
-                    self.vy = 0.0
-                    self.state = "FALLING"
+                    if self.y() < floor_y - 2:
+                        self.state = "FALLING"
+                        self.vy = max(0.0, self.drag_vy * 0.3)
+                    else:
+                        self.vy = 0.0
+                        self.state = "IDLE"
+                        self.renderer.trigger_landing_bounce()
                 else:
                     self.vy = 0.0
                     self.state = "IDLE"
+                    self.renderer.trigger_landing_bounce()
+
+                self.drag_vx = 0.0
+                self.drag_vy = 0.0
             else:
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
                 self.model.pet_head()
@@ -531,8 +578,8 @@ class PetWindow(QWidget):
         w = self.width()
         h = self.height()
 
-        # 绘制宠物本体 (气泡已升级为独立浮动卡片窗口，彻底避免耳朵与头饰遮挡)
-        self.renderer.render(painter, w, h, self.state, self.facing_left)
+        # 绘制宠物本体 (传入 drag_vx 驱动风阻倾角与抓起蹬腿动效)
+        self.renderer.render(painter, w, h, self.state, self.facing_left, drag_vx=getattr(self, "drag_vx", 0.0))
 
     def closeEvent(self, event):
         self.model.last_pos_x = self.x()
