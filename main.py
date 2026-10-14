@@ -17,9 +17,29 @@ def set_windows_app_id():
     except Exception:
         pass
 
+def setup_crash_logger():
+    """未捕获异常崩溃日志记录"""
+    import traceback
+    import time
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        log_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "ElectricPet")
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "crash.log")
+        try:
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"\n--- Crash at {time.ctime()} ---\n")
+                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+        except Exception:
+            pass
+    sys.excepthook = handle_exception
+
 def main():
     # 启用高分屏清晰缩放与反锯齿
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    setup_crash_logger()
     set_windows_app_id()
 
     app = QApplication(sys.argv)

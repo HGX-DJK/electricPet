@@ -93,7 +93,8 @@ class PetWindow(QWidget):
         else:
             default_x = avail.right() - self.width() - 80
             default_y = avail.bottom() - self.height()
-            if self.model.last_pos_x is not None and self.model.last_pos_y is not None:
+            if (self.model.last_pos_x is not None and self.model.last_pos_y is not None and
+                    not (self.model.last_pos_x == 0 and self.model.last_pos_y == 0)):
                 init_x = max(avail.left(), min(int(self.model.last_pos_x), avail.right() - self.width()))
                 init_y = max(avail.top(), min(int(self.model.last_pos_y), avail.bottom() - self.height()))
             else:
@@ -582,9 +583,10 @@ class PetWindow(QWidget):
         self.renderer.render(painter, w, h, self.state, self.facing_left, drag_vx=getattr(self, "drag_vx", 0.0))
 
     def closeEvent(self, event):
-        self.model.last_pos_x = self.x()
-        self.model.last_pos_y = self.y()
-        self.model.save_to_disk()
+        if self.x() > 0 or self.y() > 0:
+            self.model.last_pos_x = self.x()
+            self.model.last_pos_y = self.y()
+            self.model.save_to_disk()
         if hasattr(self, "dock"):
             self.dock.close()
         if hasattr(self, "dialogue") and hasattr(self.dialogue, "bubble"):

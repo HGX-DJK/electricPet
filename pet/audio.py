@@ -245,18 +245,18 @@ class SoundManager:
         return self._create_wav_bytes(samples, sample_rate)
 
     def play(self, sound_name):
-        """异步播放指定音效"""
+        """异步播放指定音效 (在独立守护线程中同步播放，确保内存缓冲区存活，杜绝 SND_ASYNC 偶发空指针/释放后访问异常)"""
         if self.muted:
             return
         wav_bytes = self._sound_cache.get(sound_name)
         if not wav_bytes:
             return
-        def _worker():
+        def _worker(data):
             try:
-                winsound.PlaySound(wav_bytes, winsound.SND_MEMORY | winsound.SND_ASYNC)
+                winsound.PlaySound(data, winsound.SND_MEMORY)
             except Exception:
                 pass
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=_worker, args=(wav_bytes,), daemon=True).start()
 
     def toggle_mute(self):
         self.muted = not self.muted
