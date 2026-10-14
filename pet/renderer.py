@@ -160,6 +160,27 @@ class PetRenderer:
         squash_y = 1.0
         tilt_angle = 0.0
 
+        # 3D 旋转动力学解算
+        is_spin = (state == "HAPPY_SPIN")
+        spin_angle = (self.anim_time * 7.5) % (2.0 * math.pi) if is_spin else 0.0
+        cos_a = math.cos(spin_angle) if is_spin else 1.0
+        sin_a = math.sin(spin_angle) if is_spin else 0.0
+        is_front = (cos_a >= 0.0) if is_spin else True
+
+        # 3D 旋转时的立体厚度因子：侧面投影保持 75% 饱满厚度，绝不塌缩为 0 厚度纸片！
+        spin_body_scale_x = math.sqrt(cos_a * cos_a + (0.75 * sin_a) ** 2) if is_spin else 1.0
+
+        spin_info = {
+            "is_spin": is_spin,
+            "angle": spin_angle,
+            "cos_a": cos_a,
+            "sin_a": sin_a,
+            "is_front": is_front,
+            "scale_x": spin_body_scale_x,
+            "face_offset_x": 32.0 * sin_a,
+            "belly_offset_x": 24.0 * sin_a
+        }
+
         if state == "FALLING":
             squash_x = 0.88
             squash_y = 1.15
@@ -188,8 +209,10 @@ class PetRenderer:
         elif state == "TILT_HEAD":
             tilt_angle = 18.0
         elif state == "HAPPY_SPIN":
-            breath_offset = -28.0 * abs(math.sin(self.anim_time * 6.0))
-            squash_x = math.cos(self.anim_time * 10.0)
+            breath_offset = -30.0 * abs(math.sin(self.anim_time * 5.5))
+            squash_x = spin_body_scale_x
+            squash_y = 1.0 + (1.0 - spin_body_scale_x) * 0.08
+            tilt_angle = sin_a * 4.0
         elif state == "DOZE_OFF":
             tilt_angle = max(0.0, math.sin(self.anim_time * 2.2) * 18.0)
             breath_offset = 4.0
@@ -214,11 +237,20 @@ class PetRenderer:
         if stage == "ULTIMATE" or self.evolution_aura_timer > 0:
             self._draw_ultimate_aura(painter)
 
-        # 2. 背部装饰 (如翅膀、气球)
-        self._draw_back_decorations(painter)
+        # 2. 背景背部装饰 (正面时位于身体后方)
+        self._draw_back_decorations(painter, spin_info, is_foreground=False)
 
-        # 3. 底部双层立体地面投影 (Ground Dual-Layer 3D Shadow)
-        shadow_w = 96 * abs(squash_x)
+        # 3. 底部双层立体地面投影 (Ground Dual-Layer 3D Shadow, 旋转时不收缩为线)
+        if is_spin:
+            jump_ratio = min(1.0, abs(breath_offset) / 32.0)
+            shadow_w = 92.0 * (1.0 - jump_ratio * 0.15)
+            ambient_alpha = int(48 * (1.0 - jump_ratio * 0.35))
+            contact_alpha = int(80 * (1.0 - jump_ratio * 0.7))
+        else:
+            shadow_w = 96 * abs(squash_x)
+            ambient_alpha = 48
+            contact_alpha = 80
+
         if stage == "BABY":
             shadow_w *= 0.85
         elif stage == "ULTIMATE":
@@ -227,49 +259,60 @@ class PetRenderer:
         # 漫反射羽化大阴影 (羽化环境落影)
         shadow_rect = QRectF(-shadow_w / 2.0, 44 - breath_offset * 0.3, shadow_w, 20)
         shadow_grad = QRadialGradient(shadow_rect.center(), shadow_w / 2.0)
-        shadow_grad.setColorAt(0.0, QColor(0, 0, 0, 48))
-        shadow_grad.setColorAt(0.55, QColor(0, 0, 0, 20))
+        shadow_grad.setColorAt(0.0, QColor(0, 0, 0, ambient_alpha))
+        shadow_grad.setColorAt(0.55, QColor(0, 0, 0, int(ambient_alpha * 0.42)))
         shadow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setBrush(QBrush(shadow_grad))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(shadow_rect)
 
-        # 紧贴足底重力接触阴影 (Contact Shadow, 强化实体着地重力感)
+        # 紧贴足底重力接触阴影 (Contact Shadow)
         contact_w = shadow_w * 0.72
         contact_rect = QRectF(-contact_w / 2.0, 47 - breath_offset * 0.2, contact_w, 9)
         contact_grad = QRadialGradient(contact_rect.center(), contact_w / 2.0)
-        contact_grad.setColorAt(0.0, QColor(0, 0, 0, 80))
-        contact_grad.setColorAt(0.65, QColor(0, 0, 0, 25))
+        contact_grad.setColorAt(0.0, QColor(0, 0, 0, contact_alpha))
+        contact_grad.setColorAt(0.65, QColor(0, 0, 0, int(contact_alpha * 0.3)))
         contact_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
         painter.setBrush(QBrush(contact_grad))
         painter.drawEllipse(contact_rect)
+
+        # 3.5 3D 星尘环绕粒子 (背景层，位于身体后方)
+        if is_spin:
+            self._draw_spin_stardust_ring(painter, spin_angle, in_front=False)
 
         painter.translate(0, breath_offset)
         if tilt_angle != 0.0:
             painter.rotate(tilt_angle)
         painter.scale(squash_x, squash_y)
 
-        # 4. 根据皮肤绘制本体
+        # 4. 根据皮肤绘制本体 (支持 3D 旋转投影与立体背影)
         skin_id = self.model.skin_id
         if skin_id.startswith("dog"):
-            self._draw_dog(painter, state, skin_id)
+            self._draw_dog(painter, state, skin_id, spin_info)
         elif skin_id.startswith("slime"):
-            self._draw_slime(painter, state, skin_id)
+            self._draw_slime(painter, state, skin_id, spin_info)
         elif skin_id.startswith("penguin"):
-            self._draw_penguin(painter, state)
+            self._draw_penguin(painter, state, spin_info)
         else:
-            self._draw_cat(painter, state, skin_id)
+            self._draw_cat(painter, state, skin_id, spin_info)
 
-        # 5. 脖饰 (领结、围巾、铃铛)
-        self._draw_neck_decorations(painter)
+        # 5. 前景背部装饰 (背面时翅膀展现在身体前方)
+        self._draw_back_decorations(painter, spin_info, is_foreground=True)
 
-        # 6. 面饰 (眼镜、墨镜、心动贴纸)
-        self._draw_face_decorations(painter)
+        # 6. 脖饰 (领结、围巾、铃铛)
+        self._draw_neck_decorations(painter, spin_info)
 
-        # 7. 头饰 (魔法帽、派对帽、光环、王冠)
-        self._draw_head_decorations(painter)
+        # 7. 面饰 (眼镜、墨镜、心动贴纸，仅正面显示)
+        self._draw_face_decorations(painter, spin_info)
 
-        # 8. 动作专属覆盖物 (听歌耳机、追逐蝴蝶、眩晕星星)
+        # 8. 头饰 (魔法帽、派对帽、光环、王冠)
+        self._draw_head_decorations(painter, spin_info)
+
+        # 8.5 3D 星尘环绕粒子 (前景层，位于身体前方，形成真实空间景深穿插)
+        if is_spin:
+            self._draw_spin_stardust_ring(painter, spin_angle, in_front=True)
+
+        # 9. 动作专属覆盖物 (听歌耳机、追逐蝴蝶、眩晕星星)
         if state == "HEAD_BOB_MUSIC":
             self._draw_headphones(painter)
         elif state == "CHASE_BUTTERFLY":
@@ -277,7 +320,7 @@ class PetRenderer:
         elif state == "DIZZY":
             self._draw_dizzy_stars(painter)
 
-        # 9. 正在进行的进食/洗澡覆盖物
+        # 10. 正在进行的进食/洗澡覆盖物
         if self.eating_timer > 0:
             self._draw_eating_food(painter)
         if self.bath_timer > 0:
@@ -299,7 +342,64 @@ class PetRenderer:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(-aura_rad, -aura_rad - 10, aura_rad * 2, aura_rad * 2))
 
-    def _draw_back_decorations(self, painter: QPainter):
+    def _draw_spin_stardust_ring(self, painter: QPainter, spin_angle, in_front: bool):
+        """3D 环绕星尘粒子系统：正面穿插角色前方，背面穿插角色后方，提供真实立体景深"""
+        num_stars = 7
+        radius_x = 66.0
+        radius_y = 16.0
+        center_y = 6.0
+
+        for i in range(num_stars):
+            angle = spin_angle * 1.35 + (i * 2.0 * math.pi / num_stars)
+            cos_p = math.cos(angle)
+            sin_p = math.sin(angle)
+
+            # sin_p > 0 为前景 (in front)，sin_p <= 0 为背景 (behind)
+            is_fg = (sin_p > 0)
+            if is_fg != in_front:
+                continue
+
+            px = radius_x * cos_p
+            py = center_y + radius_y * sin_p
+
+            depth_norm = (sin_p + 1.0) / 2.0
+            star_scale = 0.65 + 0.45 * depth_norm
+            alpha = int(100 + 155 * depth_norm)
+
+            painter.save()
+            painter.translate(px, py)
+            painter.scale(star_scale, star_scale)
+            painter.rotate((self.anim_time * 160.0 + i * 50) % 360)
+
+            star_path = QPainterPath()
+            s = 9.0
+            star_path.moveTo(0, -s)
+            star_path.cubicTo(1.5, -2, 2, -1.5, s, 0)
+            star_path.cubicTo(2, 1.5, 1.5, 2, 0, s)
+            star_path.cubicTo(-1.5, 2, -2, 1.5, -s, 0)
+            star_path.cubicTo(-2, -1.5, -1.5, -2, 0, -s)
+
+            grad = QRadialGradient(0, 0, s)
+            grad.setColorAt(0.0, QColor(255, 255, 255, alpha))
+            grad.setColorAt(0.45, QColor(254, 240, 138, alpha))
+            grad.setColorAt(1.0, QColor(245, 158, 11, 0))
+            painter.setBrush(QBrush(grad))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPath(star_path)
+
+            painter.setBrush(QBrush(QColor(255, 255, 255, min(255, alpha + 40))))
+            painter.drawEllipse(QRectF(-2, -2, 4, 4))
+            painter.restore()
+
+    def _draw_back_decorations(self, painter: QPainter, spin_info=None, is_foreground=False):
+        # 旋转时根据正反面决定背部饰品位于身体后侧还是前侧
+        if spin_info and spin_info.get("is_spin", False):
+            is_back_view = not spin_info.get("is_front", True)
+            if is_back_view != is_foreground:
+                return
+        elif is_foreground:
+            return  # 普通状态下只在后景层绘制一次
+
         back_item = self.model.decorations.get("back", "none")
         if back_item == "wings":
             # 天使羽翼拍动
@@ -349,7 +449,7 @@ class PetRenderer:
             painter.restore()
 
     # ================= 猫咪皮肤绘制 (3D 立体手办质感) =================
-    def _draw_cat(self, painter: QPainter, state, skin_id):
+    def _draw_cat(self, painter: QPainter, state, skin_id, spin_info=None):
         # 3D 渲染多级光源配色表
         colors = {
             "cat_calico": {
@@ -383,10 +483,22 @@ class PetRenderer:
         }
         palette = colors.get(skin_id, colors["cat_calico"])
 
+        # 3D 旋转背面绘制 (Back View，彻底告别纸片镜像)
+        if spin_info and spin_info.get("is_spin", False) and not spin_info.get("is_front", True):
+            self._draw_cat_back(painter, palette, spin_info)
+            return
+
+        is_spin_front = bool(spin_info and spin_info.get("is_spin", False) and spin_info.get("is_front", True))
+        sin_a = spin_info.get("sin_a", 0.0) if spin_info else 0.0
+        cos_a = spin_info.get("cos_a", 1.0) if spin_info else 1.0
+        face_offset_x = spin_info.get("face_offset_x", 0.0) if spin_info else 0.0
+        belly_offset_x = spin_info.get("belly_offset_x", 0.0) if spin_info else 0.0
+
         # 1. 立体圆润尾巴
         tail_angle = math.sin(self.anim_time * 4.0) * 18.0
+        tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
         painter.save()
-        painter.translate(35, 25)
+        painter.translate(tail_x, 25)
         painter.rotate(tail_angle)
         tail_path = QPainterPath()
         tail_path.moveTo(0, 0)
@@ -400,15 +512,17 @@ class PetRenderer:
         painter.drawPath(tail_path)
         painter.restore()
 
-        # 2. 立体双耳 (外耳轮廓光 + 内耳凹陷立体阴影)
+        # 2. 立体双耳 (外耳轮廓光 + 内耳凹陷立体阴影，带 3D 轨道视差)
         ear_twitch = math.sin(self.anim_time * 6.0) * 3.0 if state == "IDLE" else 0.0
+        ear_shift = sin_a * 14.0 if is_spin_front else 0.0
+
         # 左耳
         left_ear = QPainterPath()
-        left_ear.moveTo(-35, -28)
-        left_ear.cubicTo(-42, -50, -56, -72 + ear_twitch, -54, -75 + ear_twitch)
-        left_ear.cubicTo(-46, -72 + ear_twitch, -26, -56, -12, -45)
+        left_ear.moveTo(-35 + ear_shift, -28)
+        left_ear.cubicTo(-42 + ear_shift, -50, -56 + ear_shift, -72 + ear_twitch, -54 + ear_shift, -75 + ear_twitch)
+        left_ear.cubicTo(-46 + ear_shift, -72 + ear_twitch, -26 + ear_shift, -56, -12 + ear_shift, -45)
         left_ear.closeSubpath()
-        ear_grad_l = QLinearGradient(-54, -75, -12, -28)
+        ear_grad_l = QLinearGradient(-54 + ear_shift, -75, -12 + ear_shift, -28)
         ear_grad_l.setColorAt(0.0, QColor(palette["ear_l_t"]))
         ear_grad_l.setColorAt(1.0, QColor(palette["ear_l_b"]))
         painter.setBrush(QBrush(ear_grad_l))
@@ -417,11 +531,11 @@ class PetRenderer:
 
         # 左内耳凹陷阴影
         left_inner = QPainterPath()
-        left_inner.moveTo(-34, -34)
-        left_inner.lineTo(-48, -68 + ear_twitch)
-        left_inner.lineTo(-18, -45)
+        left_inner.moveTo(-34 + ear_shift, -34)
+        left_inner.lineTo(-48 + ear_shift, -68 + ear_twitch)
+        left_inner.lineTo(-18 + ear_shift, -45)
         left_inner.closeSubpath()
-        inner_grad_l = QLinearGradient(-48, -68, -26, -34)
+        inner_grad_l = QLinearGradient(-48 + ear_shift, -68, -26 + ear_shift, -34)
         inner_grad_l.setColorAt(0.0, QColor(palette["inner_ear_t"]))
         inner_grad_l.setColorAt(1.0, QColor(palette["inner_ear_b"]))
         painter.setBrush(QBrush(inner_grad_l))
@@ -430,11 +544,11 @@ class PetRenderer:
 
         # 右耳
         right_ear = QPainterPath()
-        right_ear.moveTo(35, -28)
-        right_ear.cubicTo(42, -50, 56, -72 - ear_twitch, 54, -75 - ear_twitch)
-        right_ear.cubicTo(46, -72 - ear_twitch, 26, -56, 12, -45)
+        right_ear.moveTo(35 + ear_shift, -28)
+        right_ear.cubicTo(42 + ear_shift, -50, 56 + ear_shift, -72 - ear_twitch, 54 + ear_shift, -75 - ear_twitch)
+        right_ear.cubicTo(46 + ear_shift, -72 - ear_twitch, 26 + ear_shift, -56, 12 + ear_shift, -45)
         right_ear.closeSubpath()
-        ear_grad_r = QLinearGradient(54, -75, 12, -28)
+        ear_grad_r = QLinearGradient(54 + ear_shift, -75, 12 + ear_shift, -28)
         ear_grad_r.setColorAt(0.0, QColor(palette["ear_r_t"]))
         ear_grad_r.setColorAt(1.0, QColor(palette["ear_r_b"]))
         painter.setBrush(QBrush(ear_grad_r))
@@ -443,9 +557,9 @@ class PetRenderer:
 
         # 右内耳凹陷阴影
         right_inner = QPainterPath()
-        right_inner.moveTo(34, -34)
-        right_inner.lineTo(48, -68 - ear_twitch)
-        right_inner.lineTo(18, -45)
+        right_inner.moveTo(34 + ear_shift, -34)
+        right_inner.lineTo(48 + ear_shift, -68 - ear_twitch)
+        right_inner.lineTo(18 + ear_shift, -45)
         right_inner.closeSubpath()
         painter.setBrush(QBrush(inner_grad_l))
         painter.drawPath(right_inner)
@@ -465,17 +579,22 @@ class PetRenderer:
         # 4. 特色三花/斑纹 (贴合球体曲面的弧线渐变)
         if palette["spot_t"]:
             spot_path = QPainterPath()
-            spot_path.moveTo(15, -45)
-            spot_path.cubicTo(45, -42, 52, -15, 45, 10)
-            spot_path.cubicTo(32, 0, 20, -20, 15, -45)
-            spot_grad = QLinearGradient(20, -40, 48, 5)
+            spot_shift = sin_a * 15.0 if is_spin_front else 0.0
+            spot_path.moveTo(15 + spot_shift, -45)
+            spot_path.cubicTo(45 + spot_shift, -42, 52 + spot_shift, -15, 45 + spot_shift, 10)
+            spot_path.cubicTo(32 + spot_shift, 0, 20 + spot_shift, -20, 15 + spot_shift, -45)
+            spot_grad = QLinearGradient(20 + spot_shift, -40, 48 + spot_shift, 5)
             spot_grad.setColorAt(0.0, palette["spot_t"])
             spot_grad.setColorAt(1.0, palette["spot_b"])
             painter.setBrush(QBrush(spot_grad))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(spot_path)
 
-        # 5. 软萌凸起白肚皮 (Belly Volume Highlight)
+        # 5. 软萌凸起白肚皮 (Belly Volume Highlight, 沿球体曲面透视投射)
+        painter.save()
+        if is_spin_front:
+            painter.translate(belly_offset_x, 0)
+            painter.scale(cos_a, 1.0)
         belly_rect = QRectF(-30, 2, 60, 44)
         belly_grad = QRadialGradient(0, 15, 32, 0, 8)
         belly_grad.setColorAt(0.0, QColor(255, 255, 255, 220))
@@ -484,6 +603,7 @@ class PetRenderer:
         painter.setBrush(QBrush(belly_grad))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(belly_rect)
+        painter.restore()
 
         # 6. 3D 球体顶面光泽高光 (Specular Highlight)
         painter.save()
@@ -497,7 +617,13 @@ class PetRenderer:
         painter.drawEllipse(QRectF(-15, -7, 30, 14))
         painter.restore()
 
-        # 7. 柔和羽化立体腮红 (带微光)
+        # 7. 面部层 (腮红、胡须、五官：旋转时在正面沿 3D 球体曲面透视投射移动)
+        painter.save()
+        if is_spin_front:
+            painter.translate(face_offset_x, 0)
+            painter.scale(cos_a, 1.0)
+
+        # 柔和羽化立体腮红 (带微光)
         blush_alpha = 190 if (self.petting_timer > 0 or self.model.stage == "BABY") else 125
         for bx, by in [(-33, 4), (33, 4)]:
             b_grad = QRadialGradient(bx, by, 12)
@@ -510,7 +636,7 @@ class PetRenderer:
             painter.setBrush(QBrush(QColor(255, 255, 255, 210)))
             painter.drawEllipse(QRectF(bx - 2, by - 4, 3.5, 3.5))
 
-        # 8. 灵动弧线胡须
+        # 灵动弧线胡须
         whisk_col = QColor(palette["outline"]).lighter(120)
         painter.setPen(QPen(whisk_col, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         w_l1 = QPainterPath(); w_l1.moveTo(-42, 2); w_l1.cubicTo(-50, 1, -58, -1, -64, -3); painter.drawPath(w_l1)
@@ -518,11 +644,116 @@ class PetRenderer:
         w_r1 = QPainterPath(); w_r1.moveTo(42, 2); w_r1.cubicTo(50, 1, 58, -1, 64, -3); painter.drawPath(w_r1)
         w_r2 = QPainterPath(); w_r2.moveTo(42, 7); w_r2.cubicTo(50, 8, 58, 11, 62, 13); painter.drawPath(w_r2)
 
-        # 9. 眼睛与嘴巴 (支持异色瞳与全部动作面容)
+        # 眼睛与嘴巴 (支持异色瞳与全部动作面容)
         self._draw_cat_face(painter, state, skin_id)
+        painter.restore()
 
-        # 10. 立体胖嘟嘟小爪爪 (3D Plush Paws)
+        # 8. 立体胖嘟嘟小爪爪 (3D Plush Paws)
+        painter.save()
+        if is_spin_front:
+            painter.translate(sin_a * 8.0, 0)
         self._draw_plush_paws(painter, state, palette)
+        painter.restore()
+
+    def _draw_cat_back(self, painter: QPainter, palette, spin_info):
+        """猫咪 3D 立体手办背影视角：展现圆润后脑勺、后背斑纹、前景甩动尾巴与可爱肉垫足跟"""
+        sin_a = spin_info.get("sin_a", 0.0)
+        ear_twitch = math.sin(self.anim_time * 6.0) * 3.0
+        ear_shift = sin_a * 14.0
+
+        # 1. 背部立体耳朵 (无粉色内耳，呈现立体毛发外壳)
+        # 左耳背
+        left_ear = QPainterPath()
+        left_ear.moveTo(-35 + ear_shift, -28)
+        left_ear.cubicTo(-42 + ear_shift, -50, -56 + ear_shift, -72 + ear_twitch, -54 + ear_shift, -75 + ear_twitch)
+        left_ear.cubicTo(-46 + ear_shift, -72 + ear_twitch, -26 + ear_shift, -56, -12 + ear_shift, -45)
+        left_ear.closeSubpath()
+        ear_grad_l = QLinearGradient(-54 + ear_shift, -75, -12 + ear_shift, -28)
+        ear_grad_l.setColorAt(0.0, QColor(palette["ear_l_t"]).darker(115))
+        ear_grad_l.setColorAt(1.0, QColor(palette["ear_l_b"]).darker(120))
+        painter.setBrush(QBrush(ear_grad_l))
+        painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+        painter.drawPath(left_ear)
+
+        # 右耳背
+        right_ear = QPainterPath()
+        right_ear.moveTo(35 + ear_shift, -28)
+        right_ear.cubicTo(42 + ear_shift, -50, 56 + ear_shift, -72 - ear_twitch, 54 + ear_shift, -75 - ear_twitch)
+        right_ear.cubicTo(46 + ear_shift, -72 - ear_twitch, 26 + ear_shift, -56, 12 + ear_shift, -45)
+        right_ear.closeSubpath()
+        ear_grad_r = QLinearGradient(54 + ear_shift, -75, 12 + ear_shift, -28)
+        ear_grad_r.setColorAt(0.0, QColor(palette["ear_r_t"]).darker(115))
+        ear_grad_r.setColorAt(1.0, QColor(palette["ear_r_b"]).darker(120))
+        painter.setBrush(QBrush(ear_grad_r))
+        painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+        painter.drawPath(right_ear)
+
+        # 2. 3D 球体后背与后脑勺 (Spherical Back Volume)
+        body_rect = QRectF(-52, -48, 104, 100)
+        body_rad = QRadialGradient(-15, -20, 75, -15, -20)
+        body_rad.setColorAt(0.0, QColor(palette["body_hl"]))
+        body_rad.setColorAt(0.35, QColor(palette["body_light"]))
+        body_rad.setColorAt(0.72, QColor(palette["body_mid"]))
+        body_rad.setColorAt(0.92, QColor(palette["body_dark"]))
+        body_rad.setColorAt(1.0, QColor(palette["body_shadow"]))
+        painter.setBrush(QBrush(body_rad))
+        painter.setPen(QPen(QColor(palette["outline"]), 3.5))
+        painter.drawEllipse(body_rect)
+
+        # 3. 后背特色毛发斑纹
+        if palette["spot_t"]:
+            spot_path = QPainterPath()
+            spot_path.moveTo(-10 - ear_shift, -45)
+            spot_path.cubicTo(15 - ear_shift, -40, 22 - ear_shift, -10, 15 - ear_shift, 20)
+            spot_path.cubicTo(-2 - ear_shift, 15, -15 - ear_shift, -20, -10 - ear_shift, -45)
+            spot_grad = QLinearGradient(-10, -40, 20, 15)
+            spot_grad.setColorAt(0.0, palette["spot_t"])
+            spot_grad.setColorAt(1.0, palette["spot_b"])
+            painter.setBrush(QBrush(spot_grad))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPath(spot_path)
+
+        # 4. 后脑勺 3D 光泽高光 (Specular Back Sheen)
+        painter.save()
+        painter.translate(-18, -32)
+        painter.rotate(-18)
+        spec_grad = QLinearGradient(-15, -7, 15, 7)
+        spec_grad.setColorAt(0.0, QColor(255, 255, 255, 120))
+        spec_grad.setColorAt(0.6, QColor(255, 255, 255, 40))
+        spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setBrush(QBrush(spec_grad))
+        painter.drawEllipse(QRectF(-14, -6, 28, 12))
+        painter.restore()
+
+        # 5. 立体前景尾巴 (位于身体前景层欢快甩动，呈现震撼真实前后纵深)
+        tail_swing = math.sin(self.anim_time * 12.0) * 20.0
+        tail_x = -sin_a * 18.0
+        painter.save()
+        painter.translate(tail_x, 24)
+        painter.rotate(tail_swing)
+        tail_path = QPainterPath()
+        tail_path.moveTo(0, 0)
+        tail_path.cubicTo(26, 8, 36, -26, 22, -38)
+        tail_path.cubicTo(14, -42, 6, -22, 0, -10)
+        tail_grad = QLinearGradient(0, 0, 25, -30)
+        tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
+        tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
+        painter.setBrush(QBrush(tail_grad))
+        painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+        painter.drawPath(tail_path)
+        painter.restore()
+
+        # 6. 立体后足脚跟 (Hind Paws)
+        outline_col = QColor(palette["outline"])
+        paw_col = QColor(palette.get("paw_b", "#F0DFD1"))
+        for px in [-28, 12]:
+            paw_rect = QRectF(px, 39, 20, 14)
+            paw_g = QRadialGradient(px + 10, 45, 15)
+            paw_g.setColorAt(0.0, QColor(palette.get("paw_t", "#FFFFFF")))
+            paw_g.setColorAt(1.0, paw_col)
+            painter.setBrush(QBrush(paw_g))
+            painter.setPen(QPen(outline_col, 2.6))
+            painter.drawEllipse(paw_rect)
 
     def _draw_plush_paws(self, painter: QPainter, state, palette):
         paw_col_t = QColor(palette.get("paw_t", "#FFFFFF"))
@@ -583,7 +814,7 @@ class PetRenderer:
         self._draw_face_by_state(painter, state, eye_l_col, eye_r_col)
 
     # ================= 柴犬与柯基皮肤绘制 (3D 立体手办质感) =================
-    def _draw_dog(self, painter: QPainter, state, skin_id):
+    def _draw_dog(self, painter: QPainter, state, skin_id, spin_info=None):
         colors = {
             "dog_shiba": {
                 "fur_hl": "#FFC082", "fur_light": "#FFA858", "fur_mid": "#E88B43", "fur_dark": "#C96A20", "fur_shadow": "#A84E0C",
@@ -603,10 +834,21 @@ class PetRenderer:
         }
         pal = colors.get(skin_id, colors["dog_shiba"])
 
+        # 3D 旋转背面绘制 (Back View)
+        if spin_info and spin_info.get("is_spin", False) and not spin_info.get("is_front", True):
+            self._draw_dog_back(painter, pal, spin_info)
+            return
+
+        is_spin_front = bool(spin_info and spin_info.get("is_spin", False) and spin_info.get("is_front", True))
+        sin_a = spin_info.get("sin_a", 0.0) if spin_info else 0.0
+        cos_a = spin_info.get("cos_a", 1.0) if spin_info else 1.0
+        face_offset_x = spin_info.get("face_offset_x", 0.0) if spin_info else 0.0
+
         # 1. 3D 卷尾巴
         tail_wag = math.sin(self.anim_time * 8.0) * 12.0
+        tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
         painter.save()
-        painter.translate(35, 20)
+        painter.translate(tail_x, 20)
         painter.rotate(tail_wag)
         tail_path = QPainterPath()
         tail_path.moveTo(0, 0)
@@ -620,13 +862,14 @@ class PetRenderer:
         painter.drawPath(tail_path)
         painter.restore()
 
-        # 2. 立体双耳 (外耳高光 + 凹陷立体感)
+        # 2. 立体双耳 (带 3D 轨道视差偏移)
+        ear_shift = sin_a * 14.0 if is_spin_front else 0.0
         left_ear = QPainterPath()
-        left_ear.moveTo(-35, -28)
-        left_ear.lineTo(-50, -78)
-        left_ear.lineTo(-12, -45)
+        left_ear.moveTo(-35 + ear_shift, -28)
+        left_ear.lineTo(-50 + ear_shift, -78)
+        left_ear.lineTo(-12 + ear_shift, -45)
         left_ear.closeSubpath()
-        ear_g_l = QLinearGradient(-50, -78, -12, -28)
+        ear_g_l = QLinearGradient(-50 + ear_shift, -78, -12 + ear_shift, -28)
         ear_g_l.setColorAt(0.0, QColor(pal["fur_hl"]))
         ear_g_l.setColorAt(1.0, QColor(pal["fur_mid"]))
         painter.setBrush(QBrush(ear_g_l))
@@ -634,11 +877,11 @@ class PetRenderer:
         painter.drawPath(left_ear)
 
         right_ear = QPainterPath()
-        right_ear.moveTo(35, -28)
-        right_ear.lineTo(50, -78)
-        right_ear.lineTo(12, -45)
+        right_ear.moveTo(35 + ear_shift, -28)
+        right_ear.lineTo(50 + ear_shift, -78)
+        right_ear.lineTo(12 + ear_shift, -45)
         right_ear.closeSubpath()
-        ear_g_r = QLinearGradient(50, -78, 12, -28)
+        ear_g_r = QLinearGradient(50 + ear_shift, -78, 12 + ear_shift, -28)
         ear_g_r.setColorAt(0.0, QColor(pal["fur_hl"]))
         ear_g_r.setColorAt(1.0, QColor(pal["fur_mid"]))
         painter.setBrush(QBrush(ear_g_r))
@@ -656,7 +899,13 @@ class PetRenderer:
         painter.setPen(QPen(QColor(pal["outline"]), 3.5))
         painter.drawEllipse(body_rect)
 
-        # 4. 柴犬白色面罩 (立体浮雕渐变)
+        # 4. 面部与腮红层 (旋转时沿 3D 球面透视投射)
+        painter.save()
+        if is_spin_front:
+            painter.translate(face_offset_x, 0)
+            painter.scale(cos_a, 1.0)
+
+        # 柴犬白色面罩 (立体浮雕渐变)
         mask = QPainterPath()
         mask.moveTo(-36, -8)
         mask.cubicTo(-46, 25, -20, 48, 0, 48)
@@ -669,7 +918,7 @@ class PetRenderer:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(mask)
 
-        # 5. 柴犬标志性白眉毛 (立体微高光圆球)
+        # 柴犬标志性白眉毛
         for bx in [-28, 16]:
             brow_g = QRadialGradient(bx + 6, -28, 8)
             brow_g.setColorAt(0.0, QColor(pal["brow"]))
@@ -677,7 +926,20 @@ class PetRenderer:
             painter.setBrush(QBrush(brow_g))
             painter.drawEllipse(QRectF(bx, -32, 12, 10))
 
-        # 6. 3D 顶面高光
+        # 柔和羽化立体腮红
+        for bx, by in [(-33, 6), (33, 6)]:
+            b_grad = QRadialGradient(bx, by, 12)
+            b_grad.setColorAt(0.0, QColor(255, 120, 145, 140))
+            b_grad.setColorAt(0.6, QColor(255, 145, 170, 70))
+            b_grad.setColorAt(1.0, QColor(255, 160, 180, 0))
+            painter.setBrush(QBrush(b_grad))
+            painter.drawEllipse(QRectF(bx - 12, by - 8, 24, 16))
+
+        # 面部表情
+        self._draw_face_by_state(painter, state, QColor("#3D2923"), QColor("#3D2923"))
+        painter.restore()
+
+        # 5. 3D 顶面高光
         painter.save()
         painter.translate(-21, -30)
         painter.rotate(-22)
@@ -689,23 +951,104 @@ class PetRenderer:
         painter.drawEllipse(QRectF(-15, -7, 30, 14))
         painter.restore()
 
-        # 7. 柔和羽化立体腮红
-        for bx, by in [(-33, 6), (33, 6)]:
-            b_grad = QRadialGradient(bx, by, 12)
-            b_grad.setColorAt(0.0, QColor(255, 120, 145, 140))
-            b_grad.setColorAt(0.6, QColor(255, 145, 170, 70))
-            b_grad.setColorAt(1.0, QColor(255, 160, 180, 0))
-            painter.setBrush(QBrush(b_grad))
-            painter.drawEllipse(QRectF(bx - 12, by - 8, 24, 16))
-
-        # 8. 面部表情
-        self._draw_face_by_state(painter, state, QColor("#3D2923"), QColor("#3D2923"))
-
-        # 9. 立体肉垫爪爪
+        # 6. 立体肉垫爪爪
+        painter.save()
+        if is_spin_front:
+            painter.translate(sin_a * 8.0, 0)
         self._draw_plush_paws(painter, state, pal)
+        painter.restore()
+
+    def _draw_dog_back(self, painter: QPainter, pal, spin_info):
+        """柴犬/柯基 3D 立体手办背影视角：毛绒后背、可爱蜜桃臀与摇摆卷尾"""
+        sin_a = spin_info.get("sin_a", 0.0)
+        ear_shift = sin_a * 14.0
+
+        # 1. 耳朵背面 (暗部毛发)
+        left_ear = QPainterPath()
+        left_ear.moveTo(-35 + ear_shift, -28)
+        left_ear.lineTo(-50 + ear_shift, -78)
+        left_ear.lineTo(-12 + ear_shift, -45)
+        left_ear.closeSubpath()
+        ear_g_l = QLinearGradient(-50 + ear_shift, -78, -12 + ear_shift, -28)
+        ear_g_l.setColorAt(0.0, QColor(pal["fur_hl"]).darker(115))
+        ear_g_l.setColorAt(1.0, QColor(pal["fur_mid"]).darker(120))
+        painter.setBrush(QBrush(ear_g_l))
+        painter.setPen(QPen(QColor(pal["outline"]), 3.2))
+        painter.drawPath(left_ear)
+
+        right_ear = QPainterPath()
+        right_ear.moveTo(35 + ear_shift, -28)
+        right_ear.lineTo(50 + ear_shift, -78)
+        right_ear.lineTo(12 + ear_shift, -45)
+        right_ear.closeSubpath()
+        ear_g_r = QLinearGradient(50 + ear_shift, -78, 12 + ear_shift, -28)
+        ear_g_r.setColorAt(0.0, QColor(pal["fur_hl"]).darker(115))
+        ear_g_r.setColorAt(1.0, QColor(pal["fur_mid"]).darker(120))
+        painter.setBrush(QBrush(ear_g_r))
+        painter.drawPath(right_ear)
+
+        # 2. 身体背面 3D 球体
+        body_rect = QRectF(-52, -48, 104, 100)
+        fur_rad = QRadialGradient(-18, -20, 75, -18, -20)
+        fur_rad.setColorAt(0.0, QColor(pal["fur_hl"]))
+        fur_rad.setColorAt(0.35, QColor(pal["fur_light"]))
+        fur_rad.setColorAt(0.72, QColor(pal["fur_mid"]))
+        fur_rad.setColorAt(0.92, QColor(pal["fur_dark"]))
+        fur_rad.setColorAt(1.0, QColor(pal["fur_shadow"]))
+        painter.setBrush(QBrush(fur_rad))
+        painter.setPen(QPen(QColor(pal["outline"]), 3.5))
+        painter.drawEllipse(body_rect)
+
+        # 3. 后背白毛心形蜜桃臀 (柴犬/柯基标志萌点)
+        butt_w = QPainterPath()
+        butt_w.moveTo(-24, 25)
+        butt_w.cubicTo(-32, 42, -5, 46, 0, 36)
+        butt_w.cubicTo(5, 46, 32, 42, 24, 25)
+        butt_w.cubicTo(12, 18, -12, 18, -24, 25)
+        painter.setBrush(QBrush(QColor(pal["muzzle_t"])))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(butt_w)
+
+        # 4. 前置 3D 卷尾巴
+        tail_wag = math.sin(self.anim_time * 12.0) * 16.0
+        tail_x = -sin_a * 15.0
+        painter.save()
+        painter.translate(tail_x, 22)
+        painter.rotate(tail_wag)
+        tail_path = QPainterPath()
+        tail_path.moveTo(0, 0)
+        tail_path.cubicTo(25, 5, 35, -20, 20, -30)
+        tail_path.cubicTo(10, -35, 5, -15, 0, -5)
+        tail_grad = QLinearGradient(0, 0, 25, -25)
+        tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
+        tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
+        painter.setBrush(QBrush(tail_grad))
+        painter.setPen(QPen(QColor(pal["outline"]), 3))
+        painter.drawPath(tail_path)
+        painter.restore()
+
+        # 5. 后足小爪跟
+        outline_col = QColor(pal["outline"])
+        for px in [-28, 12]:
+            paw_rect = QRectF(px, 39, 20, 14)
+            paw_g = QRadialGradient(px + 10, 45, 15)
+            paw_g.setColorAt(0.0, QColor(pal["paw_t"]))
+            paw_g.setColorAt(1.0, QColor(pal["paw_b"]))
+            painter.setBrush(QBrush(paw_g))
+            painter.setPen(QPen(outline_col, 2.6))
+            painter.drawEllipse(paw_rect)
 
     # ================= 史莱姆皮肤绘制 (3D 晶莹果冻质感) =================
-    def _draw_slime(self, painter: QPainter, state, skin_id):
+    def _draw_slime(self, painter: QPainter, state, skin_id, spin_info=None):
+        if spin_info and spin_info.get("is_spin", False) and not spin_info.get("is_front", True):
+            self._draw_slime_back(painter, skin_id, spin_info)
+            return
+
+        is_spin_front = bool(spin_info and spin_info.get("is_spin", False) and spin_info.get("is_front", True))
+        sin_a = spin_info.get("sin_a", 0.0) if spin_info else 0.0
+        cos_a = spin_info.get("cos_a", 1.0) if spin_info else 1.0
+        face_offset_x = spin_info.get("face_offset_x", 0.0) if spin_info else 0.0
+
         jelly_wobble = math.sin(self.anim_time * 5.0) * 4.0
         slime_path = QPainterPath()
         slime_path.moveTo(0, -60)
@@ -765,6 +1108,12 @@ class PetRenderer:
         painter.setBrush(QBrush(c_grad))
         painter.drawPath(caustic)
 
+        # 旋转时面部层透视投射
+        painter.save()
+        if is_spin_front:
+            painter.translate(face_offset_x, 0)
+            painter.scale(cos_a, 1.0)
+
         # 腮红
         for bx, by in [(-36, 10), (24, 10)]:
             b_grad = QRadialGradient(bx, by, 10)
@@ -775,9 +1124,73 @@ class PetRenderer:
 
         # 史莱姆动态面部表情
         self._draw_face_by_state(painter, state, QColor("#1E293B"), QColor("#1E293B"))
+        painter.restore()
+
+    def _draw_slime_back(self, painter: QPainter, skin_id, spin_info):
+        """史莱姆 3D 果冻背面：晶莹剔透次表面散射、折射焦散球与金星天线"""
+        sin_a = spin_info.get("sin_a", 0.0)
+        jelly_wobble = math.sin(self.anim_time * 5.0) * 4.0
+        slime_path = QPainterPath()
+        slime_path.moveTo(0, -60)
+        slime_path.cubicTo(18, -40, 60 + jelly_wobble, -10, 54, 30)
+        slime_path.cubicTo(48, 55, -48, 55, -54, 30)
+        slime_path.cubicTo(-60 - jelly_wobble, -10, -18, -40, 0, -60)
+
+        # 3D 果冻晶莹背面折射色
+        slime_grad = QRadialGradient(15, -15, 68, 15, -20)
+        if skin_id == "slime_pink":
+            slime_grad.setColorAt(0.0, QColor(255, 220, 235, 245))
+            slime_grad.setColorAt(0.5, QColor(244, 114, 182, 240))
+            slime_grad.setColorAt(1.0, QColor(157, 23, 77, 255))
+            outline_col = QColor(157, 23, 77)
+        elif skin_id == "slime_gold":
+            slime_grad.setColorAt(0.0, QColor(255, 252, 180, 245))
+            slime_grad.setColorAt(0.5, QColor(250, 204, 21, 240))
+            slime_grad.setColorAt(1.0, QColor(146, 64, 14, 255))
+            outline_col = QColor(146, 64, 14)
+        else:
+            slime_grad.setColorAt(0.0, QColor(186, 230, 253, 245))
+            slime_grad.setColorAt(0.5, QColor(56, 189, 248, 240))
+            slime_grad.setColorAt(1.0, QColor(7, 89, 170, 255))
+            outline_col = QColor(7, 89, 170)
+
+        painter.setBrush(QBrush(slime_grad))
+        painter.setPen(QPen(outline_col, 3.2))
+        painter.drawPath(slime_path)
+
+        # 内部焦散折射光球 (内部纵深折射)
+        caustic = QPainterPath()
+        caustic.addEllipse(QRectF(-20 + sin_a * 8, 10, 32, 20))
+        c_grad = QRadialGradient(-10 + sin_a * 8, 18, 20)
+        c_grad.setColorAt(0.0, QColor(255, 255, 255, 120))
+        c_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setBrush(QBrush(c_grad))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(caustic)
+
+        # 天线小星星
+        star_x = math.sin(self.anim_time * 4.0) * 6.0
+        painter.setPen(QPen(outline_col, 2.5))
+        painter.drawLine(0, -60, int(star_x), -76)
+        star_g = QRadialGradient(star_x - 2, -85, 9)
+        star_g.setColorAt(0.0, QColor(255, 255, 180))
+        star_g.setColorAt(0.7, QColor(250, 204, 21))
+        star_g.setColorAt(1.0, QColor(180, 120, 0))
+        painter.setBrush(QBrush(star_g))
+        painter.setPen(QPen(QColor(180, 120, 0), 1.5))
+        painter.drawEllipse(QRectF(star_x - 7, -83, 14, 14))
 
     # ================= 帝企鹅皮肤绘制 (3D 饱满企鹅手办) =================
-    def _draw_penguin(self, painter: QPainter, state):
+    def _draw_penguin(self, painter: QPainter, state, spin_info=None):
+        if spin_info and spin_info.get("is_spin", False) and not spin_info.get("is_front", True):
+            self._draw_penguin_back(painter, spin_info)
+            return
+
+        is_spin_front = bool(spin_info and spin_info.get("is_spin", False) and spin_info.get("is_front", True))
+        sin_a = spin_info.get("sin_a", 0.0) if spin_info else 0.0
+        cos_a = spin_info.get("cos_a", 1.0) if spin_info else 1.0
+        face_offset_x = spin_info.get("face_offset_x", 0.0) if spin_info else 0.0
+
         # 黑色球体身体 (3D 天鹅绒深邃漫反射)
         body_rect = QRectF(-50, -48, 100, 98)
         body_rad = QRadialGradient(-15, -18, 70, -15, -18)
@@ -788,6 +1201,12 @@ class PetRenderer:
         painter.setBrush(QBrush(body_rad))
         painter.setPen(QPen(QColor("#080D1A"), 3.2))
         painter.drawEllipse(body_rect)
+
+        # 面部与白肚皮层 (旋转时沿 3D 球体透视位移)
+        painter.save()
+        if is_spin_front:
+            painter.translate(face_offset_x, 0)
+            painter.scale(cos_a, 1.0)
 
         # 企鹅 3D 饱满白肚皮 (向前隆起圆润光泽)
         belly = QRectF(-36, -24, 72, 68)
@@ -806,29 +1225,6 @@ class PetRenderer:
             cheek_g.setColorAt(1.0, QColor("#EAB308"))
             painter.setBrush(QBrush(cheek_g))
             painter.drawEllipse(QRectF(cx - 8, -32, 16, 22))
-
-        # 小翅膀 (立体弧光多样动作摆动)
-        if state in ("HEAD_BOB_MUSIC", "HAPPY_SPIN"):
-            flipper_angle = math.sin(self.anim_time * 16.0) * 32.0
-            flipper_r_angle = flipper_angle
-        elif state == "WASH_FACE":
-            flipper_angle = 10.0
-            flipper_r_angle = -55.0 + math.sin(self.anim_time * 12.0) * 12.0
-        else:
-            flipper_angle = math.sin(self.anim_time * 6.0) * 15.0
-            flipper_r_angle = flipper_angle
-
-        for fx, fa in [(-45, -flipper_angle), (45, flipper_r_angle)]:
-            painter.save()
-            painter.translate(fx, -5)
-            painter.rotate(fa)
-            f_grad = QLinearGradient(-8, -5, 10, 33)
-            f_grad.setColorAt(0.0, QColor("#334155"))
-            f_grad.setColorAt(1.0, QColor("#0F172A"))
-            painter.setBrush(QBrush(f_grad))
-            painter.setPen(QPen(QColor("#080D1A"), 2.5))
-            painter.drawEllipse(QRectF(-9, -5, 18, 38))
-            painter.restore()
 
         # 腮红
         for bx, by in [(-25, 4), (25, 4)]:
@@ -849,10 +1245,35 @@ class PetRenderer:
         painter.drawPolygon(beak_left)
         painter.setBrush(QBrush(QColor("#EA580C")))
         painter.drawPolygon(beak_right)
+        painter.restore()
+
+        # 小翅膀 (立体弧光多样动作摆动)
+        if state in ("HEAD_BOB_MUSIC", "HAPPY_SPIN"):
+            flipper_angle = math.sin(self.anim_time * 16.0) * 32.0
+            flipper_r_angle = flipper_angle
+        elif state == "WASH_FACE":
+            flipper_angle = 10.0
+            flipper_r_angle = -55.0 + math.sin(self.anim_time * 12.0) * 12.0
+        else:
+            flipper_angle = math.sin(self.anim_time * 6.0) * 15.0
+            flipper_r_angle = flipper_angle
+
+        wing_shift = sin_a * 8.0 if is_spin_front else 0.0
+        for fx, fa in [(-45 + wing_shift, -flipper_angle), (45 + wing_shift, flipper_r_angle)]:
+            painter.save()
+            painter.translate(fx, -5)
+            painter.rotate(fa)
+            f_grad = QLinearGradient(-8, -5, 10, 33)
+            f_grad.setColorAt(0.0, QColor("#334155"))
+            f_grad.setColorAt(1.0, QColor("#0F172A"))
+            painter.setBrush(QBrush(f_grad))
+            painter.setPen(QPen(QColor("#080D1A"), 2.5))
+            painter.drawEllipse(QRectF(-9, -5, 18, 38))
+            painter.restore()
 
         # 企鹅立体小脚丫
         leg_offset = math.sin(self.anim_time * 8.0) * 5.0 if state in ("WALK_LEFT", "WALK_RIGHT") else 0.0
-        for fx, fo in [(-20, leg_offset), (20, -leg_offset)]:
+        for fx, fo in [(-20 + wing_shift * 0.5, leg_offset), (20 + wing_shift * 0.5, -leg_offset)]:
             foot_g = QRadialGradient(fx, 45 + fo, 14)
             foot_g.setColorAt(0.0, QColor("#FDBA74"))
             foot_g.setColorAt(0.8, QColor("#EA580C"))
@@ -860,6 +1281,63 @@ class PetRenderer:
             painter.setBrush(QBrush(foot_g))
             painter.setPen(QPen(QColor("#9A3412"), 1.8))
             painter.drawEllipse(QRectF(fx - 11, 41 + fo, 22, 13))
+
+    def _draw_penguin_back(self, painter: QPainter, spin_info):
+        """帝企鹅 3D 立体手办背影视角：燕尾服后背、尖小翘尾羽与扇动小翅膀"""
+        sin_a = spin_info.get("sin_a", 0.0)
+
+        # 1. 企鹅燕尾服后背 (深邃天鹅绒黑立体球体)
+        body_rect = QRectF(-50, -48, 100, 98)
+        body_rad = QRadialGradient(-15, -18, 70, -15, -18)
+        body_rad.setColorAt(0.0, QColor("#475569"))
+        body_rad.setColorAt(0.4, QColor("#334155"))
+        body_rad.setColorAt(0.8, QColor("#1E293B"))
+        body_rad.setColorAt(1.0, QColor("#0F172A"))
+        painter.setBrush(QBrush(body_rad))
+        painter.setPen(QPen(QColor("#080D1A"), 3.2))
+        painter.drawEllipse(body_rect)
+
+        # 2. 后脑勺天鹅绒高光
+        painter.save()
+        painter.translate(-16, -30)
+        painter.rotate(-18)
+        spec_grad = QLinearGradient(-15, -7, 15, 7)
+        spec_grad.setColorAt(0.0, QColor(255, 255, 255, 90))
+        spec_grad.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setBrush(QBrush(spec_grad))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-14, -6, 28, 12))
+        painter.restore()
+
+        # 3. 企鹅小尾巴尖 (尖尖朝上黑色小尾羽)
+        tail_path = QPolygonF([QPointF(-8 - sin_a * 6, 38), QPointF(8 - sin_a * 6, 38), QPointF(-sin_a * 6, 48)])
+        painter.setBrush(QBrush(QColor("#0F172A")))
+        painter.setPen(QPen(QColor("#080D1A"), 2))
+        painter.drawPolygon(tail_path)
+
+        # 4. 侧边欢快扇动小翅膀
+        flipper_angle = math.sin(self.anim_time * 16.0) * 32.0
+        for fx, fa in [(-45, -flipper_angle), (45, flipper_angle)]:
+            painter.save()
+            painter.translate(fx, -5)
+            painter.rotate(fa)
+            f_grad = QLinearGradient(-8, -5, 10, 33)
+            f_grad.setColorAt(0.0, QColor("#334155"))
+            f_grad.setColorAt(1.0, QColor("#0F172A"))
+            painter.setBrush(QBrush(f_grad))
+            painter.setPen(QPen(QColor("#080D1A"), 2.5))
+            painter.drawEllipse(QRectF(-9, -5, 18, 38))
+            painter.restore()
+
+        # 5. 企鹅立体橙脚蹼跟
+        for fx in [-20, 20]:
+            foot_g = QRadialGradient(fx, 45, 14)
+            foot_g.setColorAt(0.0, QColor("#FDBA74"))
+            foot_g.setColorAt(0.8, QColor("#EA580C"))
+            foot_g.setColorAt(1.0, QColor("#C2410C"))
+            painter.setBrush(QBrush(foot_g))
+            painter.setPen(QPen(QColor("#9A3412"), 2))
+            painter.drawEllipse(QRectF(fx - 12, 42, 24, 12))
 
     # ================= 通用面部与动作特效绘制 =================
     def _draw_face_by_state(self, painter: QPainter, state, eye_l_col=None, eye_r_col=None):
@@ -1123,8 +1601,19 @@ class PetRenderer:
         painter.drawPath(mouth)
 
     # ================= 多插槽装扮渲染 =================
-    def _draw_head_decorations(self, painter: QPainter):
+    def _draw_head_decorations(self, painter: QPainter, spin_info=None):
         head = self.model.decorations.get("head", "none")
+        if head == "none":
+            return
+
+        is_spin = bool(spin_info and spin_info.get("is_spin", False))
+        sin_a = spin_info.get("sin_a", 0.0) if is_spin else 0.0
+        head_shift = sin_a * 10.0 if is_spin else 0.0
+
+        painter.save()
+        if is_spin:
+            painter.translate(head_shift, 0)
+
         if head == "hat_wizard":
             # 魔法尖帽
             painter.save()
@@ -1227,8 +1716,26 @@ class PetRenderer:
             painter.drawEllipse(QRectF(2, -35, 30, 30))
             painter.restore()
 
-    def _draw_face_decorations(self, painter: QPainter):
+        painter.restore()
+
+    def _draw_face_decorations(self, painter: QPainter, spin_info=None):
         face = self.model.decorations.get("face", "none")
+        if face == "none" and not self.model.is_studying:
+            return
+
+        is_spin = bool(spin_info and spin_info.get("is_spin", False))
+        if is_spin:
+            # 3D 旋转时：若为背部视角，五官/眼镜等面饰自然隐藏
+            if not spin_info.get("is_front", True):
+                return
+            painter.save()
+            face_offset_x = spin_info.get("face_offset_x", 0.0)
+            cos_a = spin_info.get("cos_a", 1.0)
+            painter.translate(face_offset_x, 0)
+            painter.scale(cos_a, 1.0)
+        else:
+            painter.save()
+
         if face == "glasses" or self.model.is_studying:
             # 博士金丝圆眼镜
             painter.setPen(QPen(QColor("#F0B429"), 2.5))
@@ -1268,8 +1775,57 @@ class PetRenderer:
                 painter.restore()
             painter.restore()
 
-    def _draw_neck_decorations(self, painter: QPainter):
+        painter.restore()
+
+    def _draw_neck_decorations(self, painter: QPainter, spin_info=None):
         neck = self.model.decorations.get("neck", "none")
+        if neck == "none":
+            return
+
+        is_spin = bool(spin_info and spin_info.get("is_spin", False))
+        is_front = spin_info.get("is_front", True) if is_spin else True
+        sin_a = spin_info.get("sin_a", 0.0) if is_spin else 0.0
+        cos_a = spin_info.get("cos_a", 1.0) if is_spin else 1.0
+        neck_shift = sin_a * 10.0 if is_spin else 0.0
+
+        if not is_front:
+            # 背面视角：展现后颈部的项圈皮带/系带扣或围巾后披，立体感拉满
+            painter.save()
+            painter.translate(-neck_shift * 0.8, 34)
+            if neck in ("bow", "bell", "tie"):
+                # 后颈项圈系带 (带小暗扣或系带结)
+                strap_col = QColor("#B31237") if neck == "bow" else (QColor("#B45309") if neck == "bell" else QColor("#0F172A"))
+                painter.setPen(QPen(strap_col, 4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawLine(-22, 0, 22, 0)
+                # 后背小搭扣
+                painter.setBrush(QBrush(QColor("#FFD700") if neck != "tie" else QColor("#94A3B8")))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRoundedRect(QRectF(-4, -4, 8, 8), 2, 2)
+            elif neck == "scarf":
+                # 围巾后脑勺包裹与垂落后背小尾端
+                scarf_back = QPainterPath()
+                scarf_back.moveTo(-32, -4)
+                scarf_back.cubicTo(-15, 6, 15, 6, 32, -4)
+                scarf_back.lineTo(26, 8)
+                scarf_back.cubicTo(12, 16, -12, 16, -26, 8)
+                scarf_back.closeSubpath()
+                painter.setBrush(QBrush(QColor("#B91C1C")))
+                painter.setPen(QPen(QColor("#7F1D1D"), 2))
+                painter.drawPath(scarf_back)
+                # 围巾下垂后尾
+                tail_scarf = QPolygonF([QPointF(-8, 6), QPointF(6, 6), QPointF(2, 26), QPointF(-12, 26)])
+                painter.setBrush(QBrush(QColor("#DC2626")))
+                painter.setPen(QPen(QColor("#991B1B"), 1.8))
+                painter.drawPolygon(tail_scarf)
+            painter.restore()
+            return
+
+        # 正面视角：带 3D 旋转透视与位移
+        painter.save()
+        if is_spin:
+            painter.translate(neck_shift, 0)
+            painter.scale(cos_a, 1.0)
+
         if neck == "bow":
             # 红色大蝴蝶结
             painter.save()
@@ -1323,6 +1879,8 @@ class PetRenderer:
             painter.setBrush(QBrush(QColor("#DC2626")))
             painter.drawEllipse(QRectF(-4, -4, 8, 8))
             painter.restore()
+
+        painter.restore()
 
     def _draw_eating_food(self, painter: QPainter):
         painter.save()
