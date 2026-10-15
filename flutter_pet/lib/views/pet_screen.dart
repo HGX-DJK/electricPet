@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
 import '../models/memo_model.dart';
 import '../renderers/pet_painter.dart';
-import 'companion_dock.dart';
+import 'backpack_drawer.dart';
 import 'dialogs/feeding_dialog.dart';
 import 'dialogs/wardrobe_dialog.dart';
 import 'dialogs/action_dialog.dart';
@@ -426,6 +426,87 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       isScrollControlled: true,
       barrierColor: Colors.black.withOpacity(0.35),
       builder: (ctx) => sheet,
+    );
+  }
+
+  /// 打开波可的奇妙背包上拉抽屉
+  void _openBackpackDrawer(bool isNight) {
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _showBottomSheetModal(
+      PokoBackpackDrawer(
+        model: widget.petModel,
+        isNight: isNight,
+        onFeedTap: () {
+          _showBottomSheetModal(
+            FeedingDialog(
+              model: widget.petModel,
+              onFeedSelected: (foodId) {
+                final food = PetModel.foodMenu.firstWhere(
+                  (f) => f['id'] == foodId,
+                  orElse: () => PetModel.foodMenu.first,
+                );
+                final foodIcon = food['icon'] as String;
+                final foodName = food['name'] as String;
+                final hungerGain = (food['hunger'] as double).toInt();
+                final expGain = (food['exp'] as double).toInt();
+
+                widget.petModel.feed(foodId);
+                if (widget.petModel.enableHaptics) {
+                  HapticFeedback.mediumImpact();
+                }
+
+                // 触发进食咀嚼动画
+                _playAction('EATING');
+
+                // 飞出食物与属性增加飘字
+                _spawnParticles(Offset(_petX, _petY - 25), emoji: foodIcon, count: 5);
+                _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹 ❤️', const Color(0xFFF59E0B));
+                _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+$expGain 经验 ✨', const Color(0xFF6366F1));
+
+                _showDialogueBubble('哇！$foodName 太美味啦~ 肚子饱饱的，好幸福！(๑´ڡ`๑)', duration: const Duration(seconds: 4));
+              },
+            ),
+          );
+        },
+        onTeaseTap: _teasePlay,
+        onWardrobeTap: () {
+          _showBottomSheetModal(
+            WardrobeDialog(model: widget.petModel),
+          );
+        },
+        onActionTap: () {
+          _showBottomSheetModal(
+            ActionDialog(
+              onActionSelected: (actId) {
+                _playAction(actId);
+              },
+            ),
+          );
+        },
+        onMemoTap: () {
+          _showBottomSheetModal(
+            MemoScreen(memoModel: widget.memoModel),
+          );
+        },
+        onBathTap: () {
+          widget.petModel.wash();
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 5);
+          _showDialogueBubble('洗香香啦！浑身散发着草莓沐浴露的香气~ 🫧✨');
+        },
+        onSleepTap: () {
+          final isSleep = widget.petModel.toggleSleep();
+          if (isSleep) {
+            _showDialogueBubble('呼噜呼噜... 进入甜甜的梦乡啦，嘘~ 💤');
+          } else {
+            _showDialogueBubble('睡饱醒来啦！元气活力充沛~ ☀️');
+          }
+        },
+        onToggleFloating: () {
+          _handleFloatingTap();
+        },
+      ),
     );
   }
 
@@ -1202,83 +1283,69 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
               // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界，夜晚自适应柔和星空底色)
               if (_showDialogue) _buildSmartDialogueBubble(screenSize, isNight),
 
-              // 6. 底部灵动伴侣岛 Dock (新增逗猫毛线球入口，昼夜自适应)
+              // 6. 底部“奇妙背包”上拉把手胶囊 (轻点或上滑呼出分类抽屉，底部大解放)
               Positioned(
-                bottom: 20,
+                bottom: 16,
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: CompanionDock(
-                    model: widget.petModel,
-                    isNight: isNight,
-                    onTeaseTap: _teasePlay,
-                    onFeedTap: () {
-                      _showBottomSheetModal(
-                        FeedingDialog(
-                          model: widget.petModel,
-                          onFeedSelected: (foodId) {
-                            final food = PetModel.foodMenu.firstWhere(
-                              (f) => f['id'] == foodId,
-                              orElse: () => PetModel.foodMenu.first,
-                            );
-                            final foodIcon = food['icon'] as String;
-                            final foodName = food['name'] as String;
-                            final hungerGain = (food['hunger'] as double).toInt();
-                            final expGain = (food['exp'] as double).toInt();
-
-                            widget.petModel.feed(foodId);
-                            if (widget.petModel.enableHaptics) {
-                              HapticFeedback.mediumImpact();
-                            }
-
-                            // 触发进食咀嚼动画
-                            _playAction('EATING');
-
-                            // 飞出食物与属性增加飘字
-                            _spawnParticles(Offset(_petX, _petY - 25), emoji: foodIcon, count: 5);
-                            _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹 ❤️', const Color(0xFFF59E0B));
-                            _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+$expGain 经验 ✨', const Color(0xFF6366F1));
-
-                            _showDialogueBubble('哇！$foodName 太美味啦~ 肚子饱饱的，好幸福！(๑´ڡ`๑)', duration: const Duration(seconds: 4));
-                          },
-                        ),
-                      );
-                    },
-                    onWardrobeTap: () {
-                      _showBottomSheetModal(
-                        WardrobeDialog(model: widget.petModel),
-                      );
-                    },
-                    onActionTap: () {
-                      _showBottomSheetModal(
-                        ActionDialog(
-                          onActionSelected: (actId) {
-                            _playAction(actId);
-                          },
-                        ),
-                      );
-                    },
-                    onMemoTap: () {
-                      _showBottomSheetModal(
-                        MemoScreen(memoModel: widget.memoModel),
-                      );
-                    },
-                    onBathTap: () {
-                      widget.petModel.wash();
-                      _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 5);
-                      _showDialogueBubble('洗香香啦！浑身散发着草莓沐浴露的香气~ 🫧✨');
-                    },
-                    onSleepTap: () {
-                      final isSleep = widget.petModel.toggleSleep();
-                      if (isSleep) {
-                        _showDialogueBubble('呼噜呼噜... 进入甜甜的梦乡啦，嘘~ 💤');
-                      } else {
-                        _showDialogueBubble('睡饱醒来啦！元气活力充沛~ ☀️');
+                  child: GestureDetector(
+                    onTap: () => _openBackpackDrawer(isNight),
+                    onVerticalDragEnd: (details) {
+                      if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
+                        _openBackpackDrawer(isNight);
                       }
                     },
-                    onToggleFloating: () {
-                      _handleFloatingTap();
-                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isNight
+                            ? const Color(0xFF1E1A40).withOpacity(0.88)
+                            : Colors.white.withOpacity(0.92),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: isNight
+                              ? const Color(0xFF6366F1).withOpacity(0.4)
+                              : const Color(0xFFE2E8F0),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isNight
+                                ? const Color(0xFF0F0C24).withOpacity(0.5)
+                                : const Color(0xFF6366F1).withOpacity(0.1),
+                            blurRadius: 14,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🎒', style: TextStyle(fontSize: 15)),
+                          const SizedBox(width: 7),
+                          Text(
+                            '奇妙背包',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: isNight
+                                  ? const Color(0xFFE2E8F0)
+                                  : const Color(0xFF334155),
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.keyboard_arrow_up_rounded,
+                            size: 18,
+                            color: isNight
+                                ? const Color(0xFFA5B4FC)
+                                : const Color(0xFF94A3B8),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
