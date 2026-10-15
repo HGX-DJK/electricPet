@@ -15,7 +15,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+/lib/
+!flutter_pet/lib/
 lib64/
 parts/
 sdist/
