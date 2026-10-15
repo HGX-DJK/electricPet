@@ -44,7 +44,11 @@ class DockIconButton(QPushButton):
         self.setToolTip(tooltip_text)
         self.setFont(QFont("Segoe UI Emoji", 15))
         self.update_style(style_key)
-        self.clicked.connect(callback)
+
+        def _on_clicked():
+            sound_manager.play("click")
+            callback()
+        self.clicked.connect(_on_clicked)
 
     def update_style(self, style_key):
         pal = DOCK_PASTELS.get(style_key, DOCK_PASTELS["more"])
@@ -58,10 +62,11 @@ class DockIconButton(QPushButton):
             }}
             QPushButton:hover {{
                 background-color: {pal["hover_bg"]};
-                border: 1.5px solid {pal["hover_border"]};
+                border: 2px solid {pal["hover_border"]};
             }}
             QPushButton:pressed {{
                 background-color: {pal["pressed"]};
+                padding-top: 2px;
             }}
         """)
 
@@ -90,12 +95,13 @@ class PetCompanionDock(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 毛玻璃胶囊底座
+        # 琉璃玉石磨砂胶囊底座 (带微光边缘反射)
         self.capsule = QFrame(self)
         self.capsule.setStyleSheet("""
             QFrame {
-                background-color: rgba(255, 255, 255, 0.97);
-                border: 1.5px solid rgba(226, 232, 240, 0.9);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255, 255, 255, 254), stop:1 rgba(248, 250, 252, 248));
+                border: 1.5px solid rgba(226, 232, 240, 0.95);
+                border-top: 1.5px solid rgba(255, 255, 255, 1.0);
                 border-radius: 24px;
             }
         """)

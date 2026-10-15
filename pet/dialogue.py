@@ -90,6 +90,17 @@ class SpeechBalloonCard(QFrame):
         painter.setPen(QPen(QColor(226, 232, 240, 240), 1.5))
         painter.drawPath(united_path)
 
+        # 右下角专属超淡萌爪水印印章 (Watermark Paw Stamp)
+        wm_x = w - 25.0
+        wm_y = (h - tail_height - 16.0) if self.tail_position == "bottom" else (h - 18.0)
+        wm_color = QColor(203, 213, 225, 95)
+        painter.setBrush(QBrush(wm_color))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(wm_x - 5, wm_y - 4, 10, 8))
+        painter.drawEllipse(QRectF(wm_x - 6, wm_y - 8, 3.2, 3.2))
+        painter.drawEllipse(QRectF(wm_x - 1.5, wm_y - 9.5, 3.2, 3.2))
+        painter.drawEllipse(QRectF(wm_x + 3, wm_y - 8, 3.2, 3.2))
+
 class SpeechBubbleWidget(QWidget):
     """
     全新独立浮动的超萌卡通对话气泡窗口

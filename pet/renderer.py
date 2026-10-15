@@ -6,6 +6,7 @@ from PyQt6.QtGui import (
     QPainter, QColor, QBrush, QPen, QRadialGradient, QLinearGradient,
     QFont, QPainterPath, QPolygonF
 )
+from pet.audio import sound_manager
 
 class Particle:
     """浮动特效粒子 (爱心、星星、泡泡、Zzz、进化金辉、小脚印、软萌尘埃)"""
@@ -67,6 +68,11 @@ class PetRenderer:
         self.current_gaze_x = 0.0     # 当前平滑插值眼神 X
         self.current_gaze_y = 0.0     # 当前平滑插值眼神 Y
 
+        # 生物级机敏偶发抖耳动作 (每 6~14 秒灵动轻弹单侧耳尖)
+        self.ear_flick_timer = 0.0
+        self.next_ear_flick_time = time.time() + 4.5
+        self.ear_flick_side = "left"
+
     def set_cursor_gaze(self, gaze_x, gaze_y):
         """设置鼠标光标引起的眼神注视目标方位"""
         self.target_gaze_x = gaze_x
@@ -75,6 +81,8 @@ class PetRenderer:
     def trigger_landing_bounce(self):
         """落地触地果冻弹性震颤与地面灰尘冲击环"""
         self.landing_timer = 0.42
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("pop")
         for _ in range(5):
             vx = random.uniform(-2.8, 2.8)
             vy = random.uniform(-0.9, -0.2)
@@ -105,18 +113,27 @@ class PetRenderer:
         }
         self.current_food_icon = food_emojis.get(food_type, "🍖")
         self.eating_timer = 2.2
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("chew")
         for _ in range(6):
             p = Particle(100 + random.uniform(-30, 30), 100, "sparkle")
             self.particles.append(p)
 
     def trigger_pet(self):
         self.petting_timer = 1.5
+        if getattr(self.model, "sound_enabled", True):
+            now_t = time.time()
+            if now_t - getattr(self, "_last_purr_time", 0.0) > 0.8:
+                self._last_purr_time = now_t
+                sound_manager.play("purr")
         for _ in range(2):
             p = Particle(100 + random.uniform(-20, 20), 70, "heart")
             self.particles.append(p)
 
     def trigger_bath(self):
         self.bath_timer = 3.0
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("pop")
         for _ in range(8):
             p = Particle(100 + random.uniform(-40, 40), 90, "bubble")
             self.particles.append(p)
@@ -124,6 +141,8 @@ class PetRenderer:
     def trigger_evolution(self):
         """蜕变进化庆祝特效"""
         self.evolution_aura_timer = 4.0
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("level_up")
         for _ in range(24):
             angle = random.uniform(0, math.pi * 2)
             speed = random.uniform(2.5, 6.0)
@@ -160,10 +179,25 @@ class PetRenderer:
                 self.blink_progress = 0.0
                 self.next_blink_time = now + random.uniform(2.5, 6.0)
 
+        # 偶发自然抖耳逻辑 (每 6~14 秒灵动机敏地轻弹耳尖)
+        if now >= self.next_ear_flick_time and current_state not in ("HAPPY_SPIN", "DRAGGING", "FALLING"):
+            self.ear_flick_timer = 0.30
+            self.ear_flick_side = "left" if random.random() < 0.5 else "right"
+            self.next_ear_flick_time = now + random.uniform(6.5, 13.5)
+
+        if self.ear_flick_timer > 0:
+            self.ear_flick_timer -= delta_time
+
         if self.eating_timer > 0:
             self.eating_timer -= delta_time
         if self.petting_timer > 0:
             self.petting_timer -= delta_time
+            # 抚摸时持续冒出软萌爱心与微光
+            if random.random() < 0.24:
+                item_type = "heart" if random.random() < 0.75 else "sparkle"
+                p = Particle(100 + random.uniform(-25, 25), 65, item_type)
+                p.size = random.uniform(13, 19)
+                self.particles.append(p)
         if self.bath_timer > 0:
             self.bath_timer -= delta_time
         if self.evolution_aura_timer > 0:
@@ -331,6 +365,13 @@ class PetRenderer:
             # 眼神视线微倾头 (目光看哪边，脑袋轻轻微偏向哪边)
             tilt_angle += self.current_gaze_x * 4.5
 
+        # 抚摸陶醉呼噜共振 (Purring Resonance, 高频微幅治愈颤动)
+        if self.petting_timer > 0:
+            purr_vibe = math.sin(self.anim_time * 28.0) * 0.024
+            squash_x *= (1.0 + purr_vibe)
+            squash_y *= (1.0 - purr_vibe)
+            breath_offset += math.sin(self.anim_time * 24.0) * 1.2
+
         # 落地果冻 Q 弹动力学形变 (阻尼正弦衰减震颤)
         if self.landing_timer > 0:
             elapsed = 0.42 - self.landing_timer
@@ -358,8 +399,14 @@ class PetRenderer:
         # 2. 背景背部装饰 (正面时位于身体后方)
         self._draw_back_decorations(painter, spin_info, is_foreground=False)
 
-        # 3. 底部双层立体地面投影 (Ground Dual-Layer 3D Shadow, 旋转时不收缩为线)
-        if is_spin:
+        # 3. 底部双层立体地面投影 (Ground Dual-Layer 3D Shadow, 悬空时淡化扩散，旋转时不收缩为线)
+        is_airborne = state in ("DRAGGING", "FALLING")
+        if is_airborne:
+            # 悬空状态：离地景深衰减，地面阴影扩散淡化
+            shadow_w = 112.0 * abs(squash_x)
+            ambient_alpha = 14
+            contact_alpha = 0  # 彻底脱离地面，无紧贴接触阴影！
+        elif is_spin:
             jump_ratio = min(1.0, abs(breath_offset) / 32.0)
             shadow_w = 92.0 * (1.0 - jump_ratio * 0.15)
             ambient_alpha = int(48 * (1.0 - jump_ratio * 0.35))
@@ -384,15 +431,16 @@ class PetRenderer:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(shadow_rect)
 
-        # 紧贴足底重力接触阴影 (Contact Shadow)
-        contact_w = shadow_w * 0.72
-        contact_rect = QRectF(-contact_w / 2.0, 47 - breath_offset * 0.2, contact_w, 9)
-        contact_grad = QRadialGradient(contact_rect.center(), contact_w / 2.0)
-        contact_grad.setColorAt(0.0, QColor(0, 0, 0, contact_alpha))
-        contact_grad.setColorAt(0.65, QColor(0, 0, 0, int(contact_alpha * 0.3)))
-        contact_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
-        painter.setBrush(QBrush(contact_grad))
-        painter.drawEllipse(contact_rect)
+        # 紧贴足底重力接触阴影 (Contact Shadow, 仅在触地时生效)
+        if contact_alpha > 0:
+            contact_w = shadow_w * 0.72
+            contact_rect = QRectF(-contact_w / 2.0, 47 - breath_offset * 0.2, contact_w, 9)
+            contact_grad = QRadialGradient(contact_rect.center(), contact_w / 2.0)
+            contact_grad.setColorAt(0.0, QColor(0, 0, 0, contact_alpha))
+            contact_grad.setColorAt(0.65, QColor(0, 0, 0, int(contact_alpha * 0.3)))
+            contact_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(QBrush(contact_grad))
+            painter.drawEllipse(contact_rect)
 
         # 3.5 3D 星尘环绕粒子 (背景层，位于身体后方)
         if is_spin:
@@ -637,15 +685,25 @@ class PetRenderer:
         painter.drawPath(tail_path)
         painter.restore()
 
-        # 2. 立体双耳 (外耳圆润柔和轮廓 + 内耳凹陷立体阴影 + 耳内萌绒毛，带 3D 轨道视差)
+        # 2. 立体双耳 (外耳圆润柔和轮廓 + 内耳凹陷立体阴影 + 耳内萌绒毛，带 3D 轨道视差 + 偶发机敏抖耳)
         ear_twitch = math.sin(self.anim_time * 6.0) * 2.5 if state == "IDLE" else 0.0
         ear_shift = sin_a * 14.0 if is_spin_front else 0.0
+
+        # 生物级单侧机敏轻弹抖耳 (flick)
+        flick_val = 0.0
+        if self.ear_flick_timer > 0:
+            p = 1.0 - (self.ear_flick_timer / 0.30)
+            flick_val = math.sin(p * math.pi * 3.5) * 8.0 * (1.0 - p)
+        flick_l = flick_val if self.ear_flick_side == "left" else 0.0
+        flick_r = flick_val if self.ear_flick_side == "right" else 0.0
+        ear_twitch_l = ear_twitch + flick_l
+        ear_twitch_r = -ear_twitch - flick_r
 
         # 左耳 (温润三角圆弧猫耳，彻底告别尖锐感)
         left_ear = QPainterPath()
         left_ear.moveTo(-43 + ear_shift, -26)
-        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch)
-        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch, -35 + ear_shift, -63 + ear_twitch, -32 + ear_shift, -57 + ear_twitch)
+        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch_l)
+        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch_l, -35 + ear_shift, -63 + ear_twitch_l, -32 + ear_shift, -57 + ear_twitch_l)
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
@@ -659,8 +717,8 @@ class PetRenderer:
         # 左内耳凹陷立体柔和粉瓣
         left_inner = QPainterPath()
         left_inner.moveTo(-39 + ear_shift, -30)
-        left_inner.cubicTo(-43 + ear_shift, -39, -44 + ear_shift, -48, -41 + ear_shift, -54 + ear_twitch)
-        left_inner.cubicTo(-38 + ear_shift, -58 + ear_twitch, -33 + ear_shift, -58 + ear_twitch, -30 + ear_shift, -53 + ear_twitch)
+        left_inner.cubicTo(-43 + ear_shift, -39, -44 + ear_shift, -48, -41 + ear_shift, -54 + ear_twitch_l)
+        left_inner.cubicTo(-38 + ear_shift, -58 + ear_twitch_l, -33 + ear_shift, -58 + ear_twitch_l, -30 + ear_shift, -53 + ear_twitch_l)
         left_inner.cubicTo(-25 + ear_shift, -46, -20 + ear_shift, -40, -17 + ear_shift, -37)
         left_inner.cubicTo(-22 + ear_shift, -32, -30 + ear_shift, -30, -39 + ear_shift, -30)
         left_inner.closeSubpath()
@@ -683,8 +741,8 @@ class PetRenderer:
         # 右耳 (温润三角圆弧猫耳)
         right_ear = QPainterPath()
         right_ear.moveTo(43 + ear_shift, -26)
-        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 - ear_twitch)
-        right_ear.cubicTo(43 + ear_shift, -63 - ear_twitch, 35 + ear_shift, -63 - ear_twitch, 32 + ear_shift, -57 - ear_twitch)
+        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 + ear_twitch_r)
+        right_ear.cubicTo(43 + ear_shift, -63 + ear_twitch_r, 35 + ear_shift, -63 + ear_twitch_r, 32 + ear_shift, -57 + ear_twitch_r)
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
@@ -698,8 +756,8 @@ class PetRenderer:
         # 右内耳凹陷立体柔和粉瓣
         right_inner = QPainterPath()
         right_inner.moveTo(39 + ear_shift, -30)
-        right_inner.cubicTo(43 + ear_shift, -39, 44 + ear_shift, -48, 41 + ear_shift, -54 - ear_twitch)
-        right_inner.cubicTo(38 + ear_shift, -58 - ear_twitch, 33 + ear_shift, -58 - ear_twitch, 30 + ear_shift, -53 - ear_twitch)
+        right_inner.cubicTo(43 + ear_shift, -39, 44 + ear_shift, -48, 41 + ear_shift, -54 + ear_twitch_r)
+        right_inner.cubicTo(38 + ear_shift, -58 + ear_twitch_r, 33 + ear_shift, -58 + ear_twitch_r, 30 + ear_shift, -53 + ear_twitch_r)
         right_inner.cubicTo(25 + ear_shift, -46, 20 + ear_shift, -40, 17 + ear_shift, -37)
         right_inner.cubicTo(22 + ear_shift, -32, 30 + ear_shift, -30, 39 + ear_shift, -30)
         right_inner.closeSubpath()
@@ -812,12 +870,21 @@ class PetRenderer:
         ear_twitch = math.sin(self.anim_time * 6.0) * 3.0
         ear_shift = sin_a * 14.0
 
+        flick_val = 0.0
+        if self.ear_flick_timer > 0:
+            p = 1.0 - (self.ear_flick_timer / 0.30)
+            flick_val = math.sin(p * math.pi * 3.5) * 8.0 * (1.0 - p)
+        flick_l = flick_val if self.ear_flick_side == "left" else 0.0
+        flick_r = flick_val if self.ear_flick_side == "right" else 0.0
+        ear_twitch_l = ear_twitch + flick_l
+        ear_twitch_r = -ear_twitch - flick_r
+
         # 1. 背部立体耳朵 (无粉色内耳，呈现立体毛发外壳)
         # 左耳背 (温润三角圆弧猫耳)
         left_ear = QPainterPath()
         left_ear.moveTo(-43 + ear_shift, -26)
-        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch)
-        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch, -35 + ear_shift, -63 + ear_twitch, -32 + ear_shift, -57 + ear_twitch)
+        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch_l)
+        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch_l, -35 + ear_shift, -63 + ear_twitch_l, -32 + ear_shift, -57 + ear_twitch_l)
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
@@ -831,8 +898,8 @@ class PetRenderer:
         # 右耳背 (温润三角圆弧猫耳)
         right_ear = QPainterPath()
         right_ear.moveTo(43 + ear_shift, -26)
-        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 - ear_twitch)
-        right_ear.cubicTo(43 + ear_shift, -63 - ear_twitch, 35 + ear_shift, -63 - ear_twitch, 32 + ear_shift, -57 - ear_twitch)
+        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 + ear_twitch_r)
+        right_ear.cubicTo(43 + ear_shift, -63 + ear_twitch_r, 35 + ear_shift, -63 + ear_twitch_r, 32 + ear_shift, -57 + ear_twitch_r)
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
@@ -925,17 +992,38 @@ class PetRenderer:
             painter.setPen(QPen(outline_col, 2.8))
             painter.drawEllipse(paw_rect)
 
-            # 3D 粉嫩果冻肉垫
+            # 3D 粉嫩果冻主掌心肉垫 (Palm Pad)
             pad_rect = QRectF(pad_x, pad_y, pad_w, pad_h)
-            pad_grad = QRadialGradient(pad_x + pad_w * 0.4, pad_y + pad_h * 0.4, max(pad_w, pad_h))
-            pad_grad.setColorAt(0.0, QColor("#FFAAAA"))
-            pad_grad.setColorAt(0.8, QColor("#FF7B90"))
-            pad_grad.setColorAt(1.0, QColor("#DE596F"))
+            pad_grad = QRadialGradient(pad_x + pad_w * 0.45, pad_y + pad_h * 0.35, max(pad_w, pad_h))
+            pad_grad.setColorAt(0.0, QColor("#FFB2B2"))
+            pad_grad.setColorAt(0.75, QColor("#FF768C"))
+            pad_grad.setColorAt(1.0, QColor("#D94B62"))
             painter.setBrush(QBrush(pad_grad))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(pad_rect)
-            painter.setBrush(QBrush(QColor(255, 255, 255, 190)))
-            painter.drawEllipse(QRectF(pad_x + 2, pad_y + 1.5, pad_w * 0.35, pad_h * 0.3))
+            # 主掌心高光
+            painter.setBrush(QBrush(QColor(255, 255, 255, 210)))
+            painter.drawEllipse(QRectF(pad_x + pad_w * 0.22, pad_y + pad_h * 0.16, pad_w * 0.34, pad_h * 0.28))
+
+            # 3 颗萌萌趾尖肉垫 (3 Cute Toe Beans)
+            toe_r = min(pad_w, pad_h) * 0.44
+            toe_offsets = [
+                (-pad_w * 0.36, -pad_h * 0.36),
+                (0.0, -pad_h * 0.52),
+                (pad_w * 0.36, -pad_h * 0.36)
+            ]
+            for tox, toy in toe_offsets:
+                tx = pad_x + pad_w * 0.5 + tox - toe_r * 0.5
+                ty = pad_y + pad_h * 0.5 + toy - toe_r * 0.5
+                t_rect = QRectF(tx, ty, toe_r, toe_r)
+                t_grad = QRadialGradient(tx + toe_r * 0.4, ty + toe_r * 0.35, toe_r)
+                t_grad.setColorAt(0.0, QColor("#FFB8B8"))
+                t_grad.setColorAt(0.8, QColor("#FF768C"))
+                t_grad.setColorAt(1.0, QColor("#D94B62"))
+                painter.setBrush(QBrush(t_grad))
+                painter.drawEllipse(t_rect)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 225)))
+                painter.drawEllipse(QRectF(tx + toe_r * 0.22, ty + toe_r * 0.2, toe_r * 0.36, toe_r * 0.36))
 
         if state == "WASH_FACE":
             draw_single_paw(-35, 40, 22, 14, -28, 45, 8, 6)
@@ -1811,10 +1899,12 @@ class PetRenderer:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(ball_x - shadow_w / 2.0, 46, shadow_w, 8))
 
-        # 散开的毛线尾巴 (灵动曲线连接至左爪侧)
+        # 散开的毛线尾巴 (灵动曲线随球滚动飘舞，带自然卷曲小圈)
+        tail_wave = math.sin(self.anim_time * 8.0) * 4.0
         thread = QPainterPath()
         thread.moveTo(ball_x - 6, ball_y + 6)
-        thread.cubicTo(ball_x - 22, ball_y + 14, 0, 48, -24, 42)
+        thread.cubicTo(ball_x - 20, ball_y + 12, ball_x - 28, 48 + tail_wave, -20, 43)
+        thread.cubicTo(-28, 41, -34, 46, -28, 48)
         painter.setPen(QPen(QColor("#F43F5E"), 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(thread)

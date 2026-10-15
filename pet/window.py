@@ -616,6 +616,8 @@ class PetWindow(QWidget):
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
                 self.model.pet_head()
                 self.renderer.trigger_pet()
+                if self.model.sound_enabled and random.random() < 0.35:
+                    sound_manager.play("meow")
                 if hasattr(self, "dock"):
                     self.dock.show_dock()
                 if random.random() < 0.4:
