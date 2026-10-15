@@ -34,6 +34,10 @@
         <service
             android:name=".FloatingPetService"
             android:exported="false" />
+        <!-- 禁用 Impeller，强制使用 Skia，避免多数 Android GPU 白屏问题 -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
