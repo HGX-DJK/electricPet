@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
 
-/// 灵动伴侣岛快捷操作栏 (马卡龙灵动岛胶囊设计)
+/// 灵动伴侣岛快捷操作栏 (马卡龙灵动岛胶囊设计，支持昼夜自适应)
 class CompanionDock extends StatelessWidget {
   final PetModel model;
   final VoidCallback onFeedTap;
@@ -13,6 +13,7 @@ class CompanionDock extends StatelessWidget {
   final VoidCallback onSleepTap;
   final VoidCallback onToggleFloating;
   final VoidCallback? onTeaseTap;
+  final bool isNight;
 
   const CompanionDock({
     super.key,
@@ -25,6 +26,7 @@ class CompanionDock extends StatelessWidget {
     required this.onSleepTap,
     required this.onToggleFloating,
     this.onTeaseTap,
+    this.isNight = false,
   });
 
   @override
@@ -33,18 +35,27 @@ class CompanionDock extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.95),
+        color: isNight
+            ? const Color(0xFF161334).withOpacity(0.90)
+            : Colors.white.withOpacity(0.95),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(
+          color: isNight ? const Color(0xFF4338CA).withOpacity(0.4) : Colors.white,
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF6366F1).withOpacity(0.12),
+            color: isNight
+                ? const Color(0xFF0D0A24).withOpacity(0.6)
+                : const Color(0xFF6366F1).withOpacity(0.12),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 6,
+            color: isNight
+                ? const Color(0xFF6366F1).withOpacity(0.15)
+                : Colors.black.withOpacity(0.04),
+            blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -58,8 +69,9 @@ class CompanionDock extends StatelessWidget {
             _DockButton(
               icon: '🍱',
               label: '投喂',
-              color: const Color(0xFFFFF7ED),
-              border: const Color(0xFFFED7AA),
+              color: isNight ? const Color(0xFF241F48) : const Color(0xFFFFF7ED),
+              border: isNight ? const Color(0xFF6366F1).withOpacity(0.5) : const Color(0xFFFED7AA),
+              textColor: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
               onTap: onFeedTap,
             ),
             const SizedBox(width: 8),
@@ -67,8 +79,9 @@ class CompanionDock extends StatelessWidget {
               _DockButton(
                 icon: '🧶',
                 label: '逗趣',
-                color: const Color(0xFFFDF2F8),
-                border: const Color(0xFFFBCFE8),
+                color: isNight ? const Color(0xFF2A1C3C) : const Color(0xFFFDF2F8),
+                border: isNight ? const Color(0xFFEC4899).withOpacity(0.5) : const Color(0xFFFBCFE8),
+                textColor: isNight ? const Color(0xFFFCE7F3) : const Color(0xFF334155),
                 onTap: onTeaseTap!,
               ),
               const SizedBox(width: 8),
@@ -76,48 +89,58 @@ class CompanionDock extends StatelessWidget {
             _DockButton(
               icon: '👗',
               label: '衣橱',
-              color: const Color(0xFFFAF5FF),
-              border: const Color(0xFFE9D5FF),
+              color: isNight ? const Color(0xFF221A44) : const Color(0xFFFAF5FF),
+              border: isNight ? const Color(0xFF8B5CF6).withOpacity(0.5) : const Color(0xFFE9D5FF),
+              textColor: isNight ? const Color(0xFFEDE9FE) : const Color(0xFF334155),
               onTap: onWardrobeTap,
             ),
             const SizedBox(width: 8),
             _DockButton(
               icon: '✨',
               label: '绝活',
-              color: const Color(0xFFFFF1F2),
-              border: const Color(0xFFFECDD3),
+              color: isNight ? const Color(0xFF2E1C32) : const Color(0xFFFFF1F2),
+              border: isNight ? const Color(0xFFF43F5E).withOpacity(0.5) : const Color(0xFFFECDD3),
+              textColor: isNight ? const Color(0xFFFFE4E6) : const Color(0xFF334155),
               onTap: onActionTap,
             ),
             const SizedBox(width: 8),
             _DockButton(
               icon: '📝',
               label: '便签',
-              color: const Color(0xFFFEFCE8),
-              border: const Color(0xFFFEF08A),
+              color: isNight ? const Color(0xFF2A232B) : const Color(0xFFFEFCE8),
+              border: isNight ? const Color(0xFFEAB308).withOpacity(0.5) : const Color(0xFFFEF08A),
+              textColor: isNight ? const Color(0xFFFEF9C3) : const Color(0xFF334155),
               onTap: onMemoTap,
             ),
             const SizedBox(width: 8),
             _DockButton(
               icon: '🫧',
               label: '洗澡',
-              color: const Color(0xFFECFDF5),
-              border: const Color(0xFFA7F3D0),
+              color: isNight ? const Color(0xFF172938) : const Color(0xFFECFDF5),
+              border: isNight ? const Color(0xFF10B981).withOpacity(0.5) : const Color(0xFFA7F3D0),
+              textColor: isNight ? const Color(0xFFD1FAE5) : const Color(0xFF334155),
               onTap: onBathTap,
             ),
             const SizedBox(width: 8),
             _DockButton(
               icon: model.isSleeping ? '☀️' : '🌙',
               label: model.isSleeping ? '唤醒' : '哄睡',
-              color: model.isSleeping ? const Color(0xFFFEF08A) : const Color(0xFFEEF2FF),
-              border: model.isSleeping ? const Color(0xFFFACC15) : const Color(0xFFC7D2FE),
+              color: isNight
+                  ? const Color(0xFF231E54)
+                  : (model.isSleeping ? const Color(0xFFFEF08A) : const Color(0xFFEEF2FF)),
+              border: isNight
+                  ? const Color(0xFF818CF8).withOpacity(0.6)
+                  : (model.isSleeping ? const Color(0xFFFACC15) : const Color(0xFFC7D2FE)),
+              textColor: isNight ? const Color(0xFFE0E7FF) : const Color(0xFF334155),
               onTap: onSleepTap,
             ),
             const SizedBox(width: 8),
             _DockButton(
               icon: '📱',
               label: '悬浮',
-              color: const Color(0xFFF0FDF4),
-              border: const Color(0xFFBBF7D0),
+              color: isNight ? const Color(0xFF1E2442) : const Color(0xFFF0FDF4),
+              border: isNight ? const Color(0xFF6366F1).withOpacity(0.5) : const Color(0xFFBBF7D0),
+              textColor: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
               onTap: onToggleFloating,
             ),
           ],
@@ -132,6 +155,7 @@ class _DockButton extends StatefulWidget {
   final String label;
   final Color color;
   final Color border;
+  final Color? textColor;
   final VoidCallback onTap;
 
   const _DockButton({
@@ -139,6 +163,7 @@ class _DockButton extends StatefulWidget {
     required this.label,
     required this.color,
     required this.border,
+    this.textColor,
     required this.onTap,
   });
 
@@ -178,10 +203,10 @@ class _DockButtonState extends State<_DockButton> {
               const SizedBox(height: 2),
               Text(
                 widget.label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF334155),
+                  color: widget.textColor ?? const Color(0xFF334155),
                 ),
               ),
             ],

@@ -481,7 +481,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       return {
         'name': '静谧星夜',
         'icon': '🌙',
-        'colors': const [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF1E293B)],
+        'colors': const [
+          Color(0xFF0F0E26), // 暮夜深紫星空
+          Color(0xFF18153E), // 梦幻星夜靛蓝
+          Color(0xFF221A48), // 暖调午夜微光
+        ],
         'isNight': true,
         'greeting': '夜深啦，小星星都眨眼了，主人早点休息哦，波可守着您~ 💤🌙',
       };
@@ -676,42 +680,78 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           child: Stack(
             children: [
               // 0. 维度四：背景微光氛围天象 (清晨/正午/日落/星夜)
-              Positioned(
-                top: 75,
-                right: 28,
-                child: Text(
-                  ambientIcon,
-                  style: TextStyle(
-                    fontSize: 34,
-                    color: isNight ? Colors.amber.shade200 : Colors.white.withOpacity(0.9),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 135,
-                left: 24,
-                child: Text(
-                  isNight ? '✨' : '☁️',
-                  style: TextStyle(
-                    fontSize: 22,
-                    color: isNight ? const Color(0xFFFDE047).withOpacity(0.8) : Colors.white.withOpacity(0.6),
-                  ),
-                ),
-              ),
               if (isNight) ...[
+                // 月亮：带有微暖柔和金辉的月牙，静静守候
                 Positioned(
-                  top: 210,
-                  right: 65,
-                  child: Text('⭐', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withOpacity(0.7))),
+                  top: 56,
+                  right: 28,
+                  child: IgnorePointer(
+                    child: Text(
+                      '🌙',
+                      style: TextStyle(
+                        fontSize: 36,
+                        shadows: [
+                          Shadow(
+                            color: const Color(0xFFFDE047).withOpacity(0.6),
+                            blurRadius: 18,
+                          ),
+                          Shadow(
+                            color: const Color(0xFFF59E0B).withOpacity(0.3),
+                            blurRadius: 28,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                // 漫天静谧微星 (柔和错落分布，营造静谧温馨的星空感)
+                Positioned(
+                  top: 85,
+                  left: 28,
+                  child: IgnorePointer(
+                    child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withOpacity(0.7))),
+                  ),
                 ),
                 Positioned(
-                  top: 180,
-                  left: 70,
-                  child: Text('✨', style: TextStyle(fontSize: 16, color: Colors.amber.shade100.withOpacity(0.8))),
+                  top: 150,
+                  right: 70,
+                  child: IgnorePointer(
+                    child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withOpacity(0.6))),
+                  ),
+                ),
+                Positioned(
+                  top: 205,
+                  left: 50,
+                  child: IgnorePointer(
+                    child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withOpacity(0.5))),
+                  ),
+                ),
+                Positioned(
+                  top: 170,
+                  left: 110,
+                  child: IgnorePointer(
+                    child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
+                  ),
+                ),
+              ] else ...[
+                // 白天环境氛围 (太阳/云朵/晚霞)
+                Positioned(
+                  top: 56,
+                  right: 28,
+                  child: IgnorePointer(
+                    child: Text(ambientIcon, style: const TextStyle(fontSize: 34)),
+                  ),
+                ),
+                Positioned(
+                  top: 115,
+                  left: 24,
+                  child: IgnorePointer(
+                    child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withOpacity(0.6))),
+                  ),
                 ),
               ],
 
-              // 1. 软萌地毯/专属软垫 (给猫咪一个温暖的家底座)
+              // 1. 软萌地毯/专属软垫 (给猫咪一个温暖的家底座，夜晚采用治愈暮紫星空绒垫)
               Positioned(
                 left: matX - 100,
                 top: matY - 22,
@@ -719,15 +759,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   width: 200,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: (isNight ? const Color(0xFF334155) : const Color(0xFFFEF3C7)).withOpacity(0.88),
+                    color: isNight
+                        ? const Color(0xFF231E4A).withOpacity(0.90) // 治愈暖调暮紫绒垫
+                        : const Color(0xFFFEF3C7).withOpacity(0.88),
                     borderRadius: BorderRadius.circular(25),
                     border: Border.all(
-                      color: isNight ? const Color(0xFF475569) : const Color(0xFFFDE68A),
+                      color: isNight
+                          ? const Color(0xFF6366F1).withOpacity(0.5) // 星光紫边
+                          : const Color(0xFFFDE68A),
                       width: 2.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: (isNight ? Colors.black : const Color(0xFFF59E0B)).withOpacity(0.14),
+                        color: isNight
+                            ? const Color(0xFF4338CA).withOpacity(0.25)
+                            : const Color(0xFFF59E0B).withOpacity(0.14),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
@@ -739,7 +785,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.bold,
-                        color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFFD97706),
+                        color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
                         letterSpacing: 1.2,
                       ),
                     ),
@@ -756,12 +802,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: isNight ? const Color(0xFF1E1A40) : Colors.white,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                      border: Border.all(
+                        color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
+                        width: 1.2,
+                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withOpacity(0.08),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),
@@ -828,12 +877,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                     child: Container(
                       padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: isNight ? const Color(0xFF1E1A40) : Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFFFBCFE8), width: 1.5),
+                        border: Border.all(
+                          color: isNight ? const Color(0xFFF43F5E).withOpacity(0.6) : const Color(0xFFFBCFE8),
+                          width: 1.5,
+                        ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFF43F5E).withOpacity(0.18),
+                            color: const Color(0xFFF43F5E).withOpacity(isNight ? 0.25 : 0.18),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),
@@ -845,12 +897,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 ),
               ),
 
-              // 2. 顶部状态胶囊栏 (等级、好感度、饱腹、心情、昼夜、重置快捷键)
+              // 2. 顶部双灵动岛浮空栏 (左侧萌宠身份 + 右侧饱腹心情小窝，告别拥挤，自然呼吸)
               Positioned(
                 top: 10,
                 left: 16,
                 right: 16,
-                child: _buildTopStatsBar(screenSize, circadian),
+                child: _buildTopDualIslands(screenSize, isNight),
               ),
 
               // 3. 萌宠主窗体 (维度一：部位差异化触感与猫咪打呼噜；维度三：剧烈晃动眩晕；维度五：亲密连击与贴贴)
@@ -1147,10 +1199,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-              // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界)
-              if (_showDialogue) _buildSmartDialogueBubble(screenSize),
+              // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界，夜晚自适应柔和星空底色)
+              if (_showDialogue) _buildSmartDialogueBubble(screenSize, isNight),
 
-              // 6. 底部灵动伴侣岛 Dock (新增逗猫毛线球入口)
+              // 6. 底部灵动伴侣岛 Dock (新增逗猫毛线球入口，昼夜自适应)
               Positioned(
                 bottom: 20,
                 left: 0,
@@ -1158,6 +1210,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 child: Center(
                   child: CompanionDock(
                     model: widget.petModel,
+                    isNight: isNight,
                     onTeaseTap: _teasePlay,
                     onFeedTap: () {
                       _showBottomSheetModal(
@@ -1236,8 +1289,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 智能对齐气泡：永不被猫挡住，附带指向小箭头
-  Widget _buildSmartDialogueBubble(Size screenSize) {
+  /// 智能对齐气泡：永不被猫挡住，附带指向小箭头，支持昼夜温润自适应
+  Widget _buildSmartDialogueBubble(Size screenSize, bool isNight) {
     final bubbleWidth = math.min(260.0, screenSize.width - 32.0);
     // 水平居中对齐猫咪，并防止超出左右屏
     final bubbleLeft = (_petX - bubbleWidth / 2).clamp(16.0, screenSize.width - bubbleWidth - 16.0);
@@ -1258,12 +1311,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           width: bubbleWidth,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.96),
+            color: isNight
+                ? const Color(0xFF1B173E).withOpacity(0.88)
+                : Colors.white.withOpacity(0.96),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE0E7FF), width: 1.5),
+            border: Border.all(
+              color: isNight
+                  ? const Color(0xFF6366F1).withOpacity(0.45)
+                  : const Color(0xFFE0E7FF),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.12),
+                color: isNight
+                    ? const Color(0xFF3730A3).withOpacity(0.25)
+                    : const Color(0xFF6366F1).withOpacity(0.12),
                 blurRadius: 16,
                 offset: const Offset(0, 6),
               ),
@@ -1272,14 +1334,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('💬', style: TextStyle(fontSize: 14)),
+              Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   _currentDialogue,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
-                    color: Color(0xFF1E293B),
+                    color: isNight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
                     fontWeight: FontWeight.w500,
                     height: 1.35,
                   ),
@@ -1292,140 +1354,172 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTopStatsBar(Size screenSize, Map<String, dynamic> circadian) {
-    final isNight = circadian['isNight'] as bool;
-    final timeIcon = circadian['icon'] as String;
-    final timeName = circadian['name'] as String;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: isNight ? const Color(0xFF1E293B).withOpacity(0.92) : Colors.white.withOpacity(0.94),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isNight ? const Color(0xFF334155) : Colors.white, width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF6366F1).withOpacity(0.08),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
-              ),
-              borderRadius: BorderRadius.circular(10),
+  /// 顶部双灵动岛浮空栏：左侧身份好感 + 右侧饱腹心情小窝，告别拥挤，自然呼吸
+  Widget _buildTopDualIslands(Size screenSize, bool isNight) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        // 1. 左侧灵动岛：萌宠等级、名称与亲密值
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isNight
+                ? const Color(0xFF181534).withOpacity(0.85)
+                : Colors.white.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isNight ? const Color(0xFF6366F1).withOpacity(0.35) : Colors.white,
+              width: 1.5,
             ),
-            child: Text(
-              'Lv.${widget.petModel.level}',
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 7),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.petModel.name,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: isNight ? Colors.white : const Color(0xFF1E293B),
-                ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                '❤️ 亲密 ${widget.petModel.intimacy}',
-                style: const TextStyle(fontSize: 10, color: Color(0xFFE11D48), fontWeight: FontWeight.w600),
+            boxShadow: [
+              BoxShadow(
+                color: isNight
+                    ? const Color(0xFF0F0C24).withOpacity(0.5)
+                    : const Color(0xFF6366F1).withOpacity(0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-          const SizedBox(width: 8),
-          // 昼夜时段灵动徽章
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: isNight ? const Color(0xFF0F172A) : const Color(0xFFFEF3C7),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isNight ? const Color(0xFF334155) : const Color(0xFFFDE68A),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(timeIcon, style: const TextStyle(fontSize: 10)),
-                const SizedBox(width: 3),
-                Text(
-                  timeName,
-                  style: TextStyle(
-                    fontSize: 9.5,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 等级徽章
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
+                  ),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  'Lv.${widget.petModel.level}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.bold,
-                    color: isNight ? const Color(0xFF94A3B8) : const Color(0xFFB45309),
                   ),
                 ),
-              ],
-            ),
-          ),
-          const Spacer(),
-          _buildMiniBar('饱腹', widget.petModel.hunger / 100, const Color(0xFFF59E0B)),
-          const SizedBox(width: 8),
-          _buildMiniBar('心情', widget.petModel.mood / 100, const Color(0xFF10B981)),
-          const SizedBox(width: 7),
-          // 一键重置回小窝按钮
-          GestureDetector(
-            onTap: () => _resetToMat(screenSize),
-            child: Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: isNight ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-                shape: BoxShape.circle,
-                border: Border.all(color: isNight ? const Color(0xFF475569) : const Color(0xFFE2E8F0)),
               ),
-              child: Icon(
-                Icons.home_rounded,
-                size: 16,
-                color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+              const SizedBox(width: 7),
+              // 萌宠名称与亲密值
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.petModel.name,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.bold,
+                      color: isNight ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    '❤️ ${widget.petModel.intimacy}',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: isNight ? const Color(0xFFFB7185) : const Color(0xFFE11D48),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMiniBar(String label, double pct, Color color) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$label ${(pct * 100).toInt()}%',
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: color),
         ),
-        const SizedBox(height: 3),
+
+        // 2. 右侧灵动岛：饱腹、心情与小窝重置
         Container(
-          width: 48,
-          height: 6,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.18),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          alignment: Alignment.centerLeft,
-          child: Container(
-            width: 48 * pct.clamp(0.0, 1.0),
-            height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(3),
+            color: isNight
+                ? const Color(0xFF181534).withOpacity(0.85)
+                : Colors.white.withOpacity(0.92),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: isNight ? const Color(0xFF6366F1).withOpacity(0.35) : Colors.white,
+              width: 1.5,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: isNight
+                    ? const Color(0xFF0F0C24).withOpacity(0.5)
+                    : const Color(0xFF6366F1).withOpacity(0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 饱腹指示
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('🍗', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${widget.petModel.hunger.toInt()}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFF59E0B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              // 分隔微点
+              Container(
+                width: 3,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // 心情指示
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('💖', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${widget.petModel.mood.toInt()}%',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF10B981),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              // 回到小窝按钮
+              GestureDetector(
+                onTap: () => _resetToMat(screenSize),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.home_rounded,
+                    size: 14,
+                    color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
