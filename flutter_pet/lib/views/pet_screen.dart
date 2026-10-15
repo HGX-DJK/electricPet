@@ -10,17 +10,22 @@ import 'dialogs/feeding_dialog.dart';
 import 'dialogs/wardrobe_dialog.dart';
 import 'dialogs/action_dialog.dart';
 import 'memo_screen.dart';
+import '../services/overlay_service.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
   final Key id = UniqueKey();
   Offset position;
   final String text;
+  final Color? color;
+  final double fontSize;
   double progress = 0.0; // 0.0 -> 1.0
 
   _Particle({
     required this.position,
     required this.text,
+    this.color,
+    this.fontSize = 22,
   });
 }
 
@@ -115,12 +120,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       _checkAutoDialogue();
     });
 
+    // 监听 PetModel 属性变更 (饱腹度、亲密度、等级、皮肤换装实时重绘)
+    widget.petModel.addListener(_onModelUpdated);
+
     // 启动初始对话
     _showDialogueBubble('主人！今天也要元气满满哦，随时随地陪着您~ ✨');
   }
 
+  void _onModelUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
+    widget.petModel.removeListener(_onModelUpdated);
     _idleAnimController.dispose();
     _squishController.dispose();
     _decayTimer?.cancel();
@@ -171,6 +186,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         text: emojis[rnd.nextInt(emojis.length)],
       ));
     }
+  }
+
+  /// 释放属性增加浮动文字飘字 (+饱腹、+经验)
+  void _spawnTextParticle(Offset pos, String text, Color color) {
+    _particles.add(_Particle(
+      position: pos,
+      text: text,
+      color: color,
+      fontSize: 13,
+    ));
   }
 
   /// 触碰/戳戳萌宠
@@ -461,10 +486,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                         child: Text(
                           p.text,
                           style: TextStyle(
-                            fontSize: 22,
+                            fontSize: p.fontSize,
+                            fontWeight: FontWeight.bold,
+                            color: p.color,
                             shadows: [
                               Shadow(
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white.withOpacity(0.9),
                                 blurRadius: 4,
                               ),
                             ],
@@ -492,9 +519,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                         builder: (_) => FeedingDialog(
                           model: widget.petModel,
                           onFeedSelected: (foodId) {
+                            final food = PetModel.foodMenu.firstWhere(
+                              (f) => f['id'] == foodId,
+                              orElse: () => PetModel.foodMenu.first,
+                            );
+                            final foodIcon = food['icon'] as String;
+                            final foodName = food['name'] as String;
+                            final hungerGain = (food['hunger'] as double).toInt();
+                            final expGain = (food['exp'] as double).toInt();
+
                             widget.petModel.feed(foodId);
-                            _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 4);
-                            _showDialogueBubble('哇！好吃到打滚~ 饱腹感满满！(๑´ڡ`๑)');
+                            if (widget.petModel.enableHaptics) {
+                              HapticFeedback.mediumImpact();
+                            }
+
+                            // 触发进食咀嚼动画
+                            _playAction('EATING');
+
+                            // 飞出食物与属性增加飘字
+                            _spawnParticles(Offset(_petX, _petY - 25), emoji: foodIcon, count: 5);
+                            _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹 ❤️', const Color(0xFFF59E0B));
+                            _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+$expGain 经验 ✨', const Color(0xFF6366F1));
+
+                            _showDialogueBubble('哇！$foodName 太美味啦~ 肚子饱饱的，好幸福！(๑´ڡ`๑)', duration: const Duration(seconds: 4));
                           },
                         ),
                       );
@@ -535,7 +582,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       }
                     },
                     onToggleFloating: () {
-                      _showFloatingNotice();
+                      _handleFloatingTap();
                     },
                   ),
                 ),
@@ -703,28 +750,103 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  void _showFloatingNotice() {
+  Future<void> _handleFloatingTap() async {
+    final hasPermission = await OverlayService.checkPermission();
+    final isRunning = await OverlayService.isRunning();
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        title: const Row(
-          children: [
-            Text('📱', style: TextStyle(fontSize: 22)),
-            SizedBox(width: 8),
-            Text('全局屏幕悬浮窗模式', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          '在 Android 设备上，波可支持突破 App 窗口界限，悬浮在手机桌面、微信、浏览器等任意应用的最上层。\n\n开启此模式需要授予“显示在其他应用上层”权限。',
-          style: TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('我知道啦'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Row(
+              children: [
+                Text('📱', style: TextStyle(fontSize: 24)),
+                SizedBox(width: 8),
+                Text('全局桌面悬浮宠', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasPermission
+                      ? '✅ 系统悬浮窗权限已就绪！\n开启后波可将突破 App 边界，常驻在手机桌面、微信、浏览器等任意应用的最上层，随时随地陪伴您。'
+                      : '⚠️ 尚未开启“显示在其他应用上层”权限。\n请先点击下方按钮前往系统设置开启悬浮窗权限，方可在手机桌面上显示波可。',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+                ),
+                const SizedBox(height: 14),
+                if (hasPermission)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isRunning ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isRunning ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(isRunning ? '🟢 悬浮萌宠：运行中 (已在屏幕边缘)' : '⚪ 悬浮萌宠：未开启',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isRunning ? const Color(0xFF047857) : const Color(0xFF64748B),
+                            )),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('稍后再说', style: TextStyle(color: Color(0xFF94A3B8))),
+              ),
+              if (!hasPermission)
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.settings_rounded, size: 18),
+                  label: const Text('前往授权悬浮窗'),
+                  onPressed: () async {
+                    Navigator.pop(ctx);
+                    await OverlayService.requestPermission();
+                  },
+                )
+              else
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isRunning ? const Color(0xFFE11D48) : const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: Icon(isRunning ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded, size: 18),
+                  label: Text(isRunning ? '收回悬浮宠' : '立即启动桌面悬浮'),
+                  onPressed: () async {
+                    if (isRunning) {
+                      await OverlayService.stopFloatingPet();
+                      _showDialogueBubble('桌面悬浮宠已收回小窝~ 🐾');
+                    } else {
+                      final ok = await OverlayService.startFloatingPet();
+                      if (ok) {
+                        _showDialogueBubble('桌面悬浮宠启动成功！切回手机桌面就能看到波可啦~ ✨');
+                      }
+                    }
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                ),
+            ],
+          );
+        },
       ),
     );
   }

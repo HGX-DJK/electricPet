@@ -34,11 +34,26 @@ class MainActivity: FlutterActivity() {
                     result.success(true)
                 }
                 "startFloatingService" -> {
-                    // 启动桌面悬浮窗模式
-                    result.success(true)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                        val intent = Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                        result.success(false)
+                    } else {
+                        val intent = Intent(this, FloatingPetService::class.java)
+                        startService(intent)
+                        result.success(true)
+                    }
                 }
                 "stopFloatingService" -> {
+                    val intent = Intent(this, FloatingPetService::class.java)
+                    stopService(intent)
                     result.success(true)
+                }
+                "isFloatingServiceRunning" -> {
+                    result.success(FloatingPetService.isRunning)
                 }
                 else -> result.notImplemented()
             }

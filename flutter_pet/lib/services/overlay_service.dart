@@ -37,4 +37,14 @@ class OverlayService {
       await _channel.invokeMethod('stopFloatingService');
     } catch (_) {}
   }
+
+  /// 检查悬浮窗是否正在运行
+  static Future<bool> isRunning() async {
+    try {
+      final bool running = await _channel.invokeMethod('isFloatingServiceRunning');
+      return running;
+    } catch (_) {
+      return false;
+    }
+  }
 }

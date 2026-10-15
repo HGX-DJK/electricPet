@@ -231,7 +231,7 @@ class PetPainter extends CustomPainter {
       headPaint,
     );
 
-    // 脑袋顶部三花斑块
+    // 脑袋斑纹与皮肤特色 (三花/橘猫/暹罗)
     if (skin.id == 'cat_calico') {
       final patchPaint = Paint()
         ..color = Color(skin.secondaryColor)
@@ -241,6 +241,25 @@ class PetPainter extends CustomPainter {
         ..quadraticBezierTo(headCenter.dx + 48, headCenter.dy - 35, headCenter.dx + 45, headCenter.dy - 5)
         ..quadraticBezierTo(headCenter.dx + 25, headCenter.dy - 20, headCenter.dx + 10, headCenter.dy - 48);
       canvas.drawPath(patchPath, patchPaint);
+    } else if (skin.id == 'cat_orange') {
+      // 橘猫额头活力虎斑 M 纹
+      final stripePaint = Paint()
+        ..color = Color(skin.secondaryColor)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(Offset(headCenter.dx - 12, headCenter.dy - 42), Offset(headCenter.dx - 4, headCenter.dy - 26), stripePaint);
+      canvas.drawLine(Offset(headCenter.dx, headCenter.dy - 45), Offset(headCenter.dx, headCenter.dy - 25), stripePaint);
+      canvas.drawLine(Offset(headCenter.dx + 12, headCenter.dy - 42), Offset(headCenter.dx + 4, headCenter.dy - 26), stripePaint);
+    } else if (skin.id == 'cat_siamese') {
+      // 暹罗猫经典重点色渐变面罩
+      final maskPaint = Paint()
+        ..color = Color(skin.secondaryColor).withOpacity(0.90)
+        ..style = PaintingStyle.fill;
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy + 8), width: 56, height: 44),
+        maskPaint,
+      );
     }
 
     // 腮红
@@ -264,7 +283,7 @@ class PetPainter extends CustomPainter {
     _drawNoseAndMouth(canvas, headCenter);
 
     // 胡须
-    _drawWhiskers(canvas, headCenter);
+    _drawWhiskers(canvas, skin, headCenter);
 
     canvas.restore();
   }
@@ -447,6 +466,28 @@ class PetPainter extends CustomPainter {
       return;
     }
 
+    if (state == 'EATING') {
+      // 投喂进食咀嚼动画 (嘴巴一开一合 嚼嚼嚼)
+      final chewCycle = math.sin(animTime * 14.0);
+      if (chewCycle > 0) {
+        final openMouth = Paint()..color = const Color(0xFF451A03);
+        canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 6), width: 10, height: 8), openMouth);
+        final tongue = Paint()..color = const Color(0xFFFB7185);
+        canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 8), width: 7, height: 5), tongue);
+      } else {
+        final happyMouth = Paint()
+          ..color = const Color(0xFF334155)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round;
+        final p = Path()
+          ..moveTo(noseCenter.dx - 8, noseCenter.dy + 4)
+          ..quadraticBezierTo(noseCenter.dx, noseCenter.dy + 9, noseCenter.dx + 8, noseCenter.dy + 4);
+        canvas.drawPath(p, happyMouth);
+      }
+      return;
+    }
+
     // 治愈 ω 微笑猫嘴
     final mouthPaint = Paint()
       ..color = const Color(0xFF334155)
@@ -465,9 +506,10 @@ class PetPainter extends CustomPainter {
     canvas.drawPath(mouthRight, mouthPaint);
   }
 
-  void _drawWhiskers(Canvas canvas, Offset headCenter) {
+  void _drawWhiskers(Canvas canvas, SkinConfig skin, Offset headCenter) {
+    final whiskerColor = (skin.id == 'cat_black') ? const Color(0xFFE2E8F0) : const Color(0x7094A3B8);
     final whiskerPaint = Paint()
-      ..color = const Color(0x7094A3B8)
+      ..color = whiskerColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
@@ -538,6 +580,33 @@ class PetPainter extends CustomPainter {
       canvas.drawCircle(const Offset(0, 25), 6.5, bellPaint);
       final bellHolePaint = Paint()..color = const Color(0xFF78350F);
       canvas.drawCircle(const Offset(0, 26), 1.8, bellHolePaint);
+    } else if (neckDeco == 'ribbon') {
+      // 俏皮粉红蝴蝶结
+      final bowPaint = Paint()..color = const Color(0xFFF43F5E);
+      // 左蝴蝶翼
+      final leftWing = Path()
+        ..moveTo(0, 24)
+        ..lineTo(-15, 17)
+        ..quadraticBezierTo(-18, 24, -15, 31)
+        ..close();
+      canvas.drawPath(leftWing, bowPaint);
+      // 右蝴蝶翼
+      final rightWing = Path()
+        ..moveTo(0, 24)
+        ..lineTo(15, 17)
+        ..quadraticBezierTo(18, 24, 15, 31)
+        ..close();
+      canvas.drawPath(rightWing, bowPaint);
+      // 蝴蝶结中心结
+      canvas.drawCircle(const Offset(0, 24), 4.5, Paint()..color = const Color(0xFFBE123C));
+      // 飘带
+      final ribbonPaint = Paint()
+        ..color = const Color(0xFFF43F5E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(-3, 27), const Offset(-7, 36), ribbonPaint);
+      canvas.drawLine(const Offset(3, 27), const Offset(7, 36), ribbonPaint);
     }
   }
 

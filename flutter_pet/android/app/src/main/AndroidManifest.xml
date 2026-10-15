@@ -29,6 +29,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service
+            android:name=".FloatingPetService"
+            android:exported="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
