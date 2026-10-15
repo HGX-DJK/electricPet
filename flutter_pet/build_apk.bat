@@ -6,17 +6,30 @@ echo          Poko Android APK Build Tool
 echo ========================================================
 echo.
 
-where flutter >nul 2>nul
-if errorlevel 1 goto no_flutter
+set "PUB_HOSTED_URL=https://pub.flutter-io.cn"
+set "FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn"
 
-echo [1/3] Getting dependencies (flutter pub get)...
+set "FLUTTER_CMD=flutter"
+where flutter >nul 2>nul
+if errorlevel 1 (
+    if exist "D:\software\flutter\bin\flutter.bat" (
+        set "FLUTTER_CMD=D:\software\flutter\bin\flutter.bat"
+        set "PATH=D:\software\flutter\bin;%PATH%"
+        echo [INFO] Detected Flutter at D:\software\flutter\bin!
+        echo.
+    ) else (
+        goto no_flutter
+    )
+)
+
+echo [1/3] Getting dependencies (%FLUTTER_CMD% pub get)...
 cd /d "%~dp0"
-call flutter pub get
+call "%FLUTTER_CMD%" pub get
 if errorlevel 1 goto err_pub
 
 echo.
-echo [2/3] Building Release APK (flutter build apk --release)...
-call flutter build apk --release
+echo [2/3] Building Release APK (%FLUTTER_CMD% build apk --release)...
+call "%FLUTTER_CMD%" build apk --release
 if errorlevel 1 goto err_build
 
 echo.
@@ -29,18 +42,7 @@ pause
 exit /b 0
 
 :no_flutter
-echo [Notice] Flutter command not found in your system PATH.
-echo.
-echo [Method 1 - Recommended]: Use GitHub Actions Cloud Build
-echo Simply push your code to GitHub, click the 'Actions' tab,
-echo and download the compiled APK directly without installing any tools!
-echo.
-echo [Method 2]: Install Flutter SDK on your PC
-echo 1. Download Flutter SDK for Windows
-echo 2. Extract to D:\software\flutter and add D:\software\flutter\bin to PATH
-echo 3. Run this script again
-echo ========================================================
-echo.
+echo [Notice] Flutter command not found in your system PATH or D:\software\flutter.
 pause
 exit /b 1
 

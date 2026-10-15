@@ -1,0 +1,4 @@
+# Ensure gradlew and shell scripts use LF endings for Linux/macOS CI runners
+flutter_pet/android/gradlew text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
