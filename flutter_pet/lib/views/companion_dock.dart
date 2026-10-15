@@ -12,6 +12,7 @@ class CompanionDock extends StatelessWidget {
   final VoidCallback onBathTap;
   final VoidCallback onSleepTap;
   final VoidCallback onToggleFloating;
+  final VoidCallback? onTeaseTap;
 
   const CompanionDock({
     super.key,
@@ -23,6 +24,7 @@ class CompanionDock extends StatelessWidget {
     required this.onBathTap,
     required this.onSleepTap,
     required this.onToggleFloating,
+    this.onTeaseTap,
   });
 
   @override
@@ -61,6 +63,16 @@ class CompanionDock extends StatelessWidget {
               onTap: onFeedTap,
             ),
             const SizedBox(width: 8),
+            if (onTeaseTap != null) ...[
+              _DockButton(
+                icon: '🧶',
+                label: '逗趣',
+                color: const Color(0xFFFDF2F8),
+                border: const Color(0xFFFBCFE8),
+                onTap: onTeaseTap!,
+              ),
+              const SizedBox(width: 8),
+            ],
             _DockButton(
               icon: '👗',
               label: '衣橱',
