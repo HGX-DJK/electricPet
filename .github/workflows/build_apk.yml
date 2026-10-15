@@ -38,6 +38,11 @@ jobs:
         run: |
           chmod +x flutter_pet/android/gradlew
 
+      - name: Run Flutter Tests
+        run: |
+          cd flutter_pet
+          flutter test
+
       - name: Build Release APK
         run: |
           cd flutter_pet

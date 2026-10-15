@@ -129,7 +129,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     ]).animate(_squishController);
 
     // 自主漫步踱步位移控制器
-    _walkController = AnimationController(vsync: this);
+    _walkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    );
     _walkController.addListener(() {
       if (!mounted || _isDragging) return;
       setState(() {
@@ -204,8 +207,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     // 监听 PetModel 属性变更 (饱腹度、亲密度、等级升级、皮肤换装实时重绘)
     widget.petModel.addListener(_onModelUpdated);
 
-    // 启动初始对话
-    _showDialogueBubble('主人！今天也要元气满满哦，随时随地陪着您~ ✨');
+    // 启动初始对话 (安全就绪，避免在 initState 期间触发 setState 引起构建异常)
+    _currentDialogue = '主人！今天也要元气满满哦，随时随地陪着您~ ✨';
+    _showDialogue = true;
+    _dialogueTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted) {
+        setState(() {
+          _showDialogue = false;
+        });
+      }
+    });
   }
 
   void _onModelUpdated() {
@@ -598,25 +609,27 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
+    final screenW = screenSize.width > 0 ? screenSize.width : 360.0;
+    final screenH = screenSize.height > 0 ? screenSize.height : 640.0;
+    final safeSize = Size(screenW, screenH);
 
     // 首次进入自适应设置萌宠在黄金视线居中点
-    if (!_initializedPos && screenSize.width > 0) {
-      _petX = screenSize.width / 2;
-      _petY = screenSize.height * 0.44;
+    if (!_initializedPos) {
+      _petX = screenW / 2;
+      _petY = screenH * 0.44;
       _initializedPos = true;
     }
 
     // 地板与软垫基准位置
-    final matX = screenSize.width / 2;
-    final matY = screenSize.height * 0.44 + 68.0;
+    final matX = screenW / 2;
+    final matY = screenH * 0.44 + 68.0;
 
     // 萌宠允许移动的上下安全边界
     const minSafeY = 150.0;
-    final maxSafeY = screenSize.height - 180.0;
+    final maxSafeY = math.max(minSafeY + 20.0, screenH - 180.0);
 
     return Scaffold(
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 600),
+      body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -1029,9 +1042,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     if (needEmoji == null) return const SizedBox.shrink();
 
+    final safeSize = MediaQuery.of(context).size;
+    final screenW = safeSize.width > 0 ? safeSize.width : 360.0;
+    final screenH = safeSize.height > 0 ? safeSize.height : 640.0;
+    final maxL = math.max(16.0, screenW - 130.0);
+    final maxT = math.max(70.0, screenH - 180.0);
+
     return Positioned(
-      left: (_petX + 42).clamp(16.0, MediaQuery.of(context).size.width - 130.0),
-      top: (_petY - 82).clamp(70.0, MediaQuery.of(context).size.height - 180.0),
+      left: (_petX + 42).clamp(16.0, maxL),
+      top: (_petY - 82).clamp(70.0, maxT),
       child: GestureDetector(
         onTap: onTapNeed,
         child: Container(
@@ -1159,8 +1178,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 智能对齐气泡：永不被猫挡住，附带指向小箭头
   Widget _buildSmartDialogueBubble(Size screenSize) {
-    final bubbleWidth = math.min(270.0, screenSize.width - 32.0);
-    final bubbleLeft = (_petX - bubbleWidth / 2).clamp(16.0, screenSize.width - bubbleWidth - 16.0);
+    final screenW = screenSize.width > 0 ? screenSize.width : 360.0;
+    final bubbleWidth = math.min(270.0, math.max(160.0, screenW - 32.0));
+    final maxLeft = math.max(16.0, screenW - bubbleWidth - 16.0);
+    final bubbleLeft = (_petX - bubbleWidth / 2).clamp(16.0, maxLeft);
 
     // 垂直方向：根据猫咪所在高度自适应调整在头顶或脚下
     final showAbove = _petY > 210.0;
@@ -1260,24 +1281,30 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           ),
           const SizedBox(width: 8),
           // 猫咪名字与亲密等级
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.petModel.name,
-                style: TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.bold,
-                  color: _isNightMode ? Colors.white : const Color(0xFF1E293B),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.petModel.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: _isNightMode ? Colors.white : const Color(0xFF1E293B),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 1),
-              Text(
-                '❤️ 亲密 ${widget.petModel.intimacy}',
-                style: const TextStyle(fontSize: 10, color: Color(0xFFE11D48), fontWeight: FontWeight.w600),
-              ),
-            ],
+                const SizedBox(height: 1),
+                Text(
+                  '❤️ 亲密 ${widget.petModel.intimacy}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: Color(0xFFE11D48), fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
           const Spacer(),
           // 饱腹与心情进度胶囊
