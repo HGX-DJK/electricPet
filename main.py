@@ -89,7 +89,9 @@ def main():
             def _handle_read():
                 msg = client.readAll().data().decode("utf-8", errors="ignore").strip()
                 if "WAKE_UP" in msg:
-                    if not window.isVisible():
+                    if getattr(window, "is_boss_hidden", False):
+                        window.toggle_boss_mode()
+                    elif not window.isVisible():
                         window.show()
                     window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
                     window.raise_()
@@ -102,13 +104,20 @@ def main():
 
     # 退出前保存状态并释放单实例资源
     def _cleanup():
+        try:
+            window.unregister_boss_hotkey()
+        except Exception:
+            pass
         model.save_to_disk()
         instance_server.close()
         QLocalServer.removeServer(server_id)
     app.aboutToQuit.connect(_cleanup)
 
-    # 显示窗口与托盘
+    # 显示窗口与托盘，并激活 Windows 全局老板键
     window.show()
+    window.raise_()
+    window.activateWindow()
+    window.register_boss_hotkey()
     tray.show()
 
     # 升级提示回调绑定

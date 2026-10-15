@@ -1,7 +1,7 @@
 import math
 import random
 import time
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRect, QRectF, QPropertyAnimation, QEasingCurve, QAbstractNativeEventFilter
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtGui import QPainter, QCursor, QMouseEvent, QScreen
 
@@ -11,6 +11,24 @@ from pet.menus import QuickActionMenu
 from pet.dock import PetCompanionDock
 from pet.memo import PetStickyNote
 from pet.audio import sound_manager
+
+class GlobalBossKeyFilter(QAbstractNativeEventFilter):
+    """Windows 原生全局消息过滤器 (安全响应 Alt+P 全局老板键)"""
+    def __init__(self, window):
+        super().__init__()
+        self.window = window
+
+    def nativeEventFilter(self, eventType, message):
+        try:
+            if eventType == b"windows_generic_MSG":
+                import ctypes.wintypes as wt
+                msg = wt.MSG.from_address(int(message))
+                if msg.message == 0x0312 and msg.wParam == getattr(self.window, "HOTKEY_BOSS_ID", 9527):
+                    self.window.toggle_boss_mode()
+                    return True, 0
+        except Exception:
+            pass
+        return False, 0
 
 class PetWindow(QWidget):
     """
@@ -29,6 +47,7 @@ class PetWindow(QWidget):
         self.is_boss_hidden = False
         self._memo_was_visible = False
         self.HOTKEY_BOSS_ID = 9527
+        self._boss_filter_installed = False
 
         # 状态机：IDLE, WALK_LEFT, WALK_RIGHT, DRAGGING, FALLING, BOUNCE, 
         # 及多样动作：STRETCH_YAWN, WASH_FACE, CHASE_BUTTERFLY, HEAD_BOB_MUSIC, TILT_HEAD, HAPPY_SPIN, DOZE_OFF, DIZZY, CARDBOARD_BOX, PEEK_LEFT, PEEK_RIGHT
@@ -104,27 +123,29 @@ class PetWindow(QWidget):
             except Exception:
                 pass
 
-        # 注册全局老板键 (Alt + P: 0x0001 | 0x4000, 0x50)
+    def register_boss_hotkey(self):
+        """窗口显式显示后安全注册 Windows 全局老板键 (Alt + P)"""
         try:
             import ctypes
             hwnd = int(self.winId())
+            self._boss_hwnd = hwnd
             ctypes.windll.user32.RegisterHotKey(hwnd, self.HOTKEY_BOSS_ID, 0x0001 | 0x4000, 0x50)
-        except Exception:
-            pass
+            app = QApplication.instance()
+            if app and not getattr(self, "_boss_filter_installed", False):
+                self._boss_filter = GlobalBossKeyFilter(self)
+                app.installNativeEventFilter(self._boss_filter)
+                self._boss_filter_installed = True
+        except Exception as e:
+            print("RegisterHotKey error:", e)
 
-    def nativeEvent(self, eventType, message):
-        """处理 Windows 原生全局消息 (响应 Alt+P 全局老板键)"""
+    def unregister_boss_hotkey(self):
+        """注销全局热键"""
         try:
-            ev_name = bytes(eventType)
-            if ev_name == b"windows_generic_MSG":
-                import ctypes.wintypes as wt
-                msg = wt.MSG.from_address(int(message))
-                if msg.message == 0x0312 and msg.wParam == getattr(self, "HOTKEY_BOSS_ID", 9527):
-                    self.toggle_boss_mode()
-                    return True, 0
+            import ctypes
+            if hasattr(self, "_boss_hwnd"):
+                ctypes.windll.user32.UnregisterHotKey(self._boss_hwnd, self.HOTKEY_BOSS_ID)
         except Exception:
             pass
-        return super().nativeEvent(eventType, message)
 
     def toggle_boss_mode(self):
         """全局老板键一键极速隐身 / 恢复显示 (Alt + P)"""
@@ -183,16 +204,20 @@ class PetWindow(QWidget):
             init_x, init_y = 100, 100
         else:
             default_x = avail.right() - self.width() - 80
-            default_y = avail.bottom() - self.height()
+            default_y = avail.bottom() - self.height() - 15
             if (self.model.last_pos_x is not None and self.model.last_pos_y is not None and
                     not (self.model.last_pos_x == 0 and self.model.last_pos_y == 0)):
-                init_x = max(avail.left(), min(int(self.model.last_pos_x), avail.right() - self.width()))
-                init_y = max(avail.top(), min(int(self.model.last_pos_y), avail.bottom() - self.height()))
+                # 如果历史记录的坐标贴顶 (<=15px) 或超出屏幕工作区，重置为右下角默认位置
+                if self.model.last_pos_y <= 15 or self.model.last_pos_y > avail.bottom() - self.height() - 10:
+                    init_x, init_y = default_x, default_y
+                else:
+                    init_x = max(avail.left() + 10, min(int(self.model.last_pos_x), avail.right() - self.width() - 10))
+                    init_y = max(avail.top() + 10, min(int(self.model.last_pos_y), avail.bottom() - self.height() - 10))
             else:
                 init_x, init_y = default_x, default_y
 
         self.anchor_y = init_y
-        self.move(init_x, init_y)
+        self.move(int(init_x), int(init_y))
 
     def apply_model_settings(self):
         """重新应用设置参数（缩放、置顶、物理重力等），安全更新避免窗体句柄重构导致卡死"""

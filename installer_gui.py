@@ -73,7 +73,15 @@ def launch_installed_app(target_exe, target_dir):
     for key in ("_MEIPASS2", "_MEIPASS", "PYTHONPATH", "PYTHONHOME", "PYTHONEXECUTABLE"):
         clean_env.pop(key, None)
 
-    # 优先使用 Windows 原生 ShellExecute (os.startfile) 直接由 Explorer 进程拉起独立应用
+    # 优先使用 Windows subprocess 独立分离进程组拉起 (明确工作目录与纯净环境)
+    try:
+        flags = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        subprocess.Popen([target_exe], cwd=target_dir, env=clean_env, creationflags=flags)
+        return True
+    except Exception as e:
+        print("subprocess launch notice:", e)
+
+    # 备选使用 Windows 原生 ShellExecute (os.startfile)
     if hasattr(os, "startfile"):
         try:
             os.startfile(target_exe)
@@ -81,13 +89,7 @@ def launch_installed_app(target_exe, target_dir):
         except Exception as e:
             print("os.startfile launch notice:", e)
 
-    # 备选使用无污染 env 的独立进程
-    try:
-        subprocess.Popen([target_exe], cwd=target_dir, env=clean_env)
-        return True
-    except Exception as e:
-        print("subprocess launch notice:", e)
-        return False
+    return False
 
 def do_core_install(target_dir, create_desktop, create_startmenu, autostart, launch_after, status_cb=None, progress_cb=None):
     """执行核心安装逻辑：解压 payload、建立快捷方式、注册表登记"""
@@ -558,6 +560,8 @@ class SetupApp(tk.Tk):
         self.launch_var = tk.BooleanVar(value=True)
 
         self.is_installed = False
+        self._already_launched = False
+        self.protocol("WM_DELETE_WINDOW", self._on_window_close)
         self._init_ui()
 
     def _init_ui(self):
@@ -774,11 +778,21 @@ class SetupApp(tk.Tk):
             self.install_dir_var.set(os.path.normpath(chosen))
             self.space_lbl.config(text=self._get_space_text())
 
-    def _on_action_click(self):
-        if self.is_installed:
+    def _on_window_close(self):
+        if self.is_installed and self.launch_var.get() and not getattr(self, "_already_launched", False):
             target_dir = self.install_dir_var.get().strip()
             target_exe = os.path.join(target_dir, "DesktopPet.exe")
             launch_installed_app(target_exe, target_dir)
+            self._already_launched = True
+        self.destroy()
+
+    def _on_action_click(self):
+        if self.is_installed:
+            if self.launch_var.get() and not getattr(self, "_already_launched", False):
+                target_dir = self.install_dir_var.get().strip()
+                target_exe = os.path.join(target_dir, "DesktopPet.exe")
+                launch_installed_app(target_exe, target_dir)
+                self._already_launched = True
             self.destroy()
             return
 
@@ -799,7 +813,7 @@ class SetupApp(tk.Tk):
                 create_desktop=self.desktop_var.get(),
                 create_startmenu=self.startmenu_var.get(),
                 autostart=self.autostart_var.get(),
-                launch_after=self.launch_var.get(),
+                launch_after=False,
                 status_cb=self._update_status,
                 progress_cb=self._update_progress
             )
