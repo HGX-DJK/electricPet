@@ -211,20 +211,43 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     final actionLines = {
       'CARDBOARD_BOX': '钻进快递纸箱啦！好有安全感，探头偷看~ 📦✨',
-      'CATCH_MOUSE': '看我的喵影神捕！敏捷一扑抓住小老鼠啦！🐭💨',
+      'CATCH_MOUSE': '看我的喵影神捕！敏捷一扑抓住机械小老鼠啦！🐭💨',
       'PLAY_YARN': '粉红毛线球滚呀滚~ 抱紧滚来滚去！🧶🐾',
       'PEEK_EDGE': '悄悄趴在屏幕边上偷看主人写代码~ 👀💕',
-      'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧',
-      'HAPPY_SPIN': '开心到飞起！旋转跳跃转圈圈~ 💫(✧ω✧)',
+      'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
       'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
       'TILT_HEAD': '歪头好奇打量~ 主人又在看什么有趣的内容呢？❓',
+      'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
+      'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
+      'HEAD_BOB_MUSIC': '戴上潮流大耳机！动次打次跟着节拍摇头晃脑~ 🎵🎧',
+      'CHASE_BUTTERFLY': '哇！彩光小蝴蝶飞来啦~ 灵巧一扑！🦋✨',
+      'HAPPY_SPIN': '开心到飞起！旋转跳跃转圈圈~ 💫(✧ω✧)',
+      'DOZE_OFF': '小脑瓜一点一点... 困意来袭，打个小瞌睡~ 💤',
       'DIZZY': '小星星在头上转呀转~ 晕乎乎晃悠悠~ ⭐🌀',
+    };
+
+    final actionEmojis = {
+      'CARDBOARD_BOX': '📦',
+      'CATCH_MOUSE': '🐭',
+      'PLAY_YARN': '🧶',
+      'PEEK_EDGE': '👀',
+      'WASH_FACE': '🫧',
+      'STRETCH_YAWN': '🥱',
+      'TILT_HEAD': '❓',
+      'LOOK_AROUND': '🔍',
+      'SIT_WAG_TAIL': '🐾',
+      'HEAD_BOB_MUSIC': '🎵',
+      'CHASE_BUTTERFLY': '🦋',
+      'HAPPY_SPIN': '💫',
+      'DOZE_OFF': '💤',
+      'DIZZY': '⭐',
     };
 
     final msg = actionLines[actionId] ?? '波可展现了独家才艺！✨';
     _showDialogueBubble(msg, duration: const Duration(seconds: 5));
+    _spawnParticles(Offset(_petX, _petY - 40), emoji: actionEmojis[actionId], count: 5);
 
-    Timer(const Duration(milliseconds: 4800), () {
+    Timer(const Duration(milliseconds: 5200), () {
       if (mounted && _state == actionId) {
         setState(() {
           _state = 'IDLE';
