@@ -87,6 +87,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   // 重力下落动画目标
   double _gravityStartY = 0.0;
   double _gravityTargetY = 0.0;
+  Size _lastScreenSize = const Size(360.0, 640.0);
 
   // 抚摸与手势
   double _strokeDistance = 0.0;
@@ -284,13 +285,19 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 开始自主漫步
   void _startAutonomousWander() {
-    final screenSize = MediaQuery.of(context).size;
-    final rugCenterX = screenSize.width / 2;
-    final rugCenterY = screenSize.height * 0.44;
+    final safeW = _lastScreenSize.width > 0 ? _lastScreenSize.width : 360.0;
+    final safeH = _lastScreenSize.height > 0 ? _lastScreenSize.height : 640.0;
+    final rugCenterX = safeW / 2;
+    final rugCenterY = safeH * 0.44;
+
+    final minTargetX = 55.0;
+    final maxTargetX = math.max(minTargetX + 10.0, safeW - 55.0);
+    final minTargetY = 160.0;
+    final maxTargetY = math.max(minTargetY + 10.0, safeH - 210.0);
 
     // 限制在地毯与房间舒适活动区
-    final newTargetX = (rugCenterX + (math.Random().nextDouble() - 0.5) * 160).clamp(55.0, screenSize.width - 55.0);
-    final newTargetY = (rugCenterY + (math.Random().nextDouble() - 0.5) * 80).clamp(160.0, screenSize.height - 210.0);
+    final newTargetX = (rugCenterX + (math.Random().nextDouble() - 0.5) * 160).clamp(minTargetX, maxTargetX);
+    final newTargetY = (rugCenterY + (math.Random().nextDouble() - 0.5) * 80).clamp(minTargetY, maxTargetY);
 
     _walkToCoordinates(newTargetX, newTargetY);
 
@@ -612,6 +619,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     final screenW = screenSize.width > 0 ? screenSize.width : 360.0;
     final screenH = screenSize.height > 0 ? screenSize.height : 640.0;
     final safeSize = Size(screenW, screenH);
+    _lastScreenSize = safeSize;
 
     // 首次进入自适应设置萌宠在黄金视线居中点
     if (!_initializedPos) {
@@ -642,9 +650,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                     Color(0xFF1E293B), // 静谧地板暗色
                   ]
                 : const [
-                    Color(0xFFFFF7ED), // 晨光暖杏奶白
+                    Color(0xFFE0F2FE), // 清新天空冰蓝
                     Color(0xFFFEF3C7), // 柔和香草奶油
-                    Color(0xFFF0FDF4), // 清新薄荷浅绿
+                    Color(0xFFFCE7F3), // 梦幻落樱治愈粉
                     Color(0xFFEEF2FF), // 治愈风铃草蓝紫
                   ],
           ),
@@ -1026,8 +1034,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       needEmoji = '🧶';
       needText = '想玩球球...';
       onTapNeed = () {
-        final matX = MediaQuery.of(context).size.width / 2;
-        final matY = MediaQuery.of(context).size.height * 0.44 + 68.0;
+        final matX = _lastScreenSize.width / 2;
+        final matY = _lastScreenSize.height * 0.44 + 68.0;
         _onYarnTapped(matX, matY);
       };
     } else if (widget.petModel.cleanliness < 45.0) {
@@ -1042,9 +1050,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     if (needEmoji == null) return const SizedBox.shrink();
 
-    final safeSize = MediaQuery.of(context).size;
-    final screenW = safeSize.width > 0 ? safeSize.width : 360.0;
-    final screenH = safeSize.height > 0 ? safeSize.height : 640.0;
+    final screenW = _lastScreenSize.width > 0 ? _lastScreenSize.width : 360.0;
+    final screenH = _lastScreenSize.height > 0 ? _lastScreenSize.height : 640.0;
     final maxL = math.max(16.0, screenW - 130.0);
     final maxT = math.max(70.0, screenH - 180.0);
 
