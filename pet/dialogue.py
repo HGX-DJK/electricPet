@@ -9,42 +9,81 @@ from PyQt6.QtGui import QFont, QColor, QPainter, QPainterPath, QBrush, QPen
 
 class SpeechBalloonCard(QFrame):
     """
-    可爱的卡通气泡卡片：纯白温润背景、平滑圆角、底部连接向宠物头部的卡通气泡小尖角
+    可爱的卡通气泡卡片：纯白温润背景、平滑圆角、指示指向宠物身体的卡通气泡小尖角
+    支持动态指向：
+    - "bottom": 气泡位于宠物上方，小尖角在底部指向下方宠物
+    - "top": 气泡位于宠物下方（如宠物停在屏幕最顶部时），小尖角在顶部指向上方宠物
+    - "none": 侧边停靠，纯圆角胶囊卡片
     """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.tail_position = "bottom"  # "bottom", "top", "none"
+        self.tail_x = None             # None 表示居中，或指定具体的局部 X 坐标
+
+    def set_tail_mode(self, position: str, tail_x: float = None):
+        changed = False
+        if self.tail_position != position:
+            self.tail_position = position
+            changed = True
+        if self.tail_x != tail_x:
+            self.tail_x = tail_x
+            changed = True
+        if changed:
+            self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         rect = self.rect()
-        w = rect.width()
-        h = rect.height()
+        w = float(rect.width())
+        h = float(rect.height())
 
-        tail_height = 8
-        tail_width = 14
-        body_h = h - tail_height
-        body_rect = QRectF(1.0, 1.0, w - 2.0, body_h - 1.0)
+        tail_height = 8.0
+        tail_width = 14.0
         radius = 16.0
 
-        path = QPainterPath()
-        path.addRoundedRect(body_rect, radius, radius)
+        # 计算尖角在卡片内部的水平对齐点
+        if self.tail_x is not None:
+            tail_center_x = max(radius + tail_width / 2.0, min(w - radius - tail_width / 2.0, float(self.tail_x)))
+        else:
+            tail_center_x = w / 2.0
 
-        # 底部中央平滑微尖角
-        tail_center_x = w / 2.0
         tail_left = tail_center_x - tail_width / 2.0
         tail_right = tail_center_x + tail_width / 2.0
-        tail_bottom = h - 1.5
 
-        tail_path = QPainterPath()
-        tail_path.moveTo(tail_left, body_h - 1.0)
-        tail_path.lineTo(tail_center_x, tail_bottom)
-        tail_path.lineTo(tail_right, body_h - 1.0)
-        tail_path.closeSubpath()
+        path = QPainterPath()
 
-        united_path = path.united(tail_path)
+        if self.tail_position == "bottom":
+            body_h = h - tail_height
+            body_rect = QRectF(1.0, 1.0, w - 2.0, body_h - 1.0)
+            path.addRoundedRect(body_rect, radius, radius)
+
+            tail_path = QPainterPath()
+            tail_path.moveTo(tail_left, body_h - 1.0)
+            tail_path.lineTo(tail_center_x, h - 1.5)
+            tail_path.lineTo(tail_right, body_h - 1.0)
+            tail_path.closeSubpath()
+            united_path = path.united(tail_path)
+
+        elif self.tail_position == "top":
+            body_y = tail_height + 1.0
+            body_h = h - tail_height - 2.0
+            body_rect = QRectF(1.0, body_y, w - 2.0, body_h)
+            path.addRoundedRect(body_rect, radius, radius)
+
+            tail_path = QPainterPath()
+            tail_path.moveTo(tail_left, body_y)
+            tail_path.lineTo(tail_center_x, 1.5)
+            tail_path.lineTo(tail_right, body_y)
+            tail_path.closeSubpath()
+            united_path = path.united(tail_path)
+
+        else:  # "none"
+            body_rect = QRectF(1.0, 1.0, w - 2.0, h - 2.0)
+            path.addRoundedRect(body_rect, radius, radius)
+            united_path = path
 
         # 纯白温润背景 + 细腻微浅灰边框
         painter.setBrush(QBrush(QColor(255, 255, 255, 252)))
@@ -72,7 +111,7 @@ class SpeechBubbleWidget(QWidget):
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 12)
+        main_layout.setContentsMargins(8, 8, 8, 8)
 
         # 气泡主卡片（自绘带指向尾巴的温润圆角多边形）
         self.card = SpeechBalloonCard(self)
@@ -84,9 +123,9 @@ class SpeechBubbleWidget(QWidget):
         shadow.setOffset(0, 4)
         self.card.setGraphicsEffect(shadow)
 
-        card_layout = QVBoxLayout(self.card)
-        card_layout.setContentsMargins(14, 11, 14, 18)
-        card_layout.setSpacing(6)
+        self.card_layout = QVBoxLayout(self.card)
+        self.card_layout.setContentsMargins(14, 11, 14, 18)
+        self.card_layout.setSpacing(6)
 
         # 特殊标签栏（仅在重要提醒如健康关怀、成长喜讯时展示，日常闲聊自动隐藏以保持极简萌感）
         self.top_bar_widget = QWidget()
@@ -105,7 +144,7 @@ class SpeechBubbleWidget(QWidget):
         top_bar.addWidget(self.badge_lbl)
         top_bar.addStretch()
 
-        card_layout.addWidget(self.top_bar_widget)
+        self.card_layout.addWidget(self.top_bar_widget)
         self.top_bar_widget.hide()
 
         # 气泡文本内容
@@ -113,7 +152,7 @@ class SpeechBubbleWidget(QWidget):
         self.text_lbl.setFont(QFont("Microsoft YaHei UI", 10))
         self.text_lbl.setWordWrap(True)
         self.text_lbl.setStyleSheet("color: #1E293B; line-height: 1.45; background: transparent;")
-        card_layout.addWidget(self.text_lbl)
+        self.card_layout.addWidget(self.text_lbl)
 
         main_layout.addWidget(self.card)
 
@@ -172,16 +211,13 @@ class SpeechBubbleWidget(QWidget):
         super().mousePressEvent(event)
 
     def sync_position(self, pet_window, dock_widget=None):
-        """精准根据宠物与快捷岛坐标对齐，紧贴头顶，绝对不被耳朵与头饰遮挡"""
+        """精准根据宠物与快捷岛坐标对齐，紧贴头顶或足底，绝对不乱飘移或遮挡"""
         if not self.isVisible():
             return
 
         pet_x = pet_window.x()
         pet_y = pet_window.y()
         pet_w = pet_window.width()
-
-        bubble_w = self.width()
-        bubble_h = self.height()
 
         screen = QApplication.screenAt(pet_window.geometry().center())
         if not screen:
@@ -192,32 +228,74 @@ class SpeechBubbleWidget(QWidget):
         has_tall_hat = pet_window.model.decorations.get("head") in ("hat_wizard", "hat_party")
         head_top_rel = int((22 if has_tall_hat else 48) * scale)
         pet_head_y = pet_y + head_top_rel
+        pet_center_x = pet_x + pet_w / 2.0
+        pet_foot_y = pet_y + int(178 * scale)
 
-        # 水平居中对齐宠物头部
-        target_x = pet_x + (pet_w - bubble_w) // 2
-        target_x = max(avail.left() + 10, min(target_x, avail.right() - bubble_w - 10))
+        self.adjustSize()
+        bubble_w = self.width()
+        bubble_h = self.height()
 
-        # 纵向计算：若有展开的悬浮岛，则位于悬浮岛紧上方；否则紧贴宠物头顶上方约 8-10 像素
-        # SpeechBubbleWidget 底部包含 14px 阴影 margin
-        if dock_widget and dock_widget.isVisible():
-            target_y = dock_widget.y() - bubble_h + 8
+        # 优先度 1：头顶上方（常规状态）
+        # 若快捷岛展开且位于宠物头部上方，则气泡停在快捷岛上方
+        dock_is_above = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() < pet_head_y + 40)
+        if dock_is_above:
+            target_y_above = dock_widget.y() - bubble_h + 8
         else:
+            target_y_above = pet_head_y - bubble_h + 4
+
+        # 优先度 2：宠物正下方（当宠物停在屏幕最顶端、上方空间不足时，气泡居中沉到底部指向宠物腹部）
+        dock_is_below = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() >= pet_foot_y - 30)
+        if dock_is_below:
+            target_y_below = dock_widget.y() + dock_widget.height() - 4
+        else:
+            target_y_below = pet_foot_y + 6
+
+        # 智能判定最佳停靠区域
+        if target_y_above >= avail.top() + 8:
+            # 上方空间充裕：默认置于头顶
+            target_y = target_y_above
+            target_x = pet_center_x - bubble_w / 2.0
+            target_x = max(avail.left() + 10, min(target_x, avail.right() - bubble_w - 10))
+            tail_mode = "bottom"
+        elif target_y_below + bubble_h <= avail.bottom() - 8:
+            # 顶部空间狭窄，但下方空间充裕：紧随宠物居中置于足底下方
+            target_y = target_y_below
+            target_x = pet_center_x - bubble_w / 2.0
+            target_x = max(avail.left() + 10, min(target_x, avail.right() - bubble_w - 10))
+            tail_mode = "top"
+        else:
+            # 极特殊极限小屏幕（上下空间均不足）：贴在宠物身旁（使用身体真实视觉半径，绝不飘逸出透明窗口）
+            cat_radius = int(58 * scale)
+            tail_mode = "none"
+            # 优先右侧
+            if pet_center_x + cat_radius + bubble_w + 10 <= avail.right():
+                target_x = pet_center_x + cat_radius + 6
+                target_y = max(avail.top() + 10, min(pet_y + 10, avail.bottom() - bubble_h - 10))
+            elif pet_center_x - cat_radius - bubble_w - 10 >= avail.left():
+                target_x = pet_center_x - cat_radius - bubble_w - 6
+                target_y = max(avail.top() + 10, min(pet_y + 10, avail.bottom() - bubble_h - 10))
+            else:
+                target_x = max(avail.left() + 10, min(pet_center_x - bubble_w / 2.0, avail.right() - bubble_w - 10))
+                target_y = max(avail.top() + 10, min(pet_y, avail.bottom() - bubble_h - 10))
+
+        # 根据 tail_mode 动态更新卡片内边距与尖角布局
+        if tail_mode == "top":
+            self.card_layout.setContentsMargins(14, 18, 14, 11)
+        elif tail_mode == "bottom":
+            self.card_layout.setContentsMargins(14, 11, 14, 18)
+        else:
+            self.card_layout.setContentsMargins(14, 14, 14, 14)
+
+        self.adjustSize()
+        bubble_h = self.height()
+        if tail_mode == "bottom" and not dock_is_above:
             target_y = pet_head_y - bubble_h + 4
 
-        # 如果上方越界撞到屏幕顶部，自动翻转到侧边或宠物下方
-        if target_y < avail.top() + 10:
-            if pet_x - bubble_w - 10 >= avail.left():
-                # 放在宠物左侧
-                target_x = pet_x - bubble_w - 8
-                target_y = pet_y + 10
-            elif pet_x + pet_w + bubble_w + 10 <= avail.right():
-                # 放在宠物右侧
-                target_x = pet_x + pet_w + 8
-                target_y = pet_y + 10
-            else:
-                foot_bot_rel = int(178 * scale)
-                target_y = pet_y + foot_bot_rel - 2
+        # 计算尖角在卡片局部坐标系中的 X 坐标 (对准宠物中心)
+        card_offset_x = self.card.x() if hasattr(self, "card") and self.card else 8
+        local_tail_x = pet_center_x - target_x - card_offset_x
 
+        self.card.set_tail_mode(tail_mode, local_tail_x)
         self.move(int(target_x), int(target_y))
 
 class DialogueManager:

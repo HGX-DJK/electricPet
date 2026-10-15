@@ -191,6 +191,26 @@ class PetRenderer:
             p.size = 14
             self.particles.append(p)
 
+        elif current_state == "LOOK_AROUND" and random.random() < 0.08:
+            p = Particle(100 + random.uniform(-25, 25), 55, "sparkle", QColor("#BAE6FD"))
+            p.size = 12
+            self.particles.append(p)
+
+        elif current_state == "SIT_WAG_TAIL" and random.random() < 0.08:
+            p = Particle(130, 80, "heart", QColor("#FDA4AF"))
+            p.size = 14
+            self.particles.append(p)
+
+        elif current_state == "CATCH_MOUSE" and random.random() < 0.12:
+            p = Particle(100 + random.uniform(15, 45), 140, "dust")
+            p.size = random.uniform(8, 14)
+            self.particles.append(p)
+
+        elif current_state == "PLAY_YARN" and random.random() < 0.12:
+            p = Particle(100 + random.uniform(0, 35), 135, "sparkle", QColor("#FDA4AF"))
+            p.size = random.uniform(10, 16)
+            self.particles.append(p)
+
         # 究极体自然散发星辉粒子
         if self.model.stage == "ULTIMATE" and random.random() < 0.15:
             p = Particle(100 + random.uniform(-40, 40), 100 + random.uniform(-40, 30), "sparkle")
@@ -286,6 +306,25 @@ class PetRenderer:
             tilt_angle = math.sin(self.anim_time * 12.0) * 6.0
             squash_x = 1.05
             squash_y = 0.95
+        elif state == "LOOK_AROUND":
+            tilt_angle = math.sin(self.anim_time * 3.5) * 12.0
+            breath_offset = 2.0
+        elif state == "SIT_WAG_TAIL":
+            squash_x = 1.06
+            squash_y = 0.94
+            breath_offset = 3.0
+        elif state == "CATCH_MOUSE":
+            # 捕鼠前摇：左右兴奋扭屁股蓄力，身体向前微扑
+            tilt_angle = math.sin(self.anim_time * 14.0) * 4.5
+            squash_x = 1.12 + math.sin(self.anim_time * 8.0) * 0.04
+            squash_y = 0.90
+            breath_offset = 4.0
+        elif state == "PLAY_YARN":
+            # 玩毛线：身体随拨球节奏欢快左右摆动
+            tilt_angle = math.sin(self.anim_time * 6.0) * 8.0
+            squash_x = 1.05 + math.sin(self.anim_time * 9.0) * 0.03
+            squash_y = 0.96
+            breath_offset = 2.0
         elif self.model.is_sleeping:
             breath_offset = math.sin(self.anim_time * 1.8) * 2.0
         elif state == "IDLE":
@@ -398,6 +437,10 @@ class PetRenderer:
             self._draw_butterfly(painter)
         elif state == "DIZZY":
             self._draw_dizzy_stars(painter)
+        elif state == "CATCH_MOUSE":
+            self._draw_scurrying_mouse(painter)
+        elif state == "PLAY_YARN":
+            self._draw_bouncing_yarn(painter)
 
         # 10. 正在进行的进食/洗澡覆盖物
         if self.eating_timer > 0:
@@ -574,7 +617,10 @@ class PetRenderer:
         belly_offset_x = spin_info.get("belly_offset_x", 0.0) if spin_info else 0.0
 
         # 1. 立体圆润尾巴
-        tail_angle = math.sin(self.anim_time * 4.0) * 18.0
+        if state == "SIT_WAG_TAIL":
+            tail_angle = math.sin(self.anim_time * 9.0) * 28.0
+        else:
+            tail_angle = math.sin(self.anim_time * 4.0) * 18.0
         tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
         painter.save()
         painter.translate(tail_x, 25)
@@ -591,57 +637,83 @@ class PetRenderer:
         painter.drawPath(tail_path)
         painter.restore()
 
-        # 2. 立体双耳 (外耳轮廓光 + 内耳凹陷立体阴影，带 3D 轨道视差)
-        ear_twitch = math.sin(self.anim_time * 6.0) * 3.0 if state == "IDLE" else 0.0
+        # 2. 立体双耳 (外耳圆润柔和轮廓 + 内耳凹陷立体阴影 + 耳内萌绒毛，带 3D 轨道视差)
+        ear_twitch = math.sin(self.anim_time * 6.0) * 2.5 if state == "IDLE" else 0.0
         ear_shift = sin_a * 14.0 if is_spin_front else 0.0
 
-        # 左耳
+        # 左耳 (温润三角圆弧猫耳，彻底告别尖锐感)
         left_ear = QPainterPath()
-        left_ear.moveTo(-35 + ear_shift, -28)
-        left_ear.cubicTo(-42 + ear_shift, -50, -56 + ear_shift, -72 + ear_twitch, -54 + ear_shift, -75 + ear_twitch)
-        left_ear.cubicTo(-46 + ear_shift, -72 + ear_twitch, -26 + ear_shift, -56, -12 + ear_shift, -45)
+        left_ear.moveTo(-43 + ear_shift, -26)
+        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch)
+        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch, -35 + ear_shift, -63 + ear_twitch, -32 + ear_shift, -57 + ear_twitch)
+        left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
+        left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        ear_grad_l = QLinearGradient(-54 + ear_shift, -75, -12 + ear_shift, -28)
+        ear_grad_l = QLinearGradient(-46 + ear_shift, -63, -14 + ear_shift, -26)
         ear_grad_l.setColorAt(0.0, QColor(palette["ear_l_t"]))
         ear_grad_l.setColorAt(1.0, QColor(palette["ear_l_b"]))
         painter.setBrush(QBrush(ear_grad_l))
         painter.setPen(QPen(QColor(palette["outline"]), 3.2))
         painter.drawPath(left_ear)
 
-        # 左内耳凹陷阴影
+        # 左内耳凹陷立体柔和粉瓣
         left_inner = QPainterPath()
-        left_inner.moveTo(-34 + ear_shift, -34)
-        left_inner.lineTo(-48 + ear_shift, -68 + ear_twitch)
-        left_inner.lineTo(-18 + ear_shift, -45)
+        left_inner.moveTo(-39 + ear_shift, -30)
+        left_inner.cubicTo(-43 + ear_shift, -39, -44 + ear_shift, -48, -41 + ear_shift, -54 + ear_twitch)
+        left_inner.cubicTo(-38 + ear_shift, -58 + ear_twitch, -33 + ear_shift, -58 + ear_twitch, -30 + ear_shift, -53 + ear_twitch)
+        left_inner.cubicTo(-25 + ear_shift, -46, -20 + ear_shift, -40, -17 + ear_shift, -37)
+        left_inner.cubicTo(-22 + ear_shift, -32, -30 + ear_shift, -30, -39 + ear_shift, -30)
         left_inner.closeSubpath()
-        inner_grad_l = QLinearGradient(-48 + ear_shift, -68, -26 + ear_shift, -34)
+        inner_grad_l = QLinearGradient(-41 + ear_shift, -58, -20 + ear_shift, -30)
         inner_grad_l.setColorAt(0.0, QColor(palette["inner_ear_t"]))
         inner_grad_l.setColorAt(1.0, QColor(palette["inner_ear_b"]))
         painter.setBrush(QBrush(inner_grad_l))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(left_inner)
 
-        # 右耳
+        # 左耳内软绒毛
+        fluff_l = QPainterPath()
+        fluff_l.moveTo(-32 + ear_shift, -33)
+        fluff_l.cubicTo(-28 + ear_shift, -40, -25 + ear_shift, -41, -22 + ear_shift, -37)
+        fluff_l.cubicTo(-21 + ear_shift, -34, -26 + ear_shift, -32, -30 + ear_shift, -32)
+        fluff_l.closeSubpath()
+        painter.setBrush(QBrush(QColor(255, 255, 255, 185)))
+        painter.drawPath(fluff_l)
+
+        # 右耳 (温润三角圆弧猫耳)
         right_ear = QPainterPath()
-        right_ear.moveTo(35 + ear_shift, -28)
-        right_ear.cubicTo(42 + ear_shift, -50, 56 + ear_shift, -72 - ear_twitch, 54 + ear_shift, -75 - ear_twitch)
-        right_ear.cubicTo(46 + ear_shift, -72 - ear_twitch, 26 + ear_shift, -56, 12 + ear_shift, -45)
+        right_ear.moveTo(43 + ear_shift, -26)
+        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 - ear_twitch)
+        right_ear.cubicTo(43 + ear_shift, -63 - ear_twitch, 35 + ear_shift, -63 - ear_twitch, 32 + ear_shift, -57 - ear_twitch)
+        right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
+        right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        ear_grad_r = QLinearGradient(54 + ear_shift, -75, 12 + ear_shift, -28)
+        ear_grad_r = QLinearGradient(46 + ear_shift, -63, 14 + ear_shift, -26)
         ear_grad_r.setColorAt(0.0, QColor(palette["ear_r_t"]))
         ear_grad_r.setColorAt(1.0, QColor(palette["ear_r_b"]))
         painter.setBrush(QBrush(ear_grad_r))
         painter.setPen(QPen(QColor(palette["outline"]), 3.2))
         painter.drawPath(right_ear)
 
-        # 右内耳凹陷阴影
+        # 右内耳凹陷立体柔和粉瓣
         right_inner = QPainterPath()
-        right_inner.moveTo(34 + ear_shift, -34)
-        right_inner.lineTo(48 + ear_shift, -68 - ear_twitch)
-        right_inner.lineTo(18 + ear_shift, -45)
+        right_inner.moveTo(39 + ear_shift, -30)
+        right_inner.cubicTo(43 + ear_shift, -39, 44 + ear_shift, -48, 41 + ear_shift, -54 - ear_twitch)
+        right_inner.cubicTo(38 + ear_shift, -58 - ear_twitch, 33 + ear_shift, -58 - ear_twitch, 30 + ear_shift, -53 - ear_twitch)
+        right_inner.cubicTo(25 + ear_shift, -46, 20 + ear_shift, -40, 17 + ear_shift, -37)
+        right_inner.cubicTo(22 + ear_shift, -32, 30 + ear_shift, -30, 39 + ear_shift, -30)
         right_inner.closeSubpath()
         painter.setBrush(QBrush(inner_grad_l))
         painter.drawPath(right_inner)
+
+        # 右耳内软绒毛
+        fluff_r = QPainterPath()
+        fluff_r.moveTo(32 + ear_shift, -33)
+        fluff_r.cubicTo(28 + ear_shift, -40, 25 + ear_shift, -41, 22 + ear_shift, -37)
+        fluff_r.cubicTo(21 + ear_shift, -34, 26 + ear_shift, -32, 30 + ear_shift, -32)
+        fluff_r.closeSubpath()
+        painter.setBrush(QBrush(QColor(255, 255, 255, 185)))
+        painter.drawPath(fluff_r)
 
         # 3. 3D 球形漫反射身体 (Spherical Lighting Volume)
         body_rect = QRectF(-52, -48, 104, 100)
@@ -741,26 +813,30 @@ class PetRenderer:
         ear_shift = sin_a * 14.0
 
         # 1. 背部立体耳朵 (无粉色内耳，呈现立体毛发外壳)
-        # 左耳背
+        # 左耳背 (温润三角圆弧猫耳)
         left_ear = QPainterPath()
-        left_ear.moveTo(-35 + ear_shift, -28)
-        left_ear.cubicTo(-42 + ear_shift, -50, -56 + ear_shift, -72 + ear_twitch, -54 + ear_shift, -75 + ear_twitch)
-        left_ear.cubicTo(-46 + ear_shift, -72 + ear_twitch, -26 + ear_shift, -56, -12 + ear_shift, -45)
+        left_ear.moveTo(-43 + ear_shift, -26)
+        left_ear.cubicTo(-48 + ear_shift, -38, -51 + ear_shift, -50, -46 + ear_shift, -58 + ear_twitch)
+        left_ear.cubicTo(-43 + ear_shift, -63 + ear_twitch, -35 + ear_shift, -63 + ear_twitch, -32 + ear_shift, -57 + ear_twitch)
+        left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
+        left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        ear_grad_l = QLinearGradient(-54 + ear_shift, -75, -12 + ear_shift, -28)
+        ear_grad_l = QLinearGradient(-46 + ear_shift, -63, -14 + ear_shift, -26)
         ear_grad_l.setColorAt(0.0, QColor(palette["ear_l_t"]).darker(115))
         ear_grad_l.setColorAt(1.0, QColor(palette["ear_l_b"]).darker(120))
         painter.setBrush(QBrush(ear_grad_l))
         painter.setPen(QPen(QColor(palette["outline"]), 3.2))
         painter.drawPath(left_ear)
 
-        # 右耳背
+        # 右耳背 (温润三角圆弧猫耳)
         right_ear = QPainterPath()
-        right_ear.moveTo(35 + ear_shift, -28)
-        right_ear.cubicTo(42 + ear_shift, -50, 56 + ear_shift, -72 - ear_twitch, 54 + ear_shift, -75 - ear_twitch)
-        right_ear.cubicTo(46 + ear_shift, -72 - ear_twitch, 26 + ear_shift, -56, 12 + ear_shift, -45)
+        right_ear.moveTo(43 + ear_shift, -26)
+        right_ear.cubicTo(48 + ear_shift, -38, 51 + ear_shift, -50, 46 + ear_shift, -58 - ear_twitch)
+        right_ear.cubicTo(43 + ear_shift, -63 - ear_twitch, 35 + ear_shift, -63 - ear_twitch, 32 + ear_shift, -57 - ear_twitch)
+        right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
+        right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        ear_grad_r = QLinearGradient(54 + ear_shift, -75, 12 + ear_shift, -28)
+        ear_grad_r = QLinearGradient(46 + ear_shift, -63, 14 + ear_shift, -26)
         ear_grad_r.setColorAt(0.0, QColor(palette["ear_r_t"]).darker(115))
         ear_grad_r.setColorAt(1.0, QColor(palette["ear_r_b"]).darker(120))
         painter.setBrush(QBrush(ear_grad_r))
@@ -873,6 +949,17 @@ class PetRenderer:
             draw_single_paw(-35, 40, 22, 14, -28, 45, 8, 6)
             swat_y = -10 + math.sin(self.anim_time * 14.0) * 12.0
             draw_single_paw(20, swat_y, 22, 16, 25, swat_y + 4, 8, 7)
+        elif state == "CATCH_MOUSE":
+            # 捕鼠前爪：前伸并扑按向地面小老鼠
+            pounce_l = math.sin(self.anim_time * 8.0) * 4.0
+            draw_single_paw(-32, 42 + pounce_l, 25, 17, -25, 48 + pounce_l, 11, 8)
+            draw_single_paw(16, 42 - pounce_l, 25, 17, 23, 48 - pounce_l, 11, 8)
+        elif state == "PLAY_YARN":
+            # 玩毛线：左右前爪交替轻拍拨动毛线球
+            bat_l = math.sin(self.anim_time * 9.0) * 8.0
+            bat_r = math.cos(self.anim_time * 9.0) * 8.0
+            draw_single_paw(-36, 38 + bat_l, 25, 17, -29, 44 + bat_l, 11, 8)
+            draw_single_paw(12, 38 + bat_r, 25, 17, 19, 44 + bat_r, 11, 8)
         elif state in ("DRAGGING", "FALLING"):
             # 被拎起悬空或自由落体：小肉垫爪爪在空中紧张又可爱地交替快速乱蹬
             kick_l = math.sin(self.anim_time * 22.0) * 11.0
@@ -1455,11 +1542,19 @@ class PetRenderer:
             self._draw_dozing_face(painter)
             return
 
-        if state == "TILT_HEAD":
+        if state in ("TILT_HEAD", "LOOK_AROUND"):
             self._draw_curious_face(painter, eye_l_col, eye_r_col)
             return
 
-        if self.petting_timer > 0 or self.eating_timer > 0 or state == "HAPPY_SPIN" or self.model.mood > 92:
+        if state == "CATCH_MOUSE":
+            self._draw_hunting_face(painter, eye_l_col, eye_r_col)
+            return
+
+        if state == "PLAY_YARN":
+            self._draw_playful_face(painter, eye_l_col, eye_r_col)
+            return
+
+        if self.petting_timer > 0 or self.eating_timer > 0 or state in ("HAPPY_SPIN", "SIT_WAG_TAIL"):
             self._draw_happy_face(painter)
             return
 
@@ -1576,6 +1671,186 @@ class PetRenderer:
         painter.drawEllipse(QRectF(-17 + gaze_ox * 0.5, -4 + gaze_oy * 0.5, 5, 5))
 
         self._draw_standard_mouth(painter)
+
+    def _draw_hunting_face(self, painter: QPainter, col_l, col_r):
+        # 捕鼠专注猎手大瞳仁：瞳孔放大充满好奇与敏捷，眼神紧盯正前方小老鼠
+        gaze_ox = 3.5 + getattr(self, "current_gaze_x", 0.0) * 1.5
+        gaze_oy = 4.0 + getattr(self, "current_gaze_y", 0.0) * 1.2
+        for ex, col in [(-18, col_l), (18, col_r)]:
+            # 漆黑大眼眶
+            painter.setBrush(QBrush(col.darker(130)))
+            painter.setPen(QPen(QColor("#150A06"), 1.8))
+            painter.drawEllipse(QRectF(ex - 8, -13, 16, 20))
+            # 放大瞳孔 (狩猎专注模式)
+            painter.setBrush(QBrush(QColor("#0F172A")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(ex - 6 + gaze_ox * 0.4, -10 + gaze_oy * 0.4, 12, 14))
+            # 亮闪高光
+            painter.setBrush(QBrush(QColor(255, 255, 255, 250)))
+            painter.drawEllipse(QRectF(ex - 4 + gaze_ox * 0.5, -9 + gaze_oy * 0.5, 6, 7))
+            painter.drawEllipse(QRectF(ex + 1 + gaze_ox * 0.5, -1 + gaze_oy * 0.5, 3.2, 3.2))
+
+        # 专注可爱的猫咪小口 (:3)
+        self._draw_standard_mouth(painter)
+
+    def _draw_playful_face(self, painter: QPainter, col_l, col_r):
+        # 玩毛线欢快扑闪大眼睛
+        gaze_ox = 2.0 + math.sin(self.anim_time * 4.5) * 2.5
+        gaze_oy = 3.0
+        for ex, col in [(-18, col_l), (18, col_r)]:
+            painter.setBrush(QBrush(col))
+            painter.setPen(QPen(QColor("#150A06"), 1.8))
+            painter.drawEllipse(QRectF(ex - 8, -13, 16, 20))
+            # 晶莹瞳孔
+            painter.setBrush(QBrush(QColor("#0F172A")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(ex - 5 + gaze_ox * 0.5, -9 + gaze_oy * 0.4, 10, 13))
+            # 双重闪烁星星高光
+            painter.setBrush(QBrush(QColor(255, 255, 255, 250)))
+            painter.drawEllipse(QRectF(ex - 3 + gaze_ox * 0.6, -8 + gaze_oy * 0.5, 5.5, 6.5))
+            painter.drawEllipse(QRectF(ex + 1 + gaze_ox * 0.6, -1 + gaze_oy * 0.5, 3.0, 3.0))
+
+        # 开心微张嘴巴
+        mouth = QPainterPath()
+        mouth.moveTo(-7, 8)
+        mouth.cubicTo(-4, 16, 4, 16, 7, 8)
+        mouth.closeSubpath()
+        painter.setBrush(QBrush(QColor("#D94F4F")))
+        painter.setPen(QPen(QColor("#543D37"), 2.0))
+        painter.drawPath(mouth)
+        painter.setBrush(QBrush(QColor("#FFAAAA")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-4, 10, 8, 5))
+
+    def _draw_scurrying_mouse(self, painter: QPainter):
+        painter.save()
+        # 机械小老鼠在地面欢快穿梭
+        mx = 36.0 + math.sin(self.anim_time * 5.0) * 20.0
+        my = 44.0 + math.cos(self.anim_time * 10.0) * 1.5
+        facing_r = math.cos(self.anim_time * 5.0) >= 0
+        painter.translate(mx, my)
+        if not facing_r:
+            painter.scale(-1.0, 1.0)
+
+        # 地面微阴影
+        painter.setBrush(QBrush(QColor(15, 23, 42, 35)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-16, 6, 32, 8))
+
+        # 摇摆的小细尾巴
+        tail_wiggle = math.sin(self.anim_time * 24.0) * 6.0
+        tail = QPainterPath()
+        tail.moveTo(-14, 1)
+        tail.cubicTo(-22, -1, -26, 8 + tail_wiggle, -34, 4 + tail_wiggle)
+        painter.setPen(QPen(QColor("#FDA4AF"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(tail)
+
+        # 小老鼠身体 (圆润水滴形)
+        body = QPainterPath()
+        body.moveTo(14, 2)
+        body.cubicTo(8, -9, -10, -11, -14, 0)
+        body.cubicTo(-16, 8, -4, 11, 14, 2)
+        body.closeSubpath()
+        m_grad = QLinearGradient(-14, -8, 12, 8)
+        m_grad.setColorAt(0.0, QColor("#CBD5E1"))
+        m_grad.setColorAt(0.65, QColor("#94A3B8"))
+        m_grad.setColorAt(1.0, QColor("#64748B"))
+        painter.setBrush(QBrush(m_grad))
+        painter.setPen(QPen(QColor("#475569"), 1.6))
+        painter.drawPath(body)
+
+        # 粉嫩双耳
+        painter.setBrush(QBrush(QColor("#FDA4AF")))
+        painter.setPen(QPen(QColor("#CBD5E1"), 1.2))
+        painter.drawEllipse(QRectF(-6, -12, 9, 11))
+        painter.drawEllipse(QRectF(-1, -14, 10, 12))
+        painter.setBrush(QBrush(QColor("#FB7185")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-4, -10, 5, 7))
+        painter.drawEllipse(QRectF(1, -12, 6, 8))
+
+        # 黑亮小眼睛
+        painter.setBrush(QBrush(QColor("#0F172A")))
+        painter.drawEllipse(QRectF(6, -3, 3.8, 3.8))
+        painter.setBrush(QBrush(QColor("#FFFFFF")))
+        painter.drawEllipse(QRectF(7, -2.5, 1.5, 1.5))
+
+        # 粉鼻头与胡须
+        painter.setBrush(QBrush(QColor("#F43F5E")))
+        painter.drawEllipse(QRectF(13, 0.5, 3.0, 3.0))
+        painter.setPen(QPen(QColor("#64748B"), 1.0, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(12, 1, 20, -2)
+        painter.drawLine(12, 3, 19, 5)
+
+        # 背上旋转金色发条旋钮
+        key_rot = (self.anim_time * 360.0) % 360
+        painter.save()
+        painter.translate(-6, -9)
+        painter.rotate(key_rot)
+        painter.setPen(QPen(QColor("#D97706"), 1.8))
+        painter.setBrush(QBrush(QColor("#FCD34D")))
+        painter.drawLine(0, 4, 0, -4)
+        painter.drawEllipse(QRectF(-4, -8, 8, 7))
+        painter.restore()
+
+        painter.restore()
+
+    def _draw_bouncing_yarn(self, painter: QPainter):
+        painter.save()
+        # 毛线球在猫爪前滚动弹跳
+        ball_x = 24.0 + math.sin(self.anim_time * 4.5) * 18.0
+        ball_y = 38.0 - abs(math.sin(self.anim_time * 9.0)) * 12.0
+        ball_rot = (self.anim_time * 240.0) % 360
+
+        # 地面动态投影 (随弹跳高度缩放与淡化)
+        jump_norm = min(1.0, (38.0 - ball_y) / 12.0)
+        shadow_w = 32.0 * (1.0 - jump_norm * 0.3)
+        shadow_alpha = int(45 * (1.0 - jump_norm * 0.45))
+        painter.setBrush(QBrush(QColor(15, 23, 42, shadow_alpha)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(ball_x - shadow_w / 2.0, 46, shadow_w, 8))
+
+        # 散开的毛线尾巴 (灵动曲线连接至左爪侧)
+        thread = QPainterPath()
+        thread.moveTo(ball_x - 6, ball_y + 6)
+        thread.cubicTo(ball_x - 22, ball_y + 14, 0, 48, -24, 42)
+        painter.setPen(QPen(QColor("#F43F5E"), 2.4, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(thread)
+
+        # 毛线球本体 (旋转与 3D 渐变)
+        painter.translate(ball_x, ball_y)
+        painter.rotate(ball_rot)
+        ball_rad = 16.0
+        y_grad = QRadialGradient(-5, -5, ball_rad * 1.3)
+        y_grad.setColorAt(0.0, QColor("#FDA4AF"))
+        y_grad.setColorAt(0.5, QColor("#F43F5E"))
+        y_grad.setColorAt(0.85, QColor("#E11D48"))
+        y_grad.setColorAt(1.0, QColor("#9F1239"))
+        painter.setBrush(QBrush(y_grad))
+        painter.setPen(QPen(QColor("#881337"), 1.8))
+        painter.drawEllipse(QRectF(-ball_rad, -ball_rad, ball_rad * 2, ball_rad * 2))
+
+        # 毛线球交叉缠绕线纹
+        painter.setPen(QPen(QColor("#FFE4E6"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        arc1 = QPainterPath()
+        arc1.arcMoveTo(-13, -13, 26, 26, 40)
+        arc1.arcTo(-13, -13, 26, 26, 40, 110)
+        painter.drawPath(arc1)
+
+        painter.setPen(QPen(QColor("#9F1239"), 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        arc2 = QPainterPath()
+        arc2.arcMoveTo(-14, -10, 28, 20, 190)
+        arc2.arcTo(-14, -10, 28, 20, 190, 120)
+        painter.drawPath(arc2)
+
+        # 毛线绒毛小结
+        painter.setBrush(QBrush(QColor("#FDA4AF")))
+        painter.setPen(QPen(QColor("#E11D48"), 1.2))
+        painter.drawEllipse(QRectF(3, -13, 5, 5))
+
+        painter.restore()
 
     def _draw_butterfly(self, painter: QPainter):
         painter.save()

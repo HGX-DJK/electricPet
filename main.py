@@ -37,6 +37,16 @@ def setup_crash_logger():
     sys.excepthook = handle_exception
 
 def main():
+    # 确保运行工作目录始终对齐程序所在目录，防外部唤起相对路径丢失
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        os.chdir(base_dir)
+    except Exception:
+        pass
+
     # 启用高分屏清晰缩放与反锯齿
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     setup_crash_logger()

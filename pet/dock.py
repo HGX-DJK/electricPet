@@ -168,6 +168,8 @@ class PetCompanionDock(QWidget):
             self._current_anim = anim
         self.raise_()
         self.is_dock_visible = True
+        if hasattr(self.pet_window, "dialogue") and self.pet_window.dialogue.is_visible:
+            self.pet_window.dialogue.sync_position()
 
     def schedule_hide(self, delay_ms=2200):
         """延迟隐藏"""
@@ -191,6 +193,8 @@ class PetCompanionDock(QWidget):
     def _on_fade_finished(self):
         self.hide()
         self.is_dock_visible = False
+        if hasattr(self.pet_window, "dialogue") and self.pet_window.dialogue.is_visible:
+            self.pet_window.dialogue.sync_position()
 
     def sync_position(self):
         """智能随宠物吸附并防止越过屏幕边缘，紧密贴合头顶"""

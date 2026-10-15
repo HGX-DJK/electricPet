@@ -158,6 +158,9 @@ PASTEL_PALETTE = {
     "💃": ("#FCE7F3", "#FBCFE8"),
     "🥱": ("#DBEAFE", "#BFDBFE"),
     "💫": ("#FEF9C3", "#FEF08A"),
+    "👀": ("#E0F2FE", "#BAE6FD"),
+    "🐭": ("#F1F5F9", "#CBD5E1"),
+    "🧶": ("#FFE4E6", "#FDA4AF"),
 }
 
 class ActionCardButton(QPushButton):
@@ -1066,6 +1069,8 @@ class ActionShowDialog(QDialog):
         box.setSpacing(8)
 
         actions = [
+            ("CATCH_MOUSE", "🐭", "敏捷扑抓小老鼠", "机械发条小老鼠欢快乱窜，波可敏捷飞扑擒拿"),
+            ("PLAY_YARN", "🧶", "欢快拨玩毛线球", "粉嫩毛线球弹跳滚动，左右肉垫欢畅轻拍玩耍"),
             ("STRETCH_YAWN", "🐱", "伸个懒腰打哈欠", "拉伸舒展身子骨，张开萌萌大口打哈欠"),
             ("WASH_FACE", "🐾", "萌爪洗脸理毛", "举起粉嫩小肉垫，规律轻揉脸颊胡须"),
             ("CHASE_BUTTERFLY", "🦋", "欢快抓扑彩蝶", "荧光彩蝶绕身飞舞，波可轻快挥爪扑腾"),
@@ -1073,7 +1078,9 @@ class ActionShowDialog(QDialog):
             ("TILT_HEAD", "❓", "歪头好奇卖萌", "大眼睛扑闪扑闪，歪头好奇观察主人的工作"),
             ("HAPPY_SPIN", "💃", "快乐原地大旋转", "原地腾空360度大翻转，迸发灿烂金辉"),
             ("DOZE_OFF", "🥱", "站立打瞌睡点头", "困意悄悄袭来，小脑袋一点一点犯迷糊"),
-            ("DIZZY", "💫", "晕头转向小星星", "眼花缭乱，金色螺旋小星星在头顶旋转环绕")
+            ("DIZZY", "💫", "晕头转向小星星", "眼花缭乱，金色螺旋小星星在头顶旋转环绕"),
+            ("LOOK_AROUND", "👀", "四处好奇张望", "东瞅瞅西看看，扑闪大眼睛警惕巡视桌面"),
+            ("SIT_WAG_TAIL", "🐾", "乖巧蹲坐摇尾", "乖巧在脚边蹲坐，轻快欢畅摇晃蓬松小尾巴")
         ]
 
         for code, icon, name, desc_text in actions:

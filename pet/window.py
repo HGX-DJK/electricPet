@@ -195,7 +195,7 @@ class PetWindow(QWidget):
         # 触发重绘
         self.update()
 
-    def play_action(self, action_name, custom_msg=None, duration=None):
+    def play_action(self, action_name, custom_msg=None, duration=None, show_dialogue=True):
         """播放特定多样化动作动画与对应专属音效、台词气泡"""
         if self.model.is_sleeping:
             self.model.wake_up()
@@ -268,15 +268,48 @@ class PetWindow(QWidget):
                     "眼花缭乱~ 世界怎么开始倒过来了？(@ @)",
                     "脚步轻飘飘... 晕头转向晃悠悠~ 💫"
                 ]
+            },
+            "LOOK_AROUND": {
+                "duration": 3.6, "sound": "curious",
+                "lines": [
+                    "东瞅瞅、西看看~ 发现主人正专注地敲代码呢！👀✨",
+                    "脑袋转转，警惕巡视桌面~ 报告主人，一切安全！🐾",
+                    "四处张望~ 看看有没有小鱼干掉落呢？(ฅ'ω'ฅ)"
+                ]
+            },
+            "SIT_WAG_TAIL": {
+                "duration": 3.8, "sound": "purr",
+                "lines": [
+                    "乖乖坐下~ 小尾巴轻快摇晃，静静陪在主人身边！🐾💕",
+                    "端坐卖萌中~ 蓬松尾巴晃呀晃，心情满分！✨",
+                    "在主人脚边乖巧蹲坐~ 呼噜呼噜好安心~ (๑╹◡╹๑)"
+                ]
+            },
+            "CATCH_MOUSE": {
+                "duration": 4.5, "sound": "pop",
+                "lines": [
+                    "看我的喵影神捕！敏捷一扑，抓到机械小老鼠啦！🐭🐾",
+                    "小老鼠别跑~ 喵呜飞扑！稳稳按在爪下！✨(ฅ'ω'ฅ)",
+                    "本喵是抓鼠小冠军！身手矫健敏捷度拉满~ 💨"
+                ]
+            },
+            "PLAY_YARN": {
+                "duration": 4.6, "sound": "sparkle",
+                "lines": [
+                    "发现粉红毛线球！左爪拍拍，右爪拨拨~ 🧶🐾",
+                    "毛线球滚呀滚~ 扑腾扑腾，好好玩呀！💕✨",
+                    "抓线头大作战！滚来滚去，快乐无极限~ 🐱"
+                ]
             }
         }
 
         cfg = action_config.get(action_name, {"duration": 3.0, "sound": "meow", "lines": ["波可展示了可爱绝活！✨"]})
         self.action_timer = duration if duration is not None else cfg["duration"]
-        if cfg.get("sound"):
+        if cfg.get("sound") and getattr(self.model, "sound_enabled", True):
             sound_manager.play(cfg["sound"])
-        msg = custom_msg or random.choice(cfg["lines"])
-        self.dialogue.say(msg, duration=self.action_timer + 0.8)
+        if show_dialogue:
+            msg = custom_msg or random.choice(cfg["lines"])
+            self.dialogue.say(msg, duration=self.action_timer + 0.8)
 
     def _update_physics_and_ai(self, dt):
         current_x = self.x()
@@ -339,64 +372,89 @@ class PetWindow(QWidget):
             return
 
         # 5. 特殊多样化动作持续中
-        if self.state in ("STRETCH_YAWN", "WASH_FACE", "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC",
-                          "TILT_HEAD", "HAPPY_SPIN", "DOZE_OFF", "DIZZY"):
+        ALL_ACTIONS = (
+            "STRETCH_YAWN", "WASH_FACE", "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC",
+            "TILT_HEAD", "HAPPY_SPIN", "DOZE_OFF", "DIZZY", "LOOK_AROUND", "SIT_WAG_TAIL",
+            "CATCH_MOUSE", "PLAY_YARN"
+        )
+        if self.state in ALL_ACTIONS:
             self.action_timer -= dt
             self.move(int(current_x), int(target_ground_y))
             if self.action_timer <= 0:
                 self.state = "IDLE"
-                self.next_action_time = time.time() + random.uniform(5.0, 12.0)
+                self.next_action_time = time.time() + random.uniform(2.5, 5.0)
             return
 
-        # 6. 自主漫步与多样动作 AI 行为决策
-        if self.model.auto_roam and not self.model.is_sleeping and not self.model.is_studying:
+        # 6. 自主漫步与多样动作 AI 行为决策 (活力巡视，彻底告别卡死与僵直)
+        if not self.model.is_sleeping and not self.model.is_studying:
             now = time.time()
+            min_x = avail.left() + 25
+            max_x = avail.right() - self.width() - 25
+
             if self.state == "IDLE":
                 if now >= self.next_action_time:
-                    # 丰富多样的自主行为权重决策
-                    roll = random.random()
-                    if roll < 0.38:
-                        # 挑选目标X坐标漫步
-                        target = random.randint(avail.left() + 40, avail.right() - self.width() - 40)
+                    # 如果启用了自主漫步，有 38% 概率进行短途惬意溜达
+                    if self.model.auto_roam and random.random() < 0.38:
+                        # 挑选近距离漫步目标 (80~220px)，远离屏幕边缘防卡死
+                        if current_x <= min_x + 80:
+                            target = current_x + random.randint(100, 240)
+                        elif current_x >= max_x - 80:
+                            target = current_x - random.randint(100, 240)
+                        else:
+                            direction = -1 if random.random() < 0.5 else 1
+                            target = current_x + direction * random.randint(90, 220)
+                        target = max(min_x, min(target, max_x))
+
                         self.walk_target_x = target
+                        self._walk_start_time = now
                         if target < current_x:
                             self.state = "WALK_LEFT"
                             self.facing_left = True
                         else:
                             self.state = "WALK_RIGHT"
                             self.facing_left = False
-                        self.next_action_time = now + random.uniform(8.0, 18.0)
-                    elif roll < 0.48:
-                        self.play_action("STRETCH_YAWN")
-                    elif roll < 0.60:
-                        self.play_action("WASH_FACE")
-                    elif roll < 0.70:
-                        self.play_action("CHASE_BUTTERFLY")
-                    elif roll < 0.80:
-                        self.play_action("HEAD_BOB_MUSIC")
-                    elif roll < 0.90:
-                        self.play_action("TILT_HEAD")
-                    elif roll < 0.96:
-                        self.play_action("HAPPY_SPIN")
+                        self.next_action_time = now + 6.0
                     else:
-                        self.play_action("DOZE_OFF")
+                        # 原地灵动才艺动作自主切换 (加权抽取，突出抓老鼠与玩毛线的高光互动)
+                        act_choices = [
+                            "CATCH_MOUSE", "PLAY_YARN", "WASH_FACE", "STRETCH_YAWN",
+                            "TILT_HEAD", "LOOK_AROUND", "SIT_WAG_TAIL", "HEAD_BOB_MUSIC",
+                            "CHASE_BUTTERFLY", "HAPPY_SPIN", "DOZE_OFF"
+                        ]
+                        weights = [0.18, 0.18, 0.14, 0.12, 0.11, 0.10, 0.08, 0.04, 0.03, 0.01, 0.01]
+                        selected = random.choices(act_choices, weights=weights)[0]
+                        # 20% 概率轻声冒出台词气泡，避免频繁打扰工作
+                        say_line = (random.random() < 0.20)
+                        self.play_action(selected, show_dialogue=say_line)
+                        self.next_action_time = now + self.action_timer + random.uniform(2.5, 5.5)
 
             elif self.state in ("WALK_LEFT", "WALK_RIGHT"):
-                speed = 55.0  # 走动速度 (像素/秒)
-                dx = self.walk_target_x - current_x
-                if abs(dx) < 4.0:
+                speed = 70.0  # 活泼的漫步速度 (像素/秒)
+                step = speed * dt
+                reached = False
+
+                if self.state == "WALK_LEFT":
+                    new_x = current_x - step
+                    if new_x <= self.walk_target_x or new_x <= min_x:
+                        new_x = max(min_x, self.walk_target_x)
+                        reached = True
+                else:
+                    new_x = current_x + step
+                    if new_x >= self.walk_target_x or new_x >= max_x:
+                        new_x = min(max_x, self.walk_target_x)
+                        reached = True
+
+                # 到达目标或超时防卡死保护 (最长漫步 4.8 秒)
+                walk_elapsed = now - getattr(self, "_walk_start_time", now)
+                if reached or walk_elapsed > 4.8:
                     self.state = "IDLE"
                     self.step_accum = 0.0
-                    self.next_action_time = now + random.uniform(4.0, 10.0)
-                else:
-                    step = speed * dt
-                    if self.state == "WALK_LEFT":
-                        new_x = max(avail.left() + 20, current_x - step)
-                    else:
-                        new_x = min(avail.right() - self.width() - 20, current_x + step)
+                    self.next_action_time = now + random.uniform(2.5, 5.5)
                     self.move(int(new_x), int(target_ground_y))
-                    # 漫步步频积累与足印/轻尘微粒发射
-                    self.step_accum += dt * 8.0
+                else:
+                    self.move(int(new_x), int(target_ground_y))
+                    # 步频微粒发射
+                    self.step_accum += dt * 8.5
                     if self.step_accum >= math.pi:
                         self.step_accum -= math.pi
                         self.renderer.trigger_step_poof(self.facing_left)
@@ -553,6 +611,7 @@ class PetWindow(QWidget):
 
                 self.drag_vx = 0.0
                 self.drag_vy = 0.0
+                self.next_action_time = time.time() + random.uniform(2.0, 4.0)
             else:
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
                 self.model.pet_head()
@@ -571,7 +630,10 @@ class PetWindow(QWidget):
             # 双击宠物互动：随机触发才艺绝活（旋转欢呼、歪头卖萌、抓蝴蝶、听歌摇摆）
             self.model.pet_head()
             self.renderer.trigger_pet()
-            choice = random.choice(["HAPPY_SPIN", "TILT_HEAD", "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC"])
+            choice = random.choice([
+                "CATCH_MOUSE", "PLAY_YARN", "HAPPY_SPIN", "TILT_HEAD",
+                "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC", "SIT_WAG_TAIL", "LOOK_AROUND", "WASH_FACE"
+            ])
             self.play_action(choice)
 
     def paintEvent(self, event):
