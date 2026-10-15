@@ -432,6 +432,14 @@ class QuickActionMenu(QWidget):
         btn_stats.clicked.connect(self._on_stats)
         grid.addWidget(btn_stats, 3, 1)
 
+        btn_memo = ActionCardButton("📝", "随手便签", "待办灵感记事")
+        btn_memo.clicked.connect(self._on_memo)
+        grid.addWidget(btn_memo, 4, 0)
+
+        btn_peek = ActionCardButton("👀", "贴边偷看", "暗中观察模式")
+        btn_peek.clicked.connect(self._on_peek)
+        grid.addWidget(btn_peek, 4, 1)
+
         layout.addLayout(grid)
 
         # 4. 底部系统偏好设置条 (整条通栏，类似 iOS / macOS 设置入口)
@@ -600,6 +608,18 @@ class QuickActionMenu(QWidget):
         sound_manager.play("click")
         self.close()
         QTimer.singleShot(30, lambda: StatusDialog(self.model).exec())
+
+    def _on_memo(self):
+        sound_manager.play("click")
+        self.close()
+        if hasattr(self.pet_window, "toggle_memo"):
+            self.pet_window.toggle_memo()
+
+    def _on_peek(self):
+        sound_manager.play("click")
+        self.close()
+        if hasattr(self.pet_window, "trigger_edge_peek"):
+            self.pet_window.trigger_edge_peek()
 
     def _on_settings(self):
         sound_manager.play("click")
@@ -1032,7 +1052,7 @@ class PlayDialog(QDialog):
 class ActionShowDialog(QDialog):
     """
     萌宠动作才艺大赏交互面板
-    支持 8 种高精度专属动作随时点播与趣味演练
+    支持 14 种高精度专属动作随时点播与趣味演练
     """
     def __init__(self, model, pet_window, parent=None):
         super().__init__(parent)
@@ -1053,7 +1073,7 @@ class ActionShowDialog(QDialog):
         title.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
         header.addWidget(title)
 
-        desc = QLabel("波可学会了 8 种超丰富的趣味动作！点击任意卡片即可命令波可立即展示独门绝活：")
+        desc = QLabel("波可学会了 14 种超丰富的趣味动作！点击任意卡片即可命令波可立即展示独门绝活：")
         desc.setWordWrap(True)
         desc.setStyleSheet("color: #64748B; font-size: 11px;")
         header.addWidget(desc)
@@ -1070,6 +1090,8 @@ class ActionShowDialog(QDialog):
         box.setSpacing(8)
 
         actions = [
+            ("CARDBOARD_BOX", "📦", "纸箱藏猫猫 (新绝活)", "快递空纸箱是猫咪快乐老家，钻进箱子探头暗中观察"),
+            ("PEEK_EDGE", "👀", "贴边探头偷看 (新技能)", "敏捷滑到屏幕最近边缘，两只小肉垫扒住边框探头暗中偷看"),
             ("CATCH_MOUSE", "🐭", "敏捷扑抓小老鼠", "机械发条小老鼠欢快乱窜，波可敏捷飞扑擒拿"),
             ("PLAY_YARN", "🧶", "欢快拨玩毛线球", "粉嫩毛线球弹跳滚动，左右肉垫欢畅轻拍玩耍"),
             ("STRETCH_YAWN", "🐱", "伸个懒腰打哈欠", "拉伸舒展身子骨，张开萌萌大口打哈欠"),
@@ -1101,6 +1123,10 @@ class ActionShowDialog(QDialog):
     def _trigger_action(self, action_code):
         sound_manager.play("click")
         self.accept()
+        if action_code == "PEEK_EDGE":
+            if hasattr(self.pet_window, "trigger_edge_peek"):
+                self.pet_window.trigger_edge_peek()
+            return
         self.pet_window.play_action(action_code)
 
 class FocusDialog(QDialog):

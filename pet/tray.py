@@ -102,6 +102,18 @@ class PetTrayIcon(QSystemTrayIcon):
         self.toggle_show_action = menu.addAction("👁️ 隐藏萌宠")
         self.toggle_show_action.triggered.connect(self._toggle_visibility)
 
+        # 全局老板键一键隐身/呼出
+        boss_action = menu.addAction("🕶️ 全局老板键 (Alt + P)")
+        boss_action.triggered.connect(self._toggle_boss)
+
+        # 随手便签
+        memo_action = menu.addAction("📝 桌面随手便签")
+        memo_action.triggered.connect(self._toggle_memo)
+
+        # 贴边探头偷看
+        peek_action = menu.addAction("👀 贴边探头偷看")
+        peek_action.triggered.connect(self._trigger_peek)
+
         # 重置位置 (防止用户误把窗口拖出屏幕)
         reset_pos_action = menu.addAction("🎯 重置萌宠屏幕位置")
         reset_pos_action.triggered.connect(self._reset_position)
@@ -155,6 +167,18 @@ class PetTrayIcon(QSystemTrayIcon):
         else:
             self.pet_window.show()
             self.toggle_show_action.setText("👁️ 隐藏萌宠")
+
+    def _toggle_boss(self):
+        if hasattr(self.pet_window, "toggle_boss_mode"):
+            self.pet_window.toggle_boss_mode()
+
+    def _toggle_memo(self):
+        if hasattr(self.pet_window, "toggle_memo"):
+            self.pet_window.toggle_memo()
+
+    def _trigger_peek(self):
+        if hasattr(self.pet_window, "trigger_edge_peek"):
+            self.pet_window.trigger_edge_peek()
 
     def _reset_position(self):
         self.pet_window._init_initial_position()

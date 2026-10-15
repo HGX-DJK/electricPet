@@ -73,10 +73,19 @@ class PetRenderer:
         self.next_ear_flick_time = time.time() + 4.5
         self.ear_flick_side = "left"
 
-    def set_cursor_gaze(self, gaze_x, gaze_y):
-        """设置鼠标光标引起的眼神注视目标方位"""
+        # 动态瞳孔放大与灵性双眨眼
+        self.target_pupil_dilation = 0.0
+        self.current_pupil_dilation = 0.0
+        self.cursor_dist = 999.0
+        self.blink_count = 0
+        self.blink_total = 1
+        self.blink_style = "normal"
+
+    def set_cursor_gaze(self, gaze_x, gaze_y, dist_px=999.0):
+        """设置鼠标光标引起的眼神注视目标方位与空间距离"""
         self.target_gaze_x = gaze_x
         self.target_gaze_y = gaze_y
+        self.cursor_dist = dist_px
 
     def trigger_landing_bounce(self):
         """落地触地果冻弹性震颤与地面灰尘冲击环"""
@@ -169,15 +178,47 @@ class PetRenderer:
         if self.landing_timer > 0:
             self.landing_timer -= delta_time
 
-        # 眨眼逻辑
+        # 动态瞳孔放大评估 (光标靠近 < 85px、抚摸陶醉、纸箱藏匿、贴边偷看、抓老鼠/毛线时放大瞳孔)
+        if (self.petting_timer > 0 or 
+            current_state in ("CARDBOARD_BOX", "PEEK_LEFT", "PEEK_RIGHT", "CATCH_MOUSE", "PLAY_YARN", "TILT_HEAD", "CHASE_BUTTERFLY") or
+            getattr(self, "cursor_dist", 999.0) < 85.0):
+            self.target_pupil_dilation = 1.0
+        elif getattr(self, "cursor_dist", 999.0) < 140.0:
+            self.target_pupil_dilation = 0.55
+        else:
+            self.target_pupil_dilation = 0.0
+
+        dil_lerp = min(1.0, delta_time * 8.0)
+        self.current_pupil_dilation += (self.target_pupil_dilation - self.current_pupil_dilation) * dil_lerp
+
+        # 灵性眨眼逻辑 (含 25% 灵动双眨眼 与 15% 信任慢眨眼 Cat Slow Blink)
         now = time.time()
-        if now >= self.next_blink_time:
-            self.is_blinking = True
-            self.blink_progress += delta_time * 8.0
-            if self.blink_progress >= 1.0:
-                self.is_blinking = False
+        if not self.is_blinking:
+            if now >= self.next_blink_time:
+                self.is_blinking = True
                 self.blink_progress = 0.0
-                self.next_blink_time = now + random.uniform(2.5, 6.0)
+                self.blink_count = 0
+                roll = random.random()
+                if roll < 0.25:
+                    self.blink_style = "double"
+                    self.blink_total = 2
+                elif roll < 0.40:
+                    self.blink_style = "slow"
+                    self.blink_total = 1
+                else:
+                    self.blink_style = "normal"
+                    self.blink_total = 1
+        else:
+            speed = 5.0 if getattr(self, "blink_style", "normal") == "slow" else 11.0
+            self.blink_progress += delta_time * speed
+            if self.blink_progress >= 1.0:
+                self.blink_count = getattr(self, "blink_count", 0) + 1
+                if self.blink_count < getattr(self, "blink_total", 1):
+                    self.blink_progress = 0.0  # 灵动双眨眼：连眨第二下
+                else:
+                    self.is_blinking = False
+                    self.blink_progress = 0.0
+                    self.next_blink_time = now + random.uniform(2.6, 6.2)
 
         # 偶发自然抖耳逻辑 (每 6~14 秒灵动机敏地轻弹耳尖)
         if now >= self.next_ear_flick_time and current_state not in ("HAPPY_SPIN", "DRAGGING", "FALLING"):
@@ -365,6 +406,18 @@ class PetRenderer:
             squash_x = 1.05 + math.sin(self.anim_time * 9.0) * 0.03
             squash_y = 0.96
             breath_offset = 2.0
+        elif state == "CARDBOARD_BOX":
+            # 纸箱藏猫猫：在箱子里惬意沉坐，好奇微探头
+            squash_x = 0.96
+            squash_y = 1.02
+            breath_offset = 6.0 + math.sin(self.anim_time * 2.8) * 3.5
+            tilt_angle = math.sin(self.anim_time * 2.0) * 3.0
+        elif state in ("PEEK_LEFT", "PEEK_RIGHT"):
+            # 贴边探头偷看：侧身向屏幕内部倾斜，好奇探出小脑袋
+            squash_x = 1.02
+            squash_y = 0.98
+            tilt_angle = 14.0 if state == "PEEK_LEFT" else -14.0
+            breath_offset = math.sin(self.anim_time * 3.5) * 2.5
         elif self.model.is_sleeping:
             breath_offset = math.sin(self.anim_time * 1.8) * 2.0
         elif state == "IDLE":
@@ -495,6 +548,10 @@ class PetRenderer:
             self._draw_scurrying_mouse(painter)
         elif state == "PLAY_YARN":
             self._draw_bouncing_yarn(painter)
+        elif state == "CARDBOARD_BOX":
+            self._draw_cardboard_box(painter)
+        elif state in ("PEEK_LEFT", "PEEK_RIGHT"):
+            self._draw_edge_peek_details(painter, state == "PEEK_LEFT")
 
         # 10. 正在进行的进食/洗澡覆盖物
         if self.eating_timer > 0:
@@ -1950,6 +2007,136 @@ class PetRenderer:
 
         painter.restore()
 
+    def _draw_cardboard_box(self, painter: QPainter):
+        """纸箱藏猫猫：牛皮纸箱、折叠翻盖、专属封箱胶带与侧边摇曳的小尾巴"""
+        painter.save()
+        box_w = 118.0
+        box_h = 56.0
+        box_x = -box_w / 2.0
+        box_y = -1.0  # 挡住胸口与四肢，让猫猫头与大眼睛探在箱沿上方
+
+        # 1. 纸箱正面外轮廓与牛皮纸质感双色渐变
+        box_rect = QRectF(box_x, box_y, box_w, box_h)
+        box_grad = QLinearGradient(box_x, box_y, box_x + box_w, box_y + box_h)
+        box_grad.setColorAt(0.0, QColor("#DDB892"))
+        box_grad.setColorAt(0.45, QColor("#B08968"))
+        box_grad.setColorAt(1.0, QColor("#7F5539"))
+        painter.setBrush(QBrush(box_grad))
+        painter.setPen(QPen(QColor("#543D37"), 2.2))
+        painter.drawRoundedRect(box_rect, 7, 7)
+
+        # 2. 纸箱左右展开折边 (Flaps)
+        flap_l = QPainterPath()
+        flap_l.moveTo(box_x, box_y)
+        flap_l.lineTo(box_x - 16, box_y - 12)
+        flap_l.lineTo(box_x - 11, box_y + 14)
+        flap_l.lineTo(box_x, box_y + 10)
+        flap_l.closeSubpath()
+        painter.setBrush(QBrush(QColor("#CDB08F")))
+        painter.setPen(QPen(QColor("#543D37"), 1.8))
+        painter.drawPath(flap_l)
+
+        flap_r = QPainterPath()
+        flap_r.moveTo(box_x + box_w, box_y)
+        flap_r.lineTo(box_x + box_w + 16, box_y - 12)
+        flap_r.lineTo(box_x + box_w + 11, box_y + 14)
+        flap_r.lineTo(box_x + box_w, box_y + 10)
+        flap_r.closeSubpath()
+        painter.drawPath(flap_r)
+
+        # 前侧下翻折边 (悬挂在箱子正面上方)
+        flap_front = QPainterPath()
+        flap_front.moveTo(box_x + 8, box_y)
+        flap_front.lineTo(box_x + box_w - 8, box_y)
+        flap_front.lineTo(box_x + box_w - 14, box_y + 15)
+        flap_front.lineTo(box_x + 14, box_y + 15)
+        flap_front.closeSubpath()
+        painter.setBrush(QBrush(QColor("#E6CCB2")))
+        painter.setPen(QPen(QColor("#543D37"), 1.8))
+        painter.drawPath(flap_front)
+
+        # 3. 封箱胶带贴纸与可爱印章
+        tape_rect = QRectF(box_x + 30, box_y + 18, 58, 15)
+        painter.setBrush(QBrush(QColor("#FFFBEB")))
+        painter.setPen(QPen(QColor("#F59E0B"), 1.0))
+        painter.drawRoundedRect(tape_rect, 3, 3)
+
+        painter.setFont(QFont("Microsoft YaHei UI", 7, QFont.Weight.Bold))
+        painter.setPen(QPen(QColor("#78350F")))
+        painter.drawText(tape_rect, Qt.AlignmentFlag.AlignCenter, "📦 波可专递 🐾")
+
+        # 易碎标记与向上箭头
+        painter.setFont(QFont("Segoe UI Emoji", 7))
+        painter.setPen(QPen(QColor("#451A03")))
+        painter.drawText(int(box_x + 10), int(box_y + 44), "↑↑ FRAGILE")
+
+        # 4. 挂在箱沿前方的两只萌萌小肉垫爪子
+        paw_y = box_y + 3
+        for px in [-24, 24]:
+            painter.setBrush(QBrush(QColor("#FFF9F2")))
+            painter.setPen(QPen(QColor("#543D37"), 2.0))
+            paw = QPainterPath()
+            paw.addRoundedRect(QRectF(px - 10, paw_y - 6, 20, 14), 7, 7)
+            painter.drawPath(paw)
+            painter.setBrush(QBrush(QColor("#FFAAAA")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(px - 6, paw_y + 1, 4, 3))
+            painter.drawEllipse(QRectF(px + 2, paw_y + 1, 4, 3))
+            painter.drawEllipse(QRectF(px - 2, paw_y + 2, 4, 3))
+
+        # 5. 箱子侧边圆孔伸出的欢畅摆动尾巴
+        tail_angle = math.sin(self.anim_time * 6.0) * 16.0
+        painter.save()
+        painter.translate(box_x + box_w - 4, box_y + 36)
+        painter.rotate(tail_angle)
+        # 纸箱通风小孔
+        painter.setBrush(QBrush(QColor("#3E200C")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-6, -6, 12, 12))
+        # 钻出来晃动的尾巴尖
+        tail_path = QPainterPath()
+        tail_path.moveTo(0, 0)
+        tail_path.cubicTo(12, -4, 20, -18, 26, -26)
+        tail_path.cubicTo(20, -22, 12, -14, 0, 4)
+        tail_path.closeSubpath()
+        painter.setBrush(QBrush(QColor("#E76F51")))
+        painter.setPen(QPen(QColor("#543D37"), 1.8))
+        painter.drawPath(tail_path)
+        painter.restore()
+
+        painter.restore()
+
+    def _draw_edge_peek_details(self, painter: QPainter, is_left: bool):
+        """贴边探头偷看细节：小肉垫趴在屏幕物理边缘、好奇抖动的小胡须与微气泡"""
+        painter.save()
+        edge_x = -36 if is_left else 36
+
+        # 1. 抓扶在屏幕边框上的可爱小肉垫
+        for paw_offset_y in [-12, 14]:
+            paw_x = edge_x
+            paw_y = paw_offset_y
+            painter.setBrush(QBrush(QColor("#FFF9F2")))
+            painter.setPen(QPen(QColor("#543D37"), 2.0))
+            paw = QPainterPath()
+            paw.addRoundedRect(QRectF(paw_x - 10, paw_y - 7, 20, 14), 7, 7)
+            painter.drawPath(paw)
+
+            # 粉嫩小肉垫掌印
+            painter.setBrush(QBrush(QColor("#FFAAAA")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(paw_x - 5, paw_y - 2, 4, 4))
+            painter.drawEllipse(QRectF(paw_x + 1, paw_y - 2, 4, 4))
+            painter.drawEllipse(QRectF(paw_x - 2, paw_y - 5, 4, 3))
+
+        # 2. 探头好奇小微粒
+        if random.random() < 0.08:
+            px = 15 if is_left else -15
+            p = Particle(100 + px, 55, "sparkle")
+            p.size = 12
+            self.particles.append(p)
+
+        painter.restore()
+
     def _draw_butterfly(self, painter: QPainter):
         painter.save()
         bf_x = math.cos(self.anim_time * 3.5) * 62.0
@@ -2043,9 +2230,16 @@ class PetRenderer:
         painter.drawEllipse(QRectF(-6, 12, 12, 7))
 
     def _draw_blinking_eyes(self, painter: QPainter):
-        painter.setPen(QPen(QColor("#543D37"), 3.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        painter.drawLine(-27, -4, -9, -4)
-        painter.drawLine(9, -4, 27, -4)
+        painter.setPen(QPen(QColor("#543D37"), 3.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        left_eye = QPainterPath()
+        left_eye.moveTo(-28, -3)
+        left_eye.cubicTo(-23, -0.5, -14, -0.5, -9, -3)
+        painter.drawPath(left_eye)
+        right_eye = QPainterPath()
+        right_eye.moveTo(9, -3)
+        right_eye.cubicTo(14, -0.5, 23, -0.5, 28, -3)
+        painter.drawPath(right_eye)
 
     def _draw_normal_eyes(self, painter: QPainter, col_l: QColor, col_r: QColor):
         # 幼年期眼睛更大更萌
@@ -2054,6 +2248,11 @@ class PetRenderer:
         # 眼神视线追踪光标微动偏移 (范围：X轴 ±3.8px，Y轴 ±2.8px)
         gaze_ox = getattr(self, "current_gaze_x", 0.0) * 3.8
         gaze_oy = getattr(self, "current_gaze_y", 0.0) * 2.8
+
+        # 动态瞳孔放大因子 (靠近/好奇/抚摸时放大瞳孔至软萌黑曜石状态)
+        dil = getattr(self, "current_pupil_dilation", 0.0)
+        pupil_ratio_w = 0.58 + dil * 0.28
+        pupil_ratio_h = 0.65 + dil * 0.23
 
         for ex, col in [(-19, col_l), (19, col_r)]:
             eye_rect = QRectF(ex - eye_w / 2.0, -15, eye_w, eye_h)
@@ -2067,8 +2266,8 @@ class PetRenderer:
             painter.setPen(QPen(QColor("#150A06"), 1.2))
             painter.drawEllipse(eye_rect)
 
-            # 内部深色瞳孔 (随眼神注视焦点平滑移动)
-            pupil_w, pupil_h = eye_w * 0.58, eye_h * 0.65
+            # 内部深色瞳孔 (随眼神注视焦点平滑移动，随动态放大因子平滑膨胀)
+            pupil_w, pupil_h = eye_w * pupil_ratio_w, eye_h * pupil_ratio_h
             pupil_rect = QRectF(ex - pupil_w / 2.0 + gaze_ox, -13 + gaze_oy, pupil_w, pupil_h)
             painter.setBrush(QBrush(QColor("#110805")))
             painter.setPen(Qt.PenStyle.NoPen)
@@ -2089,6 +2288,24 @@ class PetRenderer:
             painter.drawEllipse(QRectF(ex + 1.5 + gaze_ox * 0.7, -4.5 + gaze_oy * 0.7, 3.8, 3.8))
             painter.setBrush(QBrush(QColor(255, 255, 255, 180)))
             painter.drawEllipse(QRectF(ex - 4 + gaze_ox * 0.5, 1 + gaze_oy * 0.5, 2.5, 2.5))
+
+            # 瞳孔放大时额外渲染萌系微闪钻石星芒 (Anime Kitten Eye Sparkle)
+            if dil > 0.35:
+                sparkle_alpha = int(min(255, (dil - 0.35) / 0.65 * 240))
+                painter.setBrush(QBrush(QColor(255, 255, 255, sparkle_alpha)))
+                sx = ex - 1.0 + gaze_ox * 0.75
+                sy = -7.5 + gaze_oy * 0.75
+                star_path = QPainterPath()
+                star_path.moveTo(sx, sy - 2.8)
+                star_path.lineTo(sx + 0.9, sy - 0.9)
+                star_path.lineTo(sx + 2.8, sy)
+                star_path.lineTo(sx + 0.9, sy + 0.9)
+                star_path.lineTo(sx, sy + 2.8)
+                star_path.lineTo(sx - 0.9, sy + 0.9)
+                star_path.lineTo(sx - 2.8, sy)
+                star_path.lineTo(sx - 0.9, sy - 0.9)
+                star_path.closeSubpath()
+                painter.drawPath(star_path)
 
     def _draw_standard_mouth(self, painter: QPainter):
         painter.setBrush(QBrush(QColor("#FFA5A5")))

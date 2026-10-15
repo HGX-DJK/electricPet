@@ -9,6 +9,7 @@ from pet.renderer import PetRenderer
 from pet.dialogue import DialogueManager
 from pet.menus import QuickActionMenu
 from pet.dock import PetCompanionDock
+from pet.memo import PetStickyNote
 from pet.audio import sound_manager
 
 class PetWindow(QWidget):
@@ -22,9 +23,15 @@ class PetWindow(QWidget):
         self.renderer = PetRenderer(model)
         self.dock = PetCompanionDock(model, self)
         self.dialogue = DialogueManager(model, self)
+        self.memo = PetStickyNote(model, self)
+
+        # 全局老板键隐身状态标志
+        self.is_boss_hidden = False
+        self._memo_was_visible = False
+        self.HOTKEY_BOSS_ID = 9527
 
         # 状态机：IDLE, WALK_LEFT, WALK_RIGHT, DRAGGING, FALLING, BOUNCE, 
-        # 及多样动作：STRETCH_YAWN, WASH_FACE, CHASE_BUTTERFLY, HEAD_BOB_MUSIC, TILT_HEAD, HAPPY_SPIN, DOZE_OFF, DIZZY
+        # 及多样动作：STRETCH_YAWN, WASH_FACE, CHASE_BUTTERFLY, HEAD_BOB_MUSIC, TILT_HEAD, HAPPY_SPIN, DOZE_OFF, DIZZY, CARDBOARD_BOX, PEEK_LEFT, PEEK_RIGHT
         self.state = "IDLE"
         self.facing_left = False
         self.action_timer = 0.0
@@ -96,6 +103,57 @@ class PetWindow(QWidget):
                     primary.geometryChanged.connect(self._on_screen_changed)
             except Exception:
                 pass
+
+        # 注册全局老板键 (Alt + P: 0x0001 | 0x4000, 0x50)
+        try:
+            import ctypes
+            hwnd = int(self.winId())
+            ctypes.windll.user32.RegisterHotKey(hwnd, self.HOTKEY_BOSS_ID, 0x0001 | 0x4000, 0x50)
+        except Exception:
+            pass
+
+    def nativeEvent(self, eventType, message):
+        """处理 Windows 原生全局消息 (响应 Alt+P 全局老板键)"""
+        try:
+            ev_name = bytes(eventType)
+            if ev_name == b"windows_generic_MSG":
+                import ctypes.wintypes as wt
+                msg = wt.MSG.from_address(int(message))
+                if msg.message == 0x0312 and msg.wParam == getattr(self, "HOTKEY_BOSS_ID", 9527):
+                    self.toggle_boss_mode()
+                    return True, 0
+        except Exception:
+            pass
+        return super().nativeEvent(eventType, message)
+
+    def toggle_boss_mode(self):
+        """全局老板键一键极速隐身 / 恢复显示 (Alt + P)"""
+        self.is_boss_hidden = not getattr(self, "is_boss_hidden", False)
+        if self.is_boss_hidden:
+            # 极速隐身：隐藏窗口、伴侣岛、气泡、便签并静音
+            self.hide()
+            if hasattr(self, "dock"):
+                self.dock.hide()
+            if hasattr(self, "dialogue") and hasattr(self.dialogue, "bubble"):
+                self.dialogue.bubble.hide()
+            if hasattr(self, "memo") and self.memo.isVisible():
+                self._memo_was_visible = True
+                self.memo.hide()
+            else:
+                self._memo_was_visible = False
+            sound_manager.muted = True
+        else:
+            # 恢复现身
+            sound_manager.muted = not getattr(self.model, "sound_enabled", True)
+            self.show()
+            self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+            self.raise_()
+            self.activateWindow()
+            if getattr(self, "_memo_was_visible", False) and hasattr(self, "memo"):
+                self.memo.show()
+            if getattr(self.model, "sound_enabled", True):
+                sound_manager.play("meow")
+            self.dialogue.say("老板走啦？波可安全现身咯！🐾\n(按 Alt+P 随时隐身护体)", duration=3.8)
 
     def _on_screen_changed(self, *args):
         """屏幕拔插/分辨率调整时，自动校准位置至可视安全区域内"""
@@ -244,17 +302,18 @@ class PetWindow(QWidget):
         dt = min(0.05, now - self.last_tick_time)
         self.last_tick_time = now
 
-        # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪
+        # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪与空间距离 (驱动动态瞳孔放大)
         cursor_pos = QCursor.pos()
         pet_center_x = self.get_center_screen_x()
         pet_center_y = self.get_head_screen_y() + 25.0 * (self.width() / 220.0)
         dx = cursor_pos.x() - pet_center_x
         dy = cursor_pos.y() - pet_center_y
+        dist_px = math.hypot(dx, dy)
         if self.facing_left:
             dx = -dx
         gaze_x = max(-1.0, min(1.0, dx / 220.0))
         gaze_y = max(-1.0, min(1.0, dy / 180.0))
-        self.renderer.set_cursor_gaze(gaze_x, gaze_y)
+        self.renderer.set_cursor_gaze(gaze_x, gaze_y, dist_px)
 
         # 更新渲染器与粒子
         self.renderer.update_animation(dt, self.state)
@@ -378,6 +437,14 @@ class PetWindow(QWidget):
                     "毛线球滚呀滚~ 扑腾扑腾，好好玩呀！💕✨",
                     "抓线头大作战！滚来滚去，快乐无极限~ 🐱"
                 ]
+            },
+            "CARDBOARD_BOX": {
+                "duration": 6.5, "sound": "purr",
+                "lines": [
+                    "发现一个刚拆开的快递纸箱！钻进去也太舒服太有安全感啦~ 📦🐾",
+                    "只要有纸箱，波可就能把自己装进去！露出一双好奇大眼睛~ (✧ω✧)",
+                    "纸箱是猫咪永远的快乐老家！探头偷看~ 谁都不许抢我的箱子！📦✨"
+                ]
             }
         }
 
@@ -472,11 +539,15 @@ class PetWindow(QWidget):
             self.state = "FALLING"
             return
 
-        # 5. 特殊多样化动作持续中
+        # 5. 贴边探头模式中 (静止停留在屏幕边沿等待交互)
+        if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
+            return
+
+        # 5.5 特殊多样化动作持续中
         ALL_ACTIONS = (
             "STRETCH_YAWN", "WASH_FACE", "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC",
             "TILT_HEAD", "HAPPY_SPIN", "DOZE_OFF", "DIZZY", "LOOK_AROUND", "SIT_WAG_TAIL",
-            "CATCH_MOUSE", "PLAY_YARN"
+            "CATCH_MOUSE", "PLAY_YARN", "CARDBOARD_BOX"
         )
         if self.state in ALL_ACTIONS:
             self.action_timer -= dt
@@ -516,13 +587,13 @@ class PetWindow(QWidget):
                             self.facing_left = False
                         self.next_action_time = now + 6.0
                     else:
-                        # 原地灵动才艺动作自主切换 (加权抽取，突出抓老鼠与玩毛线的高光互动)
+                        # 原地灵动才艺动作自主切换 (加权抽取，突出抓老鼠、玩毛线与纸箱躲猫猫的高光互动)
                         act_choices = [
-                            "CATCH_MOUSE", "PLAY_YARN", "WASH_FACE", "STRETCH_YAWN",
+                            "CATCH_MOUSE", "PLAY_YARN", "CARDBOARD_BOX", "WASH_FACE", "STRETCH_YAWN",
                             "TILT_HEAD", "LOOK_AROUND", "SIT_WAG_TAIL", "HEAD_BOB_MUSIC",
                             "CHASE_BUTTERFLY", "HAPPY_SPIN", "DOZE_OFF"
                         ]
-                        weights = [0.18, 0.18, 0.14, 0.12, 0.11, 0.10, 0.08, 0.04, 0.03, 0.01, 0.01]
+                        weights = [0.16, 0.16, 0.15, 0.12, 0.10, 0.10, 0.07, 0.06, 0.04, 0.02, 0.01, 0.01]
                         selected = random.choices(act_choices, weights=weights)[0]
                         # 20% 概率轻声冒出台词气泡，避免频繁打扰工作
                         say_line = (random.random() < 0.20)
@@ -578,6 +649,10 @@ class PetWindow(QWidget):
     # ================= 鼠标与交互事件 =================
     def enterEvent(self, event):
         """鼠标靠近/移入宠物，平滑浮现伴侣交互岛"""
+        if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
+            self.pop_out_from_edge()
+            super().enterEvent(event)
+            return
         if hasattr(self, "dock"):
             self.dock.show_dock()
         super().enterEvent(event)
@@ -603,6 +678,10 @@ class PetWindow(QWidget):
         super().hideEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent):
+        if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
+            self.pop_out_from_edge()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = False
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
@@ -701,6 +780,15 @@ class PetWindow(QWidget):
                     screen = QApplication.primaryScreen()
                 avail = screen.availableGeometry() if screen else None
 
+                # 贴边探头偷看 (Screen-edge peek-a-boo) 判定 (非重力下靠近左右边框35px自动贴边偷看)
+                if avail and not self.model.enable_gravity:
+                    if self.x() <= avail.left() + 38:
+                        self.start_edge_peek("PEEK_LEFT", avail.left())
+                        return
+                    elif self.x() >= avail.right() - self.width() - 38:
+                        self.start_edge_peek("PEEK_RIGHT", avail.right())
+                        return
+
                 if avail:
                     clamped_x = max(avail.left(), min(self.x(), avail.right() - self.width()))
                     clamped_y = max(avail.top(), min(self.y(), avail.bottom() - self.height()))
@@ -758,13 +846,73 @@ class PetWindow(QWidget):
                         "被主人关爱的感觉真好~ ✨"
                     ]))
 
+    def start_edge_peek(self, side, border_x):
+        """贴边探头偷看模式 (Screen-Edge Peek-a-boo)"""
+        self.state = side
+        if side == "PEEK_LEFT":
+            self.facing_left = False
+            target_x = border_x - int(self.width() * 0.58)
+        else:
+            self.facing_left = True
+            target_x = border_x - int(self.width() * 0.42)
+        self.move(int(target_x), int(self.y()))
+        self.anchor_y = self.y()
+        self.drag_vx = 0.0
+        self.drag_vy = 0.0
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("pop")
+        self.dialogue.say("暗中观察中... (悬停或轻点抓我出来~ 🐾)", duration=3.2)
+
+    def pop_out_from_edge(self):
+        """从屏幕边缘跳回桌面正常位置"""
+        if self.state not in ("PEEK_LEFT", "PEEK_RIGHT"):
+            return
+        was_left = (self.state == "PEEK_LEFT")
+        screen = QApplication.screenAt(self.geometry().center())
+        avail = screen.availableGeometry() if screen else QApplication.primaryScreen().availableGeometry()
+        if was_left:
+            target_x = avail.left() + 25
+            self.facing_left = False
+        else:
+            target_x = avail.right() - self.width() - 25
+            self.facing_left = True
+        self.state = "IDLE"
+        self.move(int(target_x), int(self.y()))
+        self.anchor_y = self.y()
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.renderer.trigger_landing_bounce()
+        if getattr(self.model, "sound_enabled", True):
+            sound_manager.play("meow")
+        self.dialogue.say(random.choice([
+            "抓到我啦！(ฅ'ω'ฅ) 原来主人一直在注意波可呢~",
+            "探出小脑袋暗中观察，被主人一眼识破啦！🐾",
+            "喵呜~ 贴边偷看被发现！抱抱主人~ ✨"
+        ]), duration=3.5)
+
+    def trigger_edge_peek(self):
+        """主动命令波可移动至最近的屏幕边缘并探头偷看"""
+        screen = QApplication.screenAt(self.geometry().center())
+        avail = screen.availableGeometry() if screen else QApplication.primaryScreen().availableGeometry()
+        dist_left = self.x() - avail.left()
+        dist_right = avail.right() - (self.x() + self.width())
+        if dist_left <= dist_right:
+            self.start_edge_peek("PEEK_LEFT", avail.left())
+        else:
+            self.start_edge_peek("PEEK_RIGHT", avail.right())
+
+    def toggle_memo(self):
+        """切换随手便签展示"""
+        if hasattr(self, "memo"):
+            self.memo.toggle_memo()
+
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            # 双击宠物互动：随机触发才艺绝活（旋转欢呼、歪头卖萌、抓蝴蝶、听歌摇摆）
+            # 双击宠物互动：随机触发才艺绝活（含抓老鼠、玩毛线、纸箱藏猫猫等）
             self.model.pet_head()
             self.renderer.trigger_pet()
             choice = random.choice([
-                "CATCH_MOUSE", "PLAY_YARN", "HAPPY_SPIN", "TILT_HEAD",
+                "CARDBOARD_BOX", "CATCH_MOUSE", "PLAY_YARN", "HAPPY_SPIN", "TILT_HEAD",
                 "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC", "SIT_WAG_TAIL", "LOOK_AROUND", "WASH_FACE"
             ])
             self.play_action(choice)
@@ -797,6 +945,12 @@ class PetWindow(QWidget):
         self.renderer.render(painter, w, h, self.state, self.facing_left, drag_vx=getattr(self, "drag_vx", 0.0))
 
     def closeEvent(self, event):
+        try:
+            import ctypes
+            hwnd = int(self.winId())
+            ctypes.windll.user32.UnregisterHotKey(hwnd, getattr(self, "HOTKEY_BOSS_ID", 9527))
+        except Exception:
+            pass
         if self.x() > 0 or self.y() > 0:
             self.model.last_pos_x = self.x()
             self.model.last_pos_y = self.y()
@@ -805,4 +959,6 @@ class PetWindow(QWidget):
             self.dock.close()
         if hasattr(self, "dialogue") and hasattr(self.dialogue, "bubble"):
             self.dialogue.bubble.close()
+        if hasattr(self, "memo"):
+            self.memo.close()
         super().closeEvent(event)

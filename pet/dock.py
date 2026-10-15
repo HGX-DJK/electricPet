@@ -30,6 +30,9 @@ DOCK_PASTELS = {
     "wake": {
         "bg": "#FEFCE8", "border": "#FEF08A", "hover_bg": "#FEF9C3", "hover_border": "#FACC15", "pressed": "#FDE047"
     },
+    "memo": {
+        "bg": "#FEFCE8", "border": "#FEF08A", "hover_bg": "#FEF9C3", "hover_border": "#FACC15", "pressed": "#FDE047"
+    },
     "more": {
         "bg": "#F8FAFC", "border": "#E2E8F0", "hover_bg": "#F1F5F9", "hover_border": "#94A3B8", "pressed": "#CBD5E1"
     }
@@ -143,13 +146,17 @@ class PetCompanionDock(QWidget):
         self.btn_sleep = DockIconButton(sleep_icon, "💤 就寝休养 / 唤醒", self._on_sleep, sleep_style, self)
         dock_layout.addWidget(self.btn_sleep)
 
+        # 7. 桌面随手便签
+        self.btn_memo = DockIconButton("📝", "📝 桌面便签 (随时记录待办与灵感闪念)", self._on_memo, "memo", self)
+        dock_layout.addWidget(self.btn_memo)
+
         # 竖向细微分割线
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
         sep.setStyleSheet("background-color: #E2E8F0; width: 1.5px; margin: 4px 1px;")
         dock_layout.addWidget(sep)
 
-        # 7. 全部菜单与设置
+        # 8. 全部菜单与设置
         self.btn_more = DockIconButton("⚙️", "⚙️ 快捷档案与偏好设置 (点击打开完整面板)", self._on_more, "more", self)
         dock_layout.addWidget(self.btn_more)
 
@@ -298,6 +305,11 @@ class PetCompanionDock(QWidget):
             self.pet_window.dialogue.say("晚安啦主人，波可去梦里捉小鱼干啦~ 呼呼💤")
         else:
             self.pet_window.dialogue.say("伸个懒腰~ 充满能量啦！今天也要加油哦！☀️")
+
+    def _on_memo(self):
+        sound_manager.play("click")
+        if hasattr(self.pet_window, "toggle_memo"):
+            self.pet_window.toggle_memo()
 
     def _on_more(self):
         sound_manager.play("click")
