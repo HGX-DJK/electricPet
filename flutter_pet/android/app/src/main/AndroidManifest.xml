@@ -8,9 +8,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
-        android:label="桌面萌宠 · 波可"
+        android:label="电子宠物"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round">
         <activity
             android:name=".MainActivity"
             android:exported="true"

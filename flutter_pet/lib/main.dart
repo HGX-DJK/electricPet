@@ -39,7 +39,7 @@ class _DesktopElectricPetAppState extends State<DesktopElectricPetApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '桌面萌宠 · 波可',
+      title: '电子宠物',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
