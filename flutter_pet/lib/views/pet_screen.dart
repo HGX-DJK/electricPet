@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
@@ -1215,128 +1214,122 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 顶端微光毛玻璃状态胶囊
+  /// 顶端微光灵动状态胶囊
   Widget _buildTopGlassBar(Size screenSize) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: _isNightMode
-                ? const Color(0xFF1E293B).withValues(alpha: 0.85)
-                : Colors.white.withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: _isNightMode ? const Color(0xFF475569) : Colors.white.withValues(alpha: 0.95),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.08),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              // 等级徽章
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  'Lv.${widget.petModel.level}',
-                  style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // 猫咪名字与亲密等级
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.petModel.name,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: _isNightMode ? Colors.white : const Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    '❤️ 亲密 ${widget.petModel.intimacy}',
-                    style: const TextStyle(fontSize: 10, color: Color(0xFFE11D48), fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              // 饱腹与心情进度胶囊
-              _buildMiniBar('饱腹', widget.petModel.hunger / 100, const Color(0xFFF59E0B)),
-              const SizedBox(width: 8),
-              _buildMiniBar('心情', widget.petModel.mood / 100, const Color(0xFF10B981)),
-              const SizedBox(width: 8),
-              // 日夜氛围模式切换按钮
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isNightMode = !_isNightMode;
-                  });
-                  if (widget.petModel.enableHaptics) {
-                    HapticFeedback.lightImpact();
-                  }
-                  if (_isNightMode) {
-                    _showDialogueBubble('切换到静谧月夜模式啦~ 波可陪您数星星入眠🌙💤');
-                  } else {
-                    _showDialogueBubble('早安！暖洋晨光已升起，新的一天要元气满满哦☀️🐾');
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(5),
-                  decoration: BoxDecoration(
-                    color: _isNightMode ? const Color(0xFF312E81) : const Color(0xFFFEF3C7),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Text(_isNightMode ? '🌙' : '☀️', style: const TextStyle(fontSize: 13)),
-                ),
-              ),
-              const SizedBox(width: 6),
-              // 一键回窝按钮
-              GestureDetector(
-                onTap: () => _resetToMat(screenSize),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: _isNightMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: _isNightMode ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Icon(
-                    Icons.home_rounded,
-                    size: 16,
-                    color: _isNightMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  ),
-                ),
-              ),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: _isNightMode
+            ? const Color(0xFF1E293B).withValues(alpha: 0.94)
+            : Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: _isNightMode ? const Color(0xFF475569) : Colors.white,
+          width: 1.5,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withValues(alpha: 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // 等级徽章
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
+              ),
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              'Lv.${widget.petModel.level}',
+              style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // 猫咪名字与亲密等级
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.petModel.name,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                  color: _isNightMode ? Colors.white : const Color(0xFF1E293B),
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '❤️ 亲密 ${widget.petModel.intimacy}',
+                style: const TextStyle(fontSize: 10, color: Color(0xFFE11D48), fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const Spacer(),
+          // 饱腹与心情进度胶囊
+          _buildMiniBar('饱腹', widget.petModel.hunger / 100, const Color(0xFFF59E0B)),
+          const SizedBox(width: 8),
+          _buildMiniBar('心情', widget.petModel.mood / 100, const Color(0xFF10B981)),
+          const SizedBox(width: 8),
+          // 日夜氛围模式切换按钮
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isNightMode = !_isNightMode;
+              });
+              if (widget.petModel.enableHaptics) {
+                HapticFeedback.lightImpact();
+              }
+              if (_isNightMode) {
+                _showDialogueBubble('切换到静谧月夜模式啦~ 波可陪您数星星入眠🌙💤');
+              } else {
+                _showDialogueBubble('早安！暖洋晨光已升起，新的一天要元气满满哦☀️🐾');
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: _isNightMode ? const Color(0xFF312E81) : const Color(0xFFFEF3C7),
+                shape: BoxShape.circle,
+              ),
+              child: Text(_isNightMode ? '🌙' : '☀️', style: const TextStyle(fontSize: 13)),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // 一键回窝按钮
+          GestureDetector(
+            onTap: () => _resetToMat(screenSize),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: _isNightMode ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: _isNightMode ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
+                ),
+              ),
+              child: Icon(
+                Icons.home_rounded,
+                size: 16,
+                color: _isNightMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
