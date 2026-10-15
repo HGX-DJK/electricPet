@@ -61,6 +61,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   bool _isDragging = false;
   String _state = 'IDLE';
   bool _facingLeft = false;
+  int _idleSeconds = 0; // 待机计时器，驱动自主小萌点
 
   // 抚摸与手势
   double _strokeDistance = 0.0;
@@ -114,10 +115,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       }
     });
 
-    // 状态自然衰减与自言自语定时器
+    // 状态自然衰减与自言自语及自主微动作定时器
     _decayTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       widget.petModel.tickDecay(1.0);
       _checkAutoDialogue();
+
+      // 自主生活微动作引擎：待机 8~12 秒自动发生萌趣小动作
+      if (_state == 'IDLE' && !_isDragging && !widget.petModel.isSleeping) {
+        _idleSeconds++;
+        if (_idleSeconds >= 9) {
+          _idleSeconds = 0;
+          _triggerRandomIdleAction();
+        }
+      } else {
+        _idleSeconds = 0;
+      }
     });
 
     // 监听 PetModel 属性变更 (饱腹度、亲密度、等级、皮肤换装实时重绘)
@@ -200,6 +212,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 触碰/戳戳萌宠
   void _onPetTap(Offset globalPos) {
+    _idleSeconds = 0;
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
     }
@@ -219,6 +232,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 双击触发开心旋转绝活
   void _onPetDoubleTap() {
+    _idleSeconds = 0;
     if (widget.petModel.enableHaptics) {
       HapticFeedback.heavyImpact();
     }
@@ -227,6 +241,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   }
 
   void _playAction(String actionId) {
+    _idleSeconds = 0;
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
     }
@@ -241,7 +256,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       'PEEK_EDGE': '悄悄趴在屏幕边上偷看主人写代码~ 👀💕',
       'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
       'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
-      'TILT_HEAD': '歪头好奇打量~ 主人又在看什么有趣的内容呢？❓',
+      'TILT_HEAD': '歪头好奇打量~ 主人在看什么有趣的内容呢？❓',
       'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
       'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
       'HEAD_BOB_MUSIC': '戴上潮流大耳机！动次打次跟着节拍摇头晃脑~ 🎵🎧',
@@ -281,11 +296,60 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     });
   }
 
+  /// 待机自主萌趣小动作驱动 (洗脸、歪头、四处张望、摇尾巴、伸懒腰、打瞌睡)
+  void _triggerRandomIdleAction() {
+    if (!mounted || _state != 'IDLE' || _isDragging || widget.petModel.isSleeping) return;
+    final idleActions = [
+      'WASH_FACE',
+      'TILT_HEAD',
+      'LOOK_AROUND',
+      'SIT_WAG_TAIL',
+      'STRETCH_YAWN',
+      'DOZE_OFF',
+    ];
+    final act = idleActions[math.Random().nextInt(idleActions.length)];
+    setState(() {
+      _state = act;
+    });
+
+    final actionLines = {
+      'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
+      'TILT_HEAD': '歪头好奇打量~ 主人在看什么有趣的内容呢？❓',
+      'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
+      'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
+      'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
+      'DOZE_OFF': '小脑瓜一点一点... 困意来袭，打个小瞌睡~ 💤',
+    };
+    if (actionLines.containsKey(act)) {
+      _showDialogueBubble(actionLines[act]!, duration: const Duration(seconds: 4));
+    }
+
+    Timer(const Duration(milliseconds: 3800), () {
+      if (mounted && _state == act) {
+        setState(() {
+          _state = 'IDLE';
+        });
+      }
+    });
+  }
+
+  /// 优雅的半屏 BottomSheet 唤起，顶部半屏留空小猫互动演出
+  void _showBottomSheetModal(Widget sheet) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      barrierColor: Colors.black.withOpacity(0.35),
+      builder: (ctx) => sheet,
+    );
+  }
+
   /// 重置萌宠回到中心软垫
   void _resetToMat(Size screenSize) {
+    _idleSeconds = 0;
     setState(() {
       _petX = screenSize.width / 2;
-      _petY = screenSize.height * 0.44;
+      _petY = screenSize.height * 0.38;
       _state = 'IDLE';
     });
     _showDialogueBubble('回到专属小软垫啦！舒服坐好~ 🐾');
@@ -298,19 +362,19 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
 
-    // 首次进入时，自适应设置萌宠在屏幕视觉黄金居中点
+    // 首次进入时，自适应设置萌宠在屏幕视觉黄金居中偏上点 (留出下方半屏空间给弹窗)
     if (!_initializedPos && screenSize.width > 0) {
       _petX = screenSize.width / 2;
-      _petY = screenSize.height * 0.44;
+      _petY = screenSize.height * 0.38;
       _initializedPos = true;
     }
 
     // 地板与软垫基准位置
     final matX = screenSize.width / 2;
-    final matY = screenSize.height * 0.44 + 68.0;
+    final matY = screenSize.height * 0.38 + 68.0;
 
     // 萌宠允许移动的上下安全边界
-    const minSafeY = 150.0;
+    const minSafeY = 140.0;
     final maxSafeY = screenSize.height - 180.0;
 
     return Scaffold(
@@ -320,9 +384,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF0FDF4), // 晨光马卡龙薄荷浅绿
-              Color(0xFFF8FAFC), // 纯净奶油白
-              Color(0xFFEEF2FF), // 治愈风铃草蓝
+              Color(0xFFFFFBEB), // 暖杏香草晨光
+              Color(0xFFF0FDF4), // 治愈马卡龙薄荷浅白
+              Color(0xFFF8FAFC), // 纯净奶油底色
             ],
           ),
         ),
@@ -343,21 +407,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
               // 1. 软萌地毯/专属软垫 (给猫咪一个温暖的家底座)
               Positioned(
-                left: matX - 95,
+                left: matX - 100,
                 top: matY - 22,
                 child: Container(
-                  width: 190,
-                  height: 48,
+                  width: 200,
+                  height: 50,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFEF3C7).withOpacity(0.65), // 暖杏黄奶酪垫
-                    borderRadius: BorderRadius.circular(24),
+                    color: const Color(0xFFFEF3C7).withOpacity(0.85), // 暖杏黄奶酪垫
+                    borderRadius: BorderRadius.circular(25),
                     border: Border.all(
-                      color: const Color(0xFFFDE68A).withOpacity(0.8),
-                      width: 2,
+                      color: const Color(0xFFFDE68A),
+                      width: 2.2,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFF59E0B).withOpacity(0.10),
+                        color: const Color(0xFFF59E0B).withOpacity(0.12),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
@@ -365,15 +429,66 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   ),
                   child: const Center(
                     child: Text(
-                      '🐾  Poko\'s Mat  🐾',
+                      '🐾  Poko\'s Haven  🐾',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFFD97706),
                         letterSpacing: 1.2,
                       ),
                     ),
                   ),
+                ),
+              ),
+
+              // 软垫左侧：精致小猫碗
+              Positioned(
+                left: matX - 148,
+                top: matY - 14,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('🥣', style: TextStyle(fontSize: 14)),
+                      SizedBox(width: 2),
+                      Text('🐟', style: TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 软垫右侧：粉红萌趣毛线球
+              Positioned(
+                left: matX + 110,
+                top: matY - 12,
+                child: Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFFFBCFE8), width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFF43F5E).withOpacity(0.08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Text('🧶', style: TextStyle(fontSize: 15)),
                 ),
               ),
 
@@ -514,9 +629,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   child: CompanionDock(
                     model: widget.petModel,
                     onFeedTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => FeedingDialog(
+                      _showBottomSheetModal(
+                        FeedingDialog(
                           model: widget.petModel,
                           onFeedSelected: (foodId) {
                             final food = PetModel.foodMenu.firstWhere(
@@ -547,15 +661,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       );
                     },
                     onWardrobeTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => WardrobeDialog(model: widget.petModel),
+                      _showBottomSheetModal(
+                        WardrobeDialog(model: widget.petModel),
                       );
                     },
                     onActionTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => ActionDialog(
+                      _showBottomSheetModal(
+                        ActionDialog(
                           onActionSelected: (actId) {
                             _playAction(actId);
                           },
@@ -563,9 +675,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       );
                     },
                     onMemoTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => MemoScreen(memoModel: widget.memoModel),
+                      _showBottomSheetModal(
+                        MemoScreen(memoModel: widget.memoModel),
                       );
                     },
                     onBathTap: () {

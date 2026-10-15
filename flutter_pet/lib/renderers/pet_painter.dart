@@ -48,14 +48,20 @@ class PetPainter extends CustomPainter {
       canvas.scale(-1, 1);
     }
 
-    // 4. 生动呼吸与骨骼形变系统
-    // 强化呼吸起伏：提升至 5.0px 并伴随水平-垂直微小拉伸，确保在手机端肉眼清晰可见
-    double breathY = math.sin(animTime * 3.2) * 5.0;
-    double scaleX = 1.0 - math.sin(animTime * 3.2) * 0.02;
-    double scaleY = 1.0 + math.sin(animTime * 3.2) * 0.035;
+    // 4. 生动自然呼吸与骨骼形变系统 (告别机械活塞弹跳，升级为真实猫咪有机呼吸与重心摇摆)
+    final breathCycle = animTime * 1.8;
+    double breathY = math.sin(breathCycle) * 2.2;
+    double scaleX = 1.0 - math.sin(breathCycle) * 0.015;
+    double scaleY = 1.0 + math.sin(breathCycle) * 0.024;
+    double bodySwayX = 0.0;
 
-    // 绝活特殊形变逻辑
-    if (state == 'HAPPY_SPIN') {
+    if (state == 'IDLE') {
+      // 待机时猫咪骨骼自然重心微摆动 (Body sway)
+      bodySwayX = math.sin(animTime * 0.9) * 1.8;
+    } else if (state == 'EATING') {
+      // 投喂进食欢快咀嚼微动
+      breathY = math.sin(animTime * 14.0) * 2.5;
+    } else if (state == 'HAPPY_SPIN') {
       // 欢喜转圈：水平 3D 旋转缩放 + 向上小雀跃跳动
       final spinCycle = math.cos(animTime * 8.0);
       scaleX = spinCycle.abs() < 0.2 ? (spinCycle < 0 ? -0.2 : 0.2) : spinCycle;
@@ -82,7 +88,7 @@ class PetPainter extends CustomPainter {
       breathY = 0.0;
     }
 
-    canvas.translate(center.dx, center.dy + breathY);
+    canvas.translate(center.dx + bodySwayX, center.dy + breathY);
     canvas.scale(scaleX, scaleY);
 
     // 绘制影子
@@ -131,14 +137,17 @@ class PetPainter extends CustomPainter {
       ..strokeWidth = 14
       ..strokeCap = StrokeCap.round;
 
-    // 尾巴摆动速率：端坐摇尾巴特技状态下狂摇！
+    // 尾巴摆动速率：真实猫尾双正弦波涟漪摆动
     double tailWag;
     if (state == 'SIT_WAG_TAIL') {
-      tailWag = math.sin(animTime * 10.0) * 38.0;
+      tailWag = math.sin(animTime * 9.0) * 36.0 + math.sin(animTime * 18.0) * 8.0;
     } else if (state == 'STRETCH_YAWN') {
-      tailWag = 5.0 + math.sin(animTime * 15.0) * 6.0;
+      tailWag = 5.0 + math.sin(animTime * 14.0) * 6.0;
+    } else if (state == 'HAPPY_SPIN') {
+      tailWag = math.sin(animTime * 12.0) * 25.0;
     } else {
-      tailWag = math.sin(animTime * 2.8) * 18.0;
+      // IDLE 待机：轻缓而有韧性的猫尾涟漪摆动 (避免机械单摆)
+      tailWag = math.sin(animTime * 1.6) * 14.0 + math.sin(animTime * 3.2) * 4.5;
     }
 
     final path = Path();
@@ -200,8 +209,13 @@ class PetPainter extends CustomPainter {
 
     Offset headCenter = const Offset(0, -18);
 
-    // 歪头卖萌特技 (头部灵巧倾斜 18度)
-    if (state == 'TILT_HEAD') {
+    if (state == 'IDLE') {
+      // 待机时灵动微倾斜与自然呼吸探视 (好奇微歪头，灵动机敏)
+      final subtleTilt = math.sin(animTime * 0.7) * 0.035;
+      canvas.rotate(subtleTilt);
+      headCenter = Offset(math.sin(animTime * 0.6) * 1.6, -18 + math.cos(animTime * 1.2) * 0.8);
+    } else if (state == 'TILT_HEAD') {
+      // 歪头卖萌特技 (头部灵巧倾斜 18度)
       canvas.rotate(0.32 * math.sin(animTime * 3.5));
     } else if (state == 'LOOK_AROUND') {
       // 四处巡视时头部左右探视
@@ -403,7 +417,11 @@ class PetPainter extends CustomPainter {
     double gazeX = 0.0;
     double gazeY = 0.0;
 
-    if (state == 'LOOK_AROUND') {
+    if (state == 'IDLE') {
+      // 待机眼神流转：四处好奇瞄看，宛如真实萌宠在看世界
+      gazeX = math.sin(animTime * 0.85) * 2.8;
+      gazeY = (math.cos(animTime * 0.45) * 1.4).clamp(-1.2, 1.8);
+    } else if (state == 'LOOK_AROUND') {
       // 四处巡视眼神移动
       gazeX = math.sin(animTime * 2.5) * 4.5;
     } else if (state == 'CHASE_BUTTERFLY') {
