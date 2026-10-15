@@ -184,6 +184,16 @@ class PetCompanionDock(QWidget):
     def cancel_hide(self):
         self.hide_timer.stop()
 
+    def enterEvent(self, event):
+        """鼠标滑入快捷岛：取消隐藏计时，持续保持操作面板展开"""
+        self.cancel_hide()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """鼠标滑出快捷岛：平滑延时收起"""
+        self.schedule_hide(1600)
+        super().leaveEvent(event)
+
     def _do_fade_out(self):
         if not self.isVisible():
             return
@@ -216,24 +226,22 @@ class PetCompanionDock(QWidget):
             screen = QApplication.primaryScreen()
         avail = screen.availableGeometry()
 
-        # 计算宠物实际头部在屏幕上的 Y 坐标（避免悬空过远）
-        scale = getattr(self.model, "visual_scale", 1.0)
-        has_tall_hat = self.model.decorations.get("head") in ("hat_wizard", "hat_party")
-        head_top_rel = int((22 if has_tall_hat else 48) * scale)
-        pet_head_y = pet_y + head_top_rel
+        # 精确获取宠物头部与足底绝对屏幕坐标，彻底消除跨分辨率/缩放的漂移
+        pet_head_y = self.pet_window.get_head_screen_y()
+        pet_foot_y = self.pet_window.get_foot_screen_y()
+        pet_center_x = self.pet_window.get_center_screen_x()
 
         # 默认水平居中吸附在宠物正上方
-        target_x = pet_x + (pet_w - dock_w) // 2
+        target_x = pet_center_x - dock_w / 2.0
 
-        # 纵向：让胶囊底部距离宠物头部仅约 8-10 像素（dock 内部含有 10 像素阴影 margin）
-        target_y = pet_head_y - dock_h + 2
+        # 纵向：让胶囊底部距离宠物头部仅约 6 像素呼吸间距（dock 内部含有 10 像素阴影 margin）
+        target_y = pet_head_y - dock_h + 4
 
         # 边界防溢出保护
         target_x = max(avail.left() + 8, min(target_x, avail.right() - dock_w - 8))
         if target_y < avail.top() + 6:
             # 顶部空间不足，翻转到宠物足底下方
-            foot_bot_rel = int(178 * scale)
-            target_y = pet_y + foot_bot_rel - 2
+            target_y = pet_foot_y + 4
 
         self.move(int(target_x), int(target_y))
 

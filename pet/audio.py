@@ -4,6 +4,7 @@ import struct
 import wave
 import winsound
 import threading
+import time
 
 class SoundManager:
     """
@@ -25,6 +26,8 @@ class SoundManager:
         self.muted = False
         self.volume = 0.8
         self._sound_cache = {}
+        self._last_play_time = {}
+        self._play_lock = threading.Lock()
         # 预先生成常用音效缓存
         try:
             self._sound_cache["meow"] = self._generate_meow()
@@ -245,9 +248,16 @@ class SoundManager:
         return self._create_wav_bytes(samples, sample_rate)
 
     def play(self, sound_name):
-        """异步播放指定音效 (在独立守护线程中同步播放，确保内存缓冲区存活，杜绝 SND_ASYNC 偶发空指针/释放后访问异常)"""
+        """异步播放指定音效 (含150ms同一音效防爆音冷却与独立线程安全，杜绝偶发空指针/释放后访问异常)"""
         if self.muted:
             return
+        now = time.time()
+        with self._play_lock:
+            last = self._last_play_time.get(sound_name, 0.0)
+            if now - last < 0.15:
+                return
+            self._last_play_time[sound_name] = now
+
         wav_bytes = self._sound_cache.get(sound_name)
         if not wav_bytes:
             return

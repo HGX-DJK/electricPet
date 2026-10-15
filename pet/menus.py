@@ -1,3 +1,4 @@
+import os
 import sys
 import copy
 import random
@@ -1332,7 +1333,11 @@ class SettingsDialog(QDialog):
                 r"Software\Microsoft\Windows\CurrentVersion\Run",
                 0, winreg.KEY_SET_VALUE
             )
-            app_path = f'"{sys.executable}"'
+            if getattr(sys, "frozen", False):
+                app_path = f'"{sys.executable}"'
+            else:
+                main_py = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "main.py"))
+                app_path = f'"{sys.executable}" "{main_py}"'
             if enable:
                 winreg.SetValueEx(key, "DesktopElectricPet", 0, winreg.REG_SZ, app_path)
             else:

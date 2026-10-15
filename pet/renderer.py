@@ -258,6 +258,8 @@ class PetRenderer:
             self.particles.append(p)
 
         self.particles = [p for p in self.particles if p.update()]
+        if len(self.particles) > 60:
+            self.particles = self.particles[-60:]
 
     def render(self, painter: QPainter, width, height, state, facing_left=False, drag_vx=0.0):
         self.drag_vx = drag_vx
@@ -265,8 +267,12 @@ class PetRenderer:
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
 
-        cx = width / 2.0
-        cy = height / 2.0 + 15.0
+        scale_factor = width / 220.0
+        painter.save()
+        painter.scale(scale_factor, scale_factor)
+
+        cx = 110.0
+        cy = 125.0
 
         # 呼吸与多样化动作形变参数
         stage = self.model.stage
@@ -500,6 +506,8 @@ class PetRenderer:
 
         # 10. 独立粒子特效绘制
         self._draw_particles(painter, cx, cy)
+
+        painter.restore()
 
     # ================= 究极体光环与背部装饰 =================
     def _draw_ultimate_aura(self, painter: QPainter):

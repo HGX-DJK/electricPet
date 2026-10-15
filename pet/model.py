@@ -63,6 +63,7 @@ class PetModel:
         self.on_state_change = None
         self.on_level_up = None
         self.on_evolve = None
+        self.on_focus_finish = None
 
         self.load_from_disk()
 
@@ -86,7 +87,7 @@ class PetModel:
                 "name": "幼崽期 🍼",
                 "title": "软糯初生幼宠",
                 "next_target": 100,
-                "base_scale": 0.82,
+                "base_scale": 0.85,
                 "desc": "小巧圆滚滚的幼崽，大脑袋小短腿，充满稚气与好奇！"
             },
             "CHILD": {
@@ -100,14 +101,14 @@ class PetModel:
                 "name": "成熟期 👑",
                 "title": "威风忠诚守护",
                 "next_target": 700,
-                "base_scale": 1.18,
+                "base_scale": 1.15,
                 "desc": "毛发丰盈体态优雅，亲和度满分，最贴心的工作伴侣！"
             },
             "ULTIMATE": {
                 "name": "究极星辉体 ✨",
                 "title": "天界星辉神宠",
                 "next_target": 1500,
-                "base_scale": 1.38,
+                "base_scale": 1.28,
                 "desc": "觉醒神圣星辉光环，通体流转星尘粒子，拥有最强守护力！"
             }
         }
@@ -120,13 +121,13 @@ class PetModel:
         # 在同一个阶段内部，随着成长值积累也会有微微的长大平滑过渡
         stage_prog = 0.0
         if self.stage == "BABY":
-            stage_prog = (self.growth / 100.0) * 0.12
+            stage_prog = (self.growth / 100.0) * 0.06
         elif self.stage == "CHILD":
-            stage_prog = ((self.growth - 100.0) / 200.0) * 0.12
+            stage_prog = ((self.growth - 100.0) / 200.0) * 0.06
         elif self.stage == "ADULT":
-            stage_prog = ((self.growth - 300.0) / 400.0) * 0.15
+            stage_prog = ((self.growth - 300.0) / 400.0) * 0.06
         else:
-            stage_prog = min(0.15, (self.growth - 700.0) / 1000.0 * 0.15)
+            stage_prog = min(0.06, (self.growth - 700.0) / 1000.0 * 0.06)
 
         return (stage_base + stage_prog) * self.user_scale_offset
 
@@ -283,6 +284,8 @@ class PetModel:
                 sound_manager.play("alarm")
                 self.add_exp(50)
                 self.mood = min(100.0, self.mood + 30.0)
+                if self.on_focus_finish:
+                    self.on_focus_finish()
 
         self._notify_change()
 
@@ -325,11 +328,18 @@ class PetModel:
             "last_pos_x": self.last_pos_x,
             "last_pos_y": self.last_pos_y
         }
+        tmp_file = self.save_file + ".tmp"
         try:
-            with open(self.save_file, "w", encoding="utf-8") as f:
+            with open(tmp_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_file, self.save_file)
         except Exception as e:
             print(f"[PetModel] Save error: {e}")
+            if os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception:
+                    pass
 
     def load_from_disk(self):
         if not os.path.exists(self.save_file):

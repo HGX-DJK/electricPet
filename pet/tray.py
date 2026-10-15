@@ -192,8 +192,22 @@ class PetTrayIcon(QSystemTrayIcon):
         dialog.exec()
 
     def _on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            if not self.pet_window.isVisible():
+                self._toggle_visibility()
+            else:
+                self.pet_window.raise_()
+                self.pet_window.activateWindow()
+                self.pet_window.play_action("TILT_HEAD", custom_msg="主人在找波可吗？喵呜~ 🐾")
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._toggle_visibility()
+
+    def show_notification(self, title, message, duration_ms=4500):
+        """调用 Windows 原生通知中心/气泡吐司提醒"""
+        try:
+            self.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information, duration_ms)
+        except Exception:
+            pass
 
     def _exit_app(self):
         self.model.save_to_disk()

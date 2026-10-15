@@ -64,6 +64,31 @@ oLink.Save
             except Exception:
                 pass
 
+def launch_installed_app(target_exe, target_dir):
+    """安全独立唤起已安装的萌宠主程序，彻底脱离 PyInstaller 打包环境的干扰"""
+    if not target_exe or not os.path.exists(target_exe):
+        return False
+    # 清理 PyInstaller 打包环境下传递给子进程的特殊环境变量，防止引导 DLL/模块寻址错乱
+    clean_env = dict(os.environ)
+    for key in ("_MEIPASS2", "_MEIPASS", "PYTHONPATH", "PYTHONHOME", "PYTHONEXECUTABLE"):
+        clean_env.pop(key, None)
+
+    # 优先使用 Windows 原生 ShellExecute (os.startfile) 直接由 Explorer 进程拉起独立应用
+    if hasattr(os, "startfile"):
+        try:
+            os.startfile(target_exe)
+            return True
+        except Exception as e:
+            print("os.startfile launch notice:", e)
+
+    # 备选使用无污染 env 的独立进程
+    try:
+        subprocess.Popen([target_exe], cwd=target_dir, env=clean_env)
+        return True
+    except Exception as e:
+        print("subprocess launch notice:", e)
+        return False
+
 def do_core_install(target_dir, create_desktop, create_startmenu, autostart, launch_after, status_cb=None, progress_cb=None):
     """执行核心安装逻辑：解压 payload、建立快捷方式、注册表登记"""
     if status_cb: status_cb("正在检测并关闭旧版本运行进程...", 5)
@@ -99,6 +124,40 @@ def do_core_install(target_dir, create_desktop, create_startmenu, autostart, lau
     target_exe = os.path.join(target_dir, "DesktopPet.exe")
     target_ico = os.path.join(target_dir, "assets", "app.ico")
     target_uninst = os.path.join(target_dir, "uninstall.bat")
+    uninst_script = (
+        "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "title 桌面萌宠 · 波可 卸载程序\r\n"
+        "echo ========================================================\r\n"
+        "echo          桌面萌宠 · 波可 (Desktop Pet) 卸载程序\r\n"
+        "echo ========================================================\r\n"
+        "echo.\r\n"
+        "echo [1/4] 正在关闭萌宠后台运行进程...\r\n"
+        "taskkill /F /IM DesktopPet.exe >nul 2>nul\r\n"
+        "echo [2/4] 正在清理桌面与开始菜单快捷方式...\r\n"
+        "del /f /q \"%USERPROFILE%\\Desktop\\*波可*.lnk\" >nul 2>nul\r\n"
+        "del /f /q \"%USERPROFILE%\\Desktop\\*DesktopPet*.lnk\" >nul 2>nul\r\n"
+        "del /f /q \"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\*波可*.lnk\" >nul 2>nul\r\n"
+        "del /f /q \"%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\*DesktopPet*.lnk\" >nul 2>nul\r\n"
+        "echo [3/4] 正在清理系统控制面板与开机注册项...\r\n"
+        "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\DesktopPet\" /f >nul 2>nul\r\n"
+        "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"DesktopElectricPet\" /f >nul 2>nul\r\n"
+        "echo [4/4] 正在移除应用程序文件...\r\n"
+        "set \"TARGET_DIR=%~dp0\"\r\n"
+        "cd /d \"%USERPROFILE%\"\r\n"
+        "start /b \"\" cmd /c \"timeout /t 1 /nobreak >nul && rd /s /q \\\"%TARGET_DIR%\\\"\"\r\n"
+        "echo.\r\n"
+        "echo ========================================================\r\n"
+        "echo          卸载完成！波可期待下次与您相遇~\r\n"
+        "echo ========================================================\r\n"
+        "echo.\r\n"
+        "pause\r\n"
+    )
+    try:
+        with open(target_uninst, "w", encoding="utf-8") as f:
+            f.write(uninst_script)
+    except Exception:
+        pass
 
     user_profile = os.environ.get("USERPROFILE", os.path.expanduser("~"))
 
@@ -143,7 +202,7 @@ def do_core_install(target_dir, create_desktop, create_startmenu, autostart, lau
     if status_cb: status_cb("安装完成！波可已准备好与您相伴~", 100)
 
     if launch_after and os.path.exists(target_exe):
-        subprocess.Popen([target_exe], cwd=target_dir, shell=True)
+        launch_installed_app(target_exe, target_dir)
 
 # ----------------- 现代 UI 渲染辅助方法 -----------------
 
@@ -717,6 +776,9 @@ class SetupApp(tk.Tk):
 
     def _on_action_click(self):
         if self.is_installed:
+            target_dir = self.install_dir_var.get().strip()
+            target_exe = os.path.join(target_dir, "DesktopPet.exe")
+            launch_installed_app(target_exe, target_dir)
             self.destroy()
             return
 

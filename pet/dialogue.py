@@ -111,6 +111,7 @@ class SpeechBubbleWidget(QWidget):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowStaysOnTopHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedWidth(260)
 
         self._current_anim = None
@@ -226,21 +227,15 @@ class SpeechBubbleWidget(QWidget):
         if not self.isVisible():
             return
 
-        pet_x = pet_window.x()
-        pet_y = pet_window.y()
-        pet_w = pet_window.width()
-
         screen = QApplication.screenAt(pet_window.geometry().center())
         if not screen:
             screen = QApplication.primaryScreen()
         avail = screen.availableGeometry()
 
-        scale = getattr(pet_window.model, "visual_scale", 1.0)
-        has_tall_hat = pet_window.model.decorations.get("head") in ("hat_wizard", "hat_party")
-        head_top_rel = int((22 if has_tall_hat else 48) * scale)
-        pet_head_y = pet_y + head_top_rel
-        pet_center_x = pet_x + pet_w / 2.0
-        pet_foot_y = pet_y + int(178 * scale)
+        pet_head_y = pet_window.get_head_screen_y()
+        pet_foot_y = pet_window.get_foot_screen_y()
+        pet_center_x = pet_window.get_center_screen_x()
+        scale = pet_window.width() / 220.0
 
         self.adjustSize()
         bubble_w = self.width()
@@ -248,14 +243,14 @@ class SpeechBubbleWidget(QWidget):
 
         # 优先度 1：头顶上方（常规状态）
         # 若快捷岛展开且位于宠物头部上方，则气泡停在快捷岛上方
-        dock_is_above = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() < pet_head_y + 40)
+        dock_is_above = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() < pet_head_y)
         if dock_is_above:
-            target_y_above = dock_widget.y() - bubble_h + 8
+            target_y_above = dock_widget.y() - bubble_h + 6
         else:
             target_y_above = pet_head_y - bubble_h + 4
 
         # 优先度 2：宠物正下方（当宠物停在屏幕最顶端、上方空间不足时，气泡居中沉到底部指向宠物腹部）
-        dock_is_below = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() >= pet_foot_y - 30)
+        dock_is_below = bool(dock_widget and dock_widget.isVisible() and dock_widget.y() >= pet_foot_y - 10)
         if dock_is_below:
             target_y_below = dock_widget.y() + dock_widget.height() - 4
         else:

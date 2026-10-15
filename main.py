@@ -57,6 +57,22 @@ def main():
     app.setApplicationName("DesktopElectricPet")
     app.setApplicationDisplayName("桌面萌宠 · 波可")
 
+    # 单实例保护：检测是否已存在运行中的萌宠进程，避免重复启动与存档冲突
+    from PyQt6.QtNetwork import QLocalServer, QLocalSocket
+    server_id = "DesktopElectricPet_Instance_Server"
+    probe_socket = QLocalSocket()
+    probe_socket.connectToServer(server_id)
+    if probe_socket.waitForConnected(400):
+        probe_socket.write(b"WAKE_UP\n")
+        probe_socket.waitForBytesWritten(800)
+        probe_socket.disconnectFromServer()
+        sys.exit(0)
+
+    # 启动单实例本地服务器
+    instance_server = QLocalServer()
+    QLocalServer.removeServer(server_id)
+    instance_server.listen(server_id)
+
     # 设置应用全局图标
     app_icon = create_app_icon()
     app.setWindowIcon(app_icon)
@@ -66,8 +82,30 @@ def main():
     window = PetWindow(model)
     tray = PetTrayIcon(model, window, app)
 
-    # 退出前保存状态
-    app.aboutToQuit.connect(model.save_to_disk)
+    # 处理多开唤醒事件
+    def _on_instance_message():
+        client = instance_server.nextPendingConnection()
+        if client:
+            def _handle_read():
+                msg = client.readAll().data().decode("utf-8", errors="ignore").strip()
+                if "WAKE_UP" in msg:
+                    if not window.isVisible():
+                        window.show()
+                    window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+                    window.raise_()
+                    window.activateWindow()
+                    window.play_action("HAPPY_SPIN", custom_msg="主人，波可一直在这里陪着您呢！✨")
+            client.readyRead.connect(_handle_read)
+            if client.bytesAvailable() > 0:
+                _handle_read()
+    instance_server.newConnection.connect(_on_instance_message)
+
+    # 退出前保存状态并释放单实例资源
+    def _cleanup():
+        model.save_to_disk()
+        instance_server.close()
+        QLocalServer.removeServer(server_id)
+    app.aboutToQuit.connect(_cleanup)
 
     # 显示窗口与托盘
     window.show()
@@ -77,6 +115,16 @@ def main():
     def on_level_up(new_lvl):
         window.dialogue.say(f"🎉 升级啦！波可升到了 Lv.{new_lvl}！和主人的感情更深厚了呢~ (✧ω✧)", duration=6.0)
     model.on_level_up = on_level_up
+
+    # 番茄钟专注完成回调绑定 (系统托盘原生通知 + 萌宠撒花祝贺)
+    def on_focus_finish():
+        if not window.isVisible():
+            window.show()
+        window.raise_()
+        window.dialogue.say("🎉 专注时间达成！主人辛苦啦，波可给您递上温水，快休息5分钟吧~ ✨", duration=8.0)
+        tray.show_notification("⏰ 番茄钟专注完成！", "高效专注圆满达成！站起来伸伸懒腰、向远方眺望放松一下吧~ 🐾")
+        window.play_action("HAPPY_SPIN")
+    model.on_focus_finish = on_focus_finish
 
     sys.exit(app.exec())
 

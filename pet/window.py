@@ -79,11 +79,44 @@ class PetWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setMouseTracking(True)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
 
         # 根据成长与进化缩放因子调整基础大小 (基准 220x220)
         base_size = int(220 * self.model.visual_scale)
         self.resize(base_size, base_size)
+
+        # 监听屏幕分辨率变更或多显示器热插拔，防止宠物掉出屏幕可见区域
+        app = QApplication.instance()
+        if app:
+            try:
+                app.screenAdded.connect(self._on_screen_changed)
+                app.screenRemoved.connect(self._on_screen_changed)
+                primary = app.primaryScreen()
+                if primary:
+                    primary.geometryChanged.connect(self._on_screen_changed)
+            except Exception:
+                pass
+
+    def _on_screen_changed(self, *args):
+        """屏幕拔插/分辨率调整时，自动校准位置至可视安全区域内"""
+        screen = QApplication.screenAt(self.geometry().center())
+        if not screen:
+            screen = QApplication.primaryScreen()
+        if not screen:
+            return
+        avail = screen.availableGeometry()
+
+        cur_x = self.x()
+        cur_y = self.y()
+
+        clamped_x = max(avail.left() + 10, min(cur_x, avail.right() - self.width() - 10))
+        clamped_y = max(avail.top() + 10, min(cur_y, avail.bottom() - self.height()))
+
+        if clamped_x != cur_x or clamped_y != cur_y:
+            self.move(int(clamped_x), int(clamped_y))
+            self.anchor_y = clamped_y
+            if hasattr(self, "dialogue"):
+                self.dialogue.say("检测到屏幕环境变动，波可跳回眼前咯~ 🐾", duration=3.5)
 
     def _init_initial_position(self):
         screen = QApplication.primaryScreen()
@@ -152,6 +185,51 @@ class PetWindow(QWidget):
         self.dialogue.say(f"🌟 奇迹蜕变！波可成长进阶到【{stage_name}】啦！体型变大、神采奕奕~ (✧ω✧)", duration=7.0)
 
 
+    def get_head_rel_y(self) -> float:
+        """获取宠物头顶或头饰最上边缘相对于本窗口顶部的精确像素距离 (自适应所有形态与装扮)"""
+        scale = self.width() / 220.0
+        cy = 125.0 * scale
+        
+        # 基础头部高度 (相对于 cy = 125)
+        pet_type = getattr(self.model, "pet_type", "cat")
+        skin_id = getattr(self.model, "skin_id", "cat_calico")
+        
+        if skin_id.startswith("dog") or pet_type == "dog":
+            base_top_offset = 78.0
+        elif skin_id.startswith("slime") or pet_type == "slime":
+            base_top_offset = 83.0
+        elif skin_id.startswith("penguin") or pet_type == "penguin":
+            base_top_offset = 50.0
+        else: # cat
+            base_top_offset = 63.0
+            
+        # 头部饰品高度补偿
+        head_dec = self.model.decorations.get("head", "none")
+        if head_dec == "hat_wizard":
+            base_top_offset = max(base_top_offset, 108.0)
+        elif head_dec == "hat_party":
+            base_top_offset = max(base_top_offset, 98.0)
+        elif head_dec == "chef":
+            base_top_offset = max(base_top_offset, 85.0)
+        elif head_dec in ("horns", "halo", "crown"):
+            base_top_offset = max(base_top_offset, 75.0)
+            
+        head_rel = cy - base_top_offset * scale
+        return max(0.0, head_rel)
+
+    def get_head_screen_y(self) -> float:
+        """获取宠物头顶在屏幕上的绝对全局 Y 坐标"""
+        return self.y() + self.get_head_rel_y()
+
+    def get_foot_screen_y(self) -> float:
+        """获取宠物足底在屏幕上的绝对全局 Y 坐标"""
+        scale = self.width() / 220.0
+        return self.y() + 171.0 * scale
+
+    def get_center_screen_x(self) -> float:
+        """获取宠物身体中心在屏幕上的绝对全局 X 坐标"""
+        return self.x() + self.width() / 2.0
+
     def get_floor_y(self):
         """获取当前所在屏幕的任务栏/底部地面 Y 坐标"""
         screen = QApplication.screenAt(self.geometry().center())
@@ -168,8 +246,8 @@ class PetWindow(QWidget):
 
         # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪
         cursor_pos = QCursor.pos()
-        pet_center_x = self.x() + self.width() / 2.0
-        pet_center_y = self.y() + self.height() / 2.0 - 15.0
+        pet_center_x = self.get_center_screen_x()
+        pet_center_y = self.get_head_screen_y() + 25.0 * (self.width() / 220.0)
         dx = cursor_pos.x() - pet_center_x
         dy = cursor_pos.y() - pet_center_y
         if self.facing_left:
@@ -331,15 +409,35 @@ class PetWindow(QWidget):
         if self.state == "DRAGGING":
             return
 
-        # 2. 自由落体中 (仅在重力开启时生效)
+        # 2. 自由落体与惯性抛物线物理 (仅在重力开启时生效)
         if self.state == "FALLING":
             if not self.model.enable_gravity:
                 self.state = "IDLE"
                 self.vy = 0.0
+                self.vx = 0.0
                 return
 
             self.vy += self.gravity * dt
             new_y = current_y + self.vy * dt
+
+            # 水平惯性抛物线运动与空气阻力衰减
+            new_x = current_x + getattr(self, "vx", 0.0) * dt
+            self.vx *= max(0.0, 1.0 - dt * 1.6)
+
+            # 屏幕左右侧壁弹性回弹碰撞
+            if new_x <= avail.left():
+                new_x = avail.left()
+                self.vx = -self.vx * 0.55
+                self.facing_left = False
+                if abs(self.vx) > 120 and getattr(self.model, "sound_enabled", True):
+                    sound_manager.play("pop")
+            elif new_x >= avail.right() - self.width():
+                new_x = avail.right() - self.width()
+                self.vx = -self.vx * 0.55
+                self.facing_left = True
+                if abs(self.vx) > 120 and getattr(self.model, "sound_enabled", True):
+                    sound_manager.play("pop")
+
             if new_y >= floor_y:
                 new_y = floor_y
                 self.anchor_y = floor_y
@@ -347,17 +445,20 @@ class PetWindow(QWidget):
                 # 落地反弹判断
                 if abs(self.vy) > 280:
                     self.vy = -self.vy * self.bounce_damping
+                    self.vx = self.vx * 0.4
                     self.state = "BOUNCE"
                     QTimer.singleShot(220, self._finish_bounce)
                 elif abs(self.vy) > 160:
                     # 跌落产生轻微眩晕
+                    self.vx = 0.0
                     self.play_action("DIZZY", duration=2.6)
-                    self.move(int(current_x), int(floor_y))
+                    self.move(int(new_x), int(floor_y))
                     return
                 else:
-                    self.vy = 0
+                    self.vy = 0.0
+                    self.vx = 0.0
                     self.state = "IDLE"
-            self.move(int(current_x), int(new_y))
+            self.move(int(new_x), int(new_y))
             return
 
         # 3. 落地回弹轻微形变中
@@ -464,8 +565,15 @@ class PetWindow(QWidget):
             self.state = "IDLE"
 
     def _on_status_tick(self):
-        """每秒更新一次宠物数值"""
+        """每秒更新一次宠物数值与自适应能耗调节"""
         self.model.tick(1.0)
+        # 自适应能耗调节：休眠中降低帧率至 30 FPS 节约系统开销，醒来恢复 60 FPS
+        if self.model.is_sleeping:
+            if self.anim_timer.interval() != 33:
+                self.anim_timer.setInterval(33)
+        else:
+            if self.anim_timer.interval() != 16:
+                self.anim_timer.setInterval(16)
 
     # ================= 鼠标与交互事件 =================
     def enterEvent(self, event):
@@ -497,12 +605,22 @@ class PetWindow(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
             self.is_dragging = False
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
             self.mouse_press_pos = event.globalPosition().toPoint()
             self.drag_start_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self.stroke_distance = 0.0
             self.drag_vx = 0.0
             self.drag_vy = 0.0
             self._last_drag_time = time.time()
+
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            # 鼠标中键快捷哄睡/唤醒切换
+            is_sleeping = self.model.toggle_sleep()
+            self.state = "IDLE"
+            if is_sleeping:
+                self.dialogue.say("呼噜噜... 波可进入甜甜的梦乡啦，嘘~ 💤", duration=3.0)
+            else:
+                self.dialogue.say("喵呜~ 睡饱醒来啦！活力满满~ (ฅ'ω'ฅ)", duration=3.0)
 
         elif event.button() == Qt.MouseButton.RightButton:
             self._open_quick_menu()
@@ -600,19 +718,32 @@ class PetWindow(QWidget):
                     if self.y() < floor_y - 2:
                         self.state = "FALLING"
                         self.vy = max(0.0, self.drag_vy * 0.3)
+                        # 抛掷水平惯性动力学初速度
+                        self.vx = max(-1000.0, min(1000.0, self.drag_vx * 0.45))
                     else:
                         self.vy = 0.0
+                        self.vx = 0.0
                         self.state = "IDLE"
                         self.renderer.trigger_landing_bounce()
                 else:
                     self.vy = 0.0
+                    self.vx = 0.0
                     self.state = "IDLE"
                     self.renderer.trigger_landing_bounce()
 
+                # 贴边智能面朝屏幕内 (不把脸对着显示器边框)
+                if avail:
+                    if self.x() <= avail.left() + 35:
+                        self.facing_left = False
+                    elif self.x() >= avail.right() - self.width() - 35:
+                        self.facing_left = True
+
                 self.drag_vx = 0.0
                 self.drag_vy = 0.0
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
                 self.next_action_time = time.time() + random.uniform(2.0, 4.0)
             else:
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
                 self.model.pet_head()
                 self.renderer.trigger_pet()
@@ -637,6 +768,25 @@ class PetWindow(QWidget):
                 "CHASE_BUTTERFLY", "HEAD_BOB_MUSIC", "SIT_WAG_TAIL", "LOOK_AROUND", "WASH_FACE"
             ])
             self.play_action(choice)
+
+    def wheelEvent(self, event):
+        """Ctrl + 鼠标滚轮即时缩放宠物大小 (0.75 ~ 1.35)"""
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            if delta > 0:
+                new_scale = min(1.35, self.model.user_scale_offset + 0.05)
+            else:
+                new_scale = max(0.75, self.model.user_scale_offset - 0.05)
+
+            if abs(new_scale - self.model.user_scale_offset) >= 0.02:
+                self.model.user_scale_offset = round(new_scale, 2)
+                self.check_resize_for_growth()
+                self.model.save_to_disk()
+                pct = int(self.model.user_scale_offset * 100)
+                self.dialogue.say(f"体型缩放已调节为: {pct}% 🐾", duration=1.6)
+            event.accept()
+        else:
+            super().wheelEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
