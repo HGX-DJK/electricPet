@@ -6,7 +6,6 @@ import 'models/memo_model.dart';
 import 'views/pet_screen.dart';
 
 void main() {
-  // runZonedGuarded 捕获所有 Zone 内异常，防止未处理的异步错误变成无声白屏
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
@@ -52,15 +51,31 @@ void main() {
       ),
     );
 
-    runApp(const DesktopElectricPetApp());
+    // 启动前在主线程预加载持久化数据，杜绝首次构建时的异步竞争与 notifyListeners 干扰
+    final petModel = PetModel();
+    final memoModel = MemoModel();
+    try {
+      await petModel.loadFromDisk();
+      await memoModel.loadFromDisk();
+    } catch (e) {
+      debugPrint('Config pre-load non-fatal error: $e');
+    }
+
+    runApp(DesktopElectricPetApp(petModel: petModel, memoModel: memoModel));
   }, (Object error, StackTrace stack) {
-    // Zone 内顶层异常兜底（如 SharedPreferences 或插件初始化失败）
     debugPrint('💥 [Zone Error] $error\n$stack');
   });
 }
 
 class DesktopElectricPetApp extends StatefulWidget {
-  const DesktopElectricPetApp({super.key});
+  final PetModel? petModel;
+  final MemoModel? memoModel;
+
+  const DesktopElectricPetApp({
+    super.key,
+    this.petModel,
+    this.memoModel,
+  });
 
   @override
   State<DesktopElectricPetApp> createState() => _DesktopElectricPetAppState();
@@ -73,8 +88,8 @@ class _DesktopElectricPetAppState extends State<DesktopElectricPetApp> {
   @override
   void initState() {
     super.initState();
-    _petModel = PetModel();
-    _memoModel = MemoModel();
+    _petModel = widget.petModel ?? PetModel();
+    _memoModel = widget.memoModel ?? MemoModel();
   }
 
   @override
@@ -88,7 +103,6 @@ class _DesktopElectricPetAppState extends State<DesktopElectricPetApp> {
           surface: Colors.white,
         ),
         useMaterial3: true,
-        fontFamily: 'sans-serif',
       ),
       home: PetScreen(
         petModel: _petModel,

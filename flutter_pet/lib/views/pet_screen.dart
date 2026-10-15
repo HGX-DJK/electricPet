@@ -222,12 +222,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   void _onModelUpdated() {
     if (!mounted) return;
-    // 监听是否升级并触发全屏庆典
-    if (widget.petModel.level > _previousLevel) {
-      _previousLevel = widget.petModel.level;
-      _triggerLevelUpCelebration();
-    }
-    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // 监听是否升级并触发全屏庆典
+      if (widget.petModel.level > _previousLevel) {
+        _previousLevel = widget.petModel.level;
+        _triggerLevelUpCelebration();
+      }
+      setState(() {});
+    });
   }
 
   /// 升级里程碑全屏庆祝特效
