@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
 
-/// 萌宠专属美味厨房投喂面板 (现代移动端 BottomSheet 设计)
-class FeedingDialog extends StatelessWidget {
+/// 萌宠专属美味厨房投喂面板 (现代移动端 BottomSheet 设计，支持连续畅快投喂)
+class FeedingDialog extends StatefulWidget {
   final PetModel model;
   final ValueChanged<String> onFeedSelected;
 
@@ -14,7 +14,15 @@ class FeedingDialog extends StatelessWidget {
   });
 
   @override
+  State<FeedingDialog> createState() => _FeedingDialogState();
+}
+
+class _FeedingDialogState extends State<FeedingDialog> {
+  @override
   Widget build(BuildContext context) {
+    final model = widget.model;
+    final isFull = model.hunger >= 99.0;
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -65,24 +73,32 @@ class FeedingDialog extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // 饱腹度与体重胶囊指示
+          // 饱腹度与体重胶囊指示 (支持连续投喂实时刷新)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFFBEB),
+              color: isFull ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFFDE68A)),
+              border: Border.all(
+                color: isFull ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.restaurant_rounded, size: 16, color: Color(0xFFD97706)),
+                Icon(
+                  isFull ? Icons.sentiment_very_satisfied_rounded : Icons.restaurant_rounded,
+                  size: 17,
+                  color: isFull ? const Color(0xFF059669) : const Color(0xFFD97706),
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  '饱腹度: ${model.hunger.toStringAsFixed(0)}%   |   体重: ${model.weight.toStringAsFixed(2)} kg',
-                  style: const TextStyle(
+                  isFull
+                      ? '波可的小肚几已经圆滚滚饱饱啦！(100%) ✨'
+                      : '饱腹度: ${model.hunger.toStringAsFixed(0)}%   |   体重: ${model.weight.toStringAsFixed(2)} kg',
+                  style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFFB45309),
+                    color: isFull ? const Color(0xFF047857) : const Color(0xFFB45309),
                   ),
                 ),
               ],
@@ -90,7 +106,7 @@ class FeedingDialog extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // 美食网格卡片
+          // 美食网格卡片 (点击即投喂，猫咪实时咀嚼升级)
           GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -112,11 +128,29 @@ class FeedingDialog extends StatelessWidget {
                 desc: '+$hungerGain 饱腹  +$expGain 经验',
                 onTap: () {
                   HapticFeedback.mediumImpact();
-                  onFeedSelected(food['id'] as String);
-                  Navigator.pop(context);
+                  widget.onFeedSelected(food['id'] as String);
+                  setState(() {}); // 刷新本地饱腹度指示
                 },
               );
             },
+          ),
+          const SizedBox(height: 12),
+
+          // 底部收起按钮
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                backgroundColor: const Color(0xFFF1F5F9),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                '喂好啦，收起厨房小铺',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+              ),
+            ),
           ),
         ],
       ),
@@ -154,7 +188,7 @@ class _FoodItemCardState extends State<_FoodItemCard> {
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.94 : 1.0,
+        scale: _pressed ? 0.93 : 1.0,
         duration: const Duration(milliseconds: 120),
         curve: Curves.easeOutCubic,
         child: Container(
