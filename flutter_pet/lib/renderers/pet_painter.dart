@@ -48,27 +48,14 @@ class PetPainter extends CustomPainter {
       canvas.scale(-1, 1);
     }
 
-    // 4. 自然有机呼吸与多轴骨骼动态系统
-    // 告别机械呆板上下跳跃：改为柔和真实的深呼吸律动 (周期 ~3.9s)，微幅 2.0px
-    double breathY = math.sin(animTime * 1.6) * 2.0;
-    double scaleX = 1.0 - math.sin(animTime * 1.6) * 0.015;
-    double scaleY = 1.0 + math.sin(animTime * 1.6) * 0.02;
-    double bodySway = math.sin(animTime * 0.8) * 1.5; // 身体重心左右轻微换力
-    double bodyTilt = math.sin(animTime * 0.8) * 0.025; // 身体自然微倾
+    // 4. 生动呼吸与骨骼形变系统
+    // 强化呼吸起伏：提升至 5.0px 并伴随水平-垂直微小拉伸，确保在手机端肉眼清晰可见
+    double breathY = math.sin(animTime * 3.2) * 5.0;
+    double scaleX = 1.0 - math.sin(animTime * 3.2) * 0.02;
+    double scaleY = 1.0 + math.sin(animTime * 3.2) * 0.035;
 
-    // 特殊状态动作形变逻辑
-    if (state == 'WALK') {
-      // 自主漫步：轻盈弹性小跑跳步，身体微晃
-      breathY = -math.sin(animTime * 7.5).abs() * 4.0;
-      bodySway = math.sin(animTime * 7.5) * 2.5;
-      bodyTilt = math.sin(animTime * 7.5) * 0.05;
-    } else if (state == 'ROLL_OVER') {
-      // 翻肚皮撒娇：身体侧倾倒在垫子上打滚
-      bodyTilt = -0.38 + math.sin(animTime * 2.5) * 0.12;
-      breathY = 6.0 + math.sin(animTime * 2.5) * 2.0;
-      scaleX = 1.06;
-      scaleY = 0.94;
-    } else if (state == 'HAPPY_SPIN') {
+    // 绝活特殊形变逻辑
+    if (state == 'HAPPY_SPIN') {
       // 欢喜转圈：水平 3D 旋转缩放 + 向上小雀跃跳动
       final spinCycle = math.cos(animTime * 8.0);
       scaleX = spinCycle.abs() < 0.2 ? (spinCycle < 0 ? -0.2 : 0.2) : spinCycle;
@@ -89,15 +76,13 @@ class PetPainter extends CustomPainter {
       canvas.translate(math.sin(animTime * 6.0) * 8.0, math.cos(animTime * 6.0) * 4.0);
       canvas.rotate(math.sin(animTime * 6.0) * 0.08);
     } else if (state == 'DRAGGING') {
-      // 拖拽抱起：身体受重力拉长悬空，悬垂微晃
-      scaleX = 0.88;
-      scaleY = 1.15;
-      breathY = 2.0;
-      bodyTilt = math.sin(animTime * 6.0) * 0.04;
+      // 拖拽抱起：身体受重力拉长悬空
+      scaleX = 0.90;
+      scaleY = 1.12;
+      breathY = 0.0;
     }
 
-    canvas.translate(center.dx + bodySway, center.dy + breathY);
-    canvas.rotate(bodyTilt);
+    canvas.translate(center.dx, center.dy + breathY);
     canvas.scale(scaleX, scaleY);
 
     // 绘制影子
@@ -146,20 +131,14 @@ class PetPainter extends CustomPainter {
       ..strokeWidth = 14
       ..strokeCap = StrokeCap.round;
 
-    // 尾巴摆动速率：根据状态呈现生动波浪物理
+    // 尾巴摆动速率：端坐摇尾巴特技状态下狂摇！
     double tailWag;
     if (state == 'SIT_WAG_TAIL') {
-      tailWag = math.sin(animTime * 9.0) * 36.0;
+      tailWag = math.sin(animTime * 10.0) * 38.0;
     } else if (state == 'STRETCH_YAWN') {
-      tailWag = 5.0 + math.sin(animTime * 14.0) * 5.0;
-    } else if (state == 'WALK') {
-      // 漫步小跑时尾巴欢快翘起晃荡
-      tailWag = math.sin(animTime * 7.5) * 24.0;
-    } else if (state == 'ROLL_OVER') {
-      tailWag = -15.0 + math.sin(animTime * 3.0) * 8.0;
+      tailWag = 5.0 + math.sin(animTime * 15.0) * 6.0;
     } else {
-      // IDLE 自然复合波形：宛如真实猫尾巴涟漪摆动
-      tailWag = math.sin(animTime * 1.8) * 14.0 + math.sin(animTime * 3.6) * 4.5;
+      tailWag = math.sin(animTime * 2.8) * 18.0;
     }
 
     final path = Path();
@@ -221,38 +200,27 @@ class PetPainter extends CustomPainter {
 
     Offset headCenter = const Offset(0, -18);
 
-    // 头部根据自主行为灵动变化
+    // 歪头卖萌特技 (头部灵巧倾斜 18度)
     if (state == 'TILT_HEAD') {
       canvas.rotate(0.32 * math.sin(animTime * 3.5));
     } else if (state == 'LOOK_AROUND') {
       // 四处巡视时头部左右探视
-      headCenter = Offset(math.sin(animTime * 2.5) * 10.0, -18);
+      headCenter = Offset(math.sin(animTime * 2.5) * 8.0, -18);
     } else if (state == 'DOZE_OFF') {
+      // 打瞌睡点头
       final nodAngle = math.max(0.0, math.sin(animTime * 2.0)) * 0.18;
       canvas.rotate(nodAngle);
-    } else if (state == 'IDLE') {
-      // 待机时头部随好奇心有细微倾斜
-      final idleTilt = math.sin(animTime * 0.7) * 0.038;
-      canvas.rotate(idleTilt);
     }
 
-    // 耳朵绘制：两耳独立机警微动，摸头时高频微颤
-    final leftEarCycle = animTime % 5.2;
-    final rightEarCycle = animTime % 7.8;
-    double leftTwitch = 0.0;
-    double rightTwitch = 0.0;
+    // 耳朵绘制：每 5.5 秒自然机敏抖耳，摸头时高频微颤
+    final earCycle = animTime % 5.5;
+    double earTwitch = 0.0;
     if (petProgress > 0) {
-      leftTwitch = math.sin(animTime * 22.0) * 3.5;
-      rightTwitch = -math.sin(animTime * 22.0) * 3.5;
-    } else {
-      if (leftEarCycle > 4.6 && leftEarCycle < 4.95) {
-        leftTwitch = math.sin(animTime * 28.0) * 3.5;
-      }
-      if (rightEarCycle > 7.1 && rightEarCycle < 7.45) {
-        rightTwitch = math.sin(animTime * 28.0) * 3.5;
-      }
+      earTwitch = math.sin(animTime * 22.0) * 3.5;
+    } else if (earCycle > 4.8 && earCycle < 5.15) {
+      earTwitch = math.sin(animTime * 30.0) * 4.0;
     }
-    _drawEars(canvas, skin, headCenter, leftTwitch, rightTwitch);
+    _drawEars(canvas, skin, headCenter, earTwitch);
 
     // 圆润大脑袋
     final headPaint = Paint()
@@ -286,7 +254,7 @@ class PetPainter extends CustomPainter {
     } else if (skin.id == 'cat_siamese') {
       // 暹罗猫经典重点色渐变面罩
       final maskPaint = Paint()
-        ..color = Color(skin.secondaryColor).withValues(alpha: 0.90)
+        ..color = Color(skin.secondaryColor).withOpacity(0.90)
         ..style = PaintingStyle.fill;
       canvas.drawOval(
         Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy + 8), width: 56, height: 44),
@@ -320,7 +288,7 @@ class PetPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch) {
+  void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double twitch) {
     final earBasePaint = Paint()
       ..color = Color(skin.primaryColor)
       ..style = PaintingStyle.fill;
@@ -331,14 +299,14 @@ class PetPainter extends CustomPainter {
     // 左耳
     final leftEar = Path()
       ..moveTo(headCenter.dx - 45, headCenter.dy - 25)
-      ..lineTo(headCenter.dx - 42 + leftTwitch, headCenter.dy - 64)
+      ..lineTo(headCenter.dx - 42 + twitch, headCenter.dy - 64)
       ..lineTo(headCenter.dx - 12, headCenter.dy - 44)
       ..close();
     canvas.drawPath(leftEar, earBasePaint);
 
     final leftEarInner = Path()
       ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
-      ..lineTo(headCenter.dx - 37 + leftTwitch, headCenter.dy - 55)
+      ..lineTo(headCenter.dx - 37 + twitch, headCenter.dy - 55)
       ..lineTo(headCenter.dx - 18, headCenter.dy - 42)
       ..close();
     canvas.drawPath(leftEarInner, earInnerPaint);
@@ -349,14 +317,14 @@ class PetPainter extends CustomPainter {
 
     final rightEar = Path()
       ..moveTo(headCenter.dx + 45, headCenter.dy - 25)
-      ..lineTo(headCenter.dx + 42 - rightTwitch, headCenter.dy - 64)
+      ..lineTo(headCenter.dx + 42 - twitch, headCenter.dy - 64)
       ..lineTo(headCenter.dx + 12, headCenter.dy - 44)
       ..close();
     canvas.drawPath(rightEar, rightEarPaint);
 
     final rightEarInner = Path()
       ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
-      ..lineTo(headCenter.dx + 37 - rightTwitch, headCenter.dy - 55)
+      ..lineTo(headCenter.dx + 37 - twitch, headCenter.dy - 55)
       ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
       ..close();
     canvas.drawPath(rightEarInner, earInnerPaint);
@@ -402,16 +370,14 @@ class PetPainter extends CustomPainter {
       return;
     }
 
-    // 3. 闭眼/开心笑眼判断 (睡觉、洗脸理毛、伸懒腰、转圈欢喜、翻肚皮、抚摸享受、自然双眨眼)
-    final blinkCycle = animTime % 5.0;
+    // 3. 闭眼/开心笑眼判断 (睡觉、洗脸理毛、伸懒腰、转圈欢喜、抚摸、双眨眼)
+    final blinkCycle = animTime % 3.8;
     final isBlinking = model.isSleeping ||
         state == 'WASH_FACE' ||
         state == 'STRETCH_YAWN' ||
         state == 'HAPPY_SPIN' ||
-        state == 'ROLL_OVER' ||
         state == 'SIT_WAG_TAIL' ||
-        (blinkCycle > 4.2 && blinkCycle < 4.42) ||
-        (blinkCycle > 4.55 && blinkCycle < 4.72) || // 自然逼真双眨眼
+        (blinkCycle > 3.55 && blinkCycle < 3.75) ||
         (petProgress > 0.35);
 
     if (isBlinking) {
@@ -448,12 +414,6 @@ class PetPainter extends CustomPainter {
       // 俯视盯小老鼠
       gazeX = math.sin(animTime * 4.5) * 4.0;
       gazeY = 3.5;
-    } else if (state == 'IDLE' || state == 'WALK') {
-      // 待机与漫步时眼神灵动流转，不再呆滞
-      final idleGazeCycle = animTime % 6.5;
-      if (idleGazeCycle > 2.0 && idleGazeCycle < 4.5) {
-        gazeX = math.sin((idleGazeCycle - 2.0) * math.pi / 2.5) * 3.2;
-      }
     }
 
     for (final eyeCenter in [leftEyeCenter, rightEyeCenter]) {
@@ -590,39 +550,6 @@ class PetPainter extends CustomPainter {
 
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawPaint);
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawBorder);
-      return;
-    }
-
-    // 自主漫步步伐 (左前爪与右前爪交替前后迈步，超萌踏步小碎步)
-    if (state == 'WALK') {
-      final stepL = math.sin(animTime * 7.5) * 8.0;
-      final stepR = -math.sin(animTime * 7.5) * 8.0;
-      canvas.drawOval(Rect.fromCenter(center: Offset(-22, 60 + stepL), width: 22, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(-22, 60 + stepL), width: 22, height: 16), pawBorder);
-      canvas.drawOval(Rect.fromCenter(center: Offset(22, 60 + stepR), width: 22, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(22, 60 + stepR), width: 22, height: 16), pawBorder);
-      return;
-    }
-
-    // 翻肚皮撒娇：四爪向天软软蜷曲
-    if (state == 'ROLL_OVER') {
-      final curlL = math.sin(animTime * 3.0) * 2.5;
-      final curlR = -math.sin(animTime * 3.0) * 2.5;
-      canvas.drawOval(Rect.fromCenter(center: Offset(-24, 46 + curlL), width: 20, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(-24, 46 + curlL), width: 20, height: 16), pawBorder);
-      canvas.drawOval(Rect.fromCenter(center: Offset(24, 46 + curlR), width: 20, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(24, 46 + curlR), width: 20, height: 16), pawBorder);
-      return;
-    }
-
-    // 抚摸享受踩奶：两只前爪舒服地有节奏踩奶
-    if (petProgress > 0) {
-      final kneadL = math.sin(animTime * 6.0) * 4.0;
-      final kneadR = -math.sin(animTime * 6.0) * 4.0;
-      canvas.drawOval(Rect.fromCenter(center: Offset(-22, 60 + kneadL), width: 22, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(-22, 60 + kneadL), width: 22, height: 16), pawBorder);
-      canvas.drawOval(Rect.fromCenter(center: Offset(22, 60 + kneadR), width: 22, height: 16), pawPaint);
-      canvas.drawOval(Rect.fromCenter(center: Offset(22, 60 + kneadR), width: 22, height: 16), pawBorder);
       return;
     }
 
@@ -780,7 +707,7 @@ class PetPainter extends CustomPainter {
       final notePainter = TextPainter(
         text: TextSpan(
           text: t > 1.0 ? '🎶' : '🎵',
-          style: TextStyle(fontSize: 16, color: Colors.indigo.withValues(alpha: (1.0 - t / 2.0).clamp(0.0, 1.0))),
+          style: TextStyle(fontSize: 16, color: Colors.indigo.withOpacity((1.0 - t / 2.0).clamp(0.0, 1.0))),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
