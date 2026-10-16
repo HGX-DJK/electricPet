@@ -161,5 +161,9 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     // 待机后小猫自主产生了萌趣生活行为
     expect(find.byType(CustomPaint), findsWidgets);
+
+    // 验证波可豪华暖暖大猫窝与小窝标识
+    expect(find.textContaining('暖暖窝'), findsOneWidget);
+    expect(find.textContaining("Poko's Cozy Haven"), findsOneWidget);
   });
 }
