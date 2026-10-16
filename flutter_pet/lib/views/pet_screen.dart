@@ -119,6 +119,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   bool _isLaserMode = false;
   Offset? _laserPos;
 
+  // 趣味家具交互状态 (猫草微晃、猫抓板震颤、夜灯开关、相框摇摆)
+  bool _isNightLampOn = true;
+  double _plantTilt = 0.0;
+  double _postWiggle = 0.0;
+  double _photoAngle = -0.06;
+  Timer? _plantAnimTimer;
+  Timer? _postAnimTimer;
+  Timer? _photoAnimTimer;
+
   @override
   void initState() {
     super.initState();
@@ -291,6 +300,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _actionTimer?.cancel();
     _idleActionTimer?.cancel();
     _boopTimer?.cancel();
+    _plantAnimTimer?.cancel();
+    _postAnimTimer?.cancel();
+    _photoAnimTimer?.cancel();
     super.dispose();
   }
 
@@ -636,6 +648,113 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     });
   }
 
+  /// 家具交互：猫草轻摇 (清香飘逸，猫咪开心)
+  void _onPlantTap() {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _plantAnimTimer?.cancel();
+    setState(() => _plantTilt = 0.14);
+    _plantAnimTimer = Timer(const Duration(milliseconds: 240), () {
+      if (mounted) {
+        setState(() => _plantTilt = -0.08);
+        _plantAnimTimer = Timer(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _plantTilt = 0.0);
+        });
+      }
+    });
+
+    _spawnParticles(Offset(_petX - 80, _petY - 20), emoji: '🌿', count: 3);
+    _spawnParticles(Offset(_petX - 60, _petY - 30), emoji: '🌱', count: 2);
+    _spawnTextParticle(Offset(_petX - 85, _petY - 50), '猫草清香 +5 🌱', const Color(0xFF10B981));
+    widget.petModel.addExp(5.0);
+    _showDialogueBubble('猫草清香扑鼻~ 波可闻到了开心咬了一小口！🌱😋', duration: const Duration(seconds: 4));
+  }
+
+  /// 家具交互：剑麻猫抓板磨爪 (解压咔嚓磨爪爪)
+  void _onScratcherTap() {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+      Timer(const Duration(milliseconds: 120), () {
+        HapticFeedback.mediumImpact();
+      });
+    }
+    _postAnimTimer?.cancel();
+    setState(() => _postWiggle = 4.0);
+    _postAnimTimer = Timer(const Duration(milliseconds: 120), () {
+      if (mounted) {
+        setState(() => _postWiggle = -3.0);
+        _postAnimTimer = Timer(const Duration(milliseconds: 120), () {
+          if (mounted) setState(() => _postWiggle = 0.0);
+        });
+      }
+    });
+
+    _spawnParticles(Offset(_petX + 70, _petY - 30), emoji: '🐾', count: 3);
+    _spawnParticles(Offset(_petX + 85, _petY - 45), emoji: '🪵', count: 2);
+    _spawnTextParticle(Offset(_petX + 50, _petY - 60), '磨爪爪解压 +5 🐾', const Color(0xFFF59E0B));
+    widget.petModel.addExp(5.0);
+    _showDialogueBubble('磨磨爪子~ 抓板真结实，指甲尖尖亮晶晶！(ฅ>ω<*ฅ)🪵', duration: const Duration(seconds: 4));
+  }
+
+  /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光)
+  void _onNightLampTap() {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    setState(() {
+      _isNightLampOn = !_isNightLampOn;
+    });
+
+    if (_isNightLampOn) {
+      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💡', count: 3);
+      _spawnParticles(Offset(_petX + 55, _petY - 20), emoji: '✨', count: 3);
+      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '暖光微亮 💡', const Color(0xFFFBBF24));
+      _showDialogueBubble('啪嗒~ 暖光小夜灯点亮啦，守护波可的香甜美梦 💡', duration: const Duration(seconds: 4));
+    } else {
+      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💤', count: 2);
+      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '小夜灯已熄灭 🌙', const Color(0xFF94A3B8));
+      _showDialogueBubble('啪嗒~ 小夜灯熄灭啦，晚安好梦~ 🌙', duration: const Duration(seconds: 3));
+    }
+  }
+
+  /// 墙面装饰：拍立得照片墙摇晃 (初遇珍藏回忆)
+  void _onPhotoTap() {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _photoAnimTimer?.cancel();
+    setState(() => _photoAngle = 0.10);
+    _photoAnimTimer = Timer(const Duration(milliseconds: 260), () {
+      if (mounted) {
+        setState(() => _photoAngle = -0.12);
+        _photoAnimTimer = Timer(const Duration(milliseconds: 260), () {
+          if (mounted) setState(() => _photoAngle = -0.06);
+        });
+      }
+    });
+
+    _spawnParticles(const Offset(45, 135), emoji: '💕', count: 3);
+    _spawnParticles(const Offset(40, 115), emoji: '📸', count: 2);
+    _spawnTextParticle(const Offset(20, 105), '珍藏回忆 💕', const Color(0xFFEC4899));
+    _showDialogueBubble('相框里是初遇那天拍的纪念照~ 波可一直珍藏在墙上呢！🥰📷', duration: const Duration(seconds: 4));
+  }
+
+  /// 墙面装饰：温暖小串灯轻触 (一闪一闪亮晶晶)
+  void _onFairyLightsTap() {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _spawnParticles(Offset(_petX - 40, 85), emoji: '✨', count: 3);
+    _spawnParticles(Offset(_petX + 40, 85), emoji: '🌟', count: 3);
+    _showDialogueBubble('暖黄小串灯一闪一闪的，小窝变得好温馨呀~ ✨💡', duration: const Duration(seconds: 4));
+  }
+
   /// 重置萌宠回到中心软垫
   void _resetToMat(Size screenSize) {
     _idleSeconds = 0;
@@ -972,81 +1091,51 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 ),
               ],
 
-              // 1. 软萌地毯/专属软垫 (给猫咪一个温暖的家底座，夜晚采用治愈暮紫星空绒垫)
+              // 0.1 房间立体景深：木质地台与高光踢脚线 (白天浅橡木纹，夜间胡桃静谧台)
               Positioned(
-                left: matX - 100,
-                top: matY - 22,
-                child: Container(
-                  width: 200,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: isNight
-                        ? const Color(0xFF231E4A).withOpacity(0.90) // 治愈暖调暮紫绒垫
-                        : const Color(0xFFFEF3C7).withOpacity(0.88),
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: isNight
-                          ? const Color(0xFF6366F1).withOpacity(0.5) // 星光紫边
-                          : const Color(0xFFFDE68A),
-                      width: 2.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isNight
-                            ? const Color(0xFF4338CA).withOpacity(0.25)
-                            : const Color(0xFFF59E0B).withOpacity(0.14),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      '🐾  Poko\'s Haven  🐾',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                  ),
+                top: matY - 26,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: IgnorePointer(
+                  child: _buildCozyFlooring(isNight),
                 ),
               ),
 
-              // 软垫左侧：精致小猫碗 (维度二：点击弹跳小鲜鱼投喂)
+              // 0.2 墙面软装：顶部浪漫温暖小串灯 (支持轻触点亮与星光闪耀)
               Positioned(
-                left: matX - 148,
+                top: 72,
+                left: 20,
+                right: 20,
+                child: _buildFairyLightsRow(isNight),
+              ),
+
+              // 0.3 墙面软装：左上侧拍立得纪念相框 (初遇回忆，轻触摇晃冒心心)
+              Positioned(
+                top: 135,
+                left: 18,
+                child: _buildPolaroidFrame(isNight),
+              ),
+
+              // 1. 升级版：双层花瓣云朵蒲团 (外层蓬松羽绒边托 + 内层编织软芯 + 金色刺绣猫爪牌)
+              Positioned(
+                left: matX - 110,
+                top: matY - 24,
+                child: _buildCloudCushion(matX, matY, isNight),
+              ),
+
+              // 软装家具 A：左侧 · 萌宠猫草盆栽 (轻触萌晃，飘落青草粒子与清香)
+              Positioned(
+                left: (matX - 180).clamp(6.0, matX - 105.0),
+                top: matY - 48,
+                child: _buildCatGrassPlanter(isNight),
+              ),
+
+              // 软装家具 B：软垫左侧 · 精致小猫碗 (维度二：点击弹跳小鲜鱼投喂)
+              Positioned(
+                left: (matX - 146).clamp(52.0, matX - 80.0),
                 top: matY - 14,
-                child: GestureDetector(
-                  onTap: () => _popFishFromBowl(matX, matY),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF1E1A40) : Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
-                        width: 1.2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('🥣', style: TextStyle(fontSize: 14)),
-                        SizedBox(width: 2),
-                        Text('🐟', style: TextStyle(fontSize: 10)),
-                      ],
-                    ),
-                  ),
-                ),
+                child: _buildCatFoodBowl(matX, matY, isNight),
               ),
 
               // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫咪嘴边)
@@ -1059,63 +1148,48 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
+              // 软装家具 C：小猫头温馨夜灯呼吸光晕 (开灯时光环照亮地毯与小窝)
+              if (_isNightLampOn)
+                Positioned(
+                  left: (matX + 88).clamp(matX + 45.0, screenSize.width - 66.0) - 22,
+                  top: (matY + 14) - 14,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withOpacity(0.38),
+                            (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withOpacity(0.12),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // 软装家具 D：右前侧 · 萌猫头温馨夜灯 (轻触“啪嗒”开关台灯，切换光晕)
+              Positioned(
+                left: (matX + 88).clamp(matX + 45.0, screenSize.width - 66.0),
+                top: matY + 14,
+                child: _buildKittenNightLamp(isNight),
+              ),
+
               // 维度二：软垫右侧：实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
               Positioned(
                 left: _yarnX - 18,
                 top: _yarnY - 18,
-                child: GestureDetector(
-                  onPanStart: (details) {
-                    setState(() {
-                      _isYarnDragging = true;
-                      _isYarnFlying = false;
-                      _yarnVx = 0.0;
-                      _yarnVy = 0.0;
-                    });
-                  },
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _yarnX += details.delta.dx;
-                      _yarnY += details.delta.dy;
-                      _yarnX = _yarnX.clamp(20.0, screenSize.width - 20.0);
-                      _yarnY = _yarnY.clamp(80.0, screenSize.height - 100.0);
-                    });
-                  },
-                  onPanEnd: (details) {
-                    final vx = (details.velocity.pixelsPerSecond.dx / 60.0).clamp(-18.0, 18.0);
-                    final vy = (details.velocity.pixelsPerSecond.dy / 60.0).clamp(-22.0, 18.0);
-                    setState(() {
-                      _isYarnDragging = false;
-                      _isYarnFlying = true;
-                      _yarnVx = vx;
-                      _yarnVy = vy;
-                    });
-                    if (widget.petModel.enableHaptics) {
-                      HapticFeedback.lightImpact();
-                    }
-                  },
-                  child: Transform.rotate(
-                    angle: _yarnX * 0.05,
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF1E1A40) : Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isNight ? const Color(0xFFF43F5E).withOpacity(0.6) : const Color(0xFFFBCFE8),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFF43F5E).withOpacity(isNight ? 0.25 : 0.18),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: const Text('🧶', style: TextStyle(fontSize: 18)),
-                    ),
-                  ),
-                ),
+                child: _buildYarnBall(screenSize, isNight),
+              ),
+
+              // 软装家具 E：右后侧 · 原木剑麻猫抓板 (磨爪解压，轻触咔嚓磨爪与木屑火花)
+              Positioned(
+                left: (matX + 138).clamp(matX + 80.0, screenSize.width - 50.0),
+                top: matY - 50,
+                child: _buildCatScratchingPost(isNight),
               ),
 
               // 2. 顶部双灵动岛浮空栏 (左侧萌宠身份 + 右侧饱腹心情小窝，告别拥挤，自然呼吸)
@@ -2754,6 +2828,521 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
             ],
           );
         },
+      ),
+    );
+  }
+
+  /// 房间立体景深：木质地台与高光踢脚线 (白天浅橡木纹，夜间静谧胡桃木)
+  Widget _buildCozyFlooring(bool isNight) {
+    final baseboardColor = isNight ? const Color(0xFF1E1738) : const Color(0xFFD4A373);
+    final baseboardHighlight = isNight ? const Color(0xFF332A55) : const Color(0xFFFAEDCD);
+    final floorGradient = isNight
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF16122C),
+              Color(0xFF110D24),
+              Color(0xFF0C091A),
+            ],
+          )
+        : const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFFBF4EB),
+              Color(0xFFF4E3D0),
+              Color(0xFFECD2BA),
+            ],
+          );
+    final plankLineColor = isNight
+        ? Colors.white.withOpacity(0.04)
+        : const Color(0xFFB07D53).withOpacity(0.12);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: floorGradient,
+      ),
+      child: Stack(
+        children: [
+          // 踢脚线顶面高光线
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            child: Container(color: baseboardHighlight),
+          ),
+          // 踢脚线主体
+          Positioned(
+            top: 3,
+            left: 0,
+            right: 0,
+            height: 12,
+            child: Container(color: baseboardColor),
+          ),
+          // 踢脚线下立体阴影
+          Positioned(
+            top: 15,
+            left: 0,
+            right: 0,
+            height: 8,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(isNight ? 0.35 : 0.08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 木地板横向接缝细线 (模拟原木拼花空间景深)
+          for (int i = 1; i <= 6; i++)
+            Positioned(
+              top: 25.0 + i * 48.0,
+              left: 0,
+              right: 0,
+              height: 1.0,
+              child: Container(color: plankLineColor),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 顶部浪漫温馨小串灯 (白天晶莹，夜晚散发微黄暖芒，轻触闪耀)
+  Widget _buildFairyLightsRow(bool isNight) {
+    return GestureDetector(
+      onTap: _onFairyLightsTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildFairyLight('💡', isNight),
+            _buildFairyWire(isNight),
+            _buildFairyLight('✨', isNight),
+            _buildFairyWire(isNight),
+            _buildFairyLight('🌟', isNight),
+            _buildFairyWire(isNight),
+            _buildFairyLight('💡', isNight),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFairyLight(String icon, bool isNight) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: isNight
+            ? const Color(0xFFFEF08A).withOpacity(0.18)
+            : const Color(0xFFFEF3C7).withOpacity(0.6),
+        shape: BoxShape.circle,
+        boxShadow: isNight
+            ? [
+                BoxShadow(
+                  color: const Color(0xFFFDE047).withOpacity(0.35),
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: Text(icon, style: const TextStyle(fontSize: 14)),
+    );
+  }
+
+  Widget _buildFairyWire(bool isNight) {
+    return Expanded(
+      child: Container(
+        height: 1.2,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: BoxDecoration(
+          color: isNight
+              ? const Color(0xFF94A3B8).withOpacity(0.3)
+              : const Color(0xFFCBD5E1),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+  }
+
+  /// 墙面拍立得相框 (初遇温馨纪念，轻触微晃冒心心)
+  Widget _buildPolaroidFrame(bool isNight) {
+    return GestureDetector(
+      onTap: _onPhotoTap,
+      child: Transform.rotate(
+        angle: _photoAngle,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(5, 5, 5, 6),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF241D49) : Colors.white,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isNight ? const Color(0xFF6366F1).withOpacity(0.3) : const Color(0xFFE2E8F0),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isNight ? 0.35 : 0.10),
+                blurRadius: 8,
+                offset: const Offset(1, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 和纸胶带
+              Container(
+                width: 20,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF472B6).withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 3),
+              // 照片内框
+              Container(
+                width: 44,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF161131) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Center(
+                  child: Text('🐾❤️', style: TextStyle(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                'Day 1 · 相遇',
+                style: TextStyle(
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w600,
+                  color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 升级版：双层花瓣云朵蒲团 (外层蓬松羽绒边托 + 内层编织软芯 + 金色刺绣猫爪牌)
+  Widget _buildCloudCushion(double matX, double matY, bool isNight) {
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        // 外层毛绒柔光云朵底托
+        Container(
+          width: 220,
+          height: 54,
+          decoration: BoxDecoration(
+            color: isNight
+                ? const Color(0xFF1E1742).withOpacity(0.95)
+                : const Color(0xFFFEF08A).withOpacity(0.55),
+            borderRadius: BorderRadius.circular(27),
+            boxShadow: [
+              BoxShadow(
+                color: isNight
+                    ? const Color(0xFF4338CA).withOpacity(0.35)
+                    : const Color(0xFFF59E0B).withOpacity(0.20),
+                blurRadius: 22,
+                offset: const Offset(0, 9),
+              ),
+            ],
+          ),
+        ),
+        // 内层编织软芯垫
+        Container(
+          width: 204,
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF282156) : const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isNight ? const Color(0xFF818CF8).withOpacity(0.6) : const Color(0xFFFDE68A),
+              width: 2.0,
+            ),
+          ),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🐾',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Poko\'s Cozy Haven',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '🐾',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 软装家具：萌宠猫草盆栽 (轻触轻摇，散发清香与青草粒子)
+  Widget _buildCatGrassPlanter(bool isNight) {
+    return GestureDetector(
+      onTap: _onPlantTap,
+      child: Transform.rotate(
+        angle: _plantTilt,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF1E1A40) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isNight ? const Color(0xFF10B981).withOpacity(0.5) : const Color(0xFFA7F3D0),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF10B981).withOpacity(isNight ? 0.25 : 0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🪴', style: TextStyle(fontSize: 22)),
+              const SizedBox(height: 1),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF065F46) : const Color(0xFFD1FAE5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '猫草',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.bold,
+                    color: isNight ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 软装家具：精致小猫碗 (点击弹射小鲜鱼)
+  Widget _buildCatFoodBowl(double matX, double matY, bool isNight) {
+    return GestureDetector(
+      onTap: () => _popFishFromBowl(matX, matY),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: isNight ? const Color(0xFF1E1A40) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('🥣', style: TextStyle(fontSize: 14)),
+            SizedBox(width: 2),
+            Text('🐟', style: TextStyle(fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 软装家具：萌猫头温馨夜灯 (轻触“啪嗒”开关台灯，切换光晕)
+  Widget _buildKittenNightLamp(bool isNight) {
+    return GestureDetector(
+      onTap: _onNightLampTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: _isNightLampOn
+              ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7))
+              : (isNight ? const Color(0xFF1E1A40) : Colors.white),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _isNightLampOn ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withOpacity(0.4),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _isNightLampOn ? const Color(0xFFF59E0B).withOpacity(0.35) : Colors.black.withOpacity(0.06),
+              blurRadius: _isNightLampOn ? 10 : 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_isNightLampOn ? '💡' : '💤', style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 3),
+            Text(
+              _isNightLampOn ? 'ON' : 'OFF',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold,
+                color: _isNightLampOn ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 软装家具：原木剑麻猫抓板 (磨爪解压，轻触咔嚓磨爪与木屑火花)
+  Widget _buildCatScratchingPost(bool isNight) {
+    return GestureDetector(
+      onTap: _onScratcherTap,
+      child: Transform.translate(
+        offset: Offset(_postWiggle, 0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF1E1A40) : Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isNight ? const Color(0xFFF59E0B).withOpacity(0.5) : const Color(0xFFFDE68A),
+              width: 1.4,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF59E0B).withOpacity(isNight ? 0.25 : 0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🪵', style: TextStyle(fontSize: 22)),
+              const SizedBox(height: 1),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF78350F) : const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '磨爪',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.bold,
+                    color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
+  Widget _buildYarnBall(Size screenSize, bool isNight) {
+    return GestureDetector(
+      onPanStart: (details) {
+        setState(() {
+          _isYarnDragging = true;
+          _isYarnFlying = false;
+          _yarnVx = 0.0;
+          _yarnVy = 0.0;
+        });
+      },
+      onPanUpdate: (details) {
+        setState(() {
+          _yarnX += details.delta.dx;
+          _yarnY += details.delta.dy;
+          _yarnX = _yarnX.clamp(20.0, screenSize.width - 20.0);
+          _yarnY = _yarnY.clamp(80.0, screenSize.height - 100.0);
+        });
+      },
+      onPanEnd: (details) {
+        final vx = (details.velocity.pixelsPerSecond.dx / 60.0).clamp(-18.0, 18.0);
+        final vy = (details.velocity.pixelsPerSecond.dy / 60.0).clamp(-22.0, 18.0);
+        setState(() {
+          _isYarnDragging = false;
+          _isYarnFlying = true;
+          _yarnVx = vx;
+          _yarnVy = vy;
+        });
+        if (widget.petModel.enableHaptics) {
+          HapticFeedback.lightImpact();
+        }
+      },
+      child: Transform.rotate(
+        angle: _yarnX * 0.05,
+        child: Container(
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF1E1A40) : Colors.white,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isNight ? const Color(0xFFF43F5E).withOpacity(0.6) : const Color(0xFFFBCFE8),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF43F5E).withOpacity(isNight ? 0.25 : 0.18),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Text('🧶', style: TextStyle(fontSize: 18)),
+        ),
       ),
     );
   }

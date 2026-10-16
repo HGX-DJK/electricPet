@@ -84,4 +84,52 @@ void main() {
     // 验证激光笔模式退出
     expect(find.textContaining('激光笔逗猫中'), findsNothing);
   });
+
+  testWidgets('Cozy 3D Room Furniture and Haven Interactions test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 验证双层云朵花瓣猫蒲团标牌
+    expect(find.textContaining("Poko's Cozy Haven"), findsOneWidget);
+
+    // 验证室内软装家具均存在
+    expect(find.text('猫草'), findsOneWidget);
+    expect(find.text('磨爪'), findsOneWidget);
+    expect(find.text('ON'), findsOneWidget);
+    expect(find.textContaining('Day 1'), findsOneWidget);
+
+    // 交互 1：轻触猫草盆栽
+    await tester.tap(find.text('猫草'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('猫草清香'), findsWidgets);
+
+    // 交互 2：轻触原木剑麻猫抓板
+    await tester.tap(find.text('磨爪'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('磨磨爪子'), findsWidgets);
+
+    // 交互 3：轻触小夜灯开关，ON 切换为 OFF
+    await tester.tap(find.text('ON'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('OFF'), findsOneWidget);
+    expect(find.textContaining('小夜灯熄灭'), findsWidgets);
+
+    // 交互 4：再次轻触小夜灯开启，OFF 切换为 ON
+    await tester.tap(find.text('OFF'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('ON'), findsOneWidget);
+    expect(find.textContaining('小夜灯点亮'), findsWidgets);
+
+    // 交互 5：轻触拍立得照片挂饰
+    await tester.tap(find.textContaining('Day 1'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('相框里是初遇那天'), findsWidgets);
+  });
 }
