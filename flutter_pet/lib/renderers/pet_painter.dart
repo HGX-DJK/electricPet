@@ -140,12 +140,6 @@ class PetPainter extends CustomPainter {
   }
 
   void _drawTail(Canvas canvas, SkinConfig skin) {
-    final tailPaint = Paint()
-      ..color = Color(skin.primaryColor)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round;
-
     // 尾巴摆动速率：真实猫尾双正弦波涟漪摆动
     double tailWag;
     if (state == 'SIT_WAG_TAIL') {
@@ -159,6 +153,29 @@ class PetPainter extends CustomPainter {
       tailWag = math.sin(animTime * 1.6) * 14.0 + math.sin(animTime * 3.2) * 4.5;
     }
 
+    final isLonghair = (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white');
+    final isSleek = (skin.id == 'cat_siamese' || skin.id == 'cat_black');
+    final isOtter = (skin.id == 'cat_british_blue');
+    final isRinged = (skin.id == 'cat_orange' || skin.id == 'cat_american_tabby');
+
+    // 尾巴粗细形态：长毛大羽毛尾 (24) vs 粗圆水獭尾 (19) vs 纤细鞭尾 (9) vs 标准 (14)
+    final double tailWidth;
+    if (isLonghair) {
+      tailWidth = 24.0;
+    } else if (isOtter) {
+      tailWidth = 19.0;
+    } else if (isSleek) {
+      tailWidth = 9.0;
+    } else {
+      tailWidth = 14.0;
+    }
+
+    final tailPaint = Paint()
+      ..color = (skin.id == 'cat_siamese') ? Color(skin.secondaryColor) : Color(skin.primaryColor)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = tailWidth
+      ..strokeCap = StrokeCap.round;
+
     final path = Path();
     if (state == 'STRETCH_YAWN') {
       // 伸懒腰时尾巴向上翘直
@@ -170,14 +187,52 @@ class PetPainter extends CustomPainter {
     }
     canvas.drawPath(path, tailPaint);
 
+    // 1. 布偶猫 & 临清狮子猫：大蓬松羽毛长毛层次
+    if (isLonghair) {
+      final fluffPaint = Paint()
+        ..color = Color(skin.primaryColor)
+        ..style = PaintingStyle.fill;
+      // 沿尾巴外侧增加 2 簇蓬松羽毛波浪
+      final f1 = Path()
+        ..moveTo(48, 22)
+        ..quadraticBezierTo(72 + tailWag * 0.4, 20, 62 + tailWag * 0.6, 5)
+        ..close();
+      canvas.drawPath(f1, fluffPaint);
+
+      final f2 = Path()
+        ..moveTo(56 + tailWag * 0.5, 8)
+        ..quadraticBezierTo(80 + tailWag * 0.8, -8, 62 + tailWag * 0.9, -20)
+        ..close();
+      canvas.drawPath(f2, fluffPaint);
+    }
+
+    // 2. 中华大橘 & 美短银虎斑：环形条纹尾巴 (4 道深色环形斑纹)
+    if (isRinged) {
+      final ringPaint = Paint()
+        ..color = Color(skin.secondaryColor)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(35, 36), const Offset(47, 44), ringPaint);
+      canvas.drawLine(const Offset(46, 22), const Offset(58, 28), ringPaint);
+      canvas.drawLine(Offset(55 + tailWag * 0.5, 6), Offset(66 + tailWag * 0.5, 11), ringPaint);
+      canvas.drawLine(Offset(53 + tailWag * 0.8, -12), Offset(62 + tailWag * 0.8, -8), ringPaint);
+    }
+
     // 尾巴尖端重点色
     final tipPaint = Paint()
-      ..color = Color(skin.secondaryColor)
+      ..color = (skin.id == 'cat_siamese')
+          ? Color(skin.secondaryColor)
+          : (isLonghair && skin.id == 'cat_ragdoll'
+              ? Color(skin.secondaryColor)
+              : (skin.id == 'cat_calico' ? Color(skin.secondaryColor) : Color(skin.primaryColor)))
       ..style = PaintingStyle.fill;
+
     final tipOffset = state == 'STRETCH_YAWN'
         ? Offset(40 + tailWag, -65)
         : Offset(52 + tailWag, -25);
-    canvas.drawCircle(tipOffset, 7, tipPaint);
+    final double tipRadius = isLonghair ? 12.0 : (isOtter ? 9.5 : (isSleek ? 4.5 : 7.0));
+    canvas.drawCircle(tipOffset, tipRadius, tipPaint);
   }
 
   void _drawBody(Canvas canvas, SkinConfig skin) {
@@ -185,31 +240,116 @@ class PetPainter extends CustomPainter {
       ..color = Color(skin.primaryColor)
       ..style = PaintingStyle.fill;
 
-    // 圆润猫咪躯干
-    canvas.drawOval(
-      Rect.fromCenter(center: const Offset(0, 32), width: 94, height: 76),
-      bodyPaint,
-    );
+    // 根据品种骨骼设定身材体型：
+    // - 大橘猫：大肚子 (width 114, height 86)
+    // - 暹罗/黑猫：修长流线身材 (width 82, height 72)
+    // - 英短蓝猫：矮胖五短躯干 (width 104, height 78)
+    // - 布偶/临清狮子：蓬松中型躯干 (width 98, height 78)
+    final double bodyW;
+    final double bodyH;
+    final double bodyY;
+    if (skin.id == 'cat_orange') {
+      bodyW = 114;
+      bodyH = 86;
+      bodyY = 34;
+    } else if (skin.id == 'cat_siamese' || skin.id == 'cat_black') {
+      bodyW = 82;
+      bodyH = 72;
+      bodyY = 31;
+    } else if (skin.id == 'cat_british_blue') {
+      bodyW = 104;
+      bodyH = 78;
+      bodyY = 33;
+    } else if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
+      bodyW = 98;
+      bodyH = 78;
+      bodyY = 32;
+    } else {
+      bodyW = 94;
+      bodyH = 76;
+      bodyY = 32;
+    }
+
+    final bodyRect = Rect.fromCenter(center: Offset(0, bodyY), width: bodyW, height: bodyH);
+    canvas.drawOval(bodyRect, bodyPaint);
 
     // 身体边缘浅浅高光轮廓
     final borderPaint = Paint()
       ..color = const Color(0x15000000)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
-    canvas.drawOval(
-      Rect.fromCenter(center: const Offset(0, 32), width: 94, height: 76),
-      borderPaint,
-    );
+    canvas.drawOval(bodyRect, borderPaint);
 
-    // 身体花纹 (如果是三花或橘猫)
-    if (skin.id == 'cat_calico' || skin.id == 'cat_orange') {
-      final spotPaint = Paint()
-        ..color = Color(skin.secondaryColor)
-        ..style = PaintingStyle.fill;
+    // 1. 中华大橘：软萌大肚子浅色区域 + 侧腹经典橘红虎斑条纹
+    if (skin.id == 'cat_orange') {
+      final bellyPaint = Paint()..color = const Color(0xFFFFF7ED);
       canvas.drawOval(
-        Rect.fromCenter(center: const Offset(24, 25), width: 28, height: 22),
-        spotPaint,
+        Rect.fromCenter(center: const Offset(0, 44), width: 76, height: 48),
+        bellyPaint,
       );
+      final flankStripePaint = Paint()
+        ..color = Color(skin.secondaryColor)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(30, 20), const Offset(50, 28), flankStripePaint);
+      canvas.drawLine(const Offset(26, 30), const Offset(48, 38), flankStripePaint);
+      canvas.drawLine(const Offset(22, 40), const Offset(44, 48), flankStripePaint);
+    }
+
+    // 2. 美短银虎斑：侧身经典大理石回旋涡流条纹
+    if (skin.id == 'cat_american_tabby') {
+      final tabbyPaint = Paint()
+        ..color = Color(skin.secondaryColor)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round;
+      final swirlPath = Path()
+        ..moveTo(26, 20)
+        ..cubicTo(48, 22, 52, 42, 34, 46)
+        ..cubicTo(20, 50, 18, 32, 30, 32);
+      canvas.drawPath(swirlPath, tabbyPaint);
+      canvas.drawLine(const Offset(-32, 22), const Offset(-46, 32), tabbyPaint);
+      canvas.drawLine(const Offset(-28, 34), const Offset(-42, 44), tabbyPaint);
+    }
+
+    // 3. 中华三花：左黑斑 + 右橘斑大色块拼接
+    if (skin.id == 'cat_calico') {
+      final orangePatch = Paint()..color = Color(skin.secondaryColor);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(26, 26), width: 34, height: 26), orangePatch);
+      final blackPatch = Paint()..color = const Color(0xFF1E293B);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-24, 34), width: 28, height: 22), blackPatch);
+    }
+
+    // 4. 布偶猫 & 临清狮子猫：华丽蓬松胸毛领圈 (Lush Fluffy Chest Mane / Bib)
+    if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
+      final manePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      final maneShade = Paint()
+        ..color = const Color(0x18000000)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+
+      final manePath = Path()
+        ..moveTo(-26, 10)
+        ..quadraticBezierTo(-42, 24, -34, 36)
+        ..quadraticBezierTo(-26, 48, -12, 46)
+        ..quadraticBezierTo(0, 56, 12, 46)
+        ..quadraticBezierTo(26, 48, 34, 36)
+        ..quadraticBezierTo(42, 24, 26, 10)
+        ..close();
+      canvas.drawPath(manePath, manePaint);
+      canvas.drawPath(manePath, maneShade);
+
+      final ruffLine = Paint()
+        ..color = const Color(0x22CBD5E1)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(0, 22), const Offset(0, 48), ruffLine);
+      canvas.drawLine(const Offset(-14, 26), const Offset(-10, 40), ruffLine);
+      canvas.drawLine(const Offset(14, 26), const Offset(10, 40), ruffLine);
     }
   }
 
@@ -253,14 +393,83 @@ class PetPainter extends CustomPainter {
     final rightTwitch = (twitchEar == 'LEFT') ? 0.0 : earTwitch;
     _drawEars(canvas, skin, headCenter, leftTwitch, rightTwitch);
 
-    // 圆润大脑袋
+    // 脑袋轮廓：不同品种差异化骨骼形态 (包子脸发腮 / 东方楔形V脸 / 长毛侧脸爆毛 / 橘猫大圆脸)
     final headPaint = Paint()
       ..color = Color(skin.primaryColor)
       ..style = PaintingStyle.fill;
-    canvas.drawOval(
-      Rect.fromCenter(center: headCenter, width: 116, height: 96),
-      headPaint,
-    );
+
+    if (skin.id == 'cat_british_blue') {
+      // 英短蓝猫经典“包子脸”大发腮！
+      canvas.drawOval(
+        Rect.fromCenter(center: headCenter, width: 128, height: 92),
+        headPaint,
+      );
+      // 左右圆滚滚饱满发腮颊肉 (Jowls)
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(headCenter.dx - 48, headCenter.dy + 14), width: 38, height: 38),
+        headPaint,
+      );
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(headCenter.dx + 48, headCenter.dy + 14), width: 38, height: 38),
+        headPaint,
+      );
+      // 双下巴圆润下唇弧线
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy + 34), width: 52, height: 20),
+        headPaint,
+      );
+    } else if (skin.id == 'cat_siamese') {
+      // 暹罗猫东方楔形 V 脸 (Sleek Wedge Head - 尖锐贵气小下巴，无发腮)
+      final wedgeHead = Path()
+        ..moveTo(headCenter.dx - 48, headCenter.dy - 32)
+        ..quadraticBezierTo(headCenter.dx, headCenter.dy - 36, headCenter.dx + 48, headCenter.dy - 32)
+        ..cubicTo(headCenter.dx + 48, headCenter.dy - 10, headCenter.dx + 38, headCenter.dy + 18, headCenter.dx + 12, headCenter.dy + 38)
+        ..quadraticBezierTo(headCenter.dx, headCenter.dy + 42, headCenter.dx - 12, headCenter.dy + 38)
+        ..cubicTo(headCenter.dx - 38, headCenter.dy + 18, headCenter.dx - 48, headCenter.dy - 10, headCenter.dx - 48, headCenter.dy - 32)
+        ..close();
+      canvas.drawPath(wedgeHead, headPaint);
+    } else if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
+      // 布偶猫 & 临清狮子猫：仙气长毛侧脸飞毛 (Fluffy Cheek Tufts)
+      canvas.drawOval(
+        Rect.fromCenter(center: headCenter, width: 114, height: 94),
+        headPaint,
+      );
+      // 左侧脸颊 3 层飘逸向外爆出的长毛尖
+      final leftTufts = Path()
+        ..moveTo(headCenter.dx - 42, headCenter.dy - 8)
+        ..lineTo(headCenter.dx - 66, headCenter.dy - 2)
+        ..lineTo(headCenter.dx - 48, headCenter.dy + 8)
+        ..lineTo(headCenter.dx - 68, headCenter.dy + 16)
+        ..lineTo(headCenter.dx - 46, headCenter.dy + 24)
+        ..lineTo(headCenter.dx - 60, headCenter.dy + 30)
+        ..lineTo(headCenter.dx - 30, headCenter.dy + 38)
+        ..close();
+      canvas.drawPath(leftTufts, headPaint);
+
+      // 右侧脸颊 3 层飘逸长毛尖
+      final rightTufts = Path()
+        ..moveTo(headCenter.dx + 42, headCenter.dy - 8)
+        ..lineTo(headCenter.dx + 66, headCenter.dy - 2)
+        ..lineTo(headCenter.dx + 48, headCenter.dy + 8)
+        ..lineTo(headCenter.dx + 68, headCenter.dy + 16)
+        ..lineTo(headCenter.dx + 46, headCenter.dy + 24)
+        ..lineTo(headCenter.dx + 60, headCenter.dy + 30)
+        ..lineTo(headCenter.dx + 30, headCenter.dy + 38)
+        ..close();
+      canvas.drawPath(rightTufts, headPaint);
+    } else if (skin.id == 'cat_orange') {
+      // 中华大橘：暖融融大圆头
+      canvas.drawOval(
+        Rect.fromCenter(center: headCenter, width: 122, height: 98),
+        headPaint,
+      );
+    } else {
+      // 标准圆润大脑袋
+      canvas.drawOval(
+        Rect.fromCenter(center: headCenter, width: 116, height: 96),
+        headPaint,
+      );
+    }
 
     // 脑袋斑纹与皮肤特色 (三花/橘猫/暹罗/布偶/美短)
     if (skin.id == 'cat_calico') {
@@ -366,9 +575,89 @@ class PetPainter extends CustomPainter {
 
   void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch) {
     final isPointCat = skin.id == 'cat_ragdoll' || skin.id == 'cat_siamese';
-    final earBasePaint = Paint()
-      ..color = isPointCat ? Color(skin.secondaryColor) : Color(skin.primaryColor)
-      ..style = PaintingStyle.fill;
+
+    // 1. 暹罗猫：超大尖立耳 (Giant Tall Bat Ears，耳根极宽，高耸挺立)
+    if (skin.id == 'cat_siamese') {
+      final earPaint = Paint()..color = Color(skin.secondaryColor);
+      final innerPaint = Paint()..color = const Color(0xFF5D4037);
+
+      // 左耳：高耸尖锐
+      final leftEar = Path()
+        ..moveTo(headCenter.dx - 50, headCenter.dy - 22)
+        ..lineTo(headCenter.dx - 54 + leftTwitch, headCenter.dy - 84)
+        ..lineTo(headCenter.dx - 8, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(leftEar, earPaint);
+
+      final leftInner = Path()
+        ..moveTo(headCenter.dx - 44, headCenter.dy - 24)
+        ..lineTo(headCenter.dx - 48 + leftTwitch, headCenter.dy - 72)
+        ..lineTo(headCenter.dx - 14, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(leftInner, innerPaint);
+
+      // 右耳：高耸尖锐
+      final rightEar = Path()
+        ..moveTo(headCenter.dx + 50, headCenter.dy - 22)
+        ..lineTo(headCenter.dx + 54 - rightTwitch, headCenter.dy - 84)
+        ..lineTo(headCenter.dx + 8, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(rightEar, earPaint);
+
+      final rightInner = Path()
+        ..moveTo(headCenter.dx + 44, headCenter.dy - 24)
+        ..lineTo(headCenter.dx + 48 - rightTwitch, headCenter.dy - 72)
+        ..lineTo(headCenter.dx + 14, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(rightInner, innerPaint);
+      return;
+    }
+
+    // 2. 英短蓝猫：圆头小短耳 (宽间距，耳尖圆润温厚)
+    if (skin.id == 'cat_british_blue') {
+      final earPaint = Paint()..color = Color(skin.primaryColor);
+      final innerPaint = Paint()..color = const Color(0xFFFFB6C1);
+
+      // 左耳：小巧圆润
+      final leftEar = Path()
+        ..moveTo(headCenter.dx - 48, headCenter.dy - 20)
+        ..quadraticBezierTo(headCenter.dx - 44 + leftTwitch, headCenter.dy - 56, headCenter.dx - 38 + leftTwitch, headCenter.dy - 54)
+        ..lineTo(headCenter.dx - 16, headCenter.dy - 38)
+        ..close();
+      canvas.drawPath(leftEar, earPaint);
+
+      final leftInner = Path()
+        ..moveTo(headCenter.dx - 42, headCenter.dy - 24)
+        ..lineTo(headCenter.dx - 36 + leftTwitch, headCenter.dy - 48)
+        ..lineTo(headCenter.dx - 22, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(leftInner, innerPaint);
+
+      // 右耳：小巧圆润
+      final rightEar = Path()
+        ..moveTo(headCenter.dx + 48, headCenter.dy - 20)
+        ..quadraticBezierTo(headCenter.dx + 44 - rightTwitch, headCenter.dy - 56, headCenter.dx + 38 - rightTwitch, headCenter.dy - 54)
+        ..lineTo(headCenter.dx + 16, headCenter.dy - 38)
+        ..close();
+      canvas.drawPath(rightEar, earPaint);
+
+      final rightInner = Path()
+        ..moveTo(headCenter.dx + 42, headCenter.dy - 24)
+        ..lineTo(headCenter.dx + 36 - rightTwitch, headCenter.dy - 48)
+        ..lineTo(headCenter.dx + 22, headCenter.dy - 36)
+        ..close();
+      canvas.drawPath(rightInner, innerPaint);
+      return;
+    }
+
+    // 3. 中华三花：一橘一黑阴阳双色耳 (Asymmetrical Ears)
+    final leftEarBaseColor = (skin.id == 'cat_calico')
+        ? const Color(0xFFE28743)
+        : (isPointCat ? Color(skin.secondaryColor) : Color(skin.primaryColor));
+    final rightEarBaseColor = (skin.id == 'cat_calico')
+        ? const Color(0xFF1E293B)
+        : (isPointCat ? Color(skin.secondaryColor) : Color(skin.primaryColor));
+
     final earInnerPaint = Paint()
       ..color = const Color(0xFFFFB6C1)
       ..style = PaintingStyle.fill;
@@ -379,7 +668,7 @@ class PetPainter extends CustomPainter {
       ..lineTo(headCenter.dx - 42 + leftTwitch, headCenter.dy - 64)
       ..lineTo(headCenter.dx - 12, headCenter.dy - 44)
       ..close();
-    canvas.drawPath(leftEar, earBasePaint);
+    canvas.drawPath(leftEar, Paint()..color = leftEarBaseColor);
 
     final leftEarInner = Path()
       ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
@@ -388,16 +677,13 @@ class PetPainter extends CustomPainter {
       ..close();
     canvas.drawPath(leftEarInner, earInnerPaint);
 
-    // 右耳 (带重点花纹)
-    final rightEarColor = (skin.id == 'cat_calico' || isPointCat) ? Color(skin.secondaryColor) : Color(skin.primaryColor);
-    final rightEarPaint = Paint()..color = rightEarColor;
-
+    // 右耳
     final rightEar = Path()
       ..moveTo(headCenter.dx + 45, headCenter.dy - 25)
       ..lineTo(headCenter.dx + 42 - rightTwitch, headCenter.dy - 64)
       ..lineTo(headCenter.dx + 12, headCenter.dy - 44)
       ..close();
-    canvas.drawPath(rightEar, rightEarPaint);
+    canvas.drawPath(rightEar, Paint()..color = rightEarBaseColor);
 
     final rightEarInner = Path()
       ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
@@ -405,6 +691,49 @@ class PetPainter extends CustomPainter {
       ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
       ..close();
     canvas.drawPath(rightEarInner, earInnerPaint);
+
+    // 4. 布偶猫 & 临清狮子猫：耳内长长的仙气饰毛 (Wispy Ear Furnishings)
+    if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
+      final furnishPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..strokeCap = StrokeCap.round;
+
+      // 左耳飘逸饰毛
+      canvas.drawLine(
+        Offset(headCenter.dx - 32, headCenter.dy - 34),
+        Offset(headCenter.dx - 54 + leftTwitch * 0.4, headCenter.dy - 44),
+        furnishPaint,
+      );
+      canvas.drawLine(
+        Offset(headCenter.dx - 28, headCenter.dy - 30),
+        Offset(headCenter.dx - 58 + leftTwitch * 0.4, headCenter.dy - 36),
+        furnishPaint,
+      );
+      canvas.drawLine(
+        Offset(headCenter.dx - 24, headCenter.dy - 26),
+        Offset(headCenter.dx - 50 + leftTwitch * 0.4, headCenter.dy - 26),
+        furnishPaint,
+      );
+
+      // 右耳飘逸饰毛
+      canvas.drawLine(
+        Offset(headCenter.dx + 32, headCenter.dy - 34),
+        Offset(headCenter.dx + 54 - rightTwitch * 0.4, headCenter.dy - 44),
+        furnishPaint,
+      );
+      canvas.drawLine(
+        Offset(headCenter.dx + 28, headCenter.dy - 30),
+        Offset(headCenter.dx + 58 - rightTwitch * 0.4, headCenter.dy - 36),
+        furnishPaint,
+      );
+      canvas.drawLine(
+        Offset(headCenter.dx + 24, headCenter.dy - 26),
+        Offset(headCenter.dx + 50 - rightTwitch * 0.4, headCenter.dy - 26),
+        furnishPaint,
+      );
+    }
   }
 
   void _drawEyes(Canvas canvas, SkinConfig skin, Offset headCenter) {
@@ -679,12 +1008,21 @@ class PetPainter extends CustomPainter {
       return;
     }
 
-    // 普通静止前爪
-    canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: 22, height: 16), pawPaint);
-    canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: 22, height: 16), pawBorder);
+    // 普通静止前爪：不同品种爪爪肥瘦差异 (大橘厚爪 vs 暹罗细爪 vs 黑猫白手套)
+    final pawW = (skin.id == 'cat_orange') ? 26.0 : ((skin.id == 'cat_siamese') ? 19.0 : 22.0);
+    final pawH = (skin.id == 'cat_orange') ? 18.0 : ((skin.id == 'cat_siamese') ? 14.0 : 16.0);
+    canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: pawW, height: pawH), pawPaint);
+    canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: pawW, height: pawH), pawBorder);
 
-    canvas.drawOval(Rect.fromCenter(center: const Offset(22, 60), width: 22, height: 16), pawPaint);
-    canvas.drawOval(Rect.fromCenter(center: const Offset(22, 60), width: 22, height: 16), pawBorder);
+    canvas.drawOval(Rect.fromCenter(center: const Offset(22, 60), width: pawW, height: pawH), pawPaint);
+    canvas.drawOval(Rect.fromCenter(center: const Offset(22, 60), width: pawW, height: pawH), pawBorder);
+
+    // 玄夜黑猫踏雪寻梅：纯白小手套雪花爪尖
+    if (skin.id == 'cat_black') {
+      final whiteSockPaint = Paint()..color = Colors.white;
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 62), width: pawW * 0.75, height: pawH * 0.55), whiteSockPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(22, 62), width: pawW * 0.75, height: pawH * 0.55), whiteSockPaint);
+    }
   }
 
   void _drawDecorations(Canvas canvas) {

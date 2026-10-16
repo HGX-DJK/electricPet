@@ -379,6 +379,35 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ),
                   ),
                   const SizedBox(height: 8),
+
+                  // 专属骨骼体态与外貌特征标签组
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 5,
+                    children: _getBreedTags(currentSkin.id).map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: isNight ? const Color(0xFF3B2F7E) : const Color(0xFFEDE9FE),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isNight ? const Color(0xFF6D28D9) : const Color(0xFFDDD6FE),
+                            width: 0.8,
+                          ),
+                        ),
+                        child: Text(
+                          tag,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: isNight ? const Color(0xFFDDD6FE) : const Color(0xFF6D28D9),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
@@ -386,15 +415,17 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.auto_awesome, size: 14, color: Color(0xFFA855F7)),
                         const SizedBox(width: 5),
-                        Text(
-                          '当前生效：波可已变身为${currentSkin.name}，具备专属五官斑纹与毛色',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF6B21A8),
+                        Expanded(
+                          child: Text(
+                            '专属形态已生效：脸型、耳型、体型、尾巴已全面切换为${currentSkin.name}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF6B21A8),
+                            ),
                           ),
                         ),
                       ],
@@ -609,5 +640,28 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         ),
       ),
     );
+  }
+
+  List<String> _getBreedTags(String skinId) {
+    switch (skinId) {
+      case 'cat_ragdoll':
+        return ['🪶 蓬松羽毛大尾巴', '☁️ 华丽胸毛领圈', '✨ 侧脸爆毛与仙气耳毛', '🎭 海豹八字开脸'];
+      case 'cat_siamese':
+        return ['🦇 高耸挺拔大尖耳', '📐 东方修长楔形V脸', '🎋 灵巧细鞭尾', '☕ 焦糖重点色糊脸'];
+      case 'cat_british_blue':
+        return ['🥟 饱满发腮大包子脸', '🐾 矮胖五短厚实躯干', '🦦 粗圆水獭尾', '🪙 璀璨铜金双眸'];
+      case 'cat_orange':
+        return ['🥐 大橘为重软萌肚腩', '🐯 侧腹与尾部环形虎斑', '🐾 肥嘟嘟厚脚爪', '🥐 阳光圆圆大脑袋'];
+      case 'cat_persian_white':
+        return ['🦁 飘逸如狮颈部鬃毛', '💎 鸳鸯异瞳双色眼', '🪶 纯白蓬松羽毛尾', '❄️ 仙气耳内饰毛'];
+      case 'cat_calico':
+        return ['☯️ 一橘一黑双色阴阳耳', '🎨 三色不规则大色块拼接', '🍀 招财祈福民间吉猫'];
+      case 'cat_american_tabby':
+        return ['Ⓜ️ 额头经典虎斑M纹', '🌀 侧腹大理石回旋涡纹', '🦝 浣熊环形斑纹尾', '🏃 敏捷精悍猎手身材'];
+      case 'cat_black':
+        return ['🖤 曜石纯黑流线体态', '🧦 踏雪寻梅纯白手套爪', '✨ 夜光冷白长胡须', '🌕 澄澈金色星芒双眸'];
+      default:
+        return ['🐾 纯洁灵动小萌宠'];
+    }
   }
 }
