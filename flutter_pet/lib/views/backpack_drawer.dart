@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
 
-/// 波可的奇妙背包 (优雅上拉抽屉 / 萌宠工具箱面板)
+/// 波可的奇妙背包 (优雅上拉抽屉 / 萌宠日常照料与生活工具箱)
+/// 专注于日常护理、逗猫玩具与实用工具，不与外层换装/绝活重复
 class PokoBackpackDrawer extends StatelessWidget {
   final PetModel model;
   final bool isNight;
+  final int memoCount;
   final VoidCallback onFeedTap;
+  final VoidCallback onLaserTap;
   final VoidCallback onTeaseTap;
-  final VoidCallback onWardrobeTap;
-  final VoidCallback onActionTap;
   final VoidCallback onMemoTap;
   final VoidCallback onBathTap;
   final VoidCallback onSleepTap;
@@ -19,10 +20,10 @@ class PokoBackpackDrawer extends StatelessWidget {
     super.key,
     required this.model,
     required this.isNight,
+    this.memoCount = 0,
     required this.onFeedTap,
+    required this.onLaserTap,
     required this.onTeaseTap,
-    required this.onWardrobeTap,
-    required this.onActionTap,
     required this.onMemoTap,
     required this.onBathTap,
     required this.onSleepTap,
@@ -75,11 +76,11 @@ class PokoBackpackDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 2. 标题与快捷关闭
+            // 2. 标题栏与实时健康状态小胶囊
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: isNight
                         ? const Color(0xFF262054)
@@ -88,21 +89,45 @@ class PokoBackpackDrawer extends StatelessWidget {
                   ),
                   child: const Text('🎒', style: TextStyle(fontSize: 18)),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 9),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '波可的奇妙背包',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: isNight ? Colors.white : const Color(0xFF1E293B),
-                        letterSpacing: 0.3,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          '波可的奇妙背包',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isNight ? Colors.white : const Color(0xFF1E293B),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withOpacity(isNight ? 0.25 : 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF10B981).withOpacity(0.4),
+                            ),
+                          ),
+                          child: Text(
+                            model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 1),
                     Text(
-                      '日常照料、玩具道具与实用功能',
+                      '日常照料、逗猫玩具与生活贴心工具',
                       style: TextStyle(
                         fontSize: 11,
                         color: isNight
@@ -141,20 +166,22 @@ class PokoBackpackDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 3. 规整双列功能卡片网格
+            // 3. 规整清爽 6 宫格功能卡片矩阵 (2列 x 3行，无冗余去重)
             GridView.count(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               crossAxisCount: 2,
               mainAxisSpacing: 10,
               crossAxisSpacing: 10,
-              childAspectRatio: 2.25,
+              childAspectRatio: 2.1,
               children: [
                 // 1. 美味投喂
                 _BackpackCard(
                   icon: '🍱',
                   title: '美味投喂',
-                  subtitle: '补充饱腹度与好感经验',
+                  subtitle: '补充饱腹与好感经验',
+                  badgeText: '${model.hunger.toInt()}%',
+                  badgeColor: const Color(0xFFF59E0B),
                   accentColor: const Color(0xFFF59E0B),
                   isNight: isNight,
                   onTap: () {
@@ -162,11 +189,25 @@ class PokoBackpackDrawer extends StatelessWidget {
                     onFeedTap();
                   },
                 ),
-                // 2. 指尖逗趣
+                // 2. 神奇激光笔逗猫 (全新超高趣味交互)
+                _BackpackCard(
+                  icon: '🔴',
+                  title: '神奇激光笔',
+                  subtitle: '指尖红点，小猫疯狂飞扑',
+                  badgeText: '新玩具',
+                  badgeColor: const Color(0xFFEF4444),
+                  accentColor: const Color(0xFFEF4444),
+                  isNight: isNight,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onLaserTap();
+                  },
+                ),
+                // 3. 抛掷毛线球
                 _BackpackCard(
                   icon: '🧶',
-                  title: '指尖逗趣',
-                  subtitle: '抛弹毛线球，让波可飞扑',
+                  title: '抛毛线球',
+                  subtitle: '抛弹毛线球追逐打滚',
                   accentColor: const Color(0xFFEC4899),
                   isNight: isNight,
                   onTap: () {
@@ -174,47 +215,13 @@ class PokoBackpackDrawer extends StatelessWidget {
                     onTeaseTap();
                   },
                 ),
-                // 3. 萌宠衣橱
-                _BackpackCard(
-                  icon: '👗',
-                  title: '萌宠衣橱',
-                  subtitle: '换上可爱帽子与领结饰品',
-                  accentColor: const Color(0xFF8B5CF6),
-                  isNight: isNight,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onWardrobeTap();
-                  },
-                ),
-                // 4. 专属绝活
-                _BackpackCard(
-                  icon: '✨',
-                  title: '专属绝活',
-                  subtitle: '后空翻、魔术与萌趣打滚',
-                  accentColor: const Color(0xFFF43F5E),
-                  isNight: isNight,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onActionTap();
-                  },
-                ),
-                // 5. 贴心便签
-                _BackpackCard(
-                  icon: '📝',
-                  title: '贴心便签',
-                  subtitle: '记录生活备忘与待办灵感',
-                  accentColor: const Color(0xFFEAB308),
-                  isNight: isNight,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onMemoTap();
-                  },
-                ),
-                // 6. 泡泡沐浴
+                // 4. 泡泡沐浴
                 _BackpackCard(
                   icon: '🫧',
                   title: '泡泡沐浴',
-                  subtitle: '洗个香香，提升心情活力',
+                  subtitle: '草莓香波洗香香提升心情',
+                  badgeText: '${model.energy.toInt()}%',
+                  badgeColor: const Color(0xFF10B981),
                   accentColor: const Color(0xFF10B981),
                   isNight: isNight,
                   onTap: () {
@@ -222,7 +229,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                     onBathTap();
                   },
                 ),
-                // 7. 伴眠哄睡
+                // 5. 伴眠哄睡 / 唤醒
                 _BackpackCard(
                   icon: model.isSleeping ? '☀️' : '🌙',
                   title: model.isSleeping ? '唤醒波可' : '伴眠哄睡',
@@ -234,16 +241,18 @@ class PokoBackpackDrawer extends StatelessWidget {
                     onSleepTap();
                   },
                 ),
-                // 8. 桌面悬浮
+                // 6. 贴心便签 / 桌面悬浮 (便签 + 悬浮融合或便签优先)
                 _BackpackCard(
-                  icon: '📱',
-                  title: '桌面悬浮',
-                  subtitle: '全局常驻手机桌面伴侣',
-                  accentColor: const Color(0xFF06B6D4),
+                  icon: '📝',
+                  title: '贴心便签',
+                  subtitle: '生活备忘与灵感待办',
+                  badgeText: memoCount > 0 ? '$memoCount 条' : null,
+                  badgeColor: const Color(0xFFEAB308),
+                  accentColor: const Color(0xFFEAB308),
                   isNight: isNight,
                   onTap: () {
                     Navigator.of(context).pop();
-                    onToggleFloating();
+                    onMemoTap();
                   },
                 ),
               ],
@@ -259,6 +268,8 @@ class _BackpackCard extends StatefulWidget {
   final String icon;
   final String title;
   final String subtitle;
+  final String? badgeText;
+  final Color? badgeColor;
   final Color accentColor;
   final bool isNight;
   final VoidCallback onTap;
@@ -267,6 +278,8 @@ class _BackpackCard extends StatefulWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.badgeText,
+    this.badgeColor,
     required this.accentColor,
     required this.isNight,
     required this.onTap,
@@ -322,7 +335,7 @@ class _BackpackCardState extends State<_BackpackCard> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: widget.accentColor.withOpacity(widget.isNight ? 0.2 : 0.12),
+                  color: widget.accentColor.withOpacity(widget.isNight ? 0.22 : 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
@@ -334,19 +347,43 @@ class _BackpackCardState extends State<_BackpackCard> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        color: widget.isNight
-                            ? Colors.white
-                            : const Color(0xFF1E293B),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            widget.title,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.bold,
+                              color: widget.isNight
+                                  ? Colors.white
+                                  : const Color(0xFF1E293B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (widget.badgeText != null) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: (widget.badgeColor ?? widget.accentColor).withOpacity(widget.isNight ? 0.25 : 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              widget.badgeText!,
+                              style: TextStyle(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.bold,
+                                color: widget.badgeColor ?? widget.accentColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 1),
+                    const SizedBox(height: 2),
                     Text(
                       widget.subtitle,
                       style: TextStyle(

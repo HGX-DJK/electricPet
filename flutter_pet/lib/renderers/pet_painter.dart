@@ -780,6 +780,7 @@ class PetPainter extends CustomPainter {
     final blinkCycle = animTime % 3.8;
     final isBlinking = model.isSleeping ||
         isPurring ||
+        state == 'PEEK_A_BOO' ||
         state == 'WASH_FACE' ||
         state == 'STRETCH_YAWN' ||
         state == 'HAPPY_SPIN' ||
@@ -982,6 +983,24 @@ class PetPainter extends CustomPainter {
         canvas.drawCircle(Offset(pawCenter.dx, pawCenter.dy - 12), 3.8, padPaint);
         canvas.drawCircle(Offset(pawCenter.dx + 8, pawCenter.dy - 10), 3.5, padPaint);
       }
+      return;
+    }
+
+    // 遮眼躲猫猫：两只前爪抬起到眼睛前捂住脸颊
+    if (state == 'PEEK_A_BOO') {
+      canvas.save();
+      canvas.translate(-16, -2);
+      canvas.rotate(0.2);
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 24, height: 20), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 24, height: 20), pawBorder);
+      canvas.restore();
+
+      canvas.save();
+      canvas.translate(16, -2);
+      canvas.rotate(-0.2);
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 24, height: 20), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 24, height: 20), pawBorder);
+      canvas.restore();
       return;
     }
 

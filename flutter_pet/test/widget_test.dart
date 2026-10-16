@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/main.dart';
 
@@ -44,5 +45,43 @@ void main() {
 
     // 动作演职时长 5.2s 结束后自动回归平静 IDLE
     await tester.pump(const Duration(seconds: 6));
+  });
+
+  testWidgets('Backpack clean and Laser Chase test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 打开奇妙背包抽屉
+    await tester.tap(find.text('奇妙背包'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 验证抽屉内去重：不再包含衣橱与绝活，保持功能纯粹
+    expect(find.text('萌宠衣橱'), findsNothing);
+    expect(find.text('美味投喂'), findsOneWidget);
+    expect(find.text('神奇激光笔'), findsOneWidget);
+
+    // 启动神奇激光笔
+    await tester.tap(find.text('神奇激光笔'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 验证激光模式提示出现
+    expect(find.textContaining('激光笔逗猫中'), findsOneWidget);
+
+    // 点击收起激光笔
+    await tester.tap(find.textContaining('点击收起'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 验证激光笔模式退出
+    expect(find.textContaining('激光笔逗猫中'), findsNothing);
   });
 }
