@@ -59,6 +59,10 @@ class PetPainter extends CustomPainter {
     double scaleY = 1.0 + math.sin(breathCycle) * 0.024;
     double bodySwayX = 0.0;
 
+    bool isSpinBackView = false;
+    double spinFeatureShiftX = 0.0;
+    double spinTiltAngle = 0.0;
+
     if (state == 'GLASS_BOOP') {
       // 贴贴屏幕：大头贴近屏幕玻璃，可爱雀跃
       scaleX = 1.32;
@@ -71,10 +75,31 @@ class PetPainter extends CustomPainter {
       // 投喂进食欢快咀嚼微动
       breathY = math.sin(animTime * 14.0) * 2.5;
     } else if (state == 'HAPPY_SPIN') {
-      // 欢喜转圈：水平 3D 旋转缩放 + 向上小雀跃跳动
-      final spinCycle = math.cos(animTime * 8.0);
-      scaleX = spinCycle.abs() < 0.2 ? (spinCycle < 0 ? -0.2 : 0.2) : spinCycle;
-      breathY = -math.sin(animTime * 8.0).abs() * 16.0;
+      // 3D 饱满旋空回旋跳 (彻底告别纸片式左右压扁翻折)
+      final spinPhase = (animTime * 7.5) % (2 * math.pi);
+      final cosVal = math.cos(spinPhase);
+      final sinVal = math.sin(spinPhase);
+
+      // 判定是否处于背对视线区间 (cos < 0 时为背影)
+      isSpinBackView = (cosVal < 0);
+
+      // 3D 圆润视宽：基于椭圆柱面投影，最窄 profile 仍保有 68% 饱满侧脸厚度，绝不塌陷为 0 像素直线！
+      scaleX = math.sqrt(cosVal * cosVal + 0.46 * sinVal * sinVal);
+
+      // 雀跃跳跃高度抛物线：凌空跃起最高达 26px
+      final jumpProgress = math.sin(spinPhase).abs();
+      breathY = -jumpProgress * 26.0;
+
+      // 腾空与着陆的弹性形变 (Squash & Stretch)
+      scaleY = 1.0 + (jumpProgress - 0.45) * 0.16;
+
+      // 旋转动态倾角 (俏皮侧倾 7 度)
+      spinTiltAngle = sinVal * 0.12;
+
+      // 五官立体曲面滑动偏移 (呈现球形头部转动的立体视差)
+      spinFeatureShiftX = sinVal * (isSpinBackView ? -15.0 : 15.0);
+
+      bodySwayX = sinVal * 3.5;
     } else if (state == 'STRETCH_YAWN') {
       // 伸懒腰：身体纵向拉长，重心下沉
       scaleX = 1.18;
@@ -109,26 +134,36 @@ class PetPainter extends CustomPainter {
       breathY = 0.0;
     }
 
+    // 独立地面阴影：绘制在脚底地板上，随跳跃高度柔和缩放与淡化，绝不随纸片翻折在半空中飘
+    _drawGroundedShadow(canvas, center, (state == 'HAPPY_SPIN') ? breathY : 0.0);
+
     canvas.translate(center.dx + bodySwayX, center.dy + breathY);
+    if (spinTiltAngle != 0.0) {
+      canvas.rotate(spinTiltAngle);
+    }
     canvas.scale(scaleX, scaleY);
 
-    // 绘制影子
-    _drawShadow(canvas, size);
+    // 绘制尾巴 (背身时在身体前层欢快甩动，正面时在身体后层)
+    if (!isSpinBackView) {
+      _drawTail(canvas, skin);
+    }
 
-    // 绘制尾巴
-    _drawTail(canvas, skin);
+    // 绘制身体与背部花纹 (背身时呈现圆滚滚后背与背脊毛色)
+    _drawBody(canvas, skin, isBackView: isSpinBackView);
 
-    // 绘制身体与背部花纹
-    _drawBody(canvas, skin);
+    // 绘制头部与面部五官 (背身时展现后脑勺与耳背，隐去五官，彻底告别纸片感)
+    _drawHead(canvas, skin, isBackView: isSpinBackView, featureShiftX: spinFeatureShiftX);
 
-    // 绘制头部与面部五官 (根据状态绘制生动表情)
-    _drawHead(canvas, skin);
+    // 绘制前爪 (背身时两只后爪在身体后侧支撑)
+    _drawPaws(canvas, skin, isBackView: isSpinBackView);
 
-    // 绘制前爪 (洗脸或玩耍时动态位置)
-    _drawPaws(canvas, skin);
+    // 背身时尾巴在身体前层欢快甩动
+    if (isSpinBackView) {
+      _drawTail(canvas, skin);
+    }
 
-    // 绘制配饰 (铃铛/项圈)
-    _drawDecorations(canvas);
+    // 绘制配饰 (背身时只展现颈圈系带与帽子后檐)
+    _drawDecorations(canvas, isBackView: isSpinBackView);
 
     // 绘制绝活专属道具与特效层
     _drawActionProps(canvas, skin);
@@ -141,12 +176,16 @@ class PetPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawShadow(Canvas canvas, Size size) {
+  void _drawGroundedShadow(Canvas canvas, Offset center, double jumpY) {
+    final jumpHeight = (-jumpY).clamp(0.0, 40.0);
+    final shadowWidth = 110.0 * (1.0 - jumpHeight * 0.012);
+    final shadowHeight = 18.0 * (1.0 - jumpHeight * 0.008);
+    final alpha = (0x25 * (1.0 - jumpHeight * 0.016)).clamp(8, 0x25).toInt();
     final shadowPaint = Paint()
-      ..color = const Color(0x25000000)
+      ..color = Color.fromARGB(alpha, 0, 0, 0)
       ..style = PaintingStyle.fill;
     canvas.drawOval(
-      Rect.fromCenter(center: const Offset(0, 72), width: 110, height: 18),
+      Rect.fromCenter(center: Offset(center.dx, center.dy + 72), width: shadowWidth, height: shadowHeight),
       shadowPaint,
     );
   }
@@ -253,7 +292,7 @@ class PetPainter extends CustomPainter {
     canvas.drawCircle(tipOffset, tipRadius, tipPaint);
   }
 
-  void _drawBody(Canvas canvas, SkinConfig skin) {
+  void _drawBody(Canvas canvas, SkinConfig skin, {bool isBackView = false}) {
     final bodyPaint = Paint()
       ..color = Color(skin.primaryColor)
       ..style = PaintingStyle.fill;
@@ -297,6 +336,29 @@ class PetPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawOval(bodyRect, borderPaint);
+
+    // 如果处于 3D 旋转后背视角：呈现脊背虎斑/背部花纹，隐藏前腹白毛
+    if (isBackView) {
+      if (skin.id == 'cat_american_tabby' || skin.id == 'cat_orange') {
+        final spinePaint = Paint()
+          ..color = Color(skin.secondaryColor)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.6
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(const Offset(-18, 18), const Offset(18, 18), spinePaint);
+        canvas.drawLine(const Offset(-22, 30), const Offset(22, 30), spinePaint);
+        canvas.drawLine(const Offset(-18, 42), const Offset(18, 42), spinePaint);
+      } else if (skin.id == 'cat_calico') {
+        final patchOrange = Paint()..color = Color(skin.secondaryColor);
+        canvas.drawOval(Rect.fromCenter(center: const Offset(-18, 28), width: 32, height: 24), patchOrange);
+        final patchBlack = Paint()..color = const Color(0xFF1E293B);
+        canvas.drawOval(Rect.fromCenter(center: const Offset(16, 38), width: 28, height: 22), patchBlack);
+      } else if (skin.id == 'cat_siamese') {
+        final backShade = Paint()..color = const Color(0x228D6E63);
+        canvas.drawOval(Rect.fromCenter(center: const Offset(0, 32), width: 50, height: 40), backShade);
+      }
+      return;
+    }
 
     // 1. 中华大橘：软萌大肚子浅色区域 + 侧腹经典橘红虎斑条纹
     if (skin.id == 'cat_orange') {
@@ -371,7 +433,7 @@ class PetPainter extends CustomPainter {
     }
   }
 
-  void _drawHead(Canvas canvas, SkinConfig skin) {
+  void _drawHead(Canvas canvas, SkinConfig skin, {bool isBackView = false, double featureShiftX = 0.0}) {
     canvas.save();
 
     Offset headCenter = const Offset(0, -18);
@@ -409,7 +471,7 @@ class PetPainter extends CustomPainter {
     }
     final leftTwitch = (twitchEar == 'RIGHT') ? 0.0 : earTwitch;
     final rightTwitch = (twitchEar == 'LEFT') ? 0.0 : earTwitch;
-    _drawEars(canvas, skin, headCenter, leftTwitch, rightTwitch);
+    _drawEars(canvas, skin, headCenter, leftTwitch, rightTwitch, isBackView: isBackView);
 
     // 脑袋轮廓：不同品种差异化骨骼形态 (包子脸发腮 / 东方楔形V脸 / 长毛侧脸爆毛 / 橘猫大圆脸)
     final headPaint = Paint()
@@ -562,28 +624,51 @@ class PetPainter extends CustomPainter {
       canvas.drawLine(Offset(headCenter.dx + 28, headCenter.dy + 9), Offset(headCenter.dx + 45, headCenter.dy + 8), tabbyPaint);
     }
 
+    // 如果处于 3D 旋转后背视角：呈现后脑勺斑纹与帽子，隐去面部五官！
+    if (isBackView) {
+      if (skin.id == 'cat_american_tabby' || skin.id == 'cat_orange') {
+        final stripePaint = Paint()
+          ..color = Color(skin.secondaryColor).withOpacity(0.65)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.2
+          ..strokeCap = StrokeCap.round;
+        canvas.drawLine(Offset(headCenter.dx - 14, headCenter.dy - 22), Offset(headCenter.dx + 14, headCenter.dy - 22), stripePaint);
+        canvas.drawLine(Offset(headCenter.dx - 18, headCenter.dy - 12), Offset(headCenter.dx + 18, headCenter.dy - 12), stripePaint);
+        canvas.drawLine(Offset(headCenter.dx - 12, headCenter.dy - 2), Offset(headCenter.dx + 12, headCenter.dy - 2), stripePaint);
+      } else if (skin.id == 'cat_calico') {
+        final patchPaint = Paint()..color = Color(skin.secondaryColor);
+        canvas.drawOval(Rect.fromCenter(center: Offset(headCenter.dx - 16, headCenter.dy - 10), width: 26, height: 18), patchPaint);
+      }
+      _drawHeadDecorations(canvas, headCenter);
+      canvas.restore();
+      return;
+    }
+
+    // 正面视角：五官沿 3D 球形头面轻柔滑动
+    final faceCenter = Offset(headCenter.dx + featureShiftX, headCenter.dy);
+
     // 腮红
     final blushAlpha = (petProgress > 0 || state == 'HAPPY_SPIN' || state == 'KNEADING_BISCUITS') ? 0x90 : 0x55;
     final blushPaint = Paint()
       ..color = Color.fromARGB(blushAlpha, 244, 63, 94)
       ..style = PaintingStyle.fill;
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(headCenter.dx - 36, headCenter.dy + 14), width: 18, height: 11),
+      Rect.fromCenter(center: Offset(faceCenter.dx - 36, faceCenter.dy + 14), width: 18, height: 11),
       blushPaint,
     );
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(headCenter.dx + 36, headCenter.dy + 14), width: 18, height: 11),
+      Rect.fromCenter(center: Offset(faceCenter.dx + 36, faceCenter.dy + 14), width: 18, height: 11),
       blushPaint,
     );
 
     // 眼睛与瞳孔
-    _drawEyes(canvas, skin, headCenter);
+    _drawEyes(canvas, skin, faceCenter);
 
     // 鼻子与小嘴
-    _drawNoseAndMouth(canvas, headCenter);
+    _drawNoseAndMouth(canvas, faceCenter);
 
     // 胡须
-    _drawWhiskers(canvas, skin, headCenter);
+    _drawWhiskers(canvas, skin, faceCenter);
 
     // 头部帽子配饰 (随头部呼吸与歪头动态联动)
     _drawHeadDecorations(canvas, headCenter);
@@ -591,7 +676,7 @@ class PetPainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch) {
+  void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch, {bool isBackView = false}) {
     final isPointCat = skin.id == 'cat_ragdoll' || skin.id == 'cat_siamese';
 
     // 1. 暹罗猫：超大尖立耳 (Giant Tall Bat Ears，耳根极宽，高耸挺立)
@@ -607,12 +692,14 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(leftEar, earPaint);
 
-      final leftInner = Path()
-        ..moveTo(headCenter.dx - 44, headCenter.dy - 24)
-        ..lineTo(headCenter.dx - 48 + leftTwitch, headCenter.dy - 72)
-        ..lineTo(headCenter.dx - 14, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(leftInner, innerPaint);
+      if (!isBackView) {
+        final leftInner = Path()
+          ..moveTo(headCenter.dx - 44, headCenter.dy - 24)
+          ..lineTo(headCenter.dx - 48 + leftTwitch, headCenter.dy - 72)
+          ..lineTo(headCenter.dx - 14, headCenter.dy - 36)
+          ..close();
+        canvas.drawPath(leftInner, innerPaint);
+      }
 
       // 右耳：高耸尖锐
       final rightEar = Path()
@@ -622,12 +709,14 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(rightEar, earPaint);
 
-      final rightInner = Path()
-        ..moveTo(headCenter.dx + 44, headCenter.dy - 24)
-        ..lineTo(headCenter.dx + 48 - rightTwitch, headCenter.dy - 72)
-        ..lineTo(headCenter.dx + 14, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(rightInner, innerPaint);
+      if (!isBackView) {
+        final rightInner = Path()
+          ..moveTo(headCenter.dx + 44, headCenter.dy - 24)
+          ..lineTo(headCenter.dx + 48 - rightTwitch, headCenter.dy - 72)
+          ..lineTo(headCenter.dx + 14, headCenter.dy - 36)
+          ..close();
+        canvas.drawPath(rightInner, innerPaint);
+      }
       return;
     }
 
@@ -644,12 +733,14 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(leftEar, earPaint);
 
-      final leftInner = Path()
-        ..moveTo(headCenter.dx - 42, headCenter.dy - 24)
-        ..lineTo(headCenter.dx - 36 + leftTwitch, headCenter.dy - 48)
-        ..lineTo(headCenter.dx - 22, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(leftInner, innerPaint);
+      if (!isBackView) {
+        final leftInner = Path()
+          ..moveTo(headCenter.dx - 42, headCenter.dy - 24)
+          ..lineTo(headCenter.dx - 36 + leftTwitch, headCenter.dy - 48)
+          ..lineTo(headCenter.dx - 22, headCenter.dy - 36)
+          ..close();
+        canvas.drawPath(leftInner, innerPaint);
+      }
 
       // 右耳：小巧圆润
       final rightEar = Path()
@@ -659,12 +750,14 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(rightEar, earPaint);
 
-      final rightInner = Path()
-        ..moveTo(headCenter.dx + 42, headCenter.dy - 24)
-        ..lineTo(headCenter.dx + 36 - rightTwitch, headCenter.dy - 48)
-        ..lineTo(headCenter.dx + 22, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(rightInner, innerPaint);
+      if (!isBackView) {
+        final rightInner = Path()
+          ..moveTo(headCenter.dx + 42, headCenter.dy - 24)
+          ..lineTo(headCenter.dx + 36 - rightTwitch, headCenter.dy - 48)
+          ..lineTo(headCenter.dx + 22, headCenter.dy - 36)
+          ..close();
+        canvas.drawPath(rightInner, innerPaint);
+      }
       return;
     }
 
@@ -688,12 +781,14 @@ class PetPainter extends CustomPainter {
       ..close();
     canvas.drawPath(leftEar, Paint()..color = leftEarBaseColor);
 
-    final leftEarInner = Path()
-      ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
-      ..lineTo(headCenter.dx - 37 + leftTwitch, headCenter.dy - 55)
-      ..lineTo(headCenter.dx - 18, headCenter.dy - 42)
-      ..close();
-    canvas.drawPath(leftEarInner, earInnerPaint);
+    if (!isBackView) {
+      final leftEarInner = Path()
+        ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
+        ..lineTo(headCenter.dx - 37 + leftTwitch, headCenter.dy - 55)
+        ..lineTo(headCenter.dx - 18, headCenter.dy - 42)
+        ..close();
+      canvas.drawPath(leftEarInner, earInnerPaint);
+    }
 
     // 右耳
     final rightEar = Path()
@@ -703,12 +798,14 @@ class PetPainter extends CustomPainter {
       ..close();
     canvas.drawPath(rightEar, Paint()..color = rightEarBaseColor);
 
-    final rightEarInner = Path()
-      ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
-      ..lineTo(headCenter.dx + 37 - rightTwitch, headCenter.dy - 55)
-      ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
-      ..close();
-    canvas.drawPath(rightEarInner, earInnerPaint);
+    if (!isBackView) {
+      final rightEarInner = Path()
+        ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
+        ..lineTo(headCenter.dx + 37 - rightTwitch, headCenter.dy - 55)
+        ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
+        ..close();
+      canvas.drawPath(rightEarInner, earInnerPaint);
+    }
 
     // 4. 布偶猫 & 临清狮子猫：耳内长长的仙气饰毛 (Wispy Ear Furnishings)
     if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
@@ -981,12 +1078,21 @@ class PetPainter extends CustomPainter {
     canvas.drawLine(Offset(headCenter.dx + 28, headCenter.dy + 14), Offset(headCenter.dx + 56, headCenter.dy + 18), whiskerPaint);
   }
 
-  void _drawPaws(Canvas canvas, SkinConfig skin) {
+  void _drawPaws(Canvas canvas, SkinConfig skin, {bool isBackView = false}) {
     final pawPaint = Paint()..color = Color(skin.primaryColor);
     final pawBorder = Paint()
       ..color = const Color(0x15000000)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
+
+    // 背身视角：在身体后方两侧露出可爱后脚爪
+    if (isBackView) {
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-24, 60), width: 22, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-24, 60), width: 22, height: 16), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(24, 60), width: 22, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(24, 60), width: 22, height: 16), pawBorder);
+      return;
+    }
 
     // 贴贴屏幕：两只粉白小爪平贴在前方玻璃上，露出粉嫩肉垫
     if (state == 'GLASS_BOOP') {
@@ -1110,7 +1216,7 @@ class PetPainter extends CustomPainter {
     }
   }
 
-  void _drawDecorations(Canvas canvas) {
+  void _drawDecorations(Canvas canvas, {bool isBackView = false}) {
     final neckDeco = model.decorations['neck'];
     if (neckDeco == 'bell') {
       // 红色小项圈
@@ -1121,8 +1227,10 @@ class PetPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
       final collarPath = Path()
         ..moveTo(-20, 20)
-        ..quadraticBezierTo(0, 26, 20, 20);
+        ..quadraticBezierTo(0, isBackView ? 16 : 26, 20, 20);
       canvas.drawPath(collarPath, collarPaint);
+
+      if (isBackView) return; // 背面不画正面的铃铛
 
       // 金色小铃铛
       final bellPaint = Paint()..color = const Color(0xFFFBBF24);
@@ -1130,6 +1238,14 @@ class PetPainter extends CustomPainter {
       final bellHolePaint = Paint()..color = const Color(0xFF78350F);
       canvas.drawCircle(const Offset(0, 26), 1.8, bellHolePaint);
     } else if (neckDeco == 'ribbon') {
+      if (isBackView) {
+        final ribbonBand = Paint()
+          ..color = const Color(0xFFF43F5E)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.6;
+        canvas.drawLine(const Offset(-18, 20), const Offset(18, 20), ribbonBand);
+        return;
+      }
       // 俏皮粉红蝴蝶结
       final bowPaint = Paint()..color = const Color(0xFFF43F5E);
       // 左蝴蝶翼
@@ -1486,18 +1602,23 @@ class PetPainter extends CustomPainter {
       }
     }
 
-    // 6. 欢喜转圈 (星光环绕光环)
+    // 6. 欢喜转圈 (星光与金星 3D 环绕光环)
     else if (state == 'HAPPY_SPIN') {
-      for (int i = 0; i < 4; i++) {
-        final angle = animTime * 10.0 + i * (math.pi / 2);
-        final sx = math.cos(angle) * 58.0;
-        final sy = 10.0 + math.sin(angle) * 20.0;
+      for (int i = 0; i < 6; i++) {
+        final angle = animTime * 8.5 + i * (math.pi / 3);
+        final sx = math.cos(angle) * 62.0;
+        final sy = -14.0 + math.sin(angle) * 22.0;
+        final depth = math.sin(angle);
+        final starSize = depth > 0 ? 17.0 : 12.0;
 
         final spPainter = TextPainter(
-          text: const TextSpan(text: '✨', style: TextStyle(fontSize: 16)),
+          text: TextSpan(
+            text: i % 2 == 0 ? '✨' : '⭐',
+            style: TextStyle(fontSize: starSize),
+          ),
           textDirection: TextDirection.ltr,
         )..layout();
-        spPainter.paint(canvas, Offset(sx - 8, sy - 8));
+        spPainter.paint(canvas, Offset(sx - starSize / 2, sy - starSize / 2));
       }
     }
   }

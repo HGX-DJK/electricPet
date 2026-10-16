@@ -133,8 +133,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _postAnimTimer;
   Timer? _photoAnimTimer;
 
-  // 自主生活与房间漫步系统 (Autonomous Living & Roaming)
+  // 自主生活与房间 2.5D 全向漫步系统 (Autonomous Living & 2.5D Roaming)
   double? _targetWalkX;
+  double? _targetWalkY;
+  String? _roamTargetName;
   bool _isRoaming = false;
   Timer? _roamTimer;
   Size _lastScreenSize = const Size(360, 640);
@@ -333,20 +335,32 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         }
       }
 
-      // 自主漫步巡视运动驱动 (猫咪小碎步踱步移动)
-      if (_isRoaming && _state == 'WALK' && _targetWalkX != null) {
+      // 自主漫步巡视运动驱动 (猫咪 2.5D 全向小碎步有机踱步，自由穿梭于家具之间)
+      if (_isRoaming && _state == 'WALK' && _targetWalkX != null && _targetWalkY != null) {
         final dx = _targetWalkX! - _petX;
-        if (dx.abs() > 2.0) {
-          final step = (dx > 0 ? 1.5 : -1.5);
-          _petX += step;
-          _facingLeft = (dx < 0);
+        final dy = _targetWalkY! - _petY;
+        final dist = math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 3.0) {
+          // 猫咪优雅小碎步：每帧沿矢量平滑行进约 1.8px
+          final step = math.min(dist, 1.8);
+          _petX += (dx / dist) * step;
+          _petY += (dy / dist) * step;
+
+          // 转向自然对齐横向运动分量
+          if (dx.abs() > 0.8) {
+            _facingLeft = (dx < 0);
+          }
           needRepaint = true;
         } else {
           _petX = _targetWalkX!;
+          _petY = _targetWalkY!;
           _isRoaming = false;
-          final arrivedX = _targetWalkX!;
+          final target = _roamTargetName;
           _targetWalkX = null;
-          _onArrivedAtDestination(arrivedX);
+          _targetWalkY = null;
+          _roamTargetName = null;
+          _onArrivedAtDestination(target);
           needRepaint = true;
         }
       }
@@ -476,11 +490,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     ));
   }
 
+  void _stopRoaming() {
+    _isRoaming = false;
+    _targetWalkX = null;
+    _targetWalkY = null;
+    _roamTargetName = null;
+    _roamTimer?.cancel();
+  }
+
   /// 触碰/戳戳萌宠
   void _onPetTap(Offset globalPos) {
     _idleSeconds = 0;
-    _isRoaming = false;
-    _targetWalkX = null;
+    _stopRoaming();
     SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
@@ -502,8 +523,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 双击触发开心旋转绝活
   void _onPetDoubleTap() {
     _idleSeconds = 0;
-    _isRoaming = false;
-    _targetWalkX = null;
+    _stopRoaming();
     SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.heavyImpact();
@@ -514,10 +534,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   void _playAction(String actionId) {
     _idleSeconds = 0;
-    if (_isRoaming) {
-      _isRoaming = false;
-      _targetWalkX = null;
-    }
+    _stopRoaming();
     if (actionId != 'PLAY_YARN') {
       _isChasingYarn = false;
     }
@@ -586,57 +603,72 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
   }
 
-  /// 自主生活与房间漫步系统 (Autonomous Living & Roaming)
-  /// 猫咪待机 3~4 秒即刻自主决策：45% 概率在房间内迈着小碎步漫步巡视，55% 概率做原地萌趣小动作
+  /// 自主生活与房间 2.5D 深度漫步系统 (Autonomous Living & 2.5D Roaming)
+  /// 猫咪待机 3~4 秒即刻自主决策：45% 概率在房间内全向漫步视察家具，55% 概率做原地萌趣小动作
   void _triggerAutonomousLiving(Size screenSize) {
     if (!mounted || _isDragging || _isLaserMode || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
     if (_isRoaming) return;
 
+    final floorTop = (screenSize.height * 0.22).clamp(160.0, 220.0);
     final nestX = screenSize.width / 2;
-    final nestY = (screenSize.height * 0.52).clamp(340.0, screenSize.height - 230.0);
+    final nestY = floorTop + 105.0;
     final rnd = math.Random();
 
-    // 45% 概率漫步巡视房间家具
+    // 45% 概率在 2.5D 房间内自由漫步穿梭视察家具
     if (rnd.nextDouble() < 0.45) {
       final targets = <Map<String, dynamic>>[
-        // 目标 A: 左上角 · 猫草盆栽
+        // 目标 A: 左上方木地板角落 · 猫草盆栽 (深层空间)
         {
-          'x': 52.0,
+          'x': 82.0,
+          'y': floorTop + 42.0,
           'name': 'CAT_GRASS',
-          'msg': '迈着轻快小步，去左边视察猫草盆栽~ 🌿',
+          'msg': '迈着轻快小碎步，去左上方视察猫草盆栽~ 🌿',
         },
-        // 目标 B: 左下角 · 精致小猫碗
+        // 目标 B: 右上方木地板角落 · 原木剑麻猫抓柱 (深层空间)
         {
-          'x': 65.0,
+          'x': (screenSize.width - 82.0).clamp(nestX + 40.0, screenSize.width - 45.0),
+          'y': floorTop + 42.0,
+          'name': 'SCRATCHING_POST',
+          'msg': '溜达去右上方的剑麻猫抓柱，准备磨磨爪爪~ 🪵',
+        },
+        // 目标 C: 左下前侧地板 · 精致小猫碗 (前景开阔区)
+        {
+          'x': 85.0,
+          'y': (nestY + 95.0).clamp(floorTop + 60.0, screenSize.height - 120.0),
           'name': 'FOOD_BOWL',
-          'msg': '溜达去小食碗边，闻闻酥脆小鱼干！🥣',
+          'msg': '小步溜达到小食碗边，闻闻酥脆小鱼干！🥣',
         },
-        // 目标 C: 前方地板 · 毛线球
+        // 目标 D: 右下前侧地板 · 温馨小夜灯 (前景开阔区)
         {
-          'x': (_yarnX).clamp(45.0, screenSize.width - 45.0),
+          'x': (screenSize.width - 85.0).clamp(nestX + 40.0, screenSize.width - 45.0),
+          'y': (nestY + 95.0).clamp(floorTop + 60.0, screenSize.height - 120.0),
+          'name': 'NIGHT_LAMP',
+          'msg': '溜达去右前方小夜灯下蹭蹭暖光~ 💡',
+        },
+        // 目标 E: 开阔活动中庭 · 实体粉红毛线球
+        {
+          'x': _yarnX.clamp(55.0, screenSize.width - 55.0),
+          'y': (_yarnY - 22.0).clamp(floorTop + 45.0, screenSize.height - 125.0),
           'name': 'YARN_BALL',
           'msg': '悄悄溜向粉红毛线球，准备扑一下！🧶',
         },
-        // 目标 D: 右侧 · 小夜灯与剑麻板
-        {
-          'x': (screenSize.width - 55.0).clamp(nestX + 35.0, screenSize.width - 45.0),
-          'name': 'NIGHT_LAMP',
-          'msg': '溜达去小夜灯与剑麻板下蹭蹭暖光~ 💡',
-        },
-        // 目标 E: 回 3D 豪华萌猫云朵猫窝
+        // 目标 F: 回大猫窝中心暖绒垫 (中央核心)
         {
           'x': nestX,
+          'y': nestY,
           'name': 'COZY_NEST',
           'msg': '小碎步踱步回暖暖的大猫窝啦~ ☁️🐾',
         },
       ];
 
-      // 挑选一个离当前位置有一定距离的目标 (避免选到原地)
+      // 挑选一个离当前位置有一定真实 2D 距离的目标 (避免原地踏步)
       targets.shuffle();
       Map<String, dynamic>? selectedTarget;
       for (final t in targets) {
         final tx = t['x'] as double;
-        if ((tx - _petX).abs() > 30.0) {
+        final ty = t['y'] as double;
+        final dist = math.sqrt((tx - _petX) * (tx - _petX) + (ty - _petY) * (ty - _petY));
+        if (dist > 35.0) {
           selectedTarget = t;
           break;
         }
@@ -644,9 +676,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       selectedTarget ??= targets.first;
 
       final targetX = selectedTarget['x'] as double;
+      final targetY = selectedTarget['y'] as double;
+      final targetName = selectedTarget['name'] as String;
       final msg = selectedTarget['msg'] as String;
 
-      _startWalkingTo(targetX, msg);
+      _startWalkingTo(targetX, targetY, targetName, msg);
     } else {
       // 55% 概率原地自主萌态微动作
       final idleActions = [
@@ -694,12 +728,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
-  /// 启动小碎步漫步巡视
-  void _startWalkingTo(double targetX, String msg) {
+  /// 启动 2.5D 小碎步全向漫步巡视
+  void _startWalkingTo(double targetX, double targetY, String targetName, String msg) {
     if (!mounted || _isDragging || widget.petModel.isSleeping) return;
     setState(() {
       _isRoaming = true;
       _targetWalkX = targetX;
+      _targetWalkY = targetY;
+      _roamTargetName = targetName;
       _facingLeft = (targetX < _petX);
       _state = 'WALK';
     });
@@ -713,6 +749,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         setState(() {
           _isRoaming = false;
           _targetWalkX = null;
+          _targetWalkY = null;
+          _roamTargetName = null;
           _state = 'IDLE';
         });
       }
@@ -720,52 +758,45 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   }
 
   /// 漫步到达巡视目的地后的智能有机交互触发
-  void _onArrivedAtDestination(double arrivedX) {
+  void _onArrivedAtDestination(String? targetName) {
     _roamTimer?.cancel();
     final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
     final nestX = _lastScreenSize.width / 2;
     final nestY = floorTop + 105.0;
 
-    // 1. 到达大猫窝中心
-    if ((arrivedX - nestX).abs() < 24.0) {
-      _playAction('SIT_WAG_TAIL');
-      _showDialogueBubble('回到蓬松温暖的专属大猫窝啦！舒服趴好摇尾巴~ ☁️🐾');
-      SoundService.playMeow();
-      return;
+    switch (targetName) {
+      case 'CAT_GRASS':
+        _onPlantTap();
+        _playAction('LOOK_AROUND');
+        _showDialogueBubble('巡视猫草盆栽~ 凑近闻闻青草清香！🌱✨');
+        break;
+      case 'SCRATCHING_POST':
+        _onScratcherTap();
+        _playAction('WASH_FACE');
+        _showDialogueBubble('巡视剑麻猫抓柱~ 伸个懒腰准备磨爪爪！🪵🐾');
+        break;
+      case 'FOOD_BOWL':
+        _popFishFromBowl(nestX, nestY);
+        _playAction('LOOK_AROUND');
+        _showDialogueBubble('来到小猫碗边啦~ 闻闻还有没有酥脆小鱼干！🥣😋');
+        break;
+      case 'NIGHT_LAMP':
+        _onNightLampTap();
+        _playAction('LOOK_AROUND');
+        _showDialogueBubble('来到小夜灯边~ 暖融融的光晕好舒服呀！💡✨');
+        break;
+      case 'YARN_BALL':
+        _playAction('PLAY_YARN');
+        SoundService.playPop();
+        _showDialogueBubble('追到粉红毛线球啦！两只爪爪抱住滚来滚去~ 🧶🐾');
+        break;
+      case 'COZY_NEST':
+      default:
+        _playAction('SIT_WAG_TAIL');
+        _showDialogueBubble('回到蓬松温暖的专属大猫窝啦！舒服趴好摇尾巴~ ☁️🐾');
+        SoundService.playMeow();
+        break;
     }
-
-    // 2. 到达左侧猫草边
-    if (arrivedX < 58.0) {
-      _onPlantTap();
-      _playAction('LOOK_AROUND');
-      return;
-    }
-
-    // 3. 到达左侧小猫碗边
-    if (arrivedX >= 58.0 && arrivedX < nestX - 35.0) {
-      _popFishFromBowl(nestX, nestY);
-      _playAction('LOOK_AROUND');
-      _showDialogueBubble('来到小饭碗啦~ 闻闻还有没有酥脆小鱼干！🥣😋');
-      return;
-    }
-
-    // 4. 到达毛线球边
-    if ((arrivedX - _yarnX).abs() < 36.0) {
-      _playAction('PLAY_YARN');
-      SoundService.playPop();
-      _showDialogueBubble('追到粉红毛线球啦！两只爪爪抱住滚来滚去~ 🧶🐾');
-      return;
-    }
-
-    // 5. 到达右侧小夜灯 / 剑麻板边
-    if (arrivedX > nestX + 35.0) {
-      _onScratcherTap();
-      _playAction('WASH_FACE');
-      return;
-    }
-
-    // 默认到达后伸个懒腰
-    _playAction('STRETCH_YAWN');
   }
 
   /// 优雅的半屏 BottomSheet 唤起，顶部半屏留空小猫互动演出
@@ -860,8 +891,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 趣味交互：开启神奇指尖激光笔
   void _startLaserChase() {
     _idleSeconds = 0;
-    _isRoaming = false;
-    _targetWalkX = null;
+    _stopRoaming();
     _isChasingYarn = false;
     _isYarnFlying = false;
     SoundService.playMeow();
@@ -1147,8 +1177,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 家具交互：轻触云朵暖暖窝 (波可舒适归窝，享受幸福踩奶特技与呼噜 ASMR)
   void _onBedTap(double nestX, double nestY) {
     _idleSeconds = 0;
-    _isRoaming = false;
-    _targetWalkX = null;
+    _stopRoaming();
     _isChasingYarn = false;
     _isYarnFlying = false;
 
@@ -1243,9 +1272,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 重置萌宠回到专属暖绒圆垫
   void _resetToMat(Size screenSize) {
     _idleSeconds = 0;
-    _isRoaming = false;
-    _targetWalkX = null;
-    _roamTimer?.cancel();
+    _stopRoaming();
     SoundService.playMeow();
     final floorTop = (screenSize.height * 0.22).clamp(160.0, 220.0);
     final nestX = screenSize.width / 2;
@@ -1743,8 +1770,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   onPanStart: (details) {
                     setState(() {
                       _isDragging = true;
-                      _isRoaming = false;
-                      _targetWalkX = null;
+                      _stopRoaming();
                       _isChasingYarn = false;
                       _isYarnFlying = false;
                       _state = 'DRAGGING';
