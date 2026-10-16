@@ -2828,8 +2828,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 智能对齐气泡：永不被猫挡住，附带指向小箭头，支持昼夜温润自适应
   Widget _buildSmartDialogueBubble(Size screenSize, bool isNight) {
     final bubbleWidth = math.min(236.0, screenSize.width - 96.0);
-    // 水平居中对齐猫咪，并在两端家具间留足呼吸空隙
-    final bubbleLeft = (_petX - bubbleWidth / 2).clamp(46.0, screenSize.width - bubbleWidth - 46.0);
+    // 水平居中对齐猫咪；当左侧食碗展开微气泡时，气泡自动靠右避让就餐角
+    double bubbleLeft = (_petX - bubbleWidth / 2).clamp(46.0, screenSize.width - bubbleWidth - 46.0);
+    if (_showFoodTray) {
+      bubbleLeft = math.max(168.0, bubbleLeft).clamp(16.0, screenSize.width - bubbleWidth - 16.0);
+    }
 
     // 垂直方向：如果猫咪在屏幕上方，气泡放猫咪下方；默认放猫咪头顶上方！
     final showAbove = _petY > 210.0;
@@ -4364,13 +4367,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 暖绒云朵舒睡圆垫 (轻奢极简设计，沉稳坐落于木地板上，猫咪安卧其上，无任何多余遮盖与标牌)
+  /// 暖绒云朵舒睡圆垫 (柔和通透羊毛地垫，自然融入原木地板，告别生硬厚重黄色块)
   Widget _buildCatRug(double nestX, double nestY, bool isNight) {
-    const rugWidth = 180.0;
-    const rugHeight = 84.0;
+    const rugWidth = 148.0;
+    const rugHeight = 68.0;
     return Positioned(
       left: nestX - rugWidth / 2,
-      top: nestY + 5.0,
+      top: nestY + 12.0,
       width: rugWidth,
       height: rugHeight,
       child: GestureDetector(
@@ -4384,21 +4387,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             Positioned(
               bottom: 2,
               child: Container(
-                width: rugWidth * 0.94,
-                height: rugHeight * 0.48,
+                width: rugWidth * 0.92,
+                height: rugHeight * 0.44,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(rugWidth * 0.94 / 2, rugHeight * 0.48 / 2)),
+                  borderRadius: BorderRadius.all(Radius.elliptical(rugWidth * 0.92 / 2, rugHeight * 0.44 / 2)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isNight ? 0.32 : 0.09),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
+                      color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
               ),
             ),
-            // 2. 暖绒羊羔呢圆垫主体 (Soft Pastel Rug Body)
+            // 2. 暖绒羊羔呢圆垫主体 (柔和通透微渐变，透出地板木纹)
             Container(
               width: rugWidth,
               height: rugHeight,
@@ -4408,24 +4411,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isNight
-                      ? const [Color(0xFF2B2252), Color(0xFF1D1739)]
-                      : const [Color(0xFFFFFDF8), Color(0xFFFEF3C7)],
+                      ? [const Color(0xFF2B2252).withOpacity(0.55), const Color(0xFF1D1739).withOpacity(0.60)]
+                      : [const Color(0xFFFFFDF5).withOpacity(0.68), const Color(0xFFFEF3C7).withOpacity(0.45)],
                 ),
                 border: Border.all(
                   color: isNight
-                      ? const Color(0xFF6366F1).withOpacity(0.35)
-                      : const Color(0xFFFDE68A),
-                  width: 1.6,
+                      ? const Color(0xFF6366F1).withOpacity(0.28)
+                      : const Color(0xFFFDE68A).withOpacity(0.60),
+                  width: 1.2,
                 ),
               ),
               child: Center(
                 // 垫内柔和暗纹肉垫印记 (极简美观，低调质感)
                 child: Opacity(
-                  opacity: isNight ? 0.20 : 0.25,
+                  opacity: isNight ? 0.14 : 0.16,
                   child: Text(
                     '🐾',
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 16,
                       color: isNight ? const Color(0xFFC7D2FE) : const Color(0xFFD97706),
                     ),
                   ),
@@ -4562,7 +4565,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _showFoodTray = !_showFoodTray;
         });
         if (_showFoodTray) {
-          _showDialogueBubble('美味零食托盘已展开！按住小鱼干或三文鱼拖向波可嘴边吧~ 🥣✨');
+          _showDialogueBubble('喵~ 好吃的！按住小鱼干拖给波可吧~ 🥣✨', duration: const Duration(seconds: 3));
         }
       },
       onDoubleTap: () => _popFishFromBowl(nestX, nestY),
@@ -4759,110 +4762,125 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 美味零食拖拽托盘 (Drag-to-Feed Tray - 悬浮托盘，长按小鱼干/三文鱼/羊奶拖拽至嘴边投喂)
+  /// 美味零食扇形微气泡 (Arc Micro-Bubble Menu - 零大板遮挡，轻奢气泡扇形散开于食碗上方，轻触即食，亦可拖拽)
   Widget _buildFoodTray(double nestX, double nestY, bool isNight) {
     final foodItems = [
-      {'id': 'dried_fish', 'name': '香酥小鱼干', 'icon': '🐟', 'hunger': 20, 'intimacy': 5},
-      {'id': 'salmon_cubes', 'name': '纯肉三文鱼', 'icon': '🍣', 'hunger': 35, 'intimacy': 8},
-      {'id': 'goat_milk', 'name': '舒化羊奶', 'icon': '🥛', 'hunger': 15, 'intimacy': 10},
+      {'id': 'dried_fish', 'name': '香酥小鱼干', 'icon': '🐟', 'hunger': 20, 'intimacy': 5, 'dx': 6.0, 'dy': 18.0},
+      {'id': 'salmon_cubes', 'name': '纯肉三文鱼', 'icon': '🍣', 'hunger': 35, 'intimacy': 8, 'dx': 58.0, 'dy': 4.0},
+      {'id': 'goat_milk', 'name': '舒化羊奶', 'icon': '🥛', 'hunger': 15, 'intimacy': 10, 'dx': 110.0, 'dy': 24.0},
     ];
 
     return Positioned(
       key: const ValueKey('drag_to_feed_tray'),
-      left: 16,
-      top: nestY + 45,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: BoxDecoration(
-          color: isNight ? const Color(0xFF1E1838).withOpacity(0.95) : Colors.white.withOpacity(0.97),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: const Color(0xFFFB7185).withOpacity(0.6),
-            width: 1.4,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFB7185).withOpacity(0.20),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🥣 拖拽喂食', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE11D48))),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => setState(() => _showFoodTray = false),
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
+      left: 12,
+      top: nestY + 42,
+      width: 172,
+      height: 82,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          for (final food in foodItems) ...[
+            Positioned(
+              left: food['dx'] as double,
+              top: food['dy'] as double,
+              child: GestureDetector(
+                onTap: () {
+                  final hunger = food['hunger'] as int;
+                  final intimacy = food['intimacy'] as int;
+                  final icon = food['icon'] as String;
+                  _finishDragToFeed(hunger, intimacy);
+                  _spawnParticles(Offset(_petX, _petY - 20), emoji: icon, count: 3);
+                },
+                onPanStart: (details) {
+                  setState(() {
+                    _draggingFoodId = food['id'] as String;
+                    _draggingFoodName = food['name'] as String;
+                    _draggingFoodIcon = food['icon'] as String;
+                    _draggingFoodPos = details.globalPosition;
+                    _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
+                  });
+                  if (widget.petModel.enableHaptics) HapticFeedback.selectionClick();
+                },
+                onPanUpdate: (details) {
+                  setState(() {
+                    _draggingFoodPos = details.globalPosition;
+                    _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
+                  });
+                },
+                onPanEnd: (details) {
+                  _finishDragToFeed(food['hunger'] as int, food['intimacy'] as int);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isNight ? const Color(0xFF2E2652) : Colors.white,
+                        border: Border.all(
+                          color: const Color(0xFFFDA4AF),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFFB7185).withOpacity(0.32),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(food['icon'] as String, style: const TextStyle(fontSize: 20)),
+                      ),
                     ),
-                    child: Icon(Icons.close, size: 12, color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
-                  ),
+                    const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: isNight ? const Color(0xFF1E1838).withOpacity(0.92) : Colors.white.withOpacity(0.95),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFDA4AF).withOpacity(0.55), width: 0.8),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4),
+                        ],
+                      ),
+                      child: Text(
+                        food['name'] as String,
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? Colors.white : const Color(0xFF9F1239),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: foodItems.map((food) {
-                final id = food['id'] as String;
-                final name = food['name'] as String;
-                final icon = food['icon'] as String;
-                final hunger = food['hunger'] as int;
-                final intimacy = food['intimacy'] as int;
-
-                return GestureDetector(
-                  onPanStart: (details) {
-                    setState(() {
-                      _draggingFoodId = id;
-                      _draggingFoodName = name;
-                      _draggingFoodIcon = icon;
-                      _draggingFoodPos = details.globalPosition;
-                      _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
-                    });
-                    if (widget.petModel.enableHaptics) HapticFeedback.selectionClick();
-                  },
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _draggingFoodPos = details.globalPosition;
-                      _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
-                    });
-                  },
-                  onPanEnd: (details) {
-                    _finishDragToFeed(hunger, intimacy);
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF2E2652) : const Color(0xFFFFF1F2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFFDA4AF), width: 1.0),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(icon, style: const TextStyle(fontSize: 20)),
-                        const SizedBox(height: 1),
-                        Text(name, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isNight ? Colors.white : const Color(0xFF9F1239))),
-                        Text('+$intimacy💖', style: const TextStyle(fontSize: 8, color: Color(0xFFE11D48))),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+              ),
             ),
           ],
-        ),
+          // 收起微气泡按钮 (精致半透明小叉叉)
+          Positioned(
+            left: 148,
+            top: 52,
+            child: GestureDetector(
+              onTap: () => setState(() => _showFoodTray = false),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF332D73) : Colors.white,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFCBD5E1), width: 1),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 4),
+                  ],
+                ),
+                child: Icon(Icons.close, size: 12, color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
