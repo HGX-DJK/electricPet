@@ -83,6 +83,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   double _yarnVy = 0.0;
   bool _isYarnDragging = false;
   bool _isYarnFlying = false;
+  bool _isChasingYarn = false;
   bool _yarnInitialized = false;
 
   bool _fishPopping = false;
@@ -177,28 +178,100 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         needRepaint = true;
       }
 
-      // 毛线球物理运动更新
-      if (_isYarnFlying) {
-        _yarnX += _yarnVx;
-        _yarnY += _yarnVy;
-        _yarnVx *= 0.95;
-        _yarnVy = (_yarnVy + 0.35) * 0.96;
+      // 毛线球物理运动与猫咪追逐飞扑驱动
+      if (_isYarnFlying || _isChasingYarn) {
+        if (_isYarnFlying) {
+          _yarnX += _yarnVx;
+          _yarnY += _yarnVy;
+          _yarnVx *= 0.95;
+          _yarnVy = (_yarnVy + 0.42) * 0.96;
 
-        if (_yarnX < 24) { _yarnX = 24; _yarnVx = -_yarnVx * 0.7; }
-        if (_yarnX > 360) { _yarnX = 360; _yarnVx = -_yarnVx * 0.7; }
-        if (_yarnY > 580) { _yarnY = 580; _yarnVy = -_yarnVy * 0.6; }
-        if (_yarnY < 120) { _yarnY = 120; _yarnVy = -_yarnVy * 0.7; }
+          final minX = 24.0;
+          final maxX = _lastScreenSize.width > 100 ? (_lastScreenSize.width - 24.0) : 340.0;
+          final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
+          final minY = floorTop + 20.0;
+          final maxY = _lastScreenSize.height > 200 ? (_lastScreenSize.height - 110.0) : 600.0;
 
-        if (_yarnVx.abs() < 0.25 && _yarnVy.abs() < 0.25) {
-          _isYarnFlying = false;
-          _yarnVx = 0.0;
-          _yarnVy = 0.0;
+          // 左右墙壁弹性反弹
+          if (_yarnX <= minX) {
+            _yarnX = minX;
+            _yarnVx = -_yarnVx * 0.75;
+          } else if (_yarnX >= maxX) {
+            _yarnX = maxX;
+            _yarnVx = -_yarnVx * 0.75;
+          }
 
-          // 若落在猫咪脚边，猫咪欢快扑抱毛线球
-          final distToCat = (Offset(_yarnX, _yarnY) - Offset(_petX, _petY)).distance;
-          if (distToCat < 100 && _state == 'IDLE') {
+          // 地板与踢脚线弹性反弹
+          if (_yarnY >= maxY) {
+            _yarnY = maxY;
+            _yarnVy = -_yarnVy * 0.65;
+          } else if (_yarnY <= minY) {
+            _yarnY = minY;
+            _yarnVy = -_yarnVy * 0.70;
+          }
+
+          if (_yarnVx.abs() < 0.25 && _yarnVy.abs() < 0.25) {
+            _isYarnFlying = false;
+            _yarnVx = 0.0;
+            _yarnVy = 0.0;
+          }
+        }
+
+        // 猫咪主动飞奔追球、翻转朝向与扑球逻辑
+        if (!_isDragging && !_isLaserMode && !_isWardrobeMode && !_isActionMode && !widget.petModel.isSleeping) {
+          final catPos = Offset(_petX, _petY);
+          final ballPos = Offset(_yarnX, _yarnY);
+          final diff = ballPos - catPos;
+          final dist = diff.distance;
+
+          // 实时翻转朝向对准毛线球
+          if (diff.dx.abs() > 6) {
+            _facingLeft = diff.dx < 0;
+          }
+
+          if (dist > 45.0) {
+            // 未抓住时：猫咪迈动小碎步疾速奔跑追赶！
+            if (_state != 'WALK' && _state != 'PLAY_YARN') {
+              _state = 'WALK';
+            }
+            final speed = math.min(dist * 0.18, 9.5);
+            final norm = diff / dist;
+            _petX += norm.dx * speed;
+            _petY += norm.dy * speed;
+            final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
+            _petX = _petX.clamp(35.0, _lastScreenSize.width - 35.0);
+            _petY = _petY.clamp(floorTop + 25.0, _lastScreenSize.height - 115.0);
+          } else {
+            // 飞扑捕获成功瞬间！(Pounce & Catch)
+            _isYarnFlying = false;
+            _isChasingYarn = false;
+            _yarnVx = 0.0;
+            _yarnVy = 0.0;
+
+            _yarnX = _petX + (_facingLeft ? -25.0 : 25.0);
+            _yarnY = _petY + 48.0;
+
             _playAction('PLAY_YARN');
-            _showDialogueBubble('抓住毛线球啦！抱紧滚来滚去~ 🧶🐾');
+            SoundService.playMeow();
+            if (widget.petModel.enableHaptics) {
+              HapticFeedback.heavyImpact();
+            }
+
+            _squishController.forward(from: 0.0);
+            _spawnParticles(ballPos, emoji: '🧶', count: 4);
+            _spawnParticles(ballPos, emoji: '✨', count: 3);
+            _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐾', count: 3);
+            _spawnTextParticle(Offset(_petX - 35, _petY - 55), '扑到毛线球啦！🐾🧶', const Color(0xFFF43F5E));
+            _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+8 经验 ✨', const Color(0xFF6366F1));
+            widget.petModel.addExp(8.0);
+            _showDialogueBubble('哇！猛虎飞扑抓住毛线球啦！抱紧紧滚来滚去~ 🧶🐾💕', duration: const Duration(seconds: 4));
+
+            _actionTimer?.cancel();
+            _actionTimer = Timer(const Duration(milliseconds: 3500), () {
+              if (mounted && _state == 'PLAY_YARN') {
+                setState(() => _state = 'SIT_WAG_TAIL');
+              }
+            });
           }
         }
         needRepaint = true;
@@ -432,6 +505,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     if (_isRoaming) {
       _isRoaming = false;
       _targetWalkX = null;
+    }
+    if (actionId != 'PLAY_YARN') {
+      _isChasingYarn = false;
     }
     if (actionId == 'DOZE_OFF' || actionId == 'KNEADING_BISCUITS') {
       SoundService.startPurr();
@@ -774,6 +850,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _idleSeconds = 0;
     _isRoaming = false;
     _targetWalkX = null;
+    _isChasingYarn = false;
+    _isYarnFlying = false;
     SoundService.playMeow();
     final screenSize = MediaQuery.of(context).size;
     setState(() {
@@ -1059,6 +1137,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _idleSeconds = 0;
     _isRoaming = false;
     _targetWalkX = null;
+    _isChasingYarn = false;
+    _isYarnFlying = false;
 
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
@@ -1164,6 +1244,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       _yarnX = screenSize.width * 0.5;
       _yarnY = nestY + 155.0;
       _isYarnFlying = false;
+      _isChasingYarn = false;
       _yarnVx = 0.0;
       _yarnVy = 0.0;
       _state = 'IDLE';
@@ -1652,6 +1733,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       _isDragging = true;
                       _isRoaming = false;
                       _targetWalkX = null;
+                      _isChasingYarn = false;
+                      _isYarnFlying = false;
                       _state = 'DRAGGING';
                       _strokeDistance = 0.0;
                       _dragDirectionReversals = 0;
@@ -1799,12 +1882,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 ),
               ),
 
-              // 维度二：开阔活动地板：实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
-              Positioned(
-                left: _yarnX - 18,
-                top: _yarnY - 18,
-                child: _buildYarnBall(screenSize, isNight),
-              ),
+              // 维度二：开阔活动地板：实体物理毛线球 (在猫咪扑玩期间隐藏外部球，玩耍结束后恢复在猫爪旁)
+              if (_state != 'PLAY_YARN')
+                Positioned(
+                  left: _yarnX - 18,
+                  top: _yarnY - 18,
+                  child: _buildYarnBall(screenSize, isNight),
+                ),
 
               // 维度五：亲密连击 Combo 胶囊徽章
               if (_petCombo >= 2)
@@ -3840,13 +3924,31 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
+  /// 实体物理毛线球 (支持手指轻点弹跳、自由拖拽甩动与猫咪疾速追球飞扑)
   Widget _buildYarnBall(Size screenSize, bool isNight) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        SoundService.playPop();
+        if (widget.petModel.enableHaptics) {
+          HapticFeedback.mediumImpact();
+        }
+        final rnd = math.Random();
+        final vx = (rnd.nextDouble() * 10.0 + 4.0) * (rnd.nextBool() ? 1.0 : -1.0);
+        final vy = -(rnd.nextDouble() * 9.0 + 7.0);
+        setState(() {
+          _isYarnFlying = true;
+          _isChasingYarn = true;
+          _yarnVx = vx;
+          _yarnVy = vy;
+        });
+        _spawnParticles(Offset(_yarnX, _yarnY), emoji: '🧶', count: 3);
+      },
       onPanStart: (details) {
         setState(() {
           _isYarnDragging = true;
           _isYarnFlying = false;
+          _isChasingYarn = false;
           _yarnVx = 0.0;
           _yarnVy = 0.0;
         });
@@ -3860,11 +3962,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         });
       },
       onPanEnd: (details) {
-        final vx = (details.velocity.pixelsPerSecond.dx / 60.0).clamp(-18.0, 18.0);
-        final vy = (details.velocity.pixelsPerSecond.dy / 60.0).clamp(-22.0, 18.0);
+        final rawVx = details.velocity.pixelsPerSecond.dx / 60.0;
+        final rawVy = details.velocity.pixelsPerSecond.dy / 60.0;
+        final vx = rawVx.clamp(-18.0, 18.0);
+        final vy = rawVy.clamp(-22.0, 18.0);
+        final hasVelocity = vx.abs() > 0.8 || vy.abs() > 0.8;
+
         setState(() {
           _isYarnDragging = false;
-          _isYarnFlying = true;
+          _isYarnFlying = hasVelocity;
+          _isChasingYarn = true;
           _yarnVx = vx;
           _yarnVy = vy;
         });
