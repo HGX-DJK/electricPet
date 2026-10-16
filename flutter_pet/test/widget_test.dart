@@ -96,8 +96,8 @@ void main() {
     await tester.pumpWidget(const DesktopElectricPetApp());
     await tester.pump(const Duration(milliseconds: 200));
 
-    // 验证双层云朵花瓣猫蒲团标牌
-    expect(find.textContaining("Poko's Cozy Haven"), findsOneWidget);
+    // 验证暖绒舒睡圆垫
+    expect(find.byKey(const ValueKey('cozy_cat_rug')), findsOneWidget);
 
     // 验证室内软装家具均存在
     expect(find.text('猫草'), findsOneWidget);
@@ -147,8 +147,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 600));
 
-    // 交互 7：轻触云朵暖暖窝触发“幸福踩奶做小面包”
-    await tester.tap(find.textContaining("Poko's Cozy Haven"));
+    // 交互 7：轻触暖绒舒睡圆垫触发“幸福踩奶做小面包”
+    await tester.tap(find.byKey(const ValueKey('cozy_cat_rug')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('踩奶'), findsWidgets);
@@ -184,8 +184,7 @@ void main() {
     // 待机后小猫自主产生了萌趣生活行为
     expect(find.byType(CustomPaint), findsWidgets);
 
-    // 验证波可豪华暖暖大猫窝与小窝标识
-    expect(find.textContaining('暖暖窝'), findsOneWidget);
-    expect(find.textContaining("Poko's Cozy Haven"), findsOneWidget);
+    // 验证波可专属暖绒舒睡圆垫
+    expect(find.byKey(const ValueKey('cozy_cat_rug')), findsOneWidget);
   });
 }

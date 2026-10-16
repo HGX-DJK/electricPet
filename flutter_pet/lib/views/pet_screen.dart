@@ -634,9 +634,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 漫步到达巡视目的地后的智能有机交互触发
   void _onArrivedAtDestination(double arrivedX) {
     _roamTimer?.cancel();
-    final floorTop = (_lastScreenSize.height * 0.28).clamp(200.0, 260.0);
+    final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
     final nestX = _lastScreenSize.width / 2;
-    final nestY = (floorTop + 140.0).clamp(340.0, _lastScreenSize.height - 230.0);
+    final nestY = floorTop + 105.0;
 
     // 1. 到达大猫窝中心
     if ((arrivedX - nestX).abs() < 24.0) {
@@ -923,9 +923,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     });
 
     // 精准定位在右上角猫抓柱真实几何中心
-    final floorTop = (_lastScreenSize.height * 0.28).clamp(200.0, 260.0);
-    final postCenterX = _lastScreenSize.width - 20.0 - 24.0;
-    final postCenterY = floorTop + 14.0 + 26.0;
+    final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
+    final postCenterX = _lastScreenSize.width - 24.0 - 24.0;
+    final postCenterY = floorTop + 16.0 + 26.0;
 
     _spawnParticles(Offset(postCenterX, postCenterY - 10), emoji: '🪵', count: 3);
     _spawnParticles(Offset(postCenterX - 10, postCenterY), emoji: '✨', count: 3);
@@ -1064,10 +1064,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       HapticFeedback.mediumImpact();
     }
 
-    // 萌宠回归暖暖窝中心位置
+    // 萌宠回归暖绒圆垫中心位置
     setState(() {
       _petX = nestX;
-      _petY = nestY - 6.0;
+      _petY = nestY;
       _facingLeft = false;
       _state = 'KNEADING_BISCUITS';
     });
@@ -1103,8 +1103,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     });
 
     final bedQuotes = [
-      '呼噜噜~ 波可正在软软云朵窝里认真踩奶做小面包呢！(ฅ˘ω˘ฅ)🥐💕',
-      '大猫窝软乎乎暖洋洋的，肉垫陷在里面踩得好过瘾~ ☁️🐾',
+      '呼噜噜~ 波可正在软软云朵垫上认真踩奶做小面包呢！(ฅ˘ω˘ฅ)🥐💕',
+      '暖绒圆垫软乎乎暖洋洋的，肉垫陷在里面踩得好过瘾~ ☁️🐾',
       '小脚丫左一下、右一下~ 踩出全世界最甜的奶香小面包！🥐✨',
     ];
     final quote = bedQuotes[math.Random().nextInt(bedQuotes.length)];
@@ -1148,27 +1148,27 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _showDialogueBubble('暖黄小串灯一闪一闪的，小窝变得好温馨呀~ ✨💡', duration: const Duration(seconds: 4));
   }
 
-  /// 重置萌宠回到专属暖暖大猫窝
+  /// 重置萌宠回到专属暖绒圆垫
   void _resetToMat(Size screenSize) {
     _idleSeconds = 0;
     _isRoaming = false;
     _targetWalkX = null;
     _roamTimer?.cancel();
     SoundService.playMeow();
-    final floorTop = (screenSize.height * 0.28).clamp(200.0, 260.0);
+    final floorTop = (screenSize.height * 0.22).clamp(160.0, 220.0);
     final nestX = screenSize.width / 2;
-    final nestY = (floorTop + 140.0).clamp(340.0, screenSize.height - 230.0);
+    final nestY = floorTop + 105.0;
     setState(() {
       _petX = nestX;
-      _petY = nestY - 6.0;
-      _yarnX = (nestX - 60).clamp(35.0, screenSize.width - 35.0);
-      _yarnY = nestY + 98;
+      _petY = nestY;
+      _yarnX = screenSize.width * 0.5;
+      _yarnY = nestY + 155.0;
       _isYarnFlying = false;
       _yarnVx = 0.0;
       _yarnVy = 0.0;
       _state = 'IDLE';
     });
-    _showDialogueBubble('回到蓬松温暖的专属大猫窝啦！舒服趴好~ 🐾☁️');
+    _showDialogueBubble('回到蓬松温暖的专属暖绒垫啦！舒服趴好~ 🐾☁️');
     if (widget.petModel.enableHaptics) {
       HapticFeedback.selectionClick();
     }
@@ -1308,6 +1308,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     // 6. 摸肉垫 / 肚皮 (High Five / Tummy Poke)
     if (localPos.dy > 120) {
+      final floorTop = (screenSize.height * 0.22).clamp(160.0, 220.0);
+      final nestX = screenSize.width / 2;
+      final nestY = floorTop + 105.0;
+      if ((_petX - nestX).abs() < 25 && (_petY - nestY).abs() < 25) {
+        _onBedTap(nestX, nestY);
+        return;
+      }
       SoundService.playPop();
       if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
       _spawnParticles(Offset(_petX, _petY - 10), emoji: '🐾', count: 4);
@@ -1354,7 +1361,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     SoundService.playPop();
     setState(() {
       _fishPopping = true;
-      _poppingFishPos = Offset(36.0, nestY + 46.0);
+      _poppingFishPos = Offset(42.0, nestY + 115.0);
     });
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
@@ -1384,17 +1391,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _lastScreenSize = screenSize;
 
     // 房间空间黄金分割：
-    // 踢脚线与地板起始位置：上方约 28%，给宽敞木地板留足 72% 空间
-    final floorTop = (screenSize.height * 0.28).clamp(200.0, 260.0);
-    // 房间核心重心：3D 豪华萌猫云朵猫窝位于中景黄金位置
+    // 踢脚线与地板起始位置：在上方约 22%，给宽敞木地板留足 78% 空间
+    final floorTop = (screenSize.height * 0.22).clamp(160.0, 220.0);
+    // 房间核心重心：萌宠专属暖绒圆垫位于中景焦点黄金位置
     final nestX = screenSize.width / 2;
-    final nestY = (floorTop + 140.0).clamp(340.0, screenSize.height - 230.0);
-    final nestWidth = (screenSize.width * 0.72).clamp(246.0, 276.0);
+    final nestY = floorTop + 105.0;
 
-    // 首次进入时，萌宠舒适安卧于 3D 大猫窝凹陷内胆中心
+    // 首次进入时，萌宠舒适安卧于暖绒圆垫中心
     if (!_initializedPos && screenSize.width > 0) {
       _petX = nestX;
-      _petY = nestY - 6.0;
+      _petY = nestY;
       _initializedPos = true;
     }
 
@@ -1408,10 +1414,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     final isNight = circadian['isNight'] as bool;
     final ambientIcon = circadian['icon'] as String;
 
-    // 维度二：毛线球散落在猫窝前侧开阔地板上
+    // 维度二：毛线球位于前侧宽敞开阔地板上
     if (!_yarnInitialized && screenSize.width > 0) {
-      _yarnX = (nestX - 60).clamp(35.0, screenSize.width - 35.0);
-      _yarnY = nestY + 98;
+      _yarnX = screenSize.width * 0.5;
+      _yarnY = nestY + 155.0;
       _yarnInitialized = true;
     }
 
@@ -1562,26 +1568,26 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
               // 软装家具 1：左上角 · 萌宠猫草盆栽 (靠左后侧，静立于木地板墙角)
               Positioned(
-                left: 20.0,
-                top: floorTop + 14.0,
+                left: 24.0,
+                top: floorTop + 16.0,
                 child: _buildCatGrassPlanter(isNight),
               ),
 
               // 软装家具 2：右上角 · 原木剑麻猫抓柱 (靠右后侧，立于木地板墙角，与猫草呼应)
               Positioned(
-                right: 20.0,
-                top: floorTop + 14.0,
+                right: 24.0,
+                top: floorTop + 16.0,
                 child: _buildCatScratchingPost(isNight),
               ),
 
-              // 软装家具 3：左下角 · 就餐角精致小猫碗 (置于下部开阔地板，与猫咪拉开舒适距离)
+              // 软装家具 3：左侧就餐角 · 精致小猫碗 (置于下部开阔地板，错落排布)
               Positioned(
-                left: 20.0,
-                top: nestY + 46.0,
+                left: 24.0,
+                top: nestY + 115.0,
                 child: _buildCatFoodBowl(nestX, nestY, isNight),
               ),
 
-              // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫窝中猫咪嘴边)
+              // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫咪嘴边)
               if (_fishPopping && _poppingFishPos != null)
                 Positioned(
                   left: _poppingFishPos!.dx,
@@ -1591,11 +1597,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-              // 软装家具 4：右下角 · 温馨小夜灯呼吸光晕
+              // 软装家具 4：右侧照明角 · 温馨小夜灯呼吸光晕
               if (_isNightLampOn)
                 Positioned(
-                  right: 4.0,
-                  top: nestY + 30.0,
+                  right: 8.0,
+                  top: nestY + 95.0,
                   child: IgnorePointer(
                     child: Container(
                       width: 88,
@@ -1614,15 +1620,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-              // 软装家具 4：右下角 · 温馨小夜灯 (置于右下地板，轻触“啪嗒”开关台灯)
+              // 软装家具 4：右侧照明角 · 温馨小夜灯 (置于右侧地板，轻触“啪嗒”开关台灯)
               Positioned(
-                right: 20.0,
-                top: nestY + 46.0,
+                right: 24.0,
+                top: nestY + 110.0,
                 child: _buildKittenNightLamp(isNight),
               ),
 
-              // 核心大升级：3D 豪华萌猫云朵大猫窝 - 后靠背与凹陷内胆 (渲染在猫咪身后)
-              _buildCatNestBack(nestX, nestY, nestWidth, isNight),
+              // 萌宠专属舒睡暖绒圆垫 (极简轻奢，铺展于猫咪身后地板上，猫咪坐于其上)
+              _buildCatRug(nestX, nestY, isNight),
 
               // 顶部双灵动岛浮空栏 (左侧萌宠身份 + 右侧饱腹心情小窝，告别拥挤，自然呼吸)
               Positioned(
@@ -1780,10 +1786,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 ),
               ),
 
-              // 核心大升级：3D 豪华萌猫云朵大猫窝 - 前沿滚边包边与搭垂小盖毯 (渲染在猫咪前侧下端，形成真实坐入环抱感)
-              _buildCatNestFront(nestX, nestY, nestWidth, isNight),
+              // 暖绒圆垫前侧轻触响应区 (零视觉遮挡，纯净透明交互，支持轻触圆垫触发幸福踩奶)
+              Positioned(
+                key: const ValueKey('cozy_cat_rug'),
+                left: nestX - 90.0,
+                top: nestY + 30.0,
+                width: 180.0,
+                height: 60.0,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () => _onBedTap(nestX, nestY),
+                ),
+              ),
 
-              // 维度二：猫窝前侧开阔地板：实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
+              // 维度二：开阔活动地板：实体物理毛线球 (支持手指拖拽、用力弹射抛物线与猫咪追球)
               Positioned(
                 left: _yarnX - 18,
                 top: _yarnY - 18,
@@ -3520,401 +3536,71 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 3D 豪华萌猫云朵大猫窝 - 后层结构 (底座地毯 + 景深阴影 + 后靠背窝壁 + 萌猫耳朵造型 + 凹陷云朵软垫)
-  /// 渲染在猫咪主体之后 (Behind Cat)，为小猫提供沉浸式坐入包裹感
-  Widget _buildCatNestBack(double nestX, double nestY, double nestWidth, bool isNight) {
-    final nestHeight = 126.0;
+  /// 暖绒云朵舒睡圆垫 (轻奢极简设计，沉稳坐落于木地板上，猫咪安卧其上，无任何多余遮盖与标牌)
+  Widget _buildCatRug(double nestX, double nestY, bool isNight) {
+    const rugWidth = 180.0;
+    const rugHeight = 84.0;
     return Positioned(
-      left: nestX - nestWidth / 2,
-      top: nestY - 38.0,
-      width: nestWidth,
-      height: nestHeight,
-      child: IgnorePointer(
+      left: nestX - rugWidth / 2,
+      top: nestY + 5.0,
+      width: rugWidth,
+      height: rugHeight,
+      child: GestureDetector(
+        onTap: () => _onBedTap(nestX, nestY),
+        behavior: HitTestBehavior.opaque,
         child: Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
           children: [
-            // 1. 地面超软大范围触地阴影 (双层模糊，将猫窝扎实锚定在地板上)
+            // 1. 地板柔和漫反射阴影 (Diffused Floor Shadow)
             Positioned(
-              bottom: -6,
+              bottom: 2,
               child: Container(
-                width: nestWidth * 0.95,
-                height: 44,
+                width: rugWidth * 0.94,
+                height: rugHeight * 0.48,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(nestWidth * 0.95 / 2, 22)),
+                  borderRadius: BorderRadius.all(Radius.elliptical(rugWidth * 0.94 / 2, rugHeight * 0.48 / 2)),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(isNight ? 0.48 : 0.16),
-                      blurRadius: 24,
-                      spreadRadius: 4,
-                      offset: const Offset(0, 10),
-                    ),
-                    BoxShadow(
-                      color: (isNight ? const Color(0xFF4338CA) : const Color(0xFFF59E0B)).withOpacity(isNight ? 0.25 : 0.12),
-                      blurRadius: 36,
+                      color: Colors.black.withOpacity(isNight ? 0.32 : 0.09),
+                      blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
                   ],
                 ),
               ),
             ),
-
-            // 2. 编织羊羔毛波希米亚圆垫外底座 (增添治愈质感与毛绒边)
-            Positioned(
-              top: 24,
-              child: Container(
-                width: nestWidth,
-                height: 98,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(nestWidth / 2, 49)),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: isNight
-                        ? const [Color(0xFF281E58), Color(0xFF1B133E)]
-                        : const [Color(0xFFFFF7ED), Color(0xFFFED7AA)],
-                  ),
-                  border: Border.all(
-                    color: isNight
-                        ? const Color(0xFF6366F1).withOpacity(0.5)
-                        : const Color(0xFFFDBA74).withOpacity(0.65),
-                    width: 2.5,
-                  ),
-                ),
-              ),
-            ),
-
-            // 3. 猫窝后靠背萌猫耳朵造型 (立于猫窝后壁上方，萌趣立体，白天暖杏粉，夜间神秘紫)
-            // 左猫耳
-            Positioned(
-              top: 4,
-              left: nestWidth * 0.22,
-              child: Transform.rotate(
-                angle: -0.22,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: isNight
-                          ? const [Color(0xFF4338CA), Color(0xFF312E81)]
-                          : const [Color(0xFFFFEDD5), Color(0xFFFDBA74)],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(8),
-                      bottomLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.12),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF6B21A8).withOpacity(0.6) : const Color(0xFFFECDD3),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(14),
-                          bottomRight: Radius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // 右猫耳
-            Positioned(
-              top: 4,
-              right: nestWidth * 0.22,
-              child: Transform.rotate(
-                angle: 0.22,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topRight,
-                      end: Alignment.bottomLeft,
-                      colors: isNight
-                          ? const [Color(0xFF4338CA), Color(0xFF312E81)]
-                          : const [Color(0xFFFFEDD5), Color(0xFFFDBA74)],
-                    ),
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(24),
-                      topLeft: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                      bottomLeft: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.12),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF6B21A8).withOpacity(0.6) : const Color(0xFFFECDD3),
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(14),
-                          bottomLeft: Radius.circular(10),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // 4. 猫窝后内壁 (深色阴影渐变，产生真实的窝内凹陷景深腔体)
-            Positioned(
-              top: 26,
-              child: Container(
-                width: nestWidth * 0.90,
-                height: 82,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(nestWidth * 0.90 / 2, 41)),
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: isNight
-                        ? const [Color(0xFF191238), Color(0xFF130E2C)]
-                        : const [Color(0xFFFDE68A), Color(0xD9FBBF24)],
-                  ),
-                ),
-              ),
-            ),
-
-            // 5. 沉陷式法兰绒云朵软芯垫 (猫咪坐于其上，边缘蓬松、中心下陷)
-            Positioned(
-              top: 40,
-              child: Container(
-                width: nestWidth * 0.82,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(nestWidth * 0.82 / 2, 30)),
-                  gradient: RadialGradient(
-                    center: Alignment.center,
-                    radius: 0.85,
-                    colors: isNight
-                        ? const [Color(0xFF261D54), Color(0xFF161033)]
-                        : const [Color(0xFFFFFBEB), Color(0xFFFEF3C7)],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(isNight ? 0.35 : 0.08),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: isNight ? const Color(0xFF818CF8).withOpacity(0.4) : const Color(0xFFFDE68A),
-                    width: 1.5,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 3D 豪华萌猫云朵大猫窝 - 前层结构 (立体前沿滚边 + 窝边搭垂流苏小盖毯 + 立体浮雕金字皮牌 + 暖暖窝挂标)
-  /// 渲染在猫咪主体前侧 (In Front of Cat)，自然环绕猫咪身体下端，营造真实的“坐进窝里”立体景深
-  Widget _buildCatNestFront(double nestX, double nestY, double nestWidth, bool isNight) {
-    return Positioned(
-      left: nestX - nestWidth / 2,
-      top: nestY + 36.0,
-      width: nestWidth,
-      height: 58.0,
-      child: GestureDetector(
-        onTap: () => _onBedTap(nestX, nestY),
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            // 1. 3D 立体前窝沿蓬松软包壁 (Bolster Lip) 带有高光与底部圆柱下凹阴影
+            // 2. 暖绒羊羔呢圆垫主体 (Soft Pastel Rug Body)
             Container(
-              width: nestWidth * 0.94,
-              height: 48,
+              width: rugWidth,
+              height: rugHeight,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.elliptical(nestWidth * 0.94 / 2, 24)),
+                borderRadius: BorderRadius.all(Radius.elliptical(rugWidth / 2, rugHeight / 2)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isNight
-                      ? const [Color(0xFF3B2E75), Color(0xFF241B50)]
-                      : const [Color(0xFFFFFDF5), Color(0xFFFDE68A)],
+                      ? const [Color(0xFF2B2252), Color(0xFF1D1739)]
+                      : const [Color(0xFFFFFDF8), Color(0xFFFEF3C7)],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isNight ? 0.35 : 0.12),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                  BoxShadow(
-                    color: (isNight ? const Color(0xFF6366F1) : const Color(0xFFF59E0B)).withOpacity(0.18),
-                    blurRadius: 16,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
                 border: Border.all(
                   color: isNight
-                      ? const Color(0xFF818CF8).withOpacity(0.65)
-                      : const Color(0xFFFDBA74).withOpacity(0.7),
-                  width: 1.8,
+                      ? const Color(0xFF6366F1).withOpacity(0.35)
+                      : const Color(0xFFFDE68A),
+                  width: 1.6,
                 ),
               ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 前窝沿顶部微光高光弧 (Rim Highlight)
-                  Positioned(
-                    top: 2,
-                    child: Container(
-                      width: nestWidth * 0.72,
-                      height: 2.2,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(2),
-                        color: Colors.white.withOpacity(isNight ? 0.28 : 0.75),
-                      ),
+              child: Center(
+                // 垫内柔和暗纹肉垫印记 (极简美观，低调质感)
+                child: Opacity(
+                  opacity: isNight ? 0.20 : 0.25,
+                  child: Text(
+                    '🐾',
+                    style: TextStyle(
+                      fontSize: 22,
+                      color: isNight ? const Color(0xFFC7D2FE) : const Color(0xFFD97706),
                     ),
                   ),
-
-                  // 2. 前窝沿核心：立体浮雕双铆钉金牌 (Poko's Cozy Haven)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: isNight
-                            ? const [Color(0xFF3730A3), Color(0xFF1E1B4B)]
-                            : const [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: isNight ? const Color(0xFFFDE047) : const Color(0xFFF59E0B),
-                        width: 1.4,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.10),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '🐾',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Poko\'s Cozy Haven',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: isNight ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '🐾',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // 3. 窝沿左侧搭垂的粉蓝格子流苏温暖小盖毯 (Blanket Corner)
-            Positioned(
-              left: 14,
-              bottom: 2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF581C87) : const Color(0xFFFCE7F3),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    bottomLeft: Radius.circular(10),
-                    bottomRight: Radius.circular(8),
-                  ),
-                  border: Border.all(
-                    color: isNight ? const Color(0xFFA855F7) : const Color(0xFFF472B6).withOpacity(0.7),
-                    width: 1.2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.14),
-                      blurRadius: 4,
-                      offset: const Offset(1, 2),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('🎀', style: TextStyle(fontSize: 9.5)),
-                    SizedBox(width: 2),
-                    Text('~', style: TextStyle(fontSize: 8, color: Color(0xFFEC4899), fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
-
-            // 4. 窝沿右上方小徽标：暖暖窝挂牌
-            Positioned(
-              right: 18,
-              top: -2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isNight ? const Color(0xFF818CF8) : const Color(0xFFF59E0B).withOpacity(0.6),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1.5),
-                    ),
-                  ],
-                ),
-                child: const Text(
-                  '✨ 暖暖窝',
-                  style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
