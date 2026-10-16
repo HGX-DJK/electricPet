@@ -11,6 +11,7 @@ import 'dialogs/wardrobe_dialog.dart';
 import 'dialogs/action_dialog.dart';
 import 'memo_screen.dart';
 import '../services/overlay_service.dart';
+import '../services/sound_service.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -127,6 +128,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   Timer? _plantAnimTimer;
   Timer? _postAnimTimer;
   Timer? _photoAnimTimer;
+
+  // 自主生活与房间漫步系统 (Autonomous Living & Roaming)
+  double? _targetWalkX;
+  bool _isRoaming = false;
+  Timer? _roamTimer;
+  Size _lastScreenSize = const Size(360, 640);
 
   @override
   void initState() {
@@ -249,6 +256,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         }
       }
 
+      // 自主漫步巡视运动驱动 (猫咪小碎步踱步移动)
+      if (_isRoaming && _state == 'WALK' && _targetWalkX != null) {
+        final dx = _targetWalkX! - _petX;
+        if (dx.abs() > 2.0) {
+          final step = (dx > 0 ? 1.5 : -1.5);
+          _petX += step;
+          _facingLeft = (dx < 0);
+          needRepaint = true;
+        } else {
+          _petX = _targetWalkX!;
+          _isRoaming = false;
+          final arrivedX = _targetWalkX!;
+          _targetWalkX = null;
+          _onArrivedAtDestination(arrivedX);
+          needRepaint = true;
+        }
+      }
+
       if (needRepaint && mounted) {
         setState(() {});
       }
@@ -259,12 +284,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       widget.petModel.tickDecay(1.0);
       _checkAutoDialogue();
 
-      // 自主生活微动作引擎：待机 8~12 秒自动发生萌趣小动作
-      if (_state == 'IDLE' && !_isDragging && !widget.petModel.isSleeping) {
+      // 自主生活与房间漫步引擎：待机 3~4 秒即刻活跃生活起来！
+      if ((_state == 'IDLE' || _state == 'WALK') && !_isDragging && !_isLaserMode && !_isWardrobeMode && !_isActionMode && !widget.petModel.isSleeping) {
         _idleSeconds++;
-        if (_idleSeconds >= 9) {
+        if (_idleSeconds >= 4 && !_isRoaming) {
           _idleSeconds = 0;
-          _triggerRandomIdleAction();
+          _triggerAutonomousLiving(_lastScreenSize);
         }
       } else {
         _idleSeconds = 0;
@@ -303,6 +328,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _plantAnimTimer?.cancel();
     _postAnimTimer?.cancel();
     _photoAnimTimer?.cancel();
+    _roamTimer?.cancel();
+    SoundService.dispose();
     super.dispose();
   }
 
@@ -363,6 +390,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 触碰/戳戳萌宠
   void _onPetTap(Offset globalPos) {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
     }
@@ -383,6 +413,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 双击触发开心旋转绝活
   void _onPetDoubleTap() {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.heavyImpact();
     }
@@ -392,6 +425,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   void _playAction(String actionId) {
     _idleSeconds = 0;
+    if (_isRoaming) {
+      _isRoaming = false;
+      _targetWalkX = null;
+    }
+    if (actionId == 'DOZE_OFF') {
+      SoundService.startPurr();
+    } else {
+      SoundService.playMeow();
+    }
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
     }
@@ -440,6 +482,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _actionTimer?.cancel();
     _actionTimer = Timer(const Duration(milliseconds: 5200), () {
       if (mounted && _state == actionId) {
+        if (actionId == 'DOZE_OFF') {
+          SoundService.stopPurr();
+        }
         setState(() {
           _state = 'IDLE';
         });
@@ -447,42 +492,185 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     });
   }
 
-  /// 待机自主萌趣小动作驱动 (洗脸、歪头、四处张望、摇尾巴、伸懒腰、打瞌睡)
-  void _triggerRandomIdleAction() {
-    if (!mounted || _state != 'IDLE' || _isDragging || widget.petModel.isSleeping) return;
-    final idleActions = [
-      'WASH_FACE',
-      'TILT_HEAD',
-      'LOOK_AROUND',
-      'SIT_WAG_TAIL',
-      'STRETCH_YAWN',
-      'DOZE_OFF',
-    ];
-    final act = idleActions[math.Random().nextInt(idleActions.length)];
-    setState(() {
-      _state = act;
-    });
+  /// 自主生活与房间漫步系统 (Autonomous Living & Roaming)
+  /// 猫咪待机 3~4 秒即刻自主决策：45% 概率在房间内迈着小碎步漫步巡视，55% 概率做原地萌趣小动作
+  void _triggerAutonomousLiving(Size screenSize) {
+    if (!mounted || _isDragging || _isLaserMode || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
+    if (_isRoaming) return;
 
-    final actionLines = {
-      'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
-      'TILT_HEAD': '歪头好奇打量~ 主人在看什么有趣的内容呢？❓',
-      'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
-      'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
-      'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
-      'DOZE_OFF': '小脑瓜一点一点... 困意来袭，打个小瞌睡~ 💤',
-    };
-    if (actionLines.containsKey(act)) {
-      _showDialogueBubble(actionLines[act]!, duration: const Duration(seconds: 4));
+    final matX = screenSize.width / 2;
+    final matY = screenSize.height * 0.38 + 68.0;
+    final rnd = math.Random();
+
+    // 45% 概率漫步巡视房间家具
+    if (rnd.nextDouble() < 0.45) {
+      final targets = <Map<String, dynamic>>[
+        // 目标 A: 猫草
+        {
+          'x': (matX - 100.0).clamp(55.0, matX - 35.0),
+          'name': 'CAT_GRASS',
+          'msg': '踏着轻快小步巡视猫草盆栽~ 🌿',
+        },
+        // 目标 B: 小猫碗
+        {
+          'x': (matX - 70.0).clamp(50.0, matX - 25.0),
+          'name': 'FOOD_BOWL',
+          'msg': '迈着小碎步溜达去小食碗边看看~ 🥣',
+        },
+        // 目标 C: 毛线球
+        {
+          'x': (_yarnX - 25.0).clamp(matX + 25.0, screenSize.width - 55.0),
+          'name': 'YARN_BALL',
+          'msg': '悄悄溜向粉红毛线球，准备扑一下！🧶',
+        },
+        // 目标 D: 小夜灯 / 猫抓板
+        {
+          'x': (matX + 50.0).clamp(matX + 20.0, screenSize.width - 65.0),
+          'name': 'NIGHT_LAMP',
+          'msg': '溜达去小夜灯下蹭蹭暖光~ 💡',
+        },
+        // 目标 E: 回云朵小窝
+        {
+          'x': matX,
+          'name': 'CLOUD_MAT',
+          'msg': '小碎步踱步回云朵小窝啦~ ☁️🐾',
+        },
+      ];
+
+      // 挑选一个离当前位置有一定距离的目标 (避免选到原地)
+      targets.shuffle();
+      Map<String, dynamic>? selectedTarget;
+      for (final t in targets) {
+        final tx = t['x'] as double;
+        if ((tx - _petX).abs() > 30.0) {
+          selectedTarget = t;
+          break;
+        }
+      }
+      selectedTarget ??= targets.first;
+
+      final targetX = selectedTarget['x'] as double;
+      final msg = selectedTarget['msg'] as String;
+
+      _startWalkingTo(targetX, msg);
+    } else {
+      // 55% 概率原地自主萌态微动作
+      final idleActions = [
+        'WASH_FACE',
+        'TILT_HEAD',
+        'LOOK_AROUND',
+        'SIT_WAG_TAIL',
+        'STRETCH_YAWN',
+        'DOZE_OFF',
+      ];
+      final act = idleActions[rnd.nextInt(idleActions.length)];
+      setState(() {
+        _state = act;
+      });
+
+      final actionLines = {
+        'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
+        'TILT_HEAD': '歪头好奇打量~ 主人在看什么有趣的内容呢？❓',
+        'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
+        'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
+        'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
+        'DOZE_OFF': '小脑瓜一点一点... 困意来袭，打个小瞌睡~ 💤',
+      };
+      if (actionLines.containsKey(act)) {
+        _showDialogueBubble(actionLines[act]!, duration: const Duration(seconds: 4));
+      }
+
+      if (act == 'DOZE_OFF') {
+        SoundService.startPurr();
+      } else if (act == 'TILT_HEAD' || act == 'WASH_FACE') {
+        SoundService.playMeow();
+      }
+
+      _idleActionTimer?.cancel();
+      _idleActionTimer = Timer(const Duration(milliseconds: 3800), () {
+        if (mounted && _state == act) {
+          if (act == 'DOZE_OFF') {
+            SoundService.stopPurr();
+          }
+          setState(() {
+            _state = 'IDLE';
+          });
+        }
+      });
     }
+  }
 
-    _idleActionTimer?.cancel();
-    _idleActionTimer = Timer(const Duration(milliseconds: 3800), () {
-      if (mounted && _state == act) {
+  /// 启动小碎步漫步巡视
+  void _startWalkingTo(double targetX, String msg) {
+    if (!mounted || _isDragging || widget.petModel.isSleeping) return;
+    setState(() {
+      _isRoaming = true;
+      _targetWalkX = targetX;
+      _facingLeft = (targetX < _petX);
+      _state = 'WALK';
+    });
+    SoundService.playMeow();
+    _showDialogueBubble(msg, duration: const Duration(seconds: 3));
+
+    // 防卡死保护：最多 8 秒结束漫步
+    _roamTimer?.cancel();
+    _roamTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _isRoaming) {
         setState(() {
+          _isRoaming = false;
+          _targetWalkX = null;
           _state = 'IDLE';
         });
       }
     });
+  }
+
+  /// 漫步到达巡视目的地后的智能有机交互触发
+  void _onArrivedAtDestination(double arrivedX) {
+    _roamTimer?.cancel();
+    final matX = _lastScreenSize.width / 2;
+    final matY = _lastScreenSize.height * 0.38 + 68.0;
+
+    // 1. 到达小窝中心
+    if ((arrivedX - matX).abs() < 18.0) {
+      _playAction('SIT_WAG_TAIL');
+      _showDialogueBubble('回到蓬松舒适的云朵蒲团啦！乖乖坐好晃尾巴~ ☁️🐾');
+      SoundService.playMeow();
+      return;
+    }
+
+    // 2. 到达猫草边
+    if (arrivedX < matX - 60) {
+      _onPlantTap();
+      _playAction('LOOK_AROUND');
+      return;
+    }
+
+    // 3. 到达小猫碗边
+    if (arrivedX < matX - 35) {
+      _popFishFromBowl(matX, matY);
+      _playAction('LOOK_AROUND');
+      _showDialogueBubble('来到小饭碗啦~ 闻闻还有没有酥脆小鱼干！🐟😋');
+      return;
+    }
+
+    // 4. 到达毛线球边
+    if ((arrivedX - _yarnX).abs() < 40.0) {
+      _playAction('PLAY_YARN');
+      SoundService.playPop();
+      _showDialogueBubble('追到粉红毛线球啦！两只爪爪抱住滚来滚去~ 🧶🐾');
+      return;
+    }
+
+    // 5. 到达小夜灯 / 剑麻板边
+    if (arrivedX > matX + 35) {
+      _onScratcherTap();
+      _playAction('WASH_FACE');
+      return;
+    }
+
+    // 默认到达后伸个懒腰
+    _playAction('STRETCH_YAWN');
   }
 
   /// 优雅的半屏 BottomSheet 唤起，顶部半屏留空小猫互动演出
@@ -498,6 +686,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 打开波可的奇妙背包上拉抽屉
   void _openBackpackDrawer(bool isNight) {
+    _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playClick();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
     }
@@ -551,10 +743,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           _showDialogueBubble('洗香香啦！浑身散发着草莓沐浴露的香气~ 🫧✨');
         },
         onSleepTap: () {
+          _isRoaming = false;
+          _targetWalkX = null;
           final isSleep = widget.petModel.toggleSleep();
           if (isSleep) {
+            SoundService.startPurr();
             _showDialogueBubble('呼噜呼噜... 进入甜甜的梦乡啦，嘘~ 💤');
           } else {
+            SoundService.stopPurr();
+            SoundService.playMeow();
             _showDialogueBubble('睡饱醒来啦！元气活力充沛~ ☀️');
           }
         },
@@ -568,6 +765,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 趣味交互：开启神奇指尖激光笔
   void _startLaserChase() {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     final screenSize = MediaQuery.of(context).size;
     setState(() {
       _isLaserMode = true;
@@ -608,7 +808,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
     }
-    _spawnParticles(Offset(_petX, _petY - 60), emoji: '🌈', count: 3);
+    _spawnParticles(Offset(_petX - 60, _petY - 60), emoji: '🌈', count: 3);
     _spawnTextParticle(Offset(_petX - 25, _petY - 95), '晴空温煦 +10 ☀️', const Color(0xFFF59E0B));
     widget.petModel.addExp(10.0);
     _showDialogueBubble('微风拂过晴空，有波可陪伴的每一天都是大晴天~ ☀️🌈', duration: const Duration(seconds: 4));
@@ -617,6 +817,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 趣味交互：遮眼躲猫猫 (Peek-a-boo 藏头露尾) 开始
   void _startPeekABoo() {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.heavyImpact();
     }
@@ -630,6 +833,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 趣味交互：遮眼躲猫猫 抬手惊喜发现
   void _finishPeekABoo() {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
     }
@@ -669,12 +875,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _spawnParticles(Offset(_petX - 60, _petY - 30), emoji: '🌱', count: 2);
     _spawnTextParticle(Offset(_petX - 85, _petY - 50), '猫草清香 +5 🌱', const Color(0xFF10B981));
     widget.petModel.addExp(5.0);
+    SoundService.playMeow();
     _showDialogueBubble('猫草清香扑鼻~ 波可闻到了开心咬了一小口！🌱😋', duration: const Duration(seconds: 4));
   }
 
   /// 家具交互：剑麻猫抓板磨爪 (解压咔嚓磨爪爪)
   void _onScratcherTap() {
     _idleSeconds = 0;
+    SoundService.playScratch();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
       Timer(const Duration(milliseconds: 120), () {
@@ -702,6 +910,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光)
   void _onNightLampTap() {
     _idleSeconds = 0;
+    SoundService.playClick();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
     }
@@ -724,6 +933,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 墙面装饰：拍立得照片墙摇晃 (初遇珍藏回忆)
   void _onPhotoTap() {
     _idleSeconds = 0;
+    SoundService.playShutter();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
     }
@@ -747,6 +957,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 墙面装饰：温暖小串灯轻触 (一闪一闪亮晶晶)
   void _onFairyLightsTap() {
     _idleSeconds = 0;
+    SoundService.playClick();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
     }
@@ -758,6 +969,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 重置萌宠回到中心软垫
   void _resetToMat(Size screenSize) {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    _roamTimer?.cancel();
+    SoundService.playMeow();
     final matX = screenSize.width / 2;
     final matY = screenSize.height * 0.38 + 68.0;
     setState(() {
@@ -821,9 +1036,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 维度一：部位差异化触感与猫咪打呼噜反应
   void _handleBodyPartTouch(Offset localPos, Size screenSize) {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
 
     // 1. 点粉嫩小鼻子 (Nose Boop)
     if ((localPos.dx - 100).abs() < 14 && (localPos.dy - 93).abs() < 10) {
+      SoundService.playMeow();
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       _squishController.forward(from: 0.0);
       _spawnParticles(Offset(_petX, _petY - 25), emoji: '🤧', count: 3);
@@ -831,11 +1049,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // 2. 挠下巴 / 颈窝 (Chin Scratch - 触发猫咪打呼噜连续细密震动与享受仰头)
+    // 2. 挠下巴 / 颈窝 (Chin Scratch - 触发猫咪打呼噜连续细密震动与真实ASMR喉音起伏)
     if ((localPos.dx - 100).abs() < 24 && (localPos.dy >= 99 && localPos.dy <= 122)) {
       setState(() {
         _isPurring = true;
       });
+      SoundService.startPurr();
       _purrHapticTimer?.cancel();
       int purrTick = 0;
       if (widget.petModel.enableHaptics) {
@@ -848,7 +1067,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         });
       }
       _purrTimer?.cancel();
-      _purrTimer = Timer(const Duration(milliseconds: 2200), () {
+      _purrTimer = Timer(const Duration(milliseconds: 2600), () {
+        SoundService.stopPurr();
         if (mounted) setState(() => _isPurring = false);
       });
       widget.petModel.petHead();
@@ -859,6 +1079,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     // 3. 触摸左耳
     if (localPos.dx >= 45 && localPos.dx <= 88 && localPos.dy >= 18 && localPos.dy <= 62) {
+      SoundService.playMeow();
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'LEFT';
@@ -874,6 +1095,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     // 4. 触摸右耳
     if (localPos.dx >= 112 && localPos.dx <= 155 && localPos.dy >= 18 && localPos.dy <= 62) {
+      SoundService.playMeow();
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'RIGHT';
@@ -891,7 +1113,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     final isLeftCheek = (localPos.dx >= 52 && localPos.dx <= 84 && localPos.dy >= 70 && localPos.dy <= 104);
     final isRightCheek = (localPos.dx >= 116 && localPos.dx <= 148 && localPos.dy >= 70 && localPos.dy <= 104);
     if (isLeftCheek || isRightCheek) {
-      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+      SoundService.playMeow();
+      if (widget.petModel.enableHaptics) {
+        HapticFeedback.lightImpact();
+      }
       _squishController.forward(from: 0.0);
       _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 3);
       _showDialogueBubble('唔姆~ 脸颊肉肉要被主人捏圆啦！(ฅ\'ω\'ฅ)', duration: const Duration(seconds: 4));
@@ -900,6 +1125,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
     // 6. 摸肉垫 / 肚皮 (High Five / Tummy Poke)
     if (localPos.dy > 120) {
+      SoundService.playPop();
       if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
       _spawnParticles(Offset(_petX, _petY - 10), emoji: '🐾', count: 4);
       _showDialogueBubble('击掌！High Five~ 击退一切烦恼！🐾⭐');
@@ -913,6 +1139,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 维度五：跑过来贴贴屏幕 (Glass Boop)
   void _triggerGlassBoop(Size screenSize) {
     if (!mounted || _state == 'GLASS_BOOP') return;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playMeow();
     setState(() {
       _state = 'GLASS_BOOP';
       _hasGlassPawPrints = true;
@@ -939,6 +1168,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 维度二：从小鱼碗弹射小鲜鱼
   void _popFishFromBowl(double matX, double matY) {
     if (_fishPopping) return;
+    SoundService.playPop();
     setState(() {
       _fishPopping = true;
       _poppingFishPos = Offset(matX - 135, matY - 14);
@@ -951,6 +1181,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   /// 逗趣与毛线球主动抛掷
   void _teasePlay() {
     _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playPop();
     setState(() {
       _isYarnFlying = true;
       _yarnVx = (math.Random().nextBool() ? 9.0 : -9.0);
@@ -965,6 +1198,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
+    _lastScreenSize = screenSize;
 
     // 首次进入时，自适应设置萌宠在屏幕视觉黄金居中偏上点 (留出下方半屏空间给弹窗)
     if (!_initializedPos && screenSize.width > 0) {
@@ -1212,6 +1446,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                   onPanStart: (details) {
                     setState(() {
                       _isDragging = true;
+                      _isRoaming = false;
+                      _targetWalkX = null;
                       _state = 'DRAGGING';
                       _strokeDistance = 0.0;
                       _dragDirectionReversals = 0;
@@ -1771,6 +2007,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
             // 2. 魔法换装 / 品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
             GestureDetector(
               onTap: () {
+                _idleSeconds = 0;
+                _isRoaming = false;
+                _targetWalkX = null;
+                SoundService.playMeow();
                 if (widget.petModel.enableHaptics) {
                   HapticFeedback.lightImpact();
                 }
@@ -1826,6 +2066,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
             // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞，零遮挡全景观赏)
             GestureDetector(
               onTap: () {
+                _idleSeconds = 0;
+                _isRoaming = false;
+                _targetWalkX = null;
+                SoundService.playMeow();
                 if (widget.petModel.enableHaptics) {
                   HapticFeedback.lightImpact();
                 }
@@ -2705,6 +2949,36 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 ],
               ),
               const SizedBox(width: 6),
+              // 音效开关按钮 (真实 ASMR 白噪音 / 静音)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    SoundService.soundEnabled = !SoundService.soundEnabled;
+                  });
+                  if (SoundService.soundEnabled) {
+                    SoundService.playMeow();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: SoundService.soundEnabled
+                        ? (isNight ? const Color(0xFF312E81) : const Color(0xFFEEF2FF))
+                        : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: SoundService.soundEnabled
+                          ? const Color(0xFF6366F1)
+                          : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                    ),
+                  ),
+                  child: Text(
+                    SoundService.soundEnabled ? '🔊' : '🔇',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
               // 回到小窝按钮
               GestureDetector(
                 onTap: () => _resetToMat(screenSize),

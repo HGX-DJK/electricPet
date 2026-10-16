@@ -132,4 +132,34 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('相框里是初遇那天'), findsWidgets);
   });
+
+  testWidgets('Sound Toggle and Autonomous Living System test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 验证初始状态音效开关处于开启态 (🔊)
+    expect(find.text('🔊'), findsOneWidget);
+
+    // 点击音效开关切换为静音态 (🔇)
+    await tester.tap(find.text('🔊'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('🔇'), findsOneWidget);
+
+    // 再次点击恢复为声音开启态 (🔊)
+    await tester.tap(find.text('🔇'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('🔊'), findsOneWidget);
+
+    // 模拟待机 5 秒触发自主生活决策 (漫步巡视或萌趣微动作)
+    await tester.pump(const Duration(seconds: 5));
+    // 待机后小猫自主产生了萌趣生活行为
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
 }

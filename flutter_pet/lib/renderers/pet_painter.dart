@@ -90,6 +90,12 @@ class PetPainter extends CustomPainter {
       // 眩晕打转晃悠
       canvas.translate(math.sin(animTime * 6.0) * 8.0, math.cos(animTime * 6.0) * 4.0);
       canvas.rotate(math.sin(animTime * 6.0) * 0.08);
+    } else if (state == 'WALK') {
+      // 漫步巡视小碎步：欢快轻盈起伏与重心交替
+      breathY = -math.sin(animTime * 10.0).abs() * 4.0;
+      scaleX = 1.0 + math.sin(animTime * 10.0) * 0.03;
+      scaleY = 1.0 - math.sin(animTime * 10.0) * 0.02;
+      bodySwayX = math.sin(animTime * 5.0) * 2.5;
     } else if (state == 'DRAGGING') {
       // 拖拽抱起：身体受重力拉长悬空
       scaleX = 0.90;
@@ -148,6 +154,9 @@ class PetPainter extends CustomPainter {
       tailWag = 5.0 + math.sin(animTime * 14.0) * 6.0;
     } else if (state == 'HAPPY_SPIN') {
       tailWag = math.sin(animTime * 12.0) * 25.0;
+    } else if (state == 'WALK') {
+      // 漫步巡视时尾巴轻快随动
+      tailWag = 8.0 + math.sin(animTime * 10.0) * 16.0;
     } else {
       // IDLE 待机：轻缓而有韧性的猫尾涟漪摆动 (避免机械单摆)
       tailWag = math.sin(animTime * 1.6) * 14.0 + math.sin(animTime * 3.2) * 4.5;
@@ -1024,6 +1033,24 @@ class PetPainter extends CustomPainter {
 
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawPaint);
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawBorder);
+      return;
+    }
+
+    // 漫步小碎步踱步：双前爪交替抬落起伏
+    if (state == 'WALK') {
+      final pawW = (skin.id == 'cat_orange') ? 26.0 : ((skin.id == 'cat_siamese') ? 19.0 : 22.0);
+      final pawH = (skin.id == 'cat_orange') ? 18.0 : ((skin.id == 'cat_siamese') ? 14.0 : 16.0);
+      final stepCycle = animTime * 10.0;
+      final leftLift = math.sin(stepCycle).clamp(0.0, 1.0) * 8.0;
+      final rightLift = (-math.sin(stepCycle)).clamp(0.0, 1.0) * 8.0;
+      final leftShift = math.cos(stepCycle) * 3.5;
+      final rightShift = -math.cos(stepCycle) * 3.5;
+
+      canvas.drawOval(Rect.fromCenter(center: Offset(-22 + leftShift, 60 - leftLift), width: pawW, height: pawH), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(-22 + leftShift, 60 - leftLift), width: pawW, height: pawH), pawBorder);
+
+      canvas.drawOval(Rect.fromCenter(center: Offset(22 + rightShift, 60 - rightLift), width: pawW, height: pawH), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(22 + rightShift, 60 - rightLift), width: pawW, height: pawH), pawBorder);
       return;
     }
 
