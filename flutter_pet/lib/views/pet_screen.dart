@@ -473,7 +473,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         onTeaseTap: _teasePlay,
         onWardrobeTap: () {
           _showBottomSheetModal(
-            WardrobeDialog(model: widget.petModel),
+            WardrobeDialog(model: widget.petModel, isNight: isNight),
           );
         },
         onActionTap: () {

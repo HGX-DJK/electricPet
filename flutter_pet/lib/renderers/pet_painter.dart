@@ -262,7 +262,7 @@ class PetPainter extends CustomPainter {
       headPaint,
     );
 
-    // 脑袋斑纹与皮肤特色 (三花/橘猫/暹罗)
+    // 脑袋斑纹与皮肤特色 (三花/橘猫/暹罗/布偶/美短)
     if (skin.id == 'cat_calico') {
       final patchPaint = Paint()
         ..color = Color(skin.secondaryColor)
@@ -291,6 +291,48 @@ class PetPainter extends CustomPainter {
         Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy + 8), width: 56, height: 44),
         maskPaint,
       );
+    } else if (skin.id == 'cat_ragdoll') {
+      // 布偶猫经典海豹双色八字开脸面罩
+      final maskPaint = Paint()
+        ..color = Color(skin.secondaryColor).withOpacity(0.88)
+        ..style = PaintingStyle.fill;
+      // 左侧面罩 (围绕左眼与左脸颊)
+      final leftMask = Path()
+        ..moveTo(headCenter.dx - 6, headCenter.dy - 42)
+        ..lineTo(headCenter.dx - 46, headCenter.dy - 24)
+        ..quadraticBezierTo(headCenter.dx - 54, headCenter.dy + 12, headCenter.dx - 32, headCenter.dy + 32)
+        ..quadraticBezierTo(headCenter.dx - 20, headCenter.dy + 16, headCenter.dx - 14, headCenter.dy - 8)
+        ..close();
+      canvas.drawPath(leftMask, maskPaint);
+      // 右侧面罩 (对称围绕右眼与右脸颊)
+      final rightMask = Path()
+        ..moveTo(headCenter.dx + 6, headCenter.dy - 42)
+        ..lineTo(headCenter.dx + 46, headCenter.dy - 24)
+        ..quadraticBezierTo(headCenter.dx + 54, headCenter.dy + 12, headCenter.dx + 32, headCenter.dy + 32)
+        ..quadraticBezierTo(headCenter.dx + 20, headCenter.dy + 16, headCenter.dx + 14, headCenter.dy - 8)
+        ..close();
+      canvas.drawPath(rightMask, maskPaint);
+    } else if (skin.id == 'cat_american_tabby') {
+      // 美短银虎斑额头经典 M 纹与脸颊鱼骨纹
+      final tabbyPaint = Paint()
+        ..color = Color(skin.secondaryColor)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      final mPath = Path()
+        ..moveTo(headCenter.dx - 15, headCenter.dy - 36)
+        ..lineTo(headCenter.dx - 8, headCenter.dy - 44)
+        ..lineTo(headCenter.dx, headCenter.dy - 37)
+        ..lineTo(headCenter.dx + 8, headCenter.dy - 44)
+        ..lineTo(headCenter.dx + 15, headCenter.dy - 36);
+      canvas.drawPath(mPath, tabbyPaint);
+
+      // 脸颊两道帅气鱼骨斑纹
+      canvas.drawLine(Offset(headCenter.dx - 30, headCenter.dy + 2), Offset(headCenter.dx - 48, headCenter.dy - 1), tabbyPaint);
+      canvas.drawLine(Offset(headCenter.dx - 28, headCenter.dy + 9), Offset(headCenter.dx - 45, headCenter.dy + 8), tabbyPaint);
+      canvas.drawLine(Offset(headCenter.dx + 30, headCenter.dy + 2), Offset(headCenter.dx + 48, headCenter.dy - 1), tabbyPaint);
+      canvas.drawLine(Offset(headCenter.dx + 28, headCenter.dy + 9), Offset(headCenter.dx + 45, headCenter.dy + 8), tabbyPaint);
     }
 
     // 腮红
@@ -316,12 +358,16 @@ class PetPainter extends CustomPainter {
     // 胡须
     _drawWhiskers(canvas, skin, headCenter);
 
+    // 头部帽子配饰 (随头部呼吸与歪头动态联动)
+    _drawHeadDecorations(canvas, headCenter);
+
     canvas.restore();
   }
 
   void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch) {
+    final isPointCat = skin.id == 'cat_ragdoll' || skin.id == 'cat_siamese';
     final earBasePaint = Paint()
-      ..color = Color(skin.primaryColor)
+      ..color = isPointCat ? Color(skin.secondaryColor) : Color(skin.primaryColor)
       ..style = PaintingStyle.fill;
     final earInnerPaint = Paint()
       ..color = const Color(0xFFFFB6C1)
@@ -343,7 +389,7 @@ class PetPainter extends CustomPainter {
     canvas.drawPath(leftEarInner, earInnerPaint);
 
     // 右耳 (带重点花纹)
-    final rightEarColor = (skin.id == 'cat_calico') ? Color(skin.secondaryColor) : Color(skin.primaryColor);
+    final rightEarColor = (skin.id == 'cat_calico' || isPointCat) ? Color(skin.secondaryColor) : Color(skin.primaryColor);
     final rightEarPaint = Paint()..color = rightEarColor;
 
     final rightEar = Path()
@@ -458,14 +504,22 @@ class PetPainter extends CustomPainter {
       gazeY = 3.5;
     }
 
-    for (final eyeCenter in [leftEyeCenter, rightEyeCenter]) {
+    final eyeList = [
+      (leftEyeCenter, skin.id == 'cat_persian_white' ? const Color(0xFFF59E0B) : Color(skin.eyeColor)),
+      (rightEyeCenter, skin.id == 'cat_persian_white' ? const Color(0xFF0284C7) : Color(skin.eyeColor)),
+    ];
+
+    for (final eye in eyeList) {
+      final eyeCenter = eye.$1;
+      final irisColor = eye.$2;
+
       // 眼白
       final eyeWhitePaint = Paint()..color = Colors.white;
       canvas.drawOval(Rect.fromCenter(center: eyeCenter, width: 22, height: 26), eyeWhitePaint);
 
       // 虹膜彩环
       final irisCenter = Offset(eyeCenter.dx + gazeX, eyeCenter.dy + gazeY);
-      final irisPaint = Paint()..color = Color(skin.eyeColor);
+      final irisPaint = Paint()..color = irisColor;
       canvas.drawOval(Rect.fromCenter(center: irisCenter, width: 17, height: 21), irisPaint);
 
       // 瞳孔放大
@@ -679,6 +733,194 @@ class PetPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(const Offset(-3, 27), const Offset(-7, 36), ribbonPaint);
       canvas.drawLine(const Offset(3, 27), const Offset(7, 36), ribbonPaint);
+    } else if (neckDeco == 'bowtie') {
+      // 英伦绅士深蓝小领结
+      final bowPaint = Paint()..color = const Color(0xFF1E293B);
+      final leftWing = Path()
+        ..moveTo(0, 24)
+        ..lineTo(-16, 18)
+        ..lineTo(-16, 30)
+        ..close();
+      canvas.drawPath(leftWing, bowPaint);
+      final rightWing = Path()
+        ..moveTo(0, 24)
+        ..lineTo(16, 18)
+        ..lineTo(16, 30)
+        ..close();
+      canvas.drawPath(rightWing, bowPaint);
+      // 中心金扣
+      canvas.drawCircle(const Offset(0, 24), 4.0, Paint()..color = const Color(0xFFEAB308));
+    } else if (neckDeco == 'scarf') {
+      // 暖冬红围巾
+      final scarfPaint = Paint()
+        ..color = const Color(0xFFE11D48)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 7.0
+        ..strokeCap = StrokeCap.round;
+      final scarfNeck = Path()
+        ..moveTo(-22, 21)
+        ..quadraticBezierTo(0, 27, 22, 21);
+      canvas.drawPath(scarfNeck, scarfPaint);
+
+      // 下垂围巾下摆
+      final tailPaint = Paint()
+        ..color = const Color(0xFFBE123C)
+        ..style = PaintingStyle.fill;
+      final tailPath = Path()
+        ..moveTo(5, 23)
+        ..lineTo(15, 23)
+        ..lineTo(16, 44)
+        ..lineTo(4, 44)
+        ..close();
+      canvas.drawPath(tailPath, tailPaint);
+
+      // 流苏白线
+      final fringePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      for (int i = 6; i <= 14; i += 3) {
+        canvas.drawLine(Offset(i.toDouble(), 44), Offset(i.toDouble(), 48), fringePaint);
+      }
+    }
+  }
+
+  /// 绘制头部帽子配饰
+  void _drawHeadDecorations(Canvas canvas, Offset headCenter) {
+    final headDeco = model.decorations['head'];
+    if (headDeco == null || headDeco == 'none') return;
+
+    if (headDeco == 'crown') {
+      // 👑 璀璨金冠
+      final crownCenter = Offset(headCenter.dx, headCenter.dy - 46);
+      final goldPaint = Paint()
+        ..color = const Color(0xFFF59E0B)
+        ..style = PaintingStyle.fill;
+      final crownBase = Path()
+        ..moveTo(crownCenter.dx - 22, crownCenter.dy)
+        ..lineTo(crownCenter.dx - 24, crownCenter.dy - 18)
+        ..lineTo(crownCenter.dx - 10, crownCenter.dy - 8)
+        ..lineTo(crownCenter.dx, crownCenter.dy - 24)
+        ..lineTo(crownCenter.dx + 10, crownCenter.dy - 8)
+        ..lineTo(crownCenter.dx + 24, crownCenter.dy - 18)
+        ..lineTo(crownCenter.dx + 22, crownCenter.dy)
+        ..close();
+      canvas.drawPath(crownBase, goldPaint);
+
+      final rimPaint = Paint()
+        ..color = const Color(0xFFD97706)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawPath(crownBase, rimPaint);
+
+      // 皇冠底圈饰带
+      final bandPaint = Paint()..color = const Color(0xFFB45309);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset(crownCenter.dx, crownCenter.dy - 1), width: 44, height: 5),
+          const Radius.circular(2.5),
+        ),
+        bandPaint,
+      );
+
+      // 三颗宝石 (中红，左绿，右蓝)
+      canvas.drawCircle(Offset(crownCenter.dx, crownCenter.dy - 23), 3.2, Paint()..color = const Color(0xFFEF4444));
+      canvas.drawCircle(Offset(crownCenter.dx - 23, crownCenter.dy - 17), 2.5, Paint()..color = const Color(0xFF10B981));
+      canvas.drawCircle(Offset(crownCenter.dx + 23, crownCenter.dy - 17), 2.5, Paint()..color = const Color(0xFF0284C7));
+    } else if (headDeco == 'wizard_hat') {
+      // 🧙‍♂️ 魔法巫师帽
+      final baseCenter = Offset(headCenter.dx, headCenter.dy - 44);
+      final hatPaint = Paint()..color = const Color(0xFF312E81);
+      final hatGold = Paint()..color = const Color(0xFFFBBF24);
+
+      // 帽檐
+      canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 56, height: 14), hatPaint);
+
+      // 尖帽身 (向右微曲，生动灵秀)
+      final cone = Path()
+        ..moveTo(baseCenter.dx - 18, baseCenter.dy - 2)
+        ..cubicTo(
+          baseCenter.dx - 10, baseCenter.dy - 25,
+          baseCenter.dx - 2, baseCenter.dy - 45,
+          baseCenter.dx + 22, baseCenter.dy - 58,
+        )
+        ..cubicTo(
+          baseCenter.dx + 12, baseCenter.dy - 40,
+          baseCenter.dx + 8, baseCenter.dy - 25,
+          baseCenter.dx + 18, baseCenter.dy - 2,
+        )
+        ..close();
+      canvas.drawPath(cone, hatPaint);
+
+      // 金色帽围缎带
+      final ribbonPaint = Paint()
+        ..color = const Color(0xFFF59E0B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5;
+      canvas.drawLine(Offset(baseCenter.dx - 17, baseCenter.dy - 3), Offset(baseCenter.dx + 17, baseCenter.dy - 3), ribbonPaint);
+
+      // 尖端小星徽
+      canvas.drawCircle(Offset(baseCenter.dx + 22, baseCenter.dy - 58), 3.2, hatGold);
+    } else if (headDeco == 'straw_hat') {
+      // 👒 田园草帽
+      final baseCenter = Offset(headCenter.dx, headCenter.dy - 44);
+      final strawColor = Paint()..color = const Color(0xFFFDE047);
+      final strawDark = Paint()
+        ..color = const Color(0xFFCA8A04)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+
+      // 宽帽檐
+      canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 62, height: 16), strawColor);
+      canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 62, height: 16), strawDark);
+
+      // 帽顶半球
+      final dome = Path()
+        ..moveTo(baseCenter.dx - 18, baseCenter.dy)
+        ..cubicTo(
+          baseCenter.dx - 18, baseCenter.dy - 22,
+          baseCenter.dx + 18, baseCenter.dy - 22,
+          baseCenter.dx + 18, baseCenter.dy,
+        )
+        ..close();
+      canvas.drawPath(dome, strawColor);
+      canvas.drawPath(dome, strawDark);
+
+      // 红色系带
+      final ribbon = Paint()..color = const Color(0xFFEF4444);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(center: Offset(baseCenter.dx, baseCenter.dy - 2), width: 36, height: 4),
+          const Radius.circular(2),
+        ),
+        ribbon,
+      );
+      // 飘动缎带小尾巴
+      canvas.drawLine(Offset(baseCenter.dx + 18, baseCenter.dy), Offset(baseCenter.dx + 26, baseCenter.dy + 12), ribbon..style = PaintingStyle.stroke..strokeWidth = 2.5);
+    } else if (headDeco == 'sailor_cap') {
+      // ⚓ 蔚蓝水手帽
+      final baseCenter = Offset(headCenter.dx, headCenter.dy - 44);
+      final capPaint = Paint()..color = const Color(0xFFF8FAFC);
+
+      // 帽子主体 (向上略微外扩的水手无檐帽)
+      final bodyPath = Path()
+        ..moveTo(baseCenter.dx - 22, baseCenter.dy)
+        ..lineTo(baseCenter.dx - 26, baseCenter.dy - 20)
+        ..quadraticBezierTo(baseCenter.dx, baseCenter.dy - 24, baseCenter.dx + 26, baseCenter.dy - 20)
+        ..lineTo(baseCenter.dx + 22, baseCenter.dy)
+        ..close();
+      canvas.drawPath(bodyPath, capPaint);
+
+      // 蓝色包边条纹
+      final navyBand = Paint()
+        ..color = const Color(0xFF1E3A8A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.0;
+      canvas.drawLine(Offset(baseCenter.dx - 22, baseCenter.dy), Offset(baseCenter.dx + 22, baseCenter.dy), navyBand);
+
+      // 帽子中心金黄小徽章
+      final goldBadge = Paint()..color = const Color(0xFFEAB308);
+      canvas.drawCircle(Offset(baseCenter.dx, baseCenter.dy - 12), 3.0, goldBadge);
     }
   }
 

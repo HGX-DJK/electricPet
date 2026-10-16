@@ -2,67 +2,132 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 宠物外观皮肤配置
+/// 宠物外观皮肤/品种配置
 class SkinConfig {
   final String id;
-  final String name;
-  final String desc;
+  final String name;      // 简短名称 (如 "布偶猫")
+  final String breed;     // 完整品种名 (如 "布偶猫 (Ragdoll)")
+  final String title;     // 专属称号 (如 "仙女喵")
+  final String desc;      // 外貌与性格简介
   final int primaryColor;
   final int secondaryColor;
   final int eyeColor;
+  final String icon;      // 品种代表 emoji
 
   const SkinConfig({
     required this.id,
     required this.name,
+    required this.breed,
+    required this.title,
     required this.desc,
     required this.primaryColor,
     required this.secondaryColor,
     required this.eyeColor,
+    this.icon = '🐱',
   });
 }
 
 /// 萌宠核心属性与成长模型
 class PetModel extends ChangeNotifier {
   static const Map<String, SkinConfig> availableSkins = {
+    'cat_ragdoll': SkinConfig(
+      id: 'cat_ragdoll',
+      name: '布偶猫',
+      breed: '布偶猫 (Ragdoll)',
+      title: '仙女喵',
+      desc: '温顺亲人如小仙女，拥有对称八字双色面具与湛蓝深邃大眼',
+      primaryColor: 0xFFFDFBF7,
+      secondaryColor: 0xFF4A3525,
+      eyeColor: 0xFF0284C7,
+      icon: '🌸',
+    ),
+    'cat_british_blue': SkinConfig(
+      id: 'cat_british_blue',
+      name: '英国短毛猫',
+      breed: '英国短毛猫 (British Blue)',
+      title: '蓝胖子',
+      desc: '经典蓝灰缎面毛发，迷人琥珀金圆眼与肉嘟嘟大包子脸',
+      primaryColor: 0xFF64748B,
+      secondaryColor: 0xFF475569,
+      eyeColor: 0xFFF59E0B,
+      icon: '🍊',
+    ),
+    'cat_american_tabby': SkinConfig(
+      id: 'cat_american_tabby',
+      name: '美短银虎斑',
+      breed: '美短银虎斑 (American Tabby)',
+      title: '银斑精灵',
+      desc: '银白底色配灵动黑灰鱼骨斑纹，额头 M 纹霸气又活泼敏捷',
+      primaryColor: 0xFFE2E8F0,
+      secondaryColor: 0xFF334155,
+      eyeColor: 0xFF10B981,
+      icon: '🐯',
+    ),
+    'cat_siamese': SkinConfig(
+      id: 'cat_siamese',
+      name: '暹罗猫',
+      breed: '暹罗猫 (Siamese)',
+      title: '挖煤小工',
+      desc: '热带贵族话痨小猫，标志性的焦褐重点色糊糊小黑脸',
+      primaryColor: 0xFFF5EBE0,
+      secondaryColor: 0xFF3E2723,
+      eyeColor: 0xFF38BDF8,
+      icon: '☕',
+    ),
     'cat_calico': SkinConfig(
       id: 'cat_calico',
-      name: '三花小猫',
-      desc: '经典幸运治愈三花配色',
-      primaryColor: 0xFFFDFBF7,
+      name: '中华三花猫',
+      breed: '中华三花猫 (Calico)',
+      title: '幸运招财',
+      desc: '三色交织天生丽质，民间招财迎福、带来好运和平安的象征',
+      primaryColor: 0xFFFFFFFF,
       secondaryColor: 0xFFE28743,
       eyeColor: 0xFF4ADE80,
+      icon: '🐾',
+    ),
+    'cat_orange': SkinConfig(
+      id: 'cat_orange',
+      name: '中华大橘猫',
+      breed: '中华大橘猫 (Ginger Tabby)',
+      title: '大橘为重',
+      desc: '阳光开朗大吃货，手感极佳毛茸茸、超治愈的小暖炉',
+      primaryColor: 0xFFFED7AA,
+      secondaryColor: 0xFFEA580C,
+      eyeColor: 0xFFFBBF24,
+      icon: '🥐',
+    ),
+    'cat_persian_white': SkinConfig(
+      id: 'cat_persian_white',
+      name: '临清狮子猫',
+      breed: '临清狮子猫 (Persian Lion)',
+      title: '雪域纯白',
+      desc: '通体如雪丝绸长毛，自带仙气与高贵纯洁的澄澈水灵双眸',
+      primaryColor: 0xFFFFFFFF,
+      secondaryColor: 0xFFF1F5F9,
+      eyeColor: 0xFF06B6D4,
+      icon: '❄️',
     ),
     'cat_white': SkinConfig(
       id: 'cat_white',
       name: '雪球白猫',
+      breed: '雪球白猫 (Pure White)',
+      title: '纯白雪球',
       desc: '通体如雪，灵动纯洁',
       primaryColor: 0xFFFFFFFF,
       secondaryColor: 0xFFF1F5F9,
-      eyeColor: 0xFF38BDF8,
-    ),
-    'cat_orange': SkinConfig(
-      id: 'cat_orange',
-      name: '元气橘喵',
-      desc: '阳光开朗，自带治愈小肚腩',
-      primaryColor: 0xFFFED7AA,
-      secondaryColor: 0xFFF97316,
-      eyeColor: 0xFFFBBF24,
+      eyeColor: 0xFF06B6D4,
+      icon: '❄️',
     ),
     'cat_black': SkinConfig(
       id: 'cat_black',
       name: '玄夜黑猫',
-      desc: '神秘高雅的黑曜石小精灵',
-      primaryColor: 0xFF1E293B,
-      secondaryColor: 0xFF0F172A,
+      breed: '玄夜黑猫 (Black Cat)',
+      title: '暗夜玄神',
+      desc: '神秘高雅黑曜石灵猫，金色眼眸如同暗夜中明亮澄澈的星火',
+      primaryColor: 0xFF0F172A,
+      secondaryColor: 0xFF1E293B,
       eyeColor: 0xFFFACC15,
-    ),
-    'cat_siamese': SkinConfig(
-      id: 'cat_siamese',
-      name: '暹罗猫咪',
-      desc: '经典重点色小挖煤工',
-      primaryColor: 0xFFF5EBE0,
-      secondaryColor: 0xFF5D4037,
-      eyeColor: 0xFF60A5FA,
+      icon: '🖤',
     ),
   };
 
