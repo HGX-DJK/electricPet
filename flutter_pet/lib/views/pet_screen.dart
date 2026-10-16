@@ -105,6 +105,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   String _currentDialogue = '喵呜~ 戳戳我或者摸摸我的小脑瓜吧！(ฅ\'ω\'ฅ)';
   bool _showDialogue = true;
 
+  // 画布级无遮挡换装模式 (免弹窗、零遮挡、实时全景预览)
+  bool _isWardrobeMode = false;
+  int _wardrobeTab = 0; // 0: 猫咪品种, 1: 头部帽子, 2: 颈部配饰
+
   @override
   void initState() {
     super.initState();
@@ -472,9 +476,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         },
         onTeaseTap: _teasePlay,
         onWardrobeTap: () {
-          _showBottomSheetModal(
-            WardrobeDialog(model: widget.petModel, isNight: isNight),
-          );
+          Navigator.pop(context); // 立即收起抽屉，无弹窗遮挡
+          setState(() {
+            _isWardrobeMode = true;
+            _wardrobeTab = 0;
+          });
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 4);
+          _showDialogueBubble('开启魔法换装！点选下方任意品种或饰品，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
         },
         onActionTap: () {
           _showBottomSheetModal(
@@ -1283,72 +1291,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
               // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界，夜晚自适应柔和星空底色)
               if (_showDialogue) _buildSmartDialogueBubble(screenSize, isNight),
 
-              // 6. 底部“奇妙背包”上拉把手胶囊 (轻点或上滑呼出分类抽屉，底部大解放)
-              Positioned(
-                bottom: 16,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () => _openBackpackDrawer(isNight),
-                    onVerticalDragEnd: (details) {
-                      if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
-                        _openBackpackDrawer(isNight);
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isNight
-                            ? const Color(0xFF1E1A40).withOpacity(0.88)
-                            : Colors.white.withOpacity(0.92),
-                        borderRadius: BorderRadius.circular(22),
-                        border: Border.all(
-                          color: isNight
-                              ? const Color(0xFF6366F1).withOpacity(0.4)
-                              : const Color(0xFFE2E8F0),
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isNight
-                                ? const Color(0xFF0F0C24).withOpacity(0.5)
-                                : const Color(0xFF6366F1).withOpacity(0.1),
-                            blurRadius: 14,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('🎒', style: TextStyle(fontSize: 15)),
-                          const SizedBox(width: 7),
-                          Text(
-                            '奇妙背包',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.bold,
-                              color: isNight
-                                  ? const Color(0xFFE2E8F0)
-                                  : const Color(0xFF334155),
-                              letterSpacing: 0.6,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.keyboard_arrow_up_rounded,
-                            size: 18,
-                            color: isNight
-                                ? const Color(0xFFA5B4FC)
-                                : const Color(0xFF94A3B8),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              // 6. 底部交互控制：常态下双浮动胶囊 (奇妙背包 + 快速换装)；进入换装模式后无缝呈现【画布级无遮挡换装滑轨】
+              if (_isWardrobeMode)
+                _buildLiveWardrobeDock(screenSize, isNight)
+              else
+                _buildBottomFloatingBar(screenSize, isNight),
             ],
           ),
         ),
@@ -1419,6 +1366,582 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
         ),
       ),
     );
+  }
+
+  /// 底部双浮动胶囊 (奇妙背包 + 快速换装)
+  Widget _buildBottomFloatingBar(Size screenSize, bool isNight) {
+    return Positioned(
+      bottom: 16,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 1. 奇妙背包
+            GestureDetector(
+              onTap: () => _openBackpackDrawer(isNight),
+              onVerticalDragEnd: (details) {
+                if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
+                  _openBackpackDrawer(isNight);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isNight
+                      ? const Color(0xFF1E1A40).withOpacity(0.88)
+                      : Colors.white.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isNight
+                        ? const Color(0xFF6366F1).withOpacity(0.4)
+                        : const Color(0xFFE2E8F0),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isNight
+                          ? const Color(0xFF0F0C24).withOpacity(0.5)
+                          : const Color(0xFF6366F1).withOpacity(0.1),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🎒', style: TextStyle(fontSize: 15)),
+                    const SizedBox(width: 6),
+                    Text(
+                      '奇妙背包',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                    Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      size: 17,
+                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // 2. 魔法衣橱 / 换品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
+            GestureDetector(
+              onTap: () {
+                if (widget.petModel.enableHaptics) {
+                  HapticFeedback.lightImpact();
+                }
+                setState(() {
+                  _isWardrobeMode = true;
+                  _wardrobeTab = 0;
+                });
+                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
+                _showDialogueBubble('开启魔法换装！点选下方任意品种，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isNight
+                      ? const Color(0xFF311E66).withOpacity(0.88)
+                      : const Color(0xFFFAF5FF).withOpacity(0.94),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isNight
+                        ? const Color(0xFFA855F7).withOpacity(0.5)
+                        : const Color(0xFFE9D5FF),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFA855F7).withOpacity(0.14),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('👗', style: TextStyle(fontSize: 15)),
+                    const SizedBox(width: 5),
+                    Text(
+                      '魔法换装',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 画布级无遮挡换装滑轨坞 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
+  Widget _buildLiveWardrobeDock(Size screenSize, bool isNight) {
+    final bgColor = isNight
+        ? const Color(0xFF161334).withOpacity(0.96)
+        : Colors.white.withOpacity(0.98);
+    final borderColor = isNight
+        ? const Color(0xFF6366F1).withOpacity(0.55)
+        : const Color(0xFFDDD6FE);
+    final titleColor = isNight ? Colors.white : const Color(0xFF1E293B);
+    final subColor = isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B);
+    final cardBg = isNight ? const Color(0xFF262054) : const Color(0xFFF8FAFC);
+
+    final currentSkin = widget.petModel.currentSkin;
+    final currentHead = widget.petModel.decorations['head'] ?? 'none';
+    final currentNeck = widget.petModel.decorations['neck'] ?? 'none';
+
+    // 8 大名贵猫咪品种
+    final skins = PetModel.availableSkins.values
+        .where((s) => s.id != 'cat_white')
+        .toList();
+
+    // 头部帽子库
+    final headDecos = const [
+      {'id': 'none', 'name': '无帽子', 'icon': '🚫'},
+      {'id': 'crown', 'name': '璀璨金冠', 'icon': '👑'},
+      {'id': 'wizard_hat', 'name': '魔法巫师帽', 'icon': '🧙‍♂️'},
+      {'id': 'straw_hat', 'name': '田园草帽', 'icon': '👒'},
+      {'id': 'sailor_cap', 'name': '蔚蓝水手帽', 'icon': '⚓'},
+    ];
+
+    // 颈部配饰库
+    final neckDecos = const [
+      {'id': 'none', 'name': '无配饰', 'icon': '🚫'},
+      {'id': 'bell', 'name': '经典金铃铛', 'icon': '🔔'},
+      {'id': 'ribbon', 'name': '俏皮蝴蝶结', 'icon': '🎀'},
+      {'id': 'bowtie', 'name': '英伦绅士领结', 'icon': '🤵'},
+      {'id': 'scarf', 'name': '暖冬红围巾', 'icon': '🧣'},
+    ];
+
+    // 当前选中的形态标签摘要
+    String currentSummary = '';
+    if (_wardrobeTab == 0) {
+      final tags = _getBreedSummary(currentSkin.id);
+      currentSummary = '🐱 当前品种：${currentSkin.name} ($tags)';
+    } else if (_wardrobeTab == 1) {
+      final item = headDecos.firstWhere((h) => h['id'] == currentHead, orElse: () => headDecos.first);
+      currentSummary = '🎩 头部帽子：${item['name']}';
+    } else {
+      final item = neckDecos.firstWhere((n) => n['id'] == currentNeck, orElse: () => neckDecos.first);
+      currentSummary = '🎀 颈部挂件：${item['name']}';
+    }
+
+    return Positioned(
+      bottom: 12,
+      left: 12,
+      right: 12,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: isNight
+                  ? const Color(0xFF0F0C24).withOpacity(0.65)
+                  : const Color(0xFF6366F1).withOpacity(0.14),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 顶层栏：分类选项卡 + 完成退出按钮
+            Row(
+              children: [
+                _buildDockTabPill(0, '🐱 品种', isNight),
+                const SizedBox(width: 6),
+                _buildDockTabPill(1, '🎩 帽子', isNight),
+                const SizedBox(width: 6),
+                _buildDockTabPill(2, '🎀 挂件', isNight),
+                const Spacer(),
+                // 完成退出换装按钮 (零阻碍，一键退出换装模式)
+                GestureDetector(
+                  onTap: () {
+                    if (widget.petModel.enableHaptics) {
+                      HapticFeedback.lightImpact();
+                    }
+                    setState(() {
+                      _isWardrobeMode = false;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withOpacity(0.35),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                        SizedBox(width: 3),
+                        Text(
+                          '完成',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 7),
+
+            // 状态指示摘要条 (紧凑指示，不遮挡上方小猫)
+            Text(
+              currentSummary,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: subColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // 水平滑动卡片展示列表 (高度仅 72px，全屏萌宠完全无阻挡)
+            SizedBox(
+              height: 72,
+              child: _wardrobeTab == 0
+                  ? ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: skins.length,
+                      itemBuilder: (context, index) {
+                        final skin = skins[index];
+                        final isSelected = (widget.petModel.skinId == skin.id);
+
+                        return GestureDetector(
+                          onTap: () {
+                            if (widget.petModel.enableHaptics) {
+                              HapticFeedback.mediumImpact();
+                            }
+                            setState(() {
+                              widget.petModel.setSkin(skin.id);
+                            });
+                            _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 72,
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                  : cardBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected
+                                    ? const Color(0xFFA855F7)
+                                    : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                                width: isSelected ? 2.2 : 1.0,
+                              ),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFFA855F7).withOpacity(0.35),
+                                        blurRadius: 6,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Color(skin.primaryColor),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Color(skin.secondaryColor), width: 2.5),
+                                      ),
+                                      child: Center(
+                                        child: Text(skin.icon, style: const TextStyle(fontSize: 14)),
+                                      ),
+                                    ),
+                                    if (isSelected)
+                                      Container(
+                                        width: 32,
+                                        height: 32,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.black.withOpacity(0.35),
+                                        ),
+                                        child: const Icon(Icons.check_rounded, color: Colors.white, size: 18),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  skin.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected
+                                        ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                        : titleColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    )
+                  : (_wardrobeTab == 1
+                      ? ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: headDecos.length,
+                          itemBuilder: (context, index) {
+                            final item = headDecos[index];
+                            final id = item['id']!;
+                            final isSelected = (currentHead == id);
+
+                            return GestureDetector(
+                              onTap: () {
+                                if (widget.petModel.enableHaptics) {
+                                  HapticFeedback.lightImpact();
+                                }
+                                setState(() {
+                                  widget.petModel.setDecoration('head', id);
+                                });
+                                _spawnParticles(Offset(_petX, _petY - 20), emoji: '🎩', count: 3);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: 72,
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                      : cardBg,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? const Color(0xFFA855F7)
+                                        : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                                    width: isSelected ? 2.2 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFA855F7).withOpacity(0.35),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(item['icon']!, style: const TextStyle(fontSize: 22)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item['name']!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        color: isSelected
+                                            ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                            : titleColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          itemCount: neckDecos.length,
+                          itemBuilder: (context, index) {
+                            final item = neckDecos[index];
+                            final id = item['id']!;
+                            final isSelected = (currentNeck == id);
+
+                            return GestureDetector(
+                              onTap: () {
+                                if (widget.petModel.enableHaptics) {
+                                  HapticFeedback.lightImpact();
+                                }
+                                setState(() {
+                                  widget.petModel.setDecoration('neck', id);
+                                });
+                                _spawnParticles(Offset(_petX, _petY - 20), emoji: '🎀', count: 3);
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: 72,
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                      : cardBg,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? const Color(0xFFA855F7)
+                                        : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                                    width: isSelected ? 2.2 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: const Color(0xFFA855F7).withOpacity(0.35),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(item['icon']!, style: const TextStyle(fontSize: 22)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      item['name']!,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                        color: isSelected
+                                            ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                            : titleColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        )),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDockTabPill(int index, String label, bool isNight) {
+    final isSelected = (_wardrobeTab == index);
+    return GestureDetector(
+      onTap: () {
+        if (widget.petModel.enableHaptics) {
+          HapticFeedback.selectionClick();
+        }
+        setState(() {
+          _wardrobeTab = index;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 4.5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFFA855F7)
+              : (isNight ? const Color(0xFF262054) : const Color(0xFFF1F5F9)),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFA855F7).withOpacity(0.35),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected
+                ? Colors.white
+                : (isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getBreedSummary(String skinId) {
+    switch (skinId) {
+      case 'cat_ragdoll':
+        return '八字开脸 · 蓬松羽尾 · 仙气胸毛';
+      case 'cat_siamese':
+        return '高耸尖耳 · 楔形V脸 · 细鞭尾';
+      case 'cat_british_blue':
+        return '包子脸发腮 · 矮胖躯干 · 水獭尾';
+      case 'cat_orange':
+        return '大橘肚腩 · 虎斑环纹尾 · 肥肉爪';
+      case 'cat_persian_white':
+        return '鸳鸯异瞳 · 飘逸鬃毛 · 纯白羽尾';
+      case 'cat_calico':
+        return '阴阳双色耳 · 锦鲤花斑 · 招财吉猫';
+      case 'cat_american_tabby':
+        return '虎斑M纹 · 大理石回旋 · 斑纹尾';
+      case 'cat_black':
+        return '曜石流线 · 踏雪寻梅白爪 · 金瞳';
+      default:
+        return '纯洁灵动小萌宠';
+    }
   }
 
   /// 顶部双灵动岛浮空栏：左侧身份好感 + 右侧饱腹心情小窝，告别拥挤，自然呼吸
