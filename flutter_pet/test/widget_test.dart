@@ -11,6 +11,13 @@ void main() {
   });
 
   testWidgets('Live Action Jukebox Dock test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     await tester.pumpWidget(const DesktopElectricPetApp());
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -223,5 +230,112 @@ void main() {
 
     // 4. 验证地板漫步与追球脚印渲染层挂载运行
     expect(find.byType(CustomPaint), findsWidgets);
+  });
+
+  testWidgets('Micro-Expressions, Drag-to-Feed, Blanket, French Window, and Intimacy Bond test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 方向三：法式拱形观景窗天象点按切换
+    final windowFinder = find.byKey(const ValueKey('french_arch_window'));
+    expect(windowFinder, findsOneWidget);
+    expect(find.text('☀️ 晴空'), findsOneWidget);
+
+    // 点击切换为治愈雨季
+    await tester.tap(windowFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('🌧️ 细雨'), findsOneWidget);
+
+    // 再次点击切换为春日落樱
+    await tester.tap(windowFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('🌸 落樱'), findsOneWidget);
+
+    // 2. 方向二：小猫食碗与美味拖拽投喂托盘
+    final foodBowlFinder = find.byKey(const ValueKey('cat_food_bowl'));
+    expect(foodBowlFinder, findsOneWidget);
+
+    // 轻触食碗展开拖拽美食托盘
+    await tester.tap(foodBowlFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('drag_to_feed_tray')), findsOneWidget);
+    expect(find.text('香酥小鱼干'), findsOneWidget);
+    expect(find.text('纯肉三文鱼'), findsOneWidget);
+    expect(find.text('舒化羊奶'), findsOneWidget);
+
+    // 点击关闭收起美食托盘
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('drag_to_feed_tray')), findsNothing);
+
+    // 3. 方向四：亲密羁绊称号勋章胶囊与成就卡片弹窗
+    final bondBadgeFinder = find.byKey(const ValueKey('intimacy_bond_badge'));
+    expect(bondBadgeFinder, findsOneWidget);
+
+    // 点按羁绊勋章呼出全览卡片
+    await tester.tap(bondBadgeFinder);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('波可与你的亲密羁绊'), findsOneWidget);
+    expect(find.textContaining('专属特权'), findsOneWidget);
+    expect(find.textContaining('皇家丝绒披风'), findsOneWidget);
+    expect(find.textContaining('璀璨星辉皇冠'), findsOneWidget);
+
+    // 关闭羁绊弹窗
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 4. 方向二：舒睡暖垫盖小被子 (Tuck-in) 与掀被互动
+    await tester.tap(find.byKey(const ValueKey('cozy_cat_rug')));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 验证出现“盖被被”按钮
+    final tuckInFinder = find.byKey(const ValueKey('tuck_in_blanket_button'));
+    expect(tuckInFinder, findsOneWidget);
+
+    // 点击盖被被
+    await tester.tap(tuckInFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('covered_blanket')), findsOneWidget);
+    expect(find.text('掀被 ☀️'), findsOneWidget);
+
+    // 点击掀被 ☀️
+    await tester.tap(find.text('掀被 ☀️'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey('covered_blanket')), findsNothing);
+
+    // 5. 方向四：换装滑轨坞内专属金饰锁定提示与形态展示
+    await tester.tap(find.text('魔法换装'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 切换到帽子 Tab
+    await tester.tap(find.text('🎩 帽子'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('星辉皇冠'), findsOneWidget);
+    expect(find.text('阶4解锁'), findsOneWidget);
+
+    // 点击锁定的星辉皇冠，触发友好提示
+    await tester.tap(find.text('星辉皇冠'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('需达到第 4 阶解锁'), findsWidgets);
+
+    // 切换到挂件 Tab
+    await tester.tap(find.text('🎀 挂件'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('皇家披风'), findsOneWidget);
+    expect(find.text('阶3解锁'), findsOneWidget);
+
+    // 点击完成按钮退出换装
+    await tester.tap(find.text('完成'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('魔法换装'), findsOneWidget);
   });
 }

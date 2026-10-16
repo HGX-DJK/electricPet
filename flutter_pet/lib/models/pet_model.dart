@@ -175,6 +175,72 @@ class PetModel extends ChangeNotifier {
 
   double get expProgress => (exp / maxExpForLevel).clamp(0.0, 1.0);
 
+  /// 亲密羁绊阶段配置模型 (陌生萌新 -> 熟悉玩伴 -> 亲密依恋 -> 形影不离 -> 灵魂羁绊)
+  Map<String, dynamic> get intimacyBondInfo {
+    if (intimacy < 60) {
+      return {
+        'stage': 1,
+        'title': '陌生萌新',
+        'icon': '🌱',
+        'color': 0xFF10B981,
+        'ownerTitle': '两脚兽朋友',
+        'desc': '波可还在偷偷打量你，多喂食摸头建立信任吧~',
+        'nextThreshold': 60,
+        'progress': (intimacy / 60.0).clamp(0.0, 1.0),
+      };
+    } else if (intimacy < 150) {
+      return {
+        'stage': 2,
+        'title': '熟悉玩伴',
+        'icon': '🐾',
+        'color': 0xFF38BDF8,
+        'ownerTitle': '波可的好伙伴',
+        'desc': '波可愿意主动跑过来蹭蹭手心啦！',
+        'nextThreshold': 150,
+        'progress': ((intimacy - 60) / 90.0).clamp(0.0, 1.0),
+      };
+    } else if (intimacy < 280) {
+      return {
+        'stage': 3,
+        'title': '亲密依恋',
+        'icon': '💖',
+        'color': 0xFFF43F5E,
+        'ownerTitle': '最喜欢的饲主',
+        'desc': '解锁专属【皇家丝绒披风】！只要你在身边就很安心~',
+        'nextThreshold': 280,
+        'progress': ((intimacy - 150) / 130.0).clamp(0.0, 1.0),
+      };
+    } else if (intimacy < 450) {
+      return {
+        'stage': 4,
+        'title': '形影不离',
+        'icon': '⭐',
+        'color': 0xFF8B5CF6,
+        'ownerTitle': '波可的专属铲屎官',
+        'desc': '解锁专属【璀璨星辉皇冠】！波可连睡觉都要贴着你~',
+        'nextThreshold': 450,
+        'progress': ((intimacy - 280) / 170.0).clamp(0.0, 1.0),
+      };
+    } else {
+      return {
+        'stage': 5,
+        'title': '灵魂羁绊',
+        'icon': '👑',
+        'color': 0xFFF59E0B,
+        'ownerTitle': '最爱最爱的主人大人',
+        'desc': '心有灵犀的灵魂共鸣！波可会用一辈子守护主人！',
+        'nextThreshold': 9999,
+        'progress': 1.0,
+      };
+    }
+  }
+
+  void addIntimacy(int amount) {
+    intimacy += amount;
+    notifyListeners();
+    saveToDisk();
+  }
+
   /// 投喂美食
   bool feed(String foodId) {
     if (isSleeping) return false;

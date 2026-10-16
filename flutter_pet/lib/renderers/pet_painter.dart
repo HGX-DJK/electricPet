@@ -16,6 +16,9 @@ class PetPainter extends CustomPainter {
   final bool isHunting;     // 捕猎/追球/追激光兴奋态 (曜石巨瞳)
   final bool isTailPuffed;  // 揪尾巴炸毛惊跳状态 (尾巴膨胀与毛刺)
   final bool isNight;       // 静谧星夜暗光环境 (瞳孔自然舒张)
+  final bool isAirplaneEars;// 飞机耳警戒态 (受惊/开灯时双耳向两侧水平压平)
+  final bool isBlep;         // 呆萌吐小舌头 (露粉嫩小舌尖)
+  final String? winkEye;     // 'LEFT' | 'RIGHT' 俏皮单眼眨眼放电
 
   PetPainter({
     required this.model,
@@ -29,6 +32,9 @@ class PetPainter extends CustomPainter {
     this.isHunting = false,
     this.isTailPuffed = false,
     this.isNight = false,
+    this.isAirplaneEars = false,
+    this.isBlep = false,
+    this.winkEye,
   });
 
   @override
@@ -712,44 +718,74 @@ class PetPainter extends CustomPainter {
   void _drawEars(Canvas canvas, SkinConfig skin, Offset headCenter, double leftTwitch, double rightTwitch, {bool isBackView = false}) {
     final isPointCat = skin.id == 'cat_ragdoll' || skin.id == 'cat_siamese';
 
+    void drawLeft(void Function() drawBlock) {
+      canvas.save();
+      if (isAirplaneEars) {
+        final pivot = Offset(headCenter.dx - 32, headCenter.dy - 20);
+        canvas.translate(pivot.dx, pivot.dy);
+        canvas.rotate(-0.46);
+        canvas.scale(1.16, 0.64);
+        canvas.translate(-pivot.dx, -pivot.dy);
+      }
+      drawBlock();
+      canvas.restore();
+    }
+
+    void drawRight(void Function() drawBlock) {
+      canvas.save();
+      if (isAirplaneEars) {
+        final pivot = Offset(headCenter.dx + 32, headCenter.dy - 20);
+        canvas.translate(pivot.dx, pivot.dy);
+        canvas.rotate(0.46);
+        canvas.scale(1.16, 0.64);
+        canvas.translate(-pivot.dx, -pivot.dy);
+      }
+      drawBlock();
+      canvas.restore();
+    }
+
     // 1. 暹罗猫：超大尖立耳 (Giant Tall Bat Ears，耳根极宽，高耸挺立)
     if (skin.id == 'cat_siamese') {
       final earPaint = Paint()..color = Color(skin.secondaryColor);
       final innerPaint = Paint()..color = const Color(0xFF5D4037);
 
       // 左耳：高耸尖锐
-      final leftEar = Path()
-        ..moveTo(headCenter.dx - 50, headCenter.dy - 22)
-        ..lineTo(headCenter.dx - 54 + leftTwitch, headCenter.dy - 84)
-        ..lineTo(headCenter.dx - 8, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(leftEar, earPaint);
-
-      if (!isBackView) {
-        final leftInner = Path()
-          ..moveTo(headCenter.dx - 44, headCenter.dy - 24)
-          ..lineTo(headCenter.dx - 48 + leftTwitch, headCenter.dy - 72)
-          ..lineTo(headCenter.dx - 14, headCenter.dy - 36)
+      drawLeft(() {
+        final leftEar = Path()
+          ..moveTo(headCenter.dx - 50, headCenter.dy - 22)
+          ..lineTo(headCenter.dx - 54 + leftTwitch, headCenter.dy - 84)
+          ..lineTo(headCenter.dx - 8, headCenter.dy - 36)
           ..close();
-        canvas.drawPath(leftInner, innerPaint);
-      }
+        canvas.drawPath(leftEar, earPaint);
+
+        if (!isBackView) {
+          final leftInner = Path()
+            ..moveTo(headCenter.dx - 44, headCenter.dy - 24)
+            ..lineTo(headCenter.dx - 48 + leftTwitch, headCenter.dy - 72)
+            ..lineTo(headCenter.dx - 14, headCenter.dy - 36)
+            ..close();
+          canvas.drawPath(leftInner, innerPaint);
+        }
+      });
 
       // 右耳：高耸尖锐
-      final rightEar = Path()
-        ..moveTo(headCenter.dx + 50, headCenter.dy - 22)
-        ..lineTo(headCenter.dx + 54 - rightTwitch, headCenter.dy - 84)
-        ..lineTo(headCenter.dx + 8, headCenter.dy - 36)
-        ..close();
-      canvas.drawPath(rightEar, earPaint);
-
-      if (!isBackView) {
-        final rightInner = Path()
-          ..moveTo(headCenter.dx + 44, headCenter.dy - 24)
-          ..lineTo(headCenter.dx + 48 - rightTwitch, headCenter.dy - 72)
-          ..lineTo(headCenter.dx + 14, headCenter.dy - 36)
+      drawRight(() {
+        final rightEar = Path()
+          ..moveTo(headCenter.dx + 50, headCenter.dy - 22)
+          ..lineTo(headCenter.dx + 54 - rightTwitch, headCenter.dy - 84)
+          ..lineTo(headCenter.dx + 8, headCenter.dy - 36)
           ..close();
-        canvas.drawPath(rightInner, innerPaint);
-      }
+        canvas.drawPath(rightEar, earPaint);
+
+        if (!isBackView) {
+          final rightInner = Path()
+            ..moveTo(headCenter.dx + 44, headCenter.dy - 24)
+            ..lineTo(headCenter.dx + 48 - rightTwitch, headCenter.dy - 72)
+            ..lineTo(headCenter.dx + 14, headCenter.dy - 36)
+            ..close();
+          canvas.drawPath(rightInner, innerPaint);
+        }
+      });
       return;
     }
 
@@ -759,38 +795,42 @@ class PetPainter extends CustomPainter {
       final innerPaint = Paint()..color = const Color(0xFFFFB6C1);
 
       // 左耳：小巧圆润
-      final leftEar = Path()
-        ..moveTo(headCenter.dx - 48, headCenter.dy - 20)
-        ..quadraticBezierTo(headCenter.dx - 44 + leftTwitch, headCenter.dy - 56, headCenter.dx - 38 + leftTwitch, headCenter.dy - 54)
-        ..lineTo(headCenter.dx - 16, headCenter.dy - 38)
-        ..close();
-      canvas.drawPath(leftEar, earPaint);
-
-      if (!isBackView) {
-        final leftInner = Path()
-          ..moveTo(headCenter.dx - 42, headCenter.dy - 24)
-          ..lineTo(headCenter.dx - 36 + leftTwitch, headCenter.dy - 48)
-          ..lineTo(headCenter.dx - 22, headCenter.dy - 36)
+      drawLeft(() {
+        final leftEar = Path()
+          ..moveTo(headCenter.dx - 48, headCenter.dy - 20)
+          ..quadraticBezierTo(headCenter.dx - 44 + leftTwitch, headCenter.dy - 56, headCenter.dx - 38 + leftTwitch, headCenter.dy - 54)
+          ..lineTo(headCenter.dx - 16, headCenter.dy - 38)
           ..close();
-        canvas.drawPath(leftInner, innerPaint);
-      }
+        canvas.drawPath(leftEar, earPaint);
+
+        if (!isBackView) {
+          final leftInner = Path()
+            ..moveTo(headCenter.dx - 42, headCenter.dy - 24)
+            ..lineTo(headCenter.dx - 36 + leftTwitch, headCenter.dy - 48)
+            ..lineTo(headCenter.dx - 22, headCenter.dy - 36)
+            ..close();
+          canvas.drawPath(leftInner, innerPaint);
+        }
+      });
 
       // 右耳：小巧圆润
-      final rightEar = Path()
-        ..moveTo(headCenter.dx + 48, headCenter.dy - 20)
-        ..quadraticBezierTo(headCenter.dx + 44 - rightTwitch, headCenter.dy - 56, headCenter.dx + 38 - rightTwitch, headCenter.dy - 54)
-        ..lineTo(headCenter.dx + 16, headCenter.dy - 38)
-        ..close();
-      canvas.drawPath(rightEar, earPaint);
-
-      if (!isBackView) {
-        final rightInner = Path()
-          ..moveTo(headCenter.dx + 42, headCenter.dy - 24)
-          ..lineTo(headCenter.dx + 36 - rightTwitch, headCenter.dy - 48)
-          ..lineTo(headCenter.dx + 22, headCenter.dy - 36)
+      drawRight(() {
+        final rightEar = Path()
+          ..moveTo(headCenter.dx + 48, headCenter.dy - 20)
+          ..quadraticBezierTo(headCenter.dx + 44 - rightTwitch, headCenter.dy - 56, headCenter.dx + 38 - rightTwitch, headCenter.dy - 54)
+          ..lineTo(headCenter.dx + 16, headCenter.dy - 38)
           ..close();
-        canvas.drawPath(rightInner, innerPaint);
-      }
+        canvas.drawPath(rightEar, earPaint);
+
+        if (!isBackView) {
+          final rightInner = Path()
+            ..moveTo(headCenter.dx + 42, headCenter.dy - 24)
+            ..lineTo(headCenter.dx + 36 - rightTwitch, headCenter.dy - 48)
+            ..lineTo(headCenter.dx + 22, headCenter.dy - 36)
+            ..close();
+          canvas.drawPath(rightInner, innerPaint);
+        }
+      });
       return;
     }
 
@@ -807,38 +847,42 @@ class PetPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     // 左耳
-    final leftEar = Path()
-      ..moveTo(headCenter.dx - 45, headCenter.dy - 25)
-      ..lineTo(headCenter.dx - 42 + leftTwitch, headCenter.dy - 64)
-      ..lineTo(headCenter.dx - 12, headCenter.dy - 44)
-      ..close();
-    canvas.drawPath(leftEar, Paint()..color = leftEarBaseColor);
-
-    if (!isBackView) {
-      final leftEarInner = Path()
-        ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
-        ..lineTo(headCenter.dx - 37 + leftTwitch, headCenter.dy - 55)
-        ..lineTo(headCenter.dx - 18, headCenter.dy - 42)
+    drawLeft(() {
+      final leftEar = Path()
+        ..moveTo(headCenter.dx - 45, headCenter.dy - 25)
+        ..lineTo(headCenter.dx - 42 + leftTwitch, headCenter.dy - 64)
+        ..lineTo(headCenter.dx - 12, headCenter.dy - 44)
         ..close();
-      canvas.drawPath(leftEarInner, earInnerPaint);
-    }
+      canvas.drawPath(leftEar, Paint()..color = leftEarBaseColor);
+
+      if (!isBackView) {
+        final leftEarInner = Path()
+          ..moveTo(headCenter.dx - 38, headCenter.dy - 28)
+          ..lineTo(headCenter.dx - 37 + leftTwitch, headCenter.dy - 55)
+          ..lineTo(headCenter.dx - 18, headCenter.dy - 42)
+          ..close();
+        canvas.drawPath(leftEarInner, earInnerPaint);
+      }
+    });
 
     // 右耳
-    final rightEar = Path()
-      ..moveTo(headCenter.dx + 45, headCenter.dy - 25)
-      ..lineTo(headCenter.dx + 42 - rightTwitch, headCenter.dy - 64)
-      ..lineTo(headCenter.dx + 12, headCenter.dy - 44)
-      ..close();
-    canvas.drawPath(rightEar, Paint()..color = rightEarBaseColor);
-
-    if (!isBackView) {
-      final rightEarInner = Path()
-        ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
-        ..lineTo(headCenter.dx + 37 - rightTwitch, headCenter.dy - 55)
-        ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
+    drawRight(() {
+      final rightEar = Path()
+        ..moveTo(headCenter.dx + 45, headCenter.dy - 25)
+        ..lineTo(headCenter.dx + 42 - rightTwitch, headCenter.dy - 64)
+        ..lineTo(headCenter.dx + 12, headCenter.dy - 44)
         ..close();
-      canvas.drawPath(rightEarInner, earInnerPaint);
-    }
+      canvas.drawPath(rightEar, Paint()..color = rightEarBaseColor);
+
+      if (!isBackView) {
+        final rightEarInner = Path()
+          ..moveTo(headCenter.dx + 38, headCenter.dy - 28)
+          ..lineTo(headCenter.dx + 37 - rightTwitch, headCenter.dy - 55)
+          ..lineTo(headCenter.dx + 18, headCenter.dy - 42)
+          ..close();
+        canvas.drawPath(rightEarInner, earInnerPaint);
+      }
+    });
 
     // 4. 布偶猫 & 临清狮子猫：耳内长长的仙气饰毛 (Wispy Ear Furnishings)
     if (skin.id == 'cat_ragdoll' || skin.id == 'cat_persian_white') {
@@ -849,38 +893,42 @@ class PetPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
 
       // 左耳飘逸饰毛
-      canvas.drawLine(
-        Offset(headCenter.dx - 32, headCenter.dy - 34),
-        Offset(headCenter.dx - 54 + leftTwitch * 0.4, headCenter.dy - 44),
-        furnishPaint,
-      );
-      canvas.drawLine(
-        Offset(headCenter.dx - 28, headCenter.dy - 30),
-        Offset(headCenter.dx - 58 + leftTwitch * 0.4, headCenter.dy - 36),
-        furnishPaint,
-      );
-      canvas.drawLine(
-        Offset(headCenter.dx - 24, headCenter.dy - 26),
-        Offset(headCenter.dx - 50 + leftTwitch * 0.4, headCenter.dy - 26),
-        furnishPaint,
-      );
+      drawLeft(() {
+        canvas.drawLine(
+          Offset(headCenter.dx - 32, headCenter.dy - 34),
+          Offset(headCenter.dx - 54 + leftTwitch * 0.4, headCenter.dy - 44),
+          furnishPaint,
+        );
+        canvas.drawLine(
+          Offset(headCenter.dx - 28, headCenter.dy - 30),
+          Offset(headCenter.dx - 58 + leftTwitch * 0.4, headCenter.dy - 36),
+          furnishPaint,
+        );
+        canvas.drawLine(
+          Offset(headCenter.dx - 24, headCenter.dy - 26),
+          Offset(headCenter.dx - 50 + leftTwitch * 0.4, headCenter.dy - 26),
+          furnishPaint,
+        );
+      });
 
       // 右耳飘逸饰毛
-      canvas.drawLine(
-        Offset(headCenter.dx + 32, headCenter.dy - 34),
-        Offset(headCenter.dx + 54 - rightTwitch * 0.4, headCenter.dy - 44),
-        furnishPaint,
-      );
-      canvas.drawLine(
-        Offset(headCenter.dx + 28, headCenter.dy - 30),
-        Offset(headCenter.dx + 58 - rightTwitch * 0.4, headCenter.dy - 36),
-        furnishPaint,
-      );
-      canvas.drawLine(
-        Offset(headCenter.dx + 24, headCenter.dy - 26),
-        Offset(headCenter.dx + 50 - rightTwitch * 0.4, headCenter.dy - 26),
-        furnishPaint,
-      );
+      drawRight(() {
+        canvas.drawLine(
+          Offset(headCenter.dx + 32, headCenter.dy - 34),
+          Offset(headCenter.dx + 54 - rightTwitch * 0.4, headCenter.dy - 44),
+          furnishPaint,
+        );
+        canvas.drawLine(
+          Offset(headCenter.dx + 28, headCenter.dy - 30),
+          Offset(headCenter.dx + 58 - rightTwitch * 0.4, headCenter.dy - 36),
+          furnishPaint,
+        );
+        canvas.drawLine(
+          Offset(headCenter.dx + 24, headCenter.dy - 26),
+          Offset(headCenter.dx + 50 - rightTwitch * 0.4, headCenter.dy - 26),
+          furnishPaint,
+        );
+      });
     }
   }
 
@@ -998,6 +1046,24 @@ class PetPainter extends CustomPainter {
     for (final eye in eyeList) {
       final eyeCenter = eye.$1;
       final irisColor = eye.$2;
+
+      // 俏皮单眼眨眼放电 (Wink)
+      final isThisEyeWinking = (eyeCenter == leftEyeCenter && winkEye == 'LEFT') ||
+          (eyeCenter == rightEyeCenter && winkEye == 'RIGHT');
+      if (isThisEyeWinking) {
+        final winkPaint = Paint()
+          ..color = const Color(0xFF1E293B)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round;
+        final winkPath = Path()
+          ..moveTo(eyeCenter.dx - 11, eyeCenter.dy)
+          ..quadraticBezierTo(eyeCenter.dx, eyeCenter.dy - 7, eyeCenter.dx + 11, eyeCenter.dy);
+        canvas.drawPath(winkPath, winkPaint);
+        // 翘起的小睫毛
+        canvas.drawLine(Offset(eyeCenter.dx + 10, eyeCenter.dy), Offset(eyeCenter.dx + 14, eyeCenter.dy - 4), winkPaint);
+        continue;
+      }
 
       // 眼白
       final eyeWhitePaint = Paint()..color = Colors.white;
@@ -1127,6 +1193,28 @@ class PetPainter extends CustomPainter {
       ..moveTo(noseCenter.dx, noseCenter.dy + 2)
       ..quadraticBezierTo(noseCenter.dx + 6, noseCenter.dy + 9, noseCenter.dx + 12, noseCenter.dy + 5);
     canvas.drawPath(mouthRight, mouthPaint);
+
+    // 呆萌吐小舌头 (Blep)
+    if (isBlep) {
+      final blepPaint = Paint()..color = const Color(0xFFFB7185);
+      final blepBorder = Paint()
+        ..color = const Color(0xFFF43F5E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      final blepPath = Path()
+        ..moveTo(noseCenter.dx - 3.8, noseCenter.dy + 5)
+        ..lineTo(noseCenter.dx + 3.8, noseCenter.dy + 5)
+        ..quadraticBezierTo(noseCenter.dx + 3.8, noseCenter.dy + 10.5, noseCenter.dx, noseCenter.dy + 11)
+        ..quadraticBezierTo(noseCenter.dx - 3.8, noseCenter.dy + 10.5, noseCenter.dx - 3.8, noseCenter.dy + 5)
+        ..close();
+      canvas.drawPath(blepPath, blepPaint);
+      canvas.drawPath(blepPath, blepBorder);
+      // 舌头中间微浅小中缝
+      final groovePaint = Paint()
+        ..color = const Color(0xFFF43F5E).withOpacity(0.6)
+        ..strokeWidth = 1.0;
+      canvas.drawLine(Offset(noseCenter.dx, noseCenter.dy + 5.5), Offset(noseCenter.dx, noseCenter.dy + 9.5), groovePaint);
+    }
   }
 
   void _drawWhiskers(Canvas canvas, SkinConfig skin, Offset headCenter) {
@@ -1389,6 +1477,29 @@ class PetPainter extends CustomPainter {
       for (int i = 6; i <= 14; i += 3) {
         canvas.drawLine(Offset(i.toDouble(), 44), Offset(i.toDouble(), 48), fringePaint);
       }
+    } else if (neckDeco == 'royal_cape') {
+      // 🦸‍♂️ 皇家丝绒披风 (羁绊3阶专属装扮：尊贵深紫红丝绒 + 贵气纯金饰边 + 领口星辉金扣)
+      final capePaint = Paint()
+        ..color = const Color(0xFF6B21A8)
+        ..style = PaintingStyle.fill;
+      final goldTrim = Paint()
+        ..color = const Color(0xFFF59E0B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2;
+
+      // 披风下摆向后背与两侧舒展
+      final capePath = Path()
+        ..moveTo(-22, 22)
+        ..quadraticBezierTo(-36, 44, -28, 64)
+        ..quadraticBezierTo(0, 70, 28, 64)
+        ..quadraticBezierTo(36, 44, 22, 22)
+        ..close();
+      canvas.drawPath(capePath, capePaint);
+      canvas.drawPath(capePath, goldTrim);
+
+      // 披风领口金扣
+      canvas.drawCircle(const Offset(0, 23), 5.0, Paint()..color = const Color(0xFFF59E0B));
+      canvas.drawCircle(const Offset(0, 23), 2.2, Paint()..color = Colors.white);
     }
   }
 
@@ -1397,7 +1508,38 @@ class PetPainter extends CustomPainter {
     final headDeco = model.decorations['head'];
     if (headDeco == null || headDeco == 'none') return;
 
-    if (headDeco == 'crown') {
+    if (headDeco == 'gold_crown_sparkle') {
+      // 👑 专属·璀璨星辉皇冠 (羁绊4阶专属装扮：五峰纯金大王冠 + 红蓝星钻 + 环绕微光星尘)
+      final crownCenter = Offset(headCenter.dx, headCenter.dy - 48);
+      final goldPaint = Paint()..color = const Color(0xFFFBBF24);
+      final crownBase = Path()
+        ..moveTo(crownCenter.dx - 24, crownCenter.dy)
+        ..lineTo(crownCenter.dx - 26, crownCenter.dy - 22)
+        ..lineTo(crownCenter.dx - 12, crownCenter.dy - 10)
+        ..lineTo(crownCenter.dx, crownCenter.dy - 28)
+        ..lineTo(crownCenter.dx + 12, crownCenter.dy - 10)
+        ..lineTo(crownCenter.dx + 26, crownCenter.dy - 22)
+        ..lineTo(crownCenter.dx + 24, crownCenter.dy)
+        ..close();
+      canvas.drawPath(crownBase, goldPaint);
+
+      final rimPaint = Paint()
+        ..color = const Color(0xFFD97706)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawPath(crownBase, rimPaint);
+
+      // 顶峰三颗闪耀红钻
+      canvas.drawCircle(Offset(crownCenter.dx, crownCenter.dy - 28), 3.6, Paint()..color = const Color(0xFFEF4444));
+      canvas.drawCircle(Offset(crownCenter.dx - 26, crownCenter.dy - 22), 2.8, Paint()..color = const Color(0xFF3B82F6));
+      canvas.drawCircle(Offset(crownCenter.dx + 26, crownCenter.dy - 22), 2.8, Paint()..color = const Color(0xFF3B82F6));
+
+      // 皇冠环绕微光星尘
+      final starAngle = animTime * 3.5;
+      final starX = crownCenter.dx + math.cos(starAngle) * 28.0;
+      final starY = crownCenter.dy - 16.0 + math.sin(starAngle) * 7.0;
+      canvas.drawCircle(Offset(starX, starY), 2.2, Paint()..color = Colors.white);
+    } else if (headDeco == 'crown') {
       // 👑 璀璨金冠
       final crownCenter = Offset(headCenter.dx, headCenter.dy - 46);
       final goldPaint = Paint()

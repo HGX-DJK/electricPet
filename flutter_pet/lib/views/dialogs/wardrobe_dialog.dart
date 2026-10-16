@@ -23,6 +23,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
   // 头部帽子装饰库
   static const List<Map<String, String>> _headDecos = [
     {'id': 'none', 'name': '无帽子', 'icon': '🚫', 'desc': '保持自然清爽原生小脑瓜'},
+    {'id': 'gold_crown_sparkle', 'name': '璀璨星辉皇冠', 'icon': '✨', 'desc': '羁绊4阶专属：五峰纯金大王冠，环绕耀目星尘', 'minStage': '4'},
     {'id': 'crown', 'name': '璀璨金冠', 'icon': '👑', 'desc': '华丽三峰黄金皇冠，镶嵌红绿蓝三色宝石'},
     {'id': 'wizard_hat', 'name': '魔法巫师帽', 'icon': '🧙‍♂️', 'desc': '深邃星空尖顶巫师帽，缀有灵动小金星'},
     {'id': 'straw_hat', 'name': '田园草帽', 'icon': '👒', 'desc': '暖阳编织宽檐草帽，配法式复古绯红丝带'},
@@ -32,6 +33,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
   // 颈部配饰挂件库
   static const List<Map<String, String>> _neckDecos = [
     {'id': 'none', 'name': '无配饰', 'icon': '🚫', 'desc': '摘下颈部挂件，舒适自在'},
+    {'id': 'royal_cape', 'name': '皇家丝绒披风', 'icon': '🦸‍♂️', 'desc': '羁绊3阶专属：高贵深紫红丝绒小斗篷，缀纯金流光包边', 'minStage': '3'},
     {'id': 'bell', 'name': '经典金铃铛', 'icon': '🔔', 'desc': '赤红如意项圈配轻晃纯金小铃铛'},
     {'id': 'ribbon', 'name': '俏皮蝴蝶结', 'icon': '🎀', 'desc': '甜美草莓粉双翼缎带蝴蝶结'},
     {'id': 'bowtie', 'name': '英伦绅士领结', 'icon': '🤵', 'desc': '深邃午夜蓝双层领结配雅致金扣'},
@@ -458,9 +460,25 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         final item = _headDecos[index];
         final id = item['id']!;
         final isSelected = (currentHead == id);
+        final minStageStr = item['minStage'];
+        final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
+        final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
+        final isLocked = minStage > currentStage;
 
         return GestureDetector(
           onTap: () {
+            if (isLocked) {
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: const Color(0xFF8B5CF6),
+                ),
+              );
+              return;
+            }
             HapticFeedback.lightImpact();
             setState(() {
               model.setDecoration('head', id);
@@ -520,7 +538,26 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ],
                   ),
                 ),
-                if (isSelected)
+                if (isLocked)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 2),
+                        Text(
+                          '阶$minStage解锁',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (isSelected)
                   const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
                 else
                   Icon(Icons.radio_button_unchecked, color: subColor.withOpacity(0.5), size: 18),
@@ -550,9 +587,25 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         final item = _neckDecos[index];
         final id = item['id']!;
         final isSelected = (currentNeck == id);
+        final minStageStr = item['minStage'];
+        final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
+        final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
+        final isLocked = minStage > currentStage;
 
         return GestureDetector(
           onTap: () {
+            if (isLocked) {
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: const Color(0xFF8B5CF6),
+                ),
+              );
+              return;
+            }
             HapticFeedback.lightImpact();
             setState(() {
               model.setDecoration('neck', id);
@@ -612,7 +665,26 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ],
                   ),
                 ),
-                if (isSelected)
+                if (isLocked)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFF59E0B)),
+                        const SizedBox(width: 2),
+                        Text(
+                          '阶$minStage解锁',
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (isSelected)
                   const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
                 else
                   Icon(Icons.radio_button_unchecked, color: subColor.withOpacity(0.5), size: 18),
