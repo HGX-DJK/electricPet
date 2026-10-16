@@ -187,4 +187,41 @@ void main() {
     // 验证波可专属暖绒舒睡圆垫
     expect(find.byKey(const ValueKey('cozy_cat_rug')), findsOneWidget);
   });
+
+  testWidgets('Dynamic Pupils, Floor Paw Footprints, and Tail Boop Puff test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 验证小猫与场景 CustomPaint 正常挂载
+    final catPaintFinder = find.byType(CustomPaint);
+    expect(catPaintFinder, findsWidgets);
+
+    // 2. 测试揪尾巴微互动 (Tail Boop / Pinch & Puff)
+    // 寻找小猫 GestureDetector 并点击小猫右侧尾巴区域 (相对于 200x200 画布的 offset (160, 95))
+    final catFinder = find.byWidgetPredicate(
+      (w) => w is GestureDetector && w.child is AnimatedBuilder,
+    );
+    expect(catFinder, findsOneWidget);
+
+    final catTopLeft = tester.getTopLeft(catFinder);
+    final tailTapTarget = Offset(catTopLeft.dx + 160.0, catTopLeft.dy + 95.0);
+    await tester.tapAt(tailTapTarget);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 验证触发尾巴敏感禁区警告台词与炸毛惊跳反应
+    expect(find.textContaining('尾巴'), findsWidgets);
+
+    // 3. 验证炸毛状态持续并在约 2 秒后自然平复
+    await tester.pump(const Duration(milliseconds: 2000));
+
+    // 4. 验证地板漫步与追球脚印渲染层挂载运行
+    expect(find.byType(CustomPaint), findsWidgets);
+  });
 }

@@ -31,6 +31,59 @@ class _Particle {
   });
 }
 
+/// 地板粉嫩小猫爪印数据模型 (漫步巡视与追球冲刺时左右交替踩出)
+class _Footprint {
+  final Offset position;
+  final double angle;
+  final bool isLeft;
+  double opacity;
+
+  _Footprint({
+    required this.position,
+    required this.angle,
+    required this.isLeft,
+    this.opacity = 0.65,
+  });
+}
+
+/// 地板粉嫩小猫爪印极速渲染器 (中心小肉垫 + 3 个半透明粉嫩趾印)
+class _FootprintPainter extends CustomPainter {
+  final List<_Footprint> footprints;
+
+  _FootprintPainter(this.footprints);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final fp in footprints) {
+      if (fp.opacity <= 0.01) continue;
+      canvas.save();
+      canvas.translate(fp.position.dx, fp.position.dy);
+      canvas.rotate(fp.angle);
+
+      final padPaint = Paint()
+        ..color = const Color(0xFFFB7185).withOpacity((fp.opacity * 0.70).clamp(0.0, 1.0))
+        ..style = PaintingStyle.fill;
+
+      // 掌心中心主肉垫
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: 8.5, height: 7.0),
+        padPaint,
+      );
+
+      // 3 个粉嫩饱满小脚趾印
+      const toeY = -6.0;
+      canvas.drawCircle(const Offset(-4.5, toeY + 1.0), 2.2, padPaint);
+      canvas.drawCircle(const Offset(0.0, toeY), 2.5, padPaint);
+      canvas.drawCircle(const Offset(4.5, toeY + 1.0), 2.2, padPaint);
+
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FootprintPainter oldDelegate) => true;
+}
+
 /// 移动端沉浸式互动乐园主界面
 class PetScreen extends StatefulWidget {
   final PetModel petModel;
@@ -75,6 +128,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _purrHapticTimer;
   String? _twitchEar;
   Timer? _earTwitchTimer;
+
+  // 揪尾巴炸毛微互动与高频电波甩尾
+  bool _isTailPuffed = false;
+  Timer? _tailPuffTimer;
+
+  // 地板粉嫩小猫爪印系统
+  final List<_Footprint> _footprints = [];
+  Offset? _lastFootprintPos;
+  bool _footprintLeft = false;
 
   // 维度二：毛线球物理与小鱼碗弹射
   double _yarnX = 0.0;
@@ -181,6 +243,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         needRepaint = true;
       }
 
+      // 地板粉嫩小猫爪印渐隐消退 (左右脚印在 1.5 秒内优雅淡出)
+      if (_footprints.isNotEmpty) {
+        _footprints.removeWhere((fp) {
+          fp.opacity -= 0.018;
+          return fp.opacity <= 0.0;
+        });
+        needRepaint = true;
+      }
+
       // 毛线球物理运动与猫咪追逐飞扑驱动
       if (_isYarnFlying || _isChasingYarn) {
         if (_isYarnFlying) {
@@ -244,6 +315,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             final floorTop = (_lastScreenSize.height * 0.22).clamp(160.0, 220.0);
             _petX = _petX.clamp(35.0, _lastScreenSize.width - 35.0);
             _petY = _petY.clamp(floorTop + 25.0, _lastScreenSize.height - 115.0);
+            _maybeAddFootprint(Offset(_petX, _petY));
           } else {
             // 飞扑捕获成功瞬间！(Pounce & Catch)
             _isYarnFlying = false;
@@ -316,6 +388,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           final norm = diff / dist;
           _petX += norm.dx * step;
           _petY += norm.dy * step;
+          _maybeAddFootprint(Offset(_petX, _petY));
           needRepaint = true;
         } else {
           // 扑到激光点瞬间！
@@ -346,6 +419,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           final step = math.min(dist, 1.8);
           _petX += (dx / dist) * step;
           _petY += (dy / dist) * step;
+          _maybeAddFootprint(Offset(_petX, _petY));
 
           // 转向自然对齐横向运动分量
           if (dx.abs() > 0.8) {
@@ -424,6 +498,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _purrHapticTimer?.cancel();
     _earTwitchTimer?.cancel();
     _comboResetTimer?.cancel();
+    _tailPuffTimer?.cancel();
     _actionTimer?.cancel();
     _idleActionTimer?.cancel();
     _boopTimer?.cancel();
@@ -1336,11 +1411,86 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
+  /// 踩出地板粉嫩小猫肉垫爪印
+  void _maybeAddFootprint(Offset currentPos) {
+    if (_lastFootprintPos == null) {
+      _lastFootprintPos = currentPos;
+      return;
+    }
+    final diff = currentPos - _lastFootprintPos!;
+    final dist = diff.distance;
+    if (dist >= 18.0) {
+      _lastFootprintPos = currentPos;
+      _footprintLeft = !_footprintLeft;
+
+      // 运动朝向角
+      final angle = math.atan2(diff.dy, diff.dx) + math.pi / 2;
+
+      // 左右两脚横向交替
+      final perp = Offset(-diff.dy, diff.dx) / dist;
+      final lateral = perp * (_footprintLeft ? -9.0 : 9.0);
+
+      // 脚印位于猫咪爪底 (垂直向下偏移约 56px)
+      final footPos = currentPos + const Offset(0, 56.0) + lateral;
+      _footprints.add(_Footprint(
+        position: footPos,
+        angle: angle,
+        isLeft: _footprintLeft,
+        opacity: 0.65,
+      ));
+      if (_footprints.length > 25) {
+        _footprints.removeAt(0);
+      }
+    }
+  }
+
+  /// 揪尾巴炸毛微互动：触发触电惊跳、高频电波甩尾、微嗔短叫与俏皮台词
+  void _triggerTailBoop() {
+    _idleSeconds = 0;
+    _stopRoaming();
+    SoundService.playMeow(tone: MeowTone.short);
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.heavyImpact();
+      Timer(const Duration(milliseconds: 120), () {
+        HapticFeedback.lightImpact();
+      });
+    }
+    _squishController.forward(from: 0.0);
+    setState(() {
+      _isTailPuffed = true;
+    });
+    _tailPuffTimer?.cancel();
+    _tailPuffTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _isTailPuffed = false);
+    });
+
+    final tailParticleX = _petX + (_facingLeft ? -45.0 : 45.0);
+    _spawnParticles(Offset(tailParticleX, _petY + 10), emoji: '⚡', count: 2);
+    _spawnParticles(Offset(tailParticleX, _petY), emoji: '💢', count: 3);
+    _spawnParticles(Offset(tailParticleX, _petY - 15), emoji: '💨', count: 2);
+
+    final tailQuotes = [
+      '喵呜？！谁在偷抓波可的尾巴！尾巴是敏感禁区喵~ 😾💢',
+      '哈！尾巴炸毛啦！不许偷偷拉小猫咪的天线！⚡(>﹏<)',
+      '喵呜呜~ 尾巴尖尖被碰到了，浑身电波噼里啪啦！💨⚡',
+      '尾巴防御系统启动！波可要哈气啦~ 哼！😾🐾',
+    ];
+    _showDialogueBubble(tailQuotes[math.Random().nextInt(tailQuotes.length)], duration: const Duration(seconds: 4));
+  }
+
   /// 维度一：部位差异化触感与猫咪打呼噜反应
   void _handleBodyPartTouch(Offset localPos, Size screenSize) {
     _idleSeconds = 0;
     _isRoaming = false;
     _targetWalkX = null;
+
+    // 0. 揪尾巴炸毛微互动 (Tail Boop / Pinch - 尾巴敏感禁区惊跳炸毛与高频电波甩尾)
+    final isTailTouch = (!_facingLeft && localPos.dx >= 135 && localPos.dx <= 192 && localPos.dy >= 55 && localPos.dy <= 135) ||
+                        (_facingLeft && localPos.dx >= 8 && localPos.dx <= 65 && localPos.dy >= 55 && localPos.dy <= 135);
+    if (isTailTouch) {
+      _triggerTailBoop();
+      return;
+    }
 
     // 1. 点粉嫩小鼻子 (Nose Boop - 触发短促清脆小猫打喷嚏回应喵)
     if ((localPos.dx - 100).abs() < 14 && (localPos.dy - 93).abs() < 10) {
@@ -1750,6 +1900,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               // 萌宠专属舒睡暖绒圆垫 (极简轻奢，铺展于猫咪身后地板上，猫咪坐于其上)
               _buildCatRug(nestX, nestY, isNight),
 
+              // 地板粉嫩小猫爪印层 (2.5D 木地板巡视与冲刺追球时淡隐脚印)
+              if (_footprints.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: _FootprintPainter(_footprints),
+                    ),
+                  ),
+                ),
+
               // 顶部双灵动岛浮空栏 (左侧萌宠身份 + 右侧饱腹心情小窝，告别拥挤，自然呼吸)
               Positioned(
                 top: 10,
@@ -1763,7 +1923,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 left: _petX - 100,
                 top: _petY - 100,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTapDown: (details) => _handleBodyPartTouch(details.localPosition, screenSize),
+                  onTap: () {},
                   onDoubleTap: _onPetDoubleTap,
                   onLongPressStart: (_) => _startPeekABoo(),
                   onLongPressEnd: (_) => _finishPeekABoo(),
@@ -1899,6 +2061,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             petProgress: _petProgress,
                             isPurring: _isPurring,
                             twitchEar: _twitchEar,
+                            isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE'),
+                            isTailPuffed: _isTailPuffed,
+                            isNight: isNight,
                           ),
                         ),
                       );

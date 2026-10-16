@@ -13,6 +13,9 @@ class PetPainter extends CustomPainter {
   final double petProgress; // 0.0 ~ 1.0 (摸头兴奋度)
   final bool isPurring;     // 挠下巴呼噜状态
   final String? twitchEar;  // 'LEFT' | 'RIGHT' 独立抖耳
+  final bool isHunting;     // 捕猎/追球/追激光兴奋态 (曜石巨瞳)
+  final bool isTailPuffed;  // 揪尾巴炸毛惊跳状态 (尾巴膨胀与毛刺)
+  final bool isNight;       // 静谧星夜暗光环境 (瞳孔自然舒张)
 
   PetPainter({
     required this.model,
@@ -23,6 +26,9 @@ class PetPainter extends CustomPainter {
     this.petProgress = 0.0,
     this.isPurring = false,
     this.twitchEar,
+    this.isHunting = false,
+    this.isTailPuffed = false,
+    this.isNight = false,
   });
 
   @override
@@ -191,9 +197,11 @@ class PetPainter extends CustomPainter {
   }
 
   void _drawTail(Canvas canvas, SkinConfig skin) {
-    // 尾巴摆动速率：真实猫尾双正弦波涟漪摆动
+    // 尾巴摆动速率：真实猫尾双正弦波涟漪摆动；若炸毛则受惊高频电波震颤 (Puffed tail tremor)
     double tailWag;
-    if (state == 'SIT_WAG_TAIL') {
+    if (isTailPuffed) {
+      tailWag = math.sin(animTime * 35.0) * 16.0;
+    } else if (state == 'SIT_WAG_TAIL') {
       tailWag = math.sin(animTime * 9.0) * 36.0 + math.sin(animTime * 18.0) * 8.0;
     } else if (state == 'STRETCH_YAWN') {
       tailWag = 5.0 + math.sin(animTime * 14.0) * 6.0;
@@ -216,19 +224,22 @@ class PetPainter extends CustomPainter {
     final isRinged = (skin.id == 'cat_orange' || skin.id == 'cat_american_tabby');
 
     // 尾巴粗细形态：长毛大羽毛尾 (24) vs 粗圆水獭尾 (19) vs 纤细鞭尾 (9) vs 标准 (14)
-    final double tailWidth;
+    // 炸毛时尾巴瞬时膨大 1.65 倍！
+    final double baseTailWidth;
     if (isLonghair) {
-      tailWidth = 24.0;
+      baseTailWidth = 24.0;
     } else if (isOtter) {
-      tailWidth = 19.0;
+      baseTailWidth = 19.0;
     } else if (isSleek) {
-      tailWidth = 9.0;
+      baseTailWidth = 9.0;
     } else {
-      tailWidth = 14.0;
+      baseTailWidth = 14.0;
     }
+    final tailWidth = isTailPuffed ? (baseTailWidth * 1.65) : baseTailWidth;
 
+    final tailColor = (skin.id == 'cat_siamese') ? Color(skin.secondaryColor) : Color(skin.primaryColor);
     final tailPaint = Paint()
-      ..color = (skin.id == 'cat_siamese') ? Color(skin.secondaryColor) : Color(skin.primaryColor)
+      ..color = tailColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = tailWidth
       ..strokeCap = StrokeCap.round;
@@ -243,6 +254,28 @@ class PetPainter extends CustomPainter {
       path.cubicTo(55, 35, 65 + tailWag, -5, 52 + tailWag, -25);
     }
     canvas.drawPath(path, tailPaint);
+
+    // 炸毛微互动：沿尾巴向外爆出软萌锯齿毛刺 (Spiky Bristles)
+    if (isTailPuffed) {
+      final bristlePaint = Paint()
+        ..color = tailColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round;
+      final bristles = [
+        (const Offset(30, 42), const Offset(16, 48)),
+        (const Offset(38, 34), const Offset(54, 40)),
+        (const Offset(44, 24), const Offset(26, 18)),
+        (Offset(50 + tailWag * 0.3, 12), Offset(68 + tailWag * 0.3, 18)),
+        (Offset(55 + tailWag * 0.5, 0), Offset(38 + tailWag * 0.5, -6)),
+        (Offset(56 + tailWag * 0.7, -12), Offset(74 + tailWag * 0.7, -8)),
+        (Offset(52 + tailWag * 0.9, -22), Offset(36 + tailWag * 0.9, -30)),
+        (Offset(52 + tailWag, -25), Offset(64 + tailWag, -35)),
+      ];
+      for (final b in bristles) {
+        canvas.drawLine(b.$1, b.$2, bristlePaint);
+      }
+    }
 
     // 1. 布偶猫 & 临清狮子猫：大蓬松羽毛长毛层次
     if (isLonghair) {
@@ -955,6 +988,13 @@ class PetPainter extends CustomPainter {
       (rightEyeCenter, skin.id == 'cat_persian_white' ? const Color(0xFF0284C7) : Color(skin.eyeColor)),
     ];
 
+    final isDilated = isHunting ||
+        isNight ||
+        touchPos != null ||
+        petProgress > 0 ||
+        state == 'CATCH_MOUSE' ||
+        state == 'PLAY_YARN';
+
     for (final eye in eyeList) {
       final eyeCenter = eye.$1;
       final irisColor = eye.$2;
@@ -963,26 +1003,54 @@ class PetPainter extends CustomPainter {
       final eyeWhitePaint = Paint()..color = Colors.white;
       canvas.drawOval(Rect.fromCenter(center: eyeCenter, width: 22, height: 26), eyeWhitePaint);
 
-      // 虹膜彩环
+      // 虹膜彩环与外圈暗色边缘
       final irisCenter = Offset(eyeCenter.dx + gazeX, eyeCenter.dy + gazeY);
+      final limbalPaint = Paint()..color = const Color(0x28000000);
+      canvas.drawOval(Rect.fromCenter(center: irisCenter, width: 18.5, height: 22.5), limbalPaint);
+
       final irisPaint = Paint()..color = irisColor;
       canvas.drawOval(Rect.fromCenter(center: irisCenter, width: 17, height: 21), irisPaint);
 
-      // 瞳孔放大
-      double pupilScale = 1.0;
-      if (touchPos != null || state == 'CATCH_MOUSE') pupilScale = 1.25;
-      if (petProgress > 0) pupilScale = 1.35;
+      if (isDilated) {
+        // 捕猎/追光/黑夜/兴奋：黑曜石巨瞳 (曜石般圆滚大眼 + 双重璀璨大星芒高光)
+        final huntPulse = isHunting ? (math.sin(animTime * 14.0) * 0.5) : 0.0;
+        final pupilW = 15.2 + huntPulse;
+        final pupilH = 17.8 + huntPulse;
 
-      final pupilPaint = Paint()..color = const Color(0xFF0F172A);
-      canvas.drawOval(
-        Rect.fromCenter(center: irisCenter, width: 11 * pupilScale, height: 15 * pupilScale),
-        pupilPaint,
-      );
+        final pupilPaint = Paint()..color = const Color(0xFF0A0F1D);
+        canvas.drawOval(
+          Rect.fromCenter(center: irisCenter, width: pupilW, height: pupilH),
+          pupilPaint,
+        );
 
-      // 闪耀高光斑
-      final starPaint = Paint()..color = Colors.white;
-      canvas.drawCircle(Offset(irisCenter.dx - 3, irisCenter.dy - 4), 3.5, starPaint);
-      canvas.drawCircle(Offset(irisCenter.dx + 3, irisCenter.dy + 3), 1.8, starPaint);
+        // 双重璀璨星芒高光 (主大高光 + 副小高光 + 卫星微光)
+        final starPaint = Paint()..color = Colors.white;
+        canvas.drawCircle(Offset(irisCenter.dx - 3.2, irisCenter.dy - 4.2), 3.6, starPaint);
+        canvas.drawCircle(Offset(irisCenter.dx + 3.4, irisCenter.dy + 3.2), 2.0, starPaint);
+        canvas.drawCircle(Offset(irisCenter.dx - 0.4, irisCenter.dy - 6.2), 1.2, starPaint);
+
+        // 底部玻璃体反光月牙 (琉璃通透感)
+        final rimPaint = Paint()
+          ..color = const Color(0x40FFFFFF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0;
+        final rimPath = Path()
+          ..moveTo(irisCenter.dx - 4.5, irisCenter.dy + 6.0)
+          ..quadraticBezierTo(irisCenter.dx, irisCenter.dy + 8.2, irisCenter.dx + 4.5, irisCenter.dy + 6.0);
+        canvas.drawPath(rimPath, rimPaint);
+      } else {
+        // 日常/清爽/白昼：灵动清透杏仁猫瞳 (Slender Almond Pupil)
+        final pupilPaint = Paint()..color = const Color(0xFF0F172A);
+        canvas.drawOval(
+          Rect.fromCenter(center: irisCenter, width: 6.8, height: 16.5),
+          pupilPaint,
+        );
+
+        // 清透晶莹高光
+        final starPaint = Paint()..color = Colors.white;
+        canvas.drawCircle(Offset(irisCenter.dx - 2.2, irisCenter.dy - 4.0), 2.5, starPaint);
+        canvas.drawCircle(Offset(irisCenter.dx + 1.8, irisCenter.dy + 2.8), 1.4, starPaint);
+      }
     }
   }
 
