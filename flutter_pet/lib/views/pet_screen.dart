@@ -66,6 +66,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   Timer? _actionTimer;
   Timer? _idleActionTimer;
   Timer? _boopTimer;
+  Timer? _scratcherMeowTimer;
 
   // 维度一：部位差异化感知 & 打呼噜状态
   bool _isPurring = false;
@@ -325,6 +326,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _actionTimer?.cancel();
     _idleActionTimer?.cancel();
     _boopTimer?.cancel();
+    _scratcherMeowTimer?.cancel();
     _plantAnimTimer?.cancel();
     _postAnimTimer?.cancel();
     _photoAnimTimer?.cancel();
@@ -880,32 +882,94 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _showDialogueBubble('猫草清香扑鼻~ 波可闻到了开心咬了一小口！🌱😋', duration: const Duration(seconds: 4));
   }
 
-  /// 家具交互：剑麻猫抓板磨爪 (解压咔嚓磨爪爪)
+  /// 家具交互：原木剑麻猫抓柱磨爪 (真实解压利爪抓挠撕扯沙沙声 + 弹性震颤 + 真实木屑火花 + 猫咪惬意互动)
   void _onScratcherTap() {
     _idleSeconds = 0;
     SoundService.playScratch();
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
-      Timer(const Duration(milliseconds: 120), () {
-        HapticFeedback.mediumImpact();
+      Timer(const Duration(milliseconds: 100), () {
+        HapticFeedback.heavyImpact();
+        Timer(const Duration(milliseconds: 120), () {
+          HapticFeedback.lightImpact();
+        });
       });
     }
+
+    // 猫抓柱多段高频弹性减震物理反馈 (模拟真实剑麻受力回弹)
     _postAnimTimer?.cancel();
-    setState(() => _postWiggle = 4.0);
-    _postAnimTimer = Timer(const Duration(milliseconds: 120), () {
+    setState(() => _postWiggle = 6.0);
+    _postAnimTimer = Timer(const Duration(milliseconds: 60), () {
       if (mounted) {
-        setState(() => _postWiggle = -3.0);
-        _postAnimTimer = Timer(const Duration(milliseconds: 120), () {
-          if (mounted) setState(() => _postWiggle = 0.0);
+        setState(() => _postWiggle = -5.0);
+        _postAnimTimer = Timer(const Duration(milliseconds: 70), () {
+          if (mounted) {
+            setState(() => _postWiggle = 3.5);
+            _postAnimTimer = Timer(const Duration(milliseconds: 80), () {
+              if (mounted) {
+                setState(() => _postWiggle = -1.5);
+                _postAnimTimer = Timer(const Duration(milliseconds: 80), () {
+                  if (mounted) setState(() => _postWiggle = 0.0);
+                });
+              }
+            });
+          }
         });
       }
     });
 
-    _spawnParticles(Offset(_petX + 70, _petY - 30), emoji: '🐾', count: 3);
-    _spawnParticles(Offset(_petX + 85, _petY - 45), emoji: '🪵', count: 2);
-    _spawnTextParticle(Offset(_petX + 50, _petY - 60), '磨爪爪解压 +5 🐾', const Color(0xFFF59E0B));
+    // 精准定位在右上角猫抓柱真实几何中心
+    final floorTop = (_lastScreenSize.height * 0.28).clamp(200.0, 260.0);
+    final postCenterX = _lastScreenSize.width - 20.0 - 24.0;
+    final postCenterY = floorTop + 14.0 + 26.0;
+
+    _spawnParticles(Offset(postCenterX, postCenterY - 10), emoji: '🪵', count: 3);
+    _spawnParticles(Offset(postCenterX - 10, postCenterY), emoji: '✨', count: 3);
+    _spawnParticles(Offset(postCenterX + 5, postCenterY - 15), emoji: '🐾', count: 2);
+    _spawnTextParticle(Offset(postCenterX - 50, postCenterY - 35), '磨爪爪解压 +5 🐾', const Color(0xFFF59E0B));
     widget.petModel.addExp(5.0);
-    _showDialogueBubble('磨磨爪子~ 抓板真结实，指甲尖尖亮晶晶！(ฅ>ω<*ฅ)🪵', duration: const Duration(seconds: 4));
+
+    // 猫咪动态响应：面朝右侧猫抓柱，伸展利爪微动作，并在磨完后满足地发出软萌耳语喵
+    if (!_isDragging) {
+      setState(() {
+        _facingLeft = false;
+        _twitchEar = 'RIGHT';
+      });
+      _earTwitchTimer?.cancel();
+      _earTwitchTimer = Timer(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() => _twitchEar = null);
+      });
+
+      // 若处于空闲或坐卧，萌宠伸展腰肢磨爪互动
+      _actionTimer?.cancel();
+      if (_state == 'IDLE' || _state == 'SIT_WAG_TAIL') {
+        setState(() {
+          _state = 'STRETCH_YAWN';
+        });
+        _actionTimer = Timer(const Duration(milliseconds: 1800), () {
+          if (mounted && _state == 'STRETCH_YAWN') {
+            setState(() => _state = 'IDLE');
+          }
+        });
+      }
+
+      // 磨完爪子后小猫发出满足温润的软喵
+      _scratcherMeowTimer?.cancel();
+      _scratcherMeowTimer = Timer(const Duration(milliseconds: 700), () {
+        if (mounted && SoundService.soundEnabled) {
+          SoundService.playMeow(tone: MeowTone.soft);
+        }
+      });
+    }
+
+    final scratcherLines = [
+      '磨磨爪子~ 抓板真结实，指甲尖尖亮晶晶！(ฅ>ω<*ฅ)🪵',
+      '磨磨利爪~ 剑麻柱沙沙响，指甲尖尖超锋利！(ฅ>ω<*ฅ)🪵',
+      '抓板太解压啦！伸长腰肢舒舒服服磨个痛快~ 🐾✨',
+      '咔嚓咔嚓~ 爪尖磨得亮晶晶，波可浑身充满干劲！(✧ω✧)🪵',
+    ];
+    final line = scratcherLines[math.Random().nextInt(scratcherLines.length)];
+    _showDialogueBubble(line, duration: const Duration(seconds: 4));
   }
 
   /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光)
@@ -1041,9 +1105,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _isRoaming = false;
     _targetWalkX = null;
 
-    // 1. 点粉嫩小鼻子 (Nose Boop)
+    // 1. 点粉嫩小鼻子 (Nose Boop - 触发短促清脆小猫打喷嚏回应喵)
     if ((localPos.dx - 100).abs() < 14 && (localPos.dy - 93).abs() < 10) {
-      SoundService.playMeow();
+      SoundService.playMeow(tone: MeowTone.short);
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       _squishController.forward(from: 0.0);
       _spawnParticles(Offset(_petX, _petY - 25), emoji: '🤧', count: 3);
@@ -1079,9 +1143,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // 3. 触摸左耳
+    // 3. 触摸左耳 (俏皮机敏轻短喵)
     if (localPos.dx >= 45 && localPos.dx <= 88 && localPos.dy >= 18 && localPos.dy <= 62) {
-      SoundService.playMeow();
+      SoundService.playMeow(tone: MeowTone.short);
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'LEFT';
@@ -1095,9 +1159,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // 4. 触摸右耳
+    // 4. 触摸右耳 (俏皮机敏轻短喵)
     if (localPos.dx >= 112 && localPos.dx <= 155 && localPos.dy >= 18 && localPos.dy <= 62) {
-      SoundService.playMeow();
+      SoundService.playMeow(tone: MeowTone.short);
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'RIGHT';
@@ -1111,11 +1175,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       return;
     }
 
-    // 5. 捏两腮包子脸 (Cheek Pinch)
+    // 5. 捏两腮包子脸 (Cheek Pinch - 软糯亲昵耳语喵)
     final isLeftCheek = (localPos.dx >= 52 && localPos.dx <= 84 && localPos.dy >= 70 && localPos.dy <= 104);
     final isRightCheek = (localPos.dx >= 116 && localPos.dx <= 148 && localPos.dy >= 70 && localPos.dy <= 104);
     if (isLeftCheek || isRightCheek) {
-      SoundService.playMeow();
+      SoundService.playMeow(tone: MeowTone.soft);
       if (widget.petModel.enableHaptics) {
         HapticFeedback.lightImpact();
       }
@@ -3780,48 +3844,61 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
 
   /// 软装家具 2：原木剑麻猫抓柱 (磨爪解压，轻触咔嚓磨爪与木屑火花，立于右上角木地板)
   Widget _buildCatScratchingPost(bool isNight) {
+    final isScratching = _postWiggle.abs() > 0.1;
     return GestureDetector(
       onTap: _onScratcherTap,
       child: Transform.translate(
         offset: Offset(_postWiggle, 0),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-          decoration: BoxDecoration(
-            color: isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.96),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isNight ? const Color(0xFFF59E0B).withOpacity(0.6) : const Color(0xFFFDE68A),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFF59E0B).withOpacity(isNight ? 0.22 : 0.14),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+        child: Transform.scale(
+          scaleX: 1.0 + (_postWiggle.abs() * 0.04),
+          scaleY: 1.0 - (_postWiggle.abs() * 0.03),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: BoxDecoration(
+              color: isNight
+                  ? (isScratching ? const Color(0xFF2C2250) : const Color(0xFF1E1838))
+                  : (isScratching ? const Color(0xFFFEF9C3) : Colors.white.withOpacity(0.96)),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isScratching
+                    ? const Color(0xFFF59E0B)
+                    : (isNight ? const Color(0xFFF59E0B).withOpacity(0.6) : const Color(0xFFFDE68A)),
+                width: isScratching ? 2.0 : 1.5,
               ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('🪵', style: TextStyle(fontSize: 24)),
-              const SizedBox(height: 2),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF78350F) : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFF59E0B).withOpacity(isScratching ? 0.38 : (isNight ? 0.22 : 0.14)),
+                  blurRadius: isScratching ? 14 : 10,
+                  offset: const Offset(0, 3),
                 ),
-                child: Text(
-                  '磨爪',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(isScratching ? '🐾' : '🪵', style: const TextStyle(fontSize: 24)),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: isScratching
+                        ? const Color(0xFFF59E0B)
+                        : (isNight ? const Color(0xFF78350F) : const Color(0xFFFEF3C7)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isScratching ? '解压中' : '磨爪',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: isScratching
+                          ? Colors.white
+                          : (isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309)),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

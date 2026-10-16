@@ -1,5 +1,14 @@
+import 'dart:math' as math;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
+
+/// 真实小猫叫声音调分类
+enum MeowTone {
+  random, // 随机智能匹配
+  sweet,  // 经典软萌甜美长喵 (meow.wav)
+  soft,   // 惬意温润耳语喵 (meow_soft.wav)
+  short,  // 俏皮欢快短促轻喵 (meow_short.wav)
+}
 
 /// 萌宠全局沉浸式 ASMR 音效与物理声效服务
 class SoundService {
@@ -14,6 +23,7 @@ class SoundService {
   static AudioPlayer? _sfxPlayer;
   static AudioPlayer? _purrPlayer;
   static bool _isPurring = false;
+  static final math.Random _random = math.Random();
 
   static AudioPlayer get sfxPlayer {
     _sfxPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
@@ -25,12 +35,32 @@ class SoundService {
     return _purrPlayer!;
   }
 
-  /// 软萌猫咪叫声 (Mew~ 喵呜~)
-  static Future<void> playMeow() async {
+  /// 软萌猫咪叫声 (Mew~ 喵呜~，原生真实高清录音，支持三种真实小猫音调随机池)
+  static Future<void> playMeow({MeowTone tone = MeowTone.random}) async {
     if (!soundEnabled) return;
     try {
       await sfxPlayer.stop();
-      await sfxPlayer.play(AssetSource('audio/meow.wav'), volume: 0.85);
+      String asset;
+      double volume = 0.88;
+      switch (tone) {
+        case MeowTone.sweet:
+          asset = 'audio/meow.wav';
+          volume = 0.88;
+          break;
+        case MeowTone.soft:
+          asset = 'audio/meow_soft.wav';
+          volume = 0.86;
+          break;
+        case MeowTone.short:
+          asset = 'audio/meow_short.wav';
+          volume = 0.90;
+          break;
+        case MeowTone.random:
+          final pool = ['audio/meow.wav', 'audio/meow_soft.wav', 'audio/meow_short.wav'];
+          asset = pool[_random.nextInt(pool.length)];
+          break;
+      }
+      await sfxPlayer.play(AssetSource(asset), volume: volume);
     } catch (_) {
       // 容错降级
       SystemSound.play(SystemSoundType.click);
@@ -42,7 +72,7 @@ class SoundService {
     if (!soundEnabled || _isPurring) return;
     _isPurring = true;
     try {
-      await purrPlayer.setVolume(0.70);
+      await purrPlayer.setVolume(0.80);
       await purrPlayer.setReleaseMode(ReleaseMode.loop);
       await purrPlayer.play(AssetSource('audio/purr.wav'));
     } catch (_) {}
@@ -68,12 +98,12 @@ class SoundService {
     } catch (_) {}
   }
 
-  /// 剑麻猫抓板磨爪沙沙声 (Scratch)
+  /// 剑麻猫抓板磨爪真实撕扯沙沙声 (Scratch - 原生利爪抓挠木质/剑麻清脆质感)
   static Future<void> playScratch() async {
     if (!soundEnabled) return;
     try {
       await sfxPlayer.stop();
-      await sfxPlayer.play(AssetSource('audio/scratch.wav'), volume: 0.80);
+      await sfxPlayer.play(AssetSource('audio/scratch.wav'), volume: 0.95);
     } catch (_) {
       SystemSound.play(SystemSoundType.click);
     }

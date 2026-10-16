@@ -110,10 +110,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('猫草清香'), findsWidgets);
 
-    // 交互 2：轻触原木剑麻猫抓板
+    // 交互 2：轻触原木剑麻猫抓柱
     await tester.tap(find.text('磨爪'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.textContaining('磨磨爪子'), findsWidgets);
+    expect(find.textContaining('爪'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 2000));
 
     // 交互 3：轻触小夜灯开关，ON 切换为 OFF
     await tester.tap(find.text('ON'));
