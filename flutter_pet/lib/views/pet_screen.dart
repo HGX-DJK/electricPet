@@ -62,6 +62,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   String _state = 'IDLE';
   bool _facingLeft = false;
   int _idleSeconds = 0; // 待机计时器，驱动自主小萌点
+  Timer? _actionTimer;
+  Timer? _idleActionTimer;
+  Timer? _boopTimer;
 
   // 维度一：部位差异化感知 & 打呼噜状态
   bool _isPurring = false;
@@ -108,6 +111,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   // 画布级无遮挡换装模式 (免弹窗、零遮挡、实时全景预览)
   bool _isWardrobeMode = false;
   int _wardrobeTab = 0; // 0: 猫咪品种, 1: 头部帽子, 2: 颈部配饰
+
+  // 画布级无遮挡专属绝活模式 (免弹窗、零遮挡、实时全景表演点播)
+  bool _isActionMode = false;
 
   @override
   void initState() {
@@ -242,6 +248,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _purrHapticTimer?.cancel();
     _earTwitchTimer?.cancel();
     _comboResetTimer?.cancel();
+    _actionTimer?.cancel();
+    _idleActionTimer?.cancel();
+    _boopTimer?.cancel();
     super.dispose();
   }
 
@@ -376,7 +385,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _showDialogueBubble(msg, duration: const Duration(seconds: 5));
     _spawnParticles(Offset(_petX, _petY - 40), emoji: actionEmojis[actionId], count: 5);
 
-    Timer(const Duration(milliseconds: 5200), () {
+    _actionTimer?.cancel();
+    _actionTimer = Timer(const Duration(milliseconds: 5200), () {
       if (mounted && _state == actionId) {
         setState(() {
           _state = 'IDLE';
@@ -413,7 +423,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       _showDialogueBubble(actionLines[act]!, duration: const Duration(seconds: 4));
     }
 
-    Timer(const Duration(milliseconds: 3800), () {
+    _idleActionTimer?.cancel();
+    _idleActionTimer = Timer(const Duration(milliseconds: 3800), () {
       if (mounted && _state == act) {
         setState(() {
           _state = 'IDLE';
@@ -479,19 +490,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           Navigator.pop(context); // 立即收起抽屉，无弹窗遮挡
           setState(() {
             _isWardrobeMode = true;
+            _isActionMode = false;
             _wardrobeTab = 0;
           });
           _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 4);
           _showDialogueBubble('开启魔法换装！点选下方任意品种或饰品，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
         },
         onActionTap: () {
-          _showBottomSheetModal(
-            ActionDialog(
-              onActionSelected: (actId) {
-                _playAction(actId);
-              },
-            ),
-          );
+          Navigator.pop(context); // 立即收起抽屉，无暗色遮罩全景观赏表演
+          setState(() {
+            _isActionMode = true;
+            _isWardrobeMode = false;
+          });
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 4);
+          _showDialogueBubble('开启才艺点播台！点选下方任意绝活卡片，波可即刻为您献艺~ 🎭✨', duration: const Duration(seconds: 4));
         },
         onMemoTap: () {
           _showBottomSheetModal(
@@ -689,7 +701,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     }
     _showDialogueBubble('波可跑来贴贴屏幕啦！主人也在看波可嘛？(ฅ\'ω\'ฅ)💕', duration: const Duration(seconds: 5));
 
-    Timer(const Duration(milliseconds: 4500), () {
+    _boopTimer?.cancel();
+    _boopTimer = Timer(const Duration(milliseconds: 4500), () {
       if (mounted && _state == 'GLASS_BOOP') {
         setState(() {
           _state = 'IDLE';
@@ -1291,9 +1304,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
               // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界，夜晚自适应柔和星空底色)
               if (_showDialogue) _buildSmartDialogueBubble(screenSize, isNight),
 
-              // 6. 底部交互控制：常态下双浮动胶囊 (奇妙背包 + 快速换装)；进入换装模式后无缝呈现【画布级无遮挡换装滑轨】
+              // 6. 底部交互控制：常态下三灵动胶囊；进入对应模式呈现画布级无遮挡点播坞/换装坞
               if (_isWardrobeMode)
                 _buildLiveWardrobeDock(screenSize, isNight)
+              else if (_isActionMode)
+                _buildLiveActionDock(screenSize, isNight)
               else
                 _buildBottomFloatingBar(screenSize, isNight),
             ],
@@ -1368,7 +1383,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 底部双浮动胶囊 (奇妙背包 + 快速换装)
+  /// 底部三灵动悬浮胶囊 (奇妙背包 + 魔法换装 + 专属绝活，1-Tap 直达，零层级深度)
   Widget _buildBottomFloatingBar(Size screenSize, bool isNight) {
     return Positioned(
       bottom: 16,
@@ -1387,11 +1402,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
                 decoration: BoxDecoration(
                   color: isNight
-                      ? const Color(0xFF1E1A40).withOpacity(0.88)
-                      : Colors.white.withOpacity(0.92),
+                      ? const Color(0xFF1E1A40).withOpacity(0.9)
+                      : Colors.white.withOpacity(0.94),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
                     color: isNight
@@ -1404,38 +1419,38 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                       color: isNight
                           ? const Color(0xFF0F0C24).withOpacity(0.5)
                           : const Color(0xFF6366F1).withOpacity(0.1),
-                      blurRadius: 14,
-                      offset: const Offset(0, 4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
                     ),
                   ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('🎒', style: TextStyle(fontSize: 15)),
-                    const SizedBox(width: 6),
+                    const Text('🎒', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
                     Text(
                       '奇妙背包',
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 2),
                     Icon(
                       Icons.keyboard_arrow_up_rounded,
-                      size: 17,
+                      size: 16,
                       color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 7),
 
-            // 2. 魔法衣橱 / 换品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
+            // 2. 魔法换装 / 品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
             GestureDetector(
               onTap: () {
                 if (widget.petModel.enableHaptics) {
@@ -1443,17 +1458,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 }
                 setState(() {
                   _isWardrobeMode = true;
+                  _isActionMode = false;
                   _wardrobeTab = 0;
                 });
                 _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
                 _showDialogueBubble('开启魔法换装！点选下方任意品种，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
                 decoration: BoxDecoration(
                   color: isNight
-                      ? const Color(0xFF311E66).withOpacity(0.88)
-                      : const Color(0xFFFAF5FF).withOpacity(0.94),
+                      ? const Color(0xFF311E66).withOpacity(0.9)
+                      : const Color(0xFFFAF5FF).withOpacity(0.95),
                   borderRadius: BorderRadius.circular(22),
                   border: Border.all(
                     color: isNight
@@ -1472,15 +1488,69 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('👗', style: TextStyle(fontSize: 15)),
-                    const SizedBox(width: 5),
+                    const Text('👗', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
                     Text(
                       '魔法换装',
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
-                        letterSpacing: 0.5,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
+
+            // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞，零遮挡全景观赏)
+            GestureDetector(
+              onTap: () {
+                if (widget.petModel.enableHaptics) {
+                  HapticFeedback.lightImpact();
+                }
+                setState(() {
+                  _isActionMode = true;
+                  _isWardrobeMode = false;
+                });
+                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
+                _showDialogueBubble('专属绝活点播台已就绪！点选下方任意绝活，看波可大展身手~ 🎭✨', duration: const Duration(seconds: 4));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                decoration: BoxDecoration(
+                  color: isNight
+                      ? const Color(0xFF3D2714).withOpacity(0.9)
+                      : const Color(0xFFFFFBEB).withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isNight
+                        ? const Color(0xFFF59E0B).withOpacity(0.55)
+                        : const Color(0xFFFDE68A),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF59E0B).withOpacity(0.18),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('✨', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 4),
+                    Text(
+                      '专属绝活',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                        letterSpacing: 0.3,
                       ),
                     ),
                   ],
@@ -1871,6 +1941,233 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                             );
                           },
                         )),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 画布级无遮挡专属绝活滑轨点播台 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
+  Widget _buildLiveActionDock(Size screenSize, bool isNight) {
+    final bgColor = isNight
+        ? const Color(0xFF14122C).withOpacity(0.96)
+        : Colors.white.withOpacity(0.98);
+    final borderColor = isNight
+        ? const Color(0xFFF59E0B).withOpacity(0.55)
+        : const Color(0xFFFDE68A);
+    final cardBg = isNight ? const Color(0xFF231B45) : const Color(0xFFFFFBEB);
+
+    final actions = ActionDialog.actions;
+
+    // 当前是否在表演某项绝活
+    final isActing = actions.any((act) => act['id'] == _state);
+    final currentAct = isActing
+        ? actions.firstWhere((act) => act['id'] == _state)
+        : null;
+
+    final headerText = isActing
+        ? '🎭 正在表演：${currentAct!['name']} · ${currentAct['desc']}'
+        : '✨ 绝活点播台 · 点击下方卡片即刻开演 (共${actions.length}项)';
+
+    return Positioned(
+      bottom: 12,
+      left: 12,
+      right: 12,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: isNight
+                  ? const Color(0xFF0F0C24).withOpacity(0.65)
+                  : const Color(0xFFF59E0B).withOpacity(0.14),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 顶层栏：动态表演状态指示 + 完成退出按钮
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: isActing
+                              ? const Color(0xFFEF4444).withOpacity(isNight ? 0.3 : 0.12)
+                              : const Color(0xFFF59E0B).withOpacity(isNight ? 0.25 : 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isActing
+                                ? const Color(0xFFEF4444).withOpacity(0.5)
+                                : const Color(0xFFF59E0B).withOpacity(0.4),
+                          ),
+                        ),
+                        child: Text(
+                          isActing ? '🔴 LIVE' : '✨ 才艺',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isActing
+                                ? (isNight ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626))
+                                : (isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          headerText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: isActing
+                                ? (isNight ? Colors.white : const Color(0xFF0F172A))
+                                : (isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // 完成退出点播按钮 (一键收起滑轨坞，回归日常互动)
+                GestureDetector(
+                  onTap: () {
+                    if (widget.petModel.enableHaptics) {
+                      HapticFeedback.lightImpact();
+                    }
+                    setState(() {
+                      _isActionMode = false;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFF59E0B).withOpacity(0.35),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_rounded, color: Colors.white, size: 14),
+                        SizedBox(width: 3),
+                        Text(
+                          '完成',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // 水平滑动卡片展示列表 (高度仅 72px，全屏萌宠与地面道具完全无遮挡)
+            SizedBox(
+              height: 72,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: actions.length,
+                itemBuilder: (context, index) {
+                  final act = actions[index];
+                  final isCurrent = (_state == act['id']);
+
+                  return GestureDetector(
+                    onTap: () {
+                      _playAction(act['id']!);
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 78,
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isCurrent
+                            ? (isNight ? const Color(0xFF581C87) : const Color(0xFFFEF3C7))
+                            : cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isCurrent
+                              ? const Color(0xFFF59E0B)
+                              : (isNight ? const Color(0xFF4338CA).withOpacity(0.35) : const Color(0xFFFDE68A).withOpacity(0.7)),
+                          width: isCurrent ? 2.2 : 1.0,
+                        ),
+                        boxShadow: isCurrent
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFFF59E0B).withOpacity(0.35),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Stack(
+                            alignment: Alignment.topRight,
+                            children: [
+                              Text(act['icon']!, style: const TextStyle(fontSize: 22)),
+                              if (isCurrent)
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFEF4444),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            act['name']!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                              color: isCurrent
+                                  ? (isNight ? const Color(0xFFFDE68A) : const Color(0xFF92400E))
+                                  : (isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
