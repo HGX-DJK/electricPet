@@ -46,7 +46,7 @@ class PetScreen extends StatefulWidget {
   State<PetScreen> createState() => _PetScreenState();
 }
 
-class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
+class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _idleAnimController;
   late AnimationController _squishController; // 点击戳戳 Q 弹形变控制器
   late Animation<double> _squishScaleX;
@@ -142,6 +142,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
 
     // 呼吸律动主循环
     _idleAnimController = AnimationController(
@@ -387,7 +388,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      widget.petModel.saveToDisk();
+      widget.memoModel.saveToDisk();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    widget.petModel.saveToDisk();
+    widget.memoModel.saveToDisk();
     widget.petModel.removeListener(_onModelUpdated);
     _idleAnimController.dispose();
     _squishController.dispose();

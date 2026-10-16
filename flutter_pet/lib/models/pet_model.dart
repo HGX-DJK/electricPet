@@ -255,6 +255,7 @@ class PetModel extends ChangeNotifier {
       intimacy += 25;
     }
     notifyListeners();
+    saveToDisk();
   }
 
   /// 时间流逝状态扣减 (每秒调用)
