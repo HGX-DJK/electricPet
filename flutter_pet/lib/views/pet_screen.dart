@@ -9,6 +9,7 @@ import 'backpack_drawer.dart';
 import 'dialogs/feeding_dialog.dart';
 import 'dialogs/wardrobe_dialog.dart';
 import 'dialogs/action_dialog.dart';
+import 'dialogs/memory_album_dialog.dart';
 import 'memo_screen.dart';
 import '../services/overlay_service.dart';
 import '../services/sound_service.dart';
@@ -102,6 +103,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   double _strokeDistance = 0.0;
   double _petProgress = 0.0;
   Offset? _touchPos;
+  Offset? _lookTargetPos; // 视线追踪目标坐标 (实时注视手指/光标)
 
   // 飘浮爱心粒子列表
   final List<_Particle> _particles = [];
@@ -352,7 +354,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
   }
 
   void _checkAutoDialogue() {
-    if (_isDragging || widget.petModel.isSleeping || _state != 'IDLE') return;
+    if (_isDragging || widget.petModel.isSleeping || _state != 'IDLE' || _showDialogue) return;
     if (math.Random().nextDouble() < 0.20) {
       final lines = [
         '主人看屏幕累了吗？眨眨眼睛休息一下吧~ 🐾',
@@ -431,7 +433,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       _isRoaming = false;
       _targetWalkX = null;
     }
-    if (actionId == 'DOZE_OFF') {
+    if (actionId == 'DOZE_OFF' || actionId == 'KNEADING_BISCUITS') {
       SoundService.startPurr();
     } else {
       SoundService.playMeow();
@@ -450,6 +452,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       'PEEK_EDGE': '悄悄趴在屏幕边上偷看主人写代码~ 👀💕',
       'WASH_FACE': '爪爪沾沾温水，认真洗脸理毛变帅帅~ 🫧✨',
       'STRETCH_YAWN': '哈欠连天~ 伸个大大的懒腰，浑身舒畅！🥱',
+      'KNEADING_BISCUITS': '呼噜噜~ 波可正在软软窝垫上幸福踩奶做小面包呢！(ฅ˘ω˘ฅ)🥐💕',
       'TILT_HEAD': '歪头好奇打量~ 主人在看什么有趣的内容呢？❓',
       'LOOK_AROUND': '左瞅瞅右看看，波可认真保卫主人手机！🔍🐾',
       'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
@@ -467,6 +470,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       'PEEK_EDGE': '👀',
       'WASH_FACE': '🫧',
       'STRETCH_YAWN': '🥱',
+      'KNEADING_BISCUITS': '🥐',
       'TILT_HEAD': '❓',
       'LOOK_AROUND': '🔍',
       'SIT_WAG_TAIL': '🐾',
@@ -995,7 +999,31 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     }
   }
 
-  /// 墙面装饰：拍立得照片墙摇晃 (初遇珍藏回忆)
+  /// 家具交互：点按标签切换房间治愈 ASMR 白噪音 (雨声 / 猫咪深度打呼噜 / 关闭)
+  Future<void> _cycleAmbientSound() async {
+    _idleSeconds = 0;
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.heavyImpact();
+    }
+    final mode = await SoundService.cycleAmbientSound();
+    setState(() {});
+
+    if (mode == 'rain') {
+      _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🌧️', count: 4);
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '沥沥细雨 ASMR 🌧️', const Color(0xFF38BDF8));
+      _showDialogueBubble('🌧️ 已开启窗外细雨白噪音，温柔雨声伴您进入深度专注心流~', duration: const Duration(seconds: 4));
+    } else if (mode == 'purr') {
+      _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🐱', count: 4);
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '深度呼噜助眠 🐱', const Color(0xFFA855F7));
+      _showDialogueBubble('🐱 已开启波可深度呼噜助眠 ASMR，纯净低频共鸣超级解压安神~', duration: const Duration(seconds: 4));
+    } else {
+      _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '💡', count: 3);
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '宁静房间 💡', const Color(0xFFFBBF24));
+      _showDialogueBubble('💡 已关闭环境白噪音，房间回归温馨安宁~', duration: const Duration(seconds: 3));
+    }
+  }
+
+  /// 墙面装饰：拍立得照片墙摇晃并展开时光手账与纪念相册
   void _onPhotoTap() {
     _idleSeconds = 0;
     SoundService.playShutter();
@@ -1016,7 +1044,96 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     _spawnParticles(const Offset(45, 135), emoji: '💕', count: 3);
     _spawnParticles(const Offset(40, 115), emoji: '📸', count: 2);
     _spawnTextParticle(const Offset(20, 105), '珍藏回忆 💕', const Color(0xFFEC4899));
-    _showDialogueBubble('相框里是初遇那天拍的纪念照~ 波可一直珍藏在墙上呢！🥰📷', duration: const Duration(seconds: 4));
+    _showDialogueBubble('相框里是初遇那天拍的纪念照~ 正在翻开波可的专属时光手账！🥰📷', duration: const Duration(seconds: 4));
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => MemoryAlbumDialog(model: widget.petModel),
+    );
+  }
+
+  /// 家具交互：轻触云朵暖暖窝 (波可舒适归窝，享受幸福踩奶特技与呼噜 ASMR)
+  void _onBedTap(double nestX, double nestY) {
+    _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+
+    // 萌宠回归暖暖窝中心位置
+    setState(() {
+      _petX = nestX;
+      _petY = nestY - 6.0;
+      _facingLeft = false;
+      _state = 'KNEADING_BISCUITS';
+    });
+
+    // 播放连续真实打呼噜声与轻柔耳语
+    SoundService.startPurr();
+    _spawnParticles(Offset(nestX - 25, nestY - 20), emoji: '🥐', count: 3);
+    _spawnParticles(Offset(nestX + 25, nestY - 25), emoji: '🐾', count: 3);
+    _spawnParticles(Offset(nestX, nestY - 40), emoji: '💕', count: 4);
+    _spawnTextParticle(Offset(nestX - 45, nestY - 60), '幸福踩奶 +10 🥐', const Color(0xFFF59E0B));
+    widget.petModel.addExp(10.0);
+
+    // 踩奶节奏细微触感
+    _purrHapticTimer?.cancel();
+    int kneadTick = 0;
+    if (widget.petModel.enableHaptics) {
+      _purrHapticTimer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+        if (kneadTick++ >= 12 || _state != 'KNEADING_BISCUITS') {
+          t.cancel();
+        } else {
+          HapticFeedback.selectionClick();
+        }
+      });
+    }
+
+    _actionTimer?.cancel();
+    _actionTimer = Timer(const Duration(milliseconds: 3200), () {
+      if (mounted && _state == 'KNEADING_BISCUITS') {
+        SoundService.stopPurr();
+        SoundService.playMeow(tone: MeowTone.soft);
+        setState(() => _state = 'SIT_WAG_TAIL');
+      }
+    });
+
+    final bedQuotes = [
+      '呼噜噜~ 波可正在软软云朵窝里认真踩奶做小面包呢！(ฅ˘ω˘ฅ)🥐💕',
+      '大猫窝软乎乎暖洋洋的，肉垫陷在里面踩得好过瘾~ ☁️🐾',
+      '小脚丫左一下、右一下~ 踩出全世界最甜的奶香小面包！🥐✨',
+    ];
+    final quote = bedQuotes[math.Random().nextInt(bedQuotes.length)];
+    _showDialogueBubble(quote, duration: const Duration(seconds: 4));
+  }
+
+  /// 屏幕全域动态视线与手指追踪
+  void _onPointerHoverOrMove(Offset globalPos) {
+    if (_isDragging) return;
+    final relX = globalPos.dx - _petX;
+    final relY = globalPos.dy - _petY;
+    if (relX.abs() < 340 && relY.abs() < 340) {
+      if (_lookTargetPos == null || (_lookTargetPos!.dx - relX).abs() > 3 || (_lookTargetPos!.dy - relY).abs() > 3) {
+        setState(() {
+          _lookTargetPos = Offset(relX, relY);
+          if (relX < -50 && !_facingLeft && _state == 'IDLE') {
+            _facingLeft = true;
+          } else if (relX > 50 && _facingLeft && _state == 'IDLE') {
+            _facingLeft = false;
+          }
+        });
+      }
+    }
+  }
+
+  void _onPointerUpOrExit() {
+    if (_lookTargetPos != null) {
+      setState(() => _lookTargetPos = null);
+    }
   }
 
   /// 墙面装饰：温暖小串灯轻触 (一闪一闪亮晶晶)
@@ -1299,19 +1416,41 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     }
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: gradientColors,
+      body: Listener(
+        onPointerHover: (event) => _onPointerHoverOrMove(event.position),
+        onPointerMove: (event) => _onPointerHoverOrMove(event.position),
+        onPointerUp: (_) => _onPointerUpOrExit(),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: gradientColors,
+            ),
           ),
-        ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // 0. 维度四：背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
-              if (isNight) ...[
+          child: SafeArea(
+            child: Stack(
+              children: [
+                // 助眠专注氛围：细雨微动粒子 (Rain ASMR Active)
+                if (SoundService.ambientMode == 'rain') ...[
+                  for (int i = 0; i < 14; i++)
+                    Positioned(
+                      left: ((i * 27.0 + _idleAnimController.value * 350.0) % screenSize.width),
+                      top: ((i * 59.0 + _idleAnimController.value * 650.0) % screenSize.height),
+                      child: IgnorePointer(
+                        child: Container(
+                          width: 1.5,
+                          height: 12.0,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.28),
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+                // 0. 维度四：背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
+                if (isNight) ...[
                 // 月亮：轻触触发流星雨与许愿彩蛋
                 Positioned(
                   top: 50,
@@ -1628,7 +1767,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
                             state: _state,
                             touchPos: (_isYarnFlying || _isYarnDragging)
                                 ? Offset(_yarnX - _petX, _yarnY - _petY)
-                                : _touchPos,
+                                : (_touchPos ?? _lookTargetPos),
                             facingLeft: _facingLeft,
                             petProgress: _petProgress,
                             isPurring: _isPurring,
@@ -1938,7 +2077,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   /// 智能对齐气泡：永不被猫挡住，附带指向小箭头，支持昼夜温润自适应
@@ -3603,15 +3743,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
       width: nestWidth,
       height: 58.0,
       child: GestureDetector(
-        onTap: () {
-          SoundService.playMeow();
-          if (widget.petModel.enableHaptics) {
-            HapticFeedback.lightImpact();
-          }
-          _spawnParticles(Offset(nestX, nestY - 20), emoji: '☁️', count: 3);
-          _spawnParticles(Offset(nestX + 25, nestY - 30), emoji: '💕', count: 2);
-          _showDialogueBubble('大猫窝软乎乎暖洋洋的，最适合波可缩成猫猫球啦~ (˘ω˘)☁️', duration: const Duration(seconds: 4));
-        },
+        onTap: () => _onBedTap(nestX, nestY),
         child: Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
@@ -3952,47 +4084,73 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin {
     );
   }
 
-  /// 软装家具 4：右下角夜灯台 · 萌猫头温馨夜灯 (轻触“啪嗒”开关台灯，切换柔光)
+  /// 软装家具 4：右下角夜灯台 · 萌猫头温馨夜灯 (轻触开关台灯，点按上方标签切换 ASMR 白噪音)
   Widget _buildKittenNightLamp(bool isNight) {
-    return GestureDetector(
-      onTap: _onNightLampTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-        decoration: BoxDecoration(
-          color: _isNightLampOn
-              ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7))
-              : (isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.96)),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _isNightLampOn ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withOpacity(0.4),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: _isNightLampOn
-                  ? const Color(0xFFF59E0B).withOpacity(0.4)
-                  : Colors.black.withOpacity(0.06),
-              blurRadius: _isNightLampOn ? 12 : 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(_isNightLampOn ? '💡' : '💤', style: const TextStyle(fontSize: 15)),
-            const SizedBox(width: 3),
-            Text(
-              _isNightLampOn ? 'ON' : 'OFF',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                color: _isNightLampOn ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (_isNightLampOn) ...[
+          GestureDetector(
+            onTap: _cycleAmbientSound,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 3.5),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFF59E0B), width: 1),
+              ),
+              child: Text(
+                SoundService.ambientMode == 'rain'
+                    ? '🌧️ 雨声'
+                    : (SoundService.ambientMode == 'purr' ? '🐱 呼噜' : '🎵 ASMR'),
+                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
               ),
             ),
-          ],
+          ),
+        ],
+        GestureDetector(
+          onTap: _onNightLampTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isNightLampOn
+                  ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7))
+                  : (isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.96)),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _isNightLampOn ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withOpacity(0.4),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _isNightLampOn
+                      ? const Color(0xFFF59E0B).withOpacity(0.4)
+                      : Colors.black.withOpacity(0.06),
+                  blurRadius: _isNightLampOn ? 12 : 5,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_isNightLampOn ? '💡' : '💤', style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: 3),
+                Text(
+                  _isNightLampOn ? 'ON' : 'OFF',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: _isNightLampOn ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 

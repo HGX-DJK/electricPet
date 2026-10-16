@@ -80,6 +80,12 @@ class PetPainter extends CustomPainter {
       scaleX = 1.18;
       scaleY = 0.86;
       breathY = 8.0;
+    } else if (state == 'KNEADING_BISCUITS') {
+      // 幸福踩奶：身体在温暖窝垫上微幅度左右轻缓摇曳起伏
+      scaleX = 1.06;
+      scaleY = 0.94;
+      breathY = math.sin(animTime * 6.5).abs() * 3.0;
+      bodySwayX = math.sin(animTime * 6.5) * 2.0;
     } else if (state == 'HEAD_BOB_MUSIC') {
       // 听歌点头：跟着节奏踩点上下摇摆
       breathY = -math.sin(animTime * 8.0).abs() * 14.0;
@@ -154,6 +160,9 @@ class PetPainter extends CustomPainter {
       tailWag = 5.0 + math.sin(animTime * 14.0) * 6.0;
     } else if (state == 'HAPPY_SPIN') {
       tailWag = math.sin(animTime * 12.0) * 25.0;
+    } else if (state == 'KNEADING_BISCUITS') {
+      // 踩奶时尾尖微翘并惬意小幅颤动
+      tailWag = 14.0 + math.sin(animTime * 6.5) * 8.0;
     } else if (state == 'WALK') {
       // 漫步巡视时尾巴轻快随动
       tailWag = 8.0 + math.sin(animTime * 10.0) * 16.0;
@@ -554,7 +563,7 @@ class PetPainter extends CustomPainter {
     }
 
     // 腮红
-    final blushAlpha = (petProgress > 0 || state == 'HAPPY_SPIN') ? 0x90 : 0x55;
+    final blushAlpha = (petProgress > 0 || state == 'HAPPY_SPIN' || state == 'KNEADING_BISCUITS') ? 0x90 : 0x55;
     final blushPaint = Paint()
       ..color = Color.fromARGB(blushAlpha, 244, 63, 94)
       ..style = PaintingStyle.fill;
@@ -794,6 +803,7 @@ class PetPainter extends CustomPainter {
         state == 'STRETCH_YAWN' ||
         state == 'HAPPY_SPIN' ||
         state == 'SIT_WAG_TAIL' ||
+        state == 'KNEADING_BISCUITS' ||
         (blinkCycle > 3.55 && blinkCycle < 3.75) ||
         (petProgress > 0.35);
 
@@ -1033,6 +1043,35 @@ class PetPainter extends CustomPainter {
 
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawPaint);
       canvas.drawOval(Rect.fromCenter(center: Offset(22 + reachX, 50), width: 22, height: 18), pawBorder);
+      return;
+    }
+
+    // 治愈踩奶特技 (Making Biscuits)：双前爪在松软窝垫中富有节奏地轮流深浅下踩，粉嫩肉垫张合
+    if (state == 'KNEADING_BISCUITS') {
+      final kneadCycle = animTime * 6.5;
+      final leftPush = math.sin(kneadCycle) * 6.0;
+      final rightPush = -math.sin(kneadCycle) * 6.0;
+
+      final leftCenter = Offset(-24, 52 + leftPush);
+      final rightCenter = Offset(24, 52 + rightPush);
+      final leftSpread = leftPush > 1.2 ? 3.0 : 0.0;
+      final rightSpread = rightPush > 1.2 ? 3.0 : 0.0;
+
+      // 左爪与爪边
+      canvas.drawOval(Rect.fromCenter(center: leftCenter, width: 24 + leftSpread, height: 18), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: leftCenter, width: 24 + leftSpread, height: 18), pawBorder);
+      // 右爪与爪边
+      canvas.drawOval(Rect.fromCenter(center: rightCenter, width: 24 + rightSpread, height: 18), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: rightCenter, width: 24 + rightSpread, height: 18), pawBorder);
+
+      // 踩在垫子上受力时显现的粉嫩肉垫
+      final padPaint = Paint()..color = const Color(0xFFFB7185).withOpacity(0.9);
+      if (leftPush > 0.8) {
+        canvas.drawOval(Rect.fromCenter(center: Offset(leftCenter.dx, leftCenter.dy + 1), width: 10, height: 8), padPaint);
+      }
+      if (rightPush > 0.8) {
+        canvas.drawOval(Rect.fromCenter(center: Offset(rightCenter.dx, rightCenter.dy + 1), width: 10, height: 8), padPaint);
+      }
       return;
     }
 

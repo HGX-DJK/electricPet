@@ -22,7 +22,10 @@ class SoundService {
   }
   static AudioPlayer? _sfxPlayer;
   static AudioPlayer? _purrPlayer;
+  static AudioPlayer? _ambientPlayer;
   static bool _isPurring = false;
+  static String _ambientMode = 'none'; // 'none', 'rain', 'purr'
+  static String get ambientMode => _ambientMode;
   static final math.Random _random = math.Random();
 
   static AudioPlayer get sfxPlayer {
@@ -33,6 +36,47 @@ class SoundService {
   static AudioPlayer get purrPlayer {
     _purrPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.loop);
     return _purrPlayer!;
+  }
+
+  static AudioPlayer get ambientPlayer {
+    _ambientPlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.loop);
+    return _ambientPlayer!;
+  }
+
+  /// 循环切换专注助眠 ASMR 白噪音音景 ('none' -> 'rain' -> 'purr' -> 'none')
+  static Future<String> cycleAmbientSound() async {
+    if (!soundEnabled) return 'none';
+    if (_ambientMode == 'none') {
+      _ambientMode = 'rain';
+      try {
+        await ambientPlayer.setVolume(0.52);
+        await ambientPlayer.setReleaseMode(ReleaseMode.loop);
+        await ambientPlayer.play(AssetSource('audio/rain.wav'));
+      } catch (_) {}
+      return 'rain';
+    } else if (_ambientMode == 'rain') {
+      _ambientMode = 'purr';
+      try {
+        await ambientPlayer.setVolume(0.70);
+        await ambientPlayer.setReleaseMode(ReleaseMode.loop);
+        await ambientPlayer.play(AssetSource('audio/purr.wav'));
+      } catch (_) {}
+      return 'purr';
+    } else {
+      _ambientMode = 'none';
+      try {
+        await ambientPlayer.stop();
+      } catch (_) {}
+      return 'none';
+    }
+  }
+
+  /// 停止环境白噪音
+  static Future<void> stopAmbient() async {
+    _ambientMode = 'none';
+    try {
+      await ambientPlayer.stop();
+    } catch (_) {}
   }
 
   /// 软萌猫咪叫声 (Mew~ 喵呜~，原生真实高清录音，支持三种真实小猫音调随机池)
@@ -135,8 +179,11 @@ class SoundService {
   static void dispose() {
     _sfxPlayer?.dispose();
     _purrPlayer?.dispose();
+    _ambientPlayer?.dispose();
     _sfxPlayer = null;
     _purrPlayer = null;
+    _ambientPlayer = null;
     _isPurring = false;
+    _ambientMode = 'none';
   }
 }

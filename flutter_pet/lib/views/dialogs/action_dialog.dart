@@ -14,6 +14,7 @@ class ActionDialog extends StatelessWidget {
     {'id': 'PEEK_EDGE', 'name': '贴边偷看', 'icon': '👀', 'desc': '吸附在屏幕边缘探出半个脑袋'},
     {'id': 'WASH_FACE', 'name': '洗脸理毛', 'icon': '🐾', 'desc': '抬起小爪认真打理软毛'},
     {'id': 'STRETCH_YAWN', 'name': '伸懒腰哈欠', 'icon': '🥱', 'desc': '躬身伸懒腰，打个超大哈欠'},
+    {'id': 'KNEADING_BISCUITS', 'name': '治愈踩奶', 'icon': '🥐', 'desc': '肉垫轮流下按，舒服呼噜做面包'},
     {'id': 'TILT_HEAD', 'name': '歪头卖萌', 'icon': '❓', 'desc': '好奇歪头眨巴水灵大眼睛'},
     {'id': 'LOOK_AROUND', 'name': '四处巡视', 'icon': '🔍', 'desc': '左瞅瞅右看看，保卫主人手机'},
     {'id': 'SIT_WAG_TAIL', 'name': '端坐摇尾巴', 'icon': '🐈', 'desc': '乖乖蹲坐，蓬松尾巴轻轻晃动'},

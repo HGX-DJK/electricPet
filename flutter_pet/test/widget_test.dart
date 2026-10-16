@@ -128,10 +128,31 @@ void main() {
     expect(find.text('ON'), findsOneWidget);
     expect(find.textContaining('小夜灯点亮'), findsWidgets);
 
-    // 交互 5：轻触拍立得照片挂饰
-    await tester.tap(find.textContaining('Day 1'));
-    await tester.pump(const Duration(milliseconds: 300));
+    // 交互 5：轻触拍立得照片挂饰，打开专属时光相册
+    await tester.tap(find.textContaining('Day 1').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     expect(find.textContaining('相框里是初遇那天'), findsWidgets);
+    expect(find.textContaining('时光纪念相册'), findsOneWidget);
+    expect(find.textContaining('咔嚓！拍下一张今日纪念照'), findsOneWidget);
+
+    // 交互 6：点击即时快门拍照留念
+    await tester.tap(find.textContaining('咔嚓！拍下一张今日纪念照'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('收入纪念相册'), findsOneWidget);
+
+    // 关闭相册弹窗
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // 交互 7：轻触云朵暖暖窝触发“幸福踩奶做小面包”
+    await tester.tap(find.textContaining("Poko's Cozy Haven"));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('踩奶'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 3500));
   });
 
   testWidgets('Sound Toggle and Autonomous Living System test', (WidgetTester tester) async {
