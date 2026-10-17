@@ -489,6 +489,20 @@ void main() {
     final waterRect = tester.getRect(waterBowlFinder);
     expect(foodRect.left, lessThan(waterRect.left));
     expect(waterRect.right, lessThan(200.0));
+
+    // 3. 验证床头小夜灯与全屋光影沉浸切换
+    final lampOnFinder = find.text('ON');
+    expect(lampOnFinder, findsOneWidget);
+    await tester.tap(lampOnFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('OFF'), findsOneWidget);
+    expect(find.textContaining('小夜灯已熄灭'), findsOneWidget);
+
+    // 再次点亮小夜灯，全屋温暖照明恢复
+    await tester.tap(find.text('OFF'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('ON'), findsOneWidget);
+    expect(find.textContaining('小夜灯点亮'), findsOneWidget);
   });
 }
 

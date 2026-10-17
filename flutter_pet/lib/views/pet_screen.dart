@@ -1627,7 +1627,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble(line, duration: const Duration(seconds: 4));
   }
 
-  /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光)
+  /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光与全屋夜眠氛围联动)
   void _onNightLampTap() {
     _idleSeconds = 0;
     SoundService.playClick();
@@ -1639,14 +1639,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     if (_isNightLampOn) {
-      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💡', count: 3);
+      _twitchEar = 'RIGHT';
+      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💡', count: 4);
       _spawnParticles(Offset(_petX + 55, _petY - 20), emoji: '✨', count: 3);
       _spawnTextParticle(Offset(_petX + 35, _petY - 35), '暖光微亮 💡', const Color(0xFFFBBF24));
       _showDialogueBubble('啪嗒~ 暖光小夜灯点亮啦，守护波可的香甜美梦 💡', duration: const Duration(seconds: 4));
     } else {
-      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💤', count: 2);
+      _spawnParticles(Offset(_petX + 50, _petY), emoji: '💤', count: 4);
+      _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🌙', count: 2);
       _spawnTextParticle(Offset(_petX + 35, _petY - 35), '小夜灯已熄灭 🌙', const Color(0xFF94A3B8));
-      _showDialogueBubble('啪嗒~ 小夜灯熄灭啦，晚安好梦~ 🌙', duration: const Duration(seconds: 3));
+      _showDialogueBubble('啪嗒~ 小夜灯熄灭啦，房间暗下来好助眠，晚安好梦~ 💤🌙', duration: const Duration(seconds: 4));
     }
   }
 
@@ -1661,15 +1663,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     if (mode == 'rain') {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🌧️', count: 4);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '沥沥细雨 ASMR 🌧️', const Color(0xFF38BDF8));
-      _showDialogueBubble('🌧️ 已开启窗外细雨白噪音，温柔雨声伴您进入深度专注心流~', duration: const Duration(seconds: 4));
+      _spawnParticles(Offset(_petX + 55, _petY), emoji: '💧', count: 3);
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启窗外细雨 🌧️', const Color(0xFF38BDF8));
+      _showDialogueBubble('🌧️ 窗外细雨沙沙作响，温柔雨声伴您进入深度专注心流~', duration: const Duration(seconds: 4));
     } else if (mode == 'purr') {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🐱', count: 4);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '深度呼噜助眠 🐱', const Color(0xFFA855F7));
-      _showDialogueBubble('🐱 已开启波可深度呼噜助眠 ASMR，纯净低频共鸣超级解压安神~', duration: const Duration(seconds: 4));
+      _spawnParticles(Offset(_petX + 55, _petY), emoji: '🫧', count: 3);
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启深度呼噜 🐱', const Color(0xFFA855F7));
+      _showDialogueBubble('🐱 咕噜噜~ 波可发出深度解压呼噜声，超安神助眠~ (ฅ>ω<*ฅ)', duration: const Duration(seconds: 4));
     } else {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '💡', count: 3);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '宁静房间 💡', const Color(0xFFFBBF24));
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '房间回归宁静 💡', const Color(0xFFFBBF24));
       _showDialogueBubble('💡 已关闭环境白噪音，房间回归温馨安宁~', duration: const Duration(seconds: 3));
     }
   }
@@ -2382,22 +2386,50 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   ),
                 ),
 
-              // 软装家具 4：右侧照明角 · 温馨小夜灯呼吸光晕
+              // 软装家具 4：右侧照明角 · 暖光小夜灯大范围呼吸光晕 (开灯时温暖漫反射笼罩就寝区)
               if (_isNightLampOn)
                 Positioned(
-                  right: 8.0,
-                  top: nestY + 90.0,
+                  right: -30.0,
+                  top: nestY + 20.0,
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: _idleAnimController,
+                      builder: (context, _) {
+                        final pulse = 1.0 + math.sin(_idleAnimController.value * 2 * math.pi) * 0.04;
+                        return Transform.scale(
+                          scale: pulse,
+                          child: Container(
+                            width: 260,
+                            height: 260,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withOpacity(0.38),
+                                  (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withOpacity(0.14),
+                                  Colors.transparent,
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+
+              // 关灯夜眠全景光影滤镜 (全屋柔和渐暗，星空与安睡氛围凸显)
+              if (!_isNightLampOn)
+                Positioned.fill(
                   child: IgnorePointer(
                     child: Container(
-                      width: 88,
-                      height: 88,
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
                         gradient: RadialGradient(
+                          center: Alignment.center,
+                          radius: 1.1,
                           colors: [
-                            (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withOpacity(0.38),
-                            (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withOpacity(0.12),
-                            Colors.transparent,
+                            (isNight ? const Color(0xFF070417) : Colors.black).withOpacity(0.44),
+                            (isNight ? const Color(0xFF03010C) : Colors.black).withOpacity(0.54),
                           ],
                         ),
                       ),
@@ -2408,7 +2440,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               // 软装家具 4：右侧照明角 · 温馨小夜灯 (置于右侧地板，轻触“啪嗒”开关台灯)
               Positioned(
                 right: 24.0,
-                top: nestY + 105.0,
+                top: nestY + 98.0,
                 child: _buildKittenNightLamp(isNight),
               ),
 
@@ -4101,6 +4133,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 children: [
                   // 音效开关
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () {
                       setState(() {
                         SoundService.soundEnabled = !SoundService.soundEnabled;
@@ -4108,7 +4141,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       if (SoundService.soundEnabled) SoundService.playMeow();
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      width: 29,
+                      height: 29,
                       decoration: BoxDecoration(
                         color: SoundService.soundEnabled
                             ? (isNight ? const Color(0xFF312E81) : const Color(0xFFEEF2FF))
@@ -4118,19 +4152,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           color: SoundService.soundEnabled
                               ? const Color(0xFF6366F1)
                               : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
-                          width: 0.8,
+                          width: 1.0,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        SoundService.soundEnabled ? '🔊' : '🔇',
-                        style: const TextStyle(fontSize: 8.5),
+                      child: Center(
+                        child: Text(
+                          SoundService.soundEnabled ? '🔊' : '🔇',
+                          style: const TextStyle(fontSize: 13.5),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 6),
                   // 地板猫爪印开关
                   GestureDetector(
                     key: const ValueKey('footprint_toggle_button'),
+                    behavior: HitTestBehavior.opaque,
                     onTap: () {
                       setState(() {
                         widget.petModel.toggleFootprints();
@@ -4147,7 +4191,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       );
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      width: 29,
+                      height: 29,
                       decoration: BoxDecoration(
                         color: widget.petModel.enableFootprints
                             ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFFF1F2))
@@ -4157,33 +4202,53 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           color: widget.petModel.enableFootprints
                               ? const Color(0xFFFB7185)
                               : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
-                          width: 0.8,
+                          width: 1.0,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        widget.petModel.enableFootprints ? '🐾' : '🧹',
-                        style: const TextStyle(fontSize: 8.5),
+                      child: Center(
+                        child: Text(
+                          widget.petModel.enableFootprints ? '🐾' : '🧹',
+                          style: const TextStyle(fontSize: 13.5),
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 6),
                   // 回到小窝按钮
                   GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _resetToMat(screenSize),
                     child: Container(
-                      padding: const EdgeInsets.all(3),
+                      width: 29,
+                      height: 29,
                       decoration: BoxDecoration(
                         color: isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
-                          width: 0.8,
+                          width: 1.0,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
                       ),
-                      child: Icon(
-                        Icons.home_rounded,
-                        size: 11,
-                        color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                      child: Center(
+                        child: Icon(
+                          Icons.home_rounded,
+                          size: 16,
+                          color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                        ),
                       ),
                     ),
                   ),
@@ -5451,45 +5516,31 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (_isNightLampOn) ...[
-          GestureDetector(
-            onTap: _cycleAmbientSound,
-            child: Container(
-              margin: const EdgeInsets.only(bottom: 3.5),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFF59E0B), width: 1),
-              ),
-              child: Text(
-                SoundService.ambientMode == 'rain'
-                    ? '🌧️ 雨声'
-                    : (SoundService.ambientMode == 'purr' ? '🐱 呼噜' : '🎵 ASMR'),
-                style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFFB45309)),
-              ),
-            ),
-          ),
-        ],
+        // 1. ASMR 白噪音切换胶囊 (始终可见，轻触即刻切换雨声/呼噜/宁静)
         GestureDetector(
-          onTap: _onNightLampTap,
+          onTap: _cycleAmbientSound,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            margin: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
             decoration: BoxDecoration(
-              color: _isNightLampOn
-                  ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFEF3C7))
-                  : (isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.96)),
-              borderRadius: BorderRadius.circular(16),
+              color: SoundService.ambientMode == 'rain'
+                  ? const Color(0xFF0284C7).withOpacity(0.24)
+                  : (SoundService.ambientMode == 'purr'
+                      ? const Color(0xFF9333EA).withOpacity(0.24)
+                      : (isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.95))),
+              borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: _isNightLampOn ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8).withOpacity(0.4),
-                width: 1.5,
+                color: SoundService.ambientMode == 'rain'
+                    ? const Color(0xFF38BDF8)
+                    : (SoundService.ambientMode == 'purr'
+                        ? const Color(0xFFA855F7)
+                        : (isNight ? const Color(0xFF6366F1).withOpacity(0.4) : const Color(0xFFCBD5E1))),
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: _isNightLampOn
-                      ? const Color(0xFFF59E0B).withOpacity(0.4)
-                      : Colors.black.withOpacity(0.06),
-                  blurRadius: _isNightLampOn ? 12 : 5,
+                  color: Colors.black.withOpacity(isNight ? 0.3 : 0.06),
+                  blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
@@ -5497,14 +5548,67 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(_isNightLampOn ? '💡' : '💤', style: const TextStyle(fontSize: 15)),
-                const SizedBox(width: 3),
                 Text(
-                  _isNightLampOn ? 'ON' : 'OFF',
+                  SoundService.ambientMode == 'rain'
+                      ? '🌧️ 雨声'
+                      : (SoundService.ambientMode == 'purr' ? '🐱 呼噜' : '🎵 ASMR'),
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.bold,
-                    color: _isNightLampOn ? const Color(0xFFD97706) : const Color(0xFF94A3B8),
+                    color: SoundService.ambientMode == 'rain'
+                        ? const Color(0xFF38BDF8)
+                        : (SoundService.ambientMode == 'purr'
+                            ? const Color(0xFFC084FC)
+                            : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B))),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // 2. 小夜灯实体开关 (开灯暖光高亮，关灯安睡深蓝)
+        GestureDetector(
+          onTap: _onNightLampTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+            decoration: BoxDecoration(
+              color: _isNightLampOn
+                  ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7))
+                  : (isNight ? const Color(0xFF181330) : Colors.white.withOpacity(0.96)),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _isNightLampOn
+                    ? const Color(0xFFF59E0B)
+                    : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFF94A3B8).withOpacity(0.4)),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: _isNightLampOn
+                      ? const Color(0xFFF59E0B).withOpacity(0.42)
+                      : Colors.black.withOpacity(0.08),
+                  blurRadius: _isNightLampOn ? 14 : 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _isNightLampOn ? '💡' : '🌙',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _isNightLampOn ? 'ON' : 'OFF',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: _isNightLampOn
+                        ? const Color(0xFFD97706)
+                        : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8)),
                   ),
                 ),
               ],
