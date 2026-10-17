@@ -76,9 +76,9 @@ class PetPainter extends CustomPainter {
     double spinTiltAngle = 0.0;
 
     if (state == 'GLASS_BOOP') {
-      // 贴贴屏幕：大头贴近屏幕玻璃，可爱雀跃
-      scaleX = 1.32;
-      scaleY = 1.32;
+      // 贴贴屏幕：大头贴近屏幕玻璃，可爱雀跃 (自然透视微前倾 1.06x，杜绝夸张畸变膨胀)
+      scaleX = 1.06;
+      scaleY = 1.06;
       breathY = math.sin(animTime * 4.0) * 3.0;
     } else if (state == 'IDLE') {
       // 待机时猫咪骨骼自然重心微摆动 (Body sway)
@@ -140,9 +140,9 @@ class PetPainter extends CustomPainter {
       scaleY = 1.0 - math.sin(animTime * 10.0) * 0.02;
       bodySwayX = math.sin(animTime * 5.0) * 2.5;
     } else if (state == 'DRAGGING') {
-      // 拖拽抱起：身体受重力拉长悬空
-      scaleX = 0.90;
-      scaleY = 1.12;
+      // 拖拽抱起：身体受重力自然悬垂微动 (稳定保真，杜绝拉伸走样)
+      scaleX = 0.98;
+      scaleY = 1.02;
       breathY = 0.0;
     }
 

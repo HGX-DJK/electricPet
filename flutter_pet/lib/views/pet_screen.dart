@@ -970,6 +970,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     widget.petModel.petHead();
 
+    // 连续轻抚摸头连击判定 (连续轻抚 5 次触发贴贴屏幕惊喜，仅在地面非拖拽时触发)
+    _petCombo++;
+    _comboResetTimer?.cancel();
+    _comboResetTimer = Timer(const Duration(milliseconds: 2600), () {
+      if (mounted) {
+        setState(() => _petCombo = 0);
+      }
+    });
+
+    if (_petCombo >= 5 && _state != 'GLASS_BOOP' && !_isDragging) {
+      _petCombo = 0;
+      _triggerGlassBoop(_lastScreenSize);
+      return;
+    }
+
     final petLines = [
       '喵呜~ 蹭蹭主人的手心！好喜欢主人~ (ฅ\'ω\'ฅ)',
       '咕噜咕噜... 被主人戳得好舒服呀！💕',
@@ -2014,7 +2029,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 维度五：跑过来贴贴屏幕 (Glass Boop)
   void _triggerGlassBoop(Size screenSize) {
-    if (!mounted || _state == 'GLASS_BOOP') return;
+    if (!mounted || _state == 'GLASS_BOOP' || _isDragging) return;
     _isRoaming = false;
     _targetWalkX = null;
     SoundService.playMeow();
@@ -2022,17 +2037,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _state = 'GLASS_BOOP';
       _hasGlassPawPrints = true;
       _pawPrints = [
-        Offset(screenSize.width / 2 - 38, _petY + 22),
-        Offset(screenSize.width / 2 + 38, _petY + 22),
+        Offset(_petX - 38, _petY + 22),
+        Offset(_petX + 38, _petY + 22),
       ];
     });
     if (widget.petModel.enableHaptics) {
       HapticFeedback.heavyImpact();
     }
-    _showDialogueBubble('波可跑来贴贴屏幕啦！主人也在看波可嘛？(ฅ\'ω\'ฅ)💕', duration: const Duration(seconds: 5));
+    _showDialogueBubble('波可跑来贴贴屏幕啦！主人也在看波可嘛？(ฅ\'ω\'ฅ)💕', duration: const Duration(seconds: 4));
 
     _boopTimer?.cancel();
-    _boopTimer = Timer(const Duration(milliseconds: 4500), () {
+    _boopTimer = Timer(const Duration(milliseconds: 3800), () {
       if (mounted && _state == 'GLASS_BOOP') {
         setState(() {
           _state = 'IDLE';
@@ -2412,37 +2427,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         _lastDragDirection = dir;
                       }
 
-                      // 维度五：连续抚摸判定与亲密 Combo
+                      // 拖拽移动与抚摸交互解耦：搬动宠物时不误触发贴贴屏幕膨胀态
                       final delta = details.delta.distance;
-                      if (delta > 1.0 && delta < 15.0) {
+                      if (delta > 2.0 && delta < 12.0) {
                         _strokeDistance += delta;
-                        if (_strokeDistance > 22.0) {
+                        if (_strokeDistance > 60.0) {
                           _strokeDistance = 0.0;
                           _petProgress = 1.0;
-                          widget.petModel.petHead();
-
-                          _petCombo++;
-                          _comboResetTimer?.cancel();
-                          _comboResetTimer = Timer(const Duration(milliseconds: 2600), () {
-                            if (mounted) {
-                              setState(() => _petCombo = 0);
-                            }
-                          });
-
                           _spawnParticles(
                             Offset(_petX, _petY - 40),
-                            emoji: _petCombo >= 4 ? '💖' : '❤️',
+                            emoji: '✨',
                             count: 1,
                           );
-                          if (widget.petModel.enableHaptics) {
-                            HapticFeedback.lightImpact();
-                          }
-
-                          // 连击达到 6 次触发猫咪贴贴屏幕
-                          if (_petCombo >= 6 && _state != 'GLASS_BOOP') {
-                            _petCombo = 0;
-                            _triggerGlassBoop(screenSize);
-                          }
                         }
                       }
                     });
@@ -2467,7 +2463,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         return;
                       }
 
-                      if (_state != 'DIZZY' && _state != 'GLASS_BOOP') {
+                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (绝不残留变形或卡在膨胀态)
+                      if (_state != 'DIZZY') {
                         _state = 'IDLE';
                       }
                     });

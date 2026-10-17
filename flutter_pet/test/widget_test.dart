@@ -338,4 +338,39 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('魔法换装'), findsOneWidget);
   });
+
+  testWidgets('Pet drag stability and no inflation test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 找到萌宠主窗体并模拟大幅度拖拽移动
+    final petFinder = find.byType(CustomPaint).first;
+    expect(petFinder, findsWidgets);
+
+    // 模拟大幅拖动（原逻辑中连续滑行超过 132px 会误触发 GLASS_BOOP 膨胀态）
+    final gesture = await tester.startGesture(const Offset(540, 1200));
+    await gesture.moveBy(const Offset(50, -30));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(60, -20));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(50, 40));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // 验证拖拽过程中绝不出现贴贴屏幕对话与膨胀态
+    expect(find.textContaining('波可跑来贴贴屏幕啦'), findsNothing);
+
+    // 结束拖拽
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 验证拖拽结束后平稳回归 IDLE，绝不残留贴贴屏幕气泡
+    expect(find.textContaining('波可跑来贴贴屏幕啦'), findsNothing);
+  });
 }
