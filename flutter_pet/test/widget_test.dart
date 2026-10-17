@@ -504,5 +504,59 @@ void main() {
     expect(find.text('ON'), findsOneWidget);
     expect(find.textContaining('小夜灯点亮'), findsOneWidget);
   });
+
+  testWidgets('Comprehensive Style, Presentation & Micro-Interactions Polish test',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 验证轻戳对话气泡触发猫咪心事与悄悄话翻牌彩蛋
+    final bubbleFinder = find.byKey(const ValueKey('smart_dialogue_bubble'));
+    expect(bubbleFinder, findsOneWidget);
+    await tester.tap(bubbleFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 验证气泡更新为专属悄悄话之一
+    expect(
+      find.byWidgetPredicate((widget) {
+        if (widget is Text && widget.data != null) {
+          final t = widget.data!;
+          return t.contains('悄悄话') ||
+              t.contains('闪闪发光') ||
+              t.contains('小耳朵') ||
+              t.contains('小爪子按个章') ||
+              t.contains('呼噜噜') ||
+              t.contains('小鱼干藏在被窝');
+        }
+        return false;
+      }),
+      findsOneWidget,
+    );
+
+    // 2. 验证点击远处猫草盆栽触发互动与猫草清香
+    final plantFinder = find.text('猫草');
+    expect(plantFinder, findsOneWidget);
+    await tester.tap(plantFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('猫草清香'), findsWidgets);
+
+    // 3. 验证点击远处猫抓柱触发磨爪与腰肢伸展
+    final scratcherFinder = find.text('磨爪');
+    expect(scratcherFinder, findsOneWidget);
+    await tester.tap(scratcherFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('爪'), findsWidgets);
+
+    // 4. 验证点击空白地板背景触发机敏眼神注视追踪，不会发生异常
+    await tester.tapAt(const Offset(300, 450));
+    await tester.pump(const Duration(milliseconds: 200));
+  });
 }
 

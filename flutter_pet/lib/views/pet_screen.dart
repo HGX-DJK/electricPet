@@ -238,6 +238,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _roamTimer;
   Size _lastScreenSize = const Size(360, 640);
 
+  // 细节优化增强状态：触碰果冻阻尼倾角、眼神注视机敏定时器、观景窗弹动缩放
+  double _bodyTiltAngle = 0.0;
+  Timer? _tiltTimer;
+  Timer? _glanceTimer;
+  double _windowScale = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -556,6 +562,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _roamTimer?.cancel();
     _slowBlinkTimer?.cancel();
     _waterRippleTimer?.cancel();
+    _tiltTimer?.cancel();
+    _glanceTimer?.cancel();
     SoundService.dispose();
     super.dispose();
   }
@@ -612,7 +620,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (math.Random().nextBool()) {
         setState(() => _isBlep = true);
       }
-      _showDialogueBubble('嗷呜一大口！吃掉了$foodName，最喜欢主人啦~ 😋💕');
+      if (widget.petModel.hunger >= 90) {
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '😋', count: 4);
+        _spawnParticles(Offset(_petX, _petY - 35), emoji: '✨', count: 3);
+        _showDialogueBubble('嗝~ 肚子吃得鼓囊囊的，好饱好幸福呀！😋💕', duration: const Duration(seconds: 4));
+        SoundService.startPurr();
+        Timer(const Duration(milliseconds: 1600), () => SoundService.stopPurr());
+      } else {
+        _showDialogueBubble('嗷呜一大口！吃掉了$foodName，最喜欢主人啦~ 😋💕');
+      }
       setState(() {
         _showFoodTray = false;
         _draggingFoodPos = null;
@@ -633,7 +649,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     SoundService.playPop();
     if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
     setState(() {
+      _windowScale = 0.88;
       _windowWeather = (_windowWeather + 1) % 4;
+    });
+    Timer(const Duration(milliseconds: 140), () {
+      if (mounted) setState(() => _windowScale = 1.0);
     });
 
     // 0: ☀️ 暖阳晴空, 1: 🌧️ 治愈雨季, 2: 🌸 春日落樱, 3: 🌙 浪漫星空
@@ -645,6 +665,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (SoundService.ambientMode == 'rain') {
         SoundService.stopAmbient();
       }
+    }
+
+    // 春日落樱：全屏拂过一阵粉红花瓣微风
+    if (_windowWeather == 2) {
+      final sWidth = _lastScreenSize.width;
+      _spawnParticles(Offset(sWidth * 0.25, 130), emoji: '🌸', count: 4);
+      _spawnParticles(Offset(sWidth * 0.55, 110), emoji: '🌸', count: 5);
+      _spawnParticles(Offset(sWidth * 0.80, 140), emoji: '🌸', count: 4);
     }
 
     final names = ['暖阳晴空 ☀️', '治愈雨季 🌧️', '春日落樱 🌸', '浪漫星空 🌙'];
@@ -1290,12 +1318,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     switch (targetName) {
       case 'CAT_GRASS':
-        _onPlantTap();
+        _onPlantTap(false);
         _playAction('LOOK_AROUND');
         _showDialogueBubble('巡视猫草盆栽~ 凑近闻闻青草清香！🌱✨');
         break;
       case 'SCRATCHING_POST':
-        _onScratcherTap();
+        _onScratcherTap(false);
         _playAction('WASH_FACE');
         _showDialogueBubble('巡视剑麻猫抓柱~ 伸个懒腰准备磨爪爪！🪵🐾');
         break;
@@ -1512,8 +1540,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
   }
 
-  /// 家具交互：猫草轻摇 (清香飘逸，猫咪开心)
-  void _onPlantTap() {
+  /// 家具交互：猫草轻摇 (清香飘逸，猫咪开心跑过去嗅嗅)
+  void _onPlantTap([bool walkIfFar = true]) {
     _idleSeconds = 0;
     if (widget.petModel.enableHaptics) {
       HapticFeedback.lightImpact();
@@ -1529,6 +1557,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
     });
 
+    final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+    final plantCenterX = 24.0 + 24.0;
+    final plantCenterY = floorTop + 16.0 + 26.0;
+
+    // 若猫咪距离猫草较远，迈着小碎步跑过去互动
+    if (walkIfFar && ((_petX - plantCenterX).abs() > 65.0) && !_isDragging && !widget.petModel.isSleeping) {
+      _startWalkingTo(
+        (plantCenterX + 38.0).clamp(35.0, _lastScreenSize.width - 35.0),
+        plantCenterY,
+        'CAT_GRASS',
+        '猫草清香扑鼻~ 波可小步跑过去闻闻咬一小口！🌱😋',
+      );
+    }
+
     _spawnParticles(Offset(_petX - 80, _petY - 20), emoji: '🌿', count: 3);
     _spawnParticles(Offset(_petX - 60, _petY - 30), emoji: '🌱', count: 2);
     _spawnTextParticle(Offset(_petX - 85, _petY - 50), '猫草清香 +5 🌱', const Color(0xFF10B981));
@@ -1537,8 +1579,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('猫草清香扑鼻~ 波可闻到了开心咬了一小口！🌱😋', duration: const Duration(seconds: 4));
   }
 
-  /// 家具交互：原木剑麻猫抓柱磨爪 (真实解压利爪抓挠撕扯沙沙声 + 弹性震颤 + 真实木屑火花 + 猫咪惬意互动)
-  void _onScratcherTap() {
+  /// 家具交互：原木剑麻猫抓柱磨爪 (真实解压利爪抓挠撕扯沙沙声 + 弹性震颤 + 真实木屑火花 + 猫咪惬意跑来磨爪)
+  void _onScratcherTap([bool walkIfFar = true]) {
     _idleSeconds = 0;
     SoundService.playScratch();
     if (widget.petModel.enableHaptics) {
@@ -1577,6 +1619,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
     final postCenterX = _lastScreenSize.width - 24.0 - 24.0;
     final postCenterY = floorTop + 16.0 + 26.0;
+
+    // 若猫咪距离猫抓柱较远，迈着欢快小碎步跑过去磨爪
+    if (walkIfFar && ((_petX - postCenterX).abs() > 65.0) && !_isDragging && !widget.petModel.isSleeping) {
+      _startWalkingTo(
+        (postCenterX - 38.0).clamp(35.0, _lastScreenSize.width - 35.0),
+        postCenterY,
+        'SCRATCHING_POST',
+        '迈着欢快的小碎步，跑去右上角剑麻柱磨爪爪啦！🐾🪵',
+      );
+    }
 
     _spawnParticles(Offset(postCenterX, postCenterY - 10), emoji: '🪵', count: 3);
     _spawnParticles(Offset(postCenterX - 10, postCenterY), emoji: '✨', count: 3);
@@ -1625,6 +1677,26 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     ];
     final line = scratcherLines[math.Random().nextInt(scratcherLines.length)];
     _showDialogueBubble(line, duration: const Duration(seconds: 4));
+  }
+
+  /// 点击对话气泡彩蛋：轻戳气泡翻牌猫咪专属悄悄话心事
+  void _onDialogueBubbleTap() {
+    _idleSeconds = 0;
+    SoundService.playMeow(tone: MeowTone.soft);
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _triggerWink();
+    _spawnParticles(Offset(_petX, _petY - 35), emoji: '✨', count: 3);
+    final secretLines = [
+      '喵呜~ 主人戳我悄悄话啦！波可一直都在看着你哦~ (ฅ>ω<*ฅ)💕',
+      '今天的主人也在闪闪发光呢！给主人打满分一百分！✨💯',
+      '波可的小耳朵一直在听主人的心声，永远都陪着主人~ 👂🐾',
+      '小爪子按个章：今天主人是最棒的，不接受反驳！🐾❤️',
+      '呼噜噜... 只要主人摸摸头，波可浑身电量就充满啦！⚡🔋',
+      '悄悄告诉主人：波可偷偷把最好的小鱼干藏在被窝留给你啦！🐟✨',
+    ];
+    _showDialogueBubble(secretLines[math.Random().nextInt(secretLines.length)], duration: const Duration(seconds: 4));
   }
 
   /// 家具交互：开关萌猫小夜灯 (温润呼吸暖光与全屋夜眠氛围联动)
@@ -1976,6 +2048,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       SoundService.playMeow(tone: MeowTone.short);
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       _squishController.forward(from: 0.0);
+      setState(() => _bodyTiltAngle = -0.04);
+      _tiltTimer?.cancel();
+      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+        if (mounted) setState(() => _bodyTiltAngle = 0.0);
+      });
       _spawnParticles(Offset(_petX, _petY - 25), emoji: '🤧', count: 3);
       _showDialogueBubble('阿嚏！(>﹏<) 戳到波可敏感的小鼻尖啦~ 🐾', duration: const Duration(seconds: 4));
       return;
@@ -2019,6 +2096,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'LEFT';
+        _bodyTiltAngle = -0.05;
+      });
+      _tiltTimer?.cancel();
+      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+        if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _earTwitchTimer?.cancel();
       _earTwitchTimer = Timer(const Duration(milliseconds: 900), () {
@@ -2035,6 +2117,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() {
         _twitchEar = 'RIGHT';
+        _bodyTiltAngle = 0.05;
+      });
+      _tiltTimer?.cancel();
+      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+        if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _earTwitchTimer?.cancel();
       _earTwitchTimer = Timer(const Duration(milliseconds: 900), () {
@@ -2054,6 +2141,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         HapticFeedback.lightImpact();
       }
       _squishController.forward(from: 0.0);
+      setState(() => _bodyTiltAngle = isLeftCheek ? 0.07 : -0.07);
+      _tiltTimer?.cancel();
+      _tiltTimer = Timer(const Duration(milliseconds: 280), () {
+        if (mounted) setState(() => _bodyTiltAngle = 0.0);
+      });
       _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 3);
       _showDialogueBubble('唔姆~ 脸颊肉肉要被主人捏圆啦！(ฅ\'ω\'ฅ)', duration: const Duration(seconds: 4));
       return;
@@ -2158,10 +2250,32 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _yarnVx = (math.Random().nextBool() ? 9.0 : -9.0);
       _yarnVy = -11.0;
     });
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
     _showDialogueBubble('逗猫时间到！毛线球飞起来啦，波可快去追~ 🧶💨', duration: const Duration(seconds: 4));
+  }
+
+  /// 轻触空白背景区域：眼神机敏注视追踪与耳尖微动 (Eye Glance Tracking)
+  void _onBackgroundPointerDown(Offset globalPos, Size screenSize) {
+    if (_isDragging || _isLaserMode || _showFoodTray || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
+    final relX = globalPos.dx - _petX;
+    final relY = globalPos.dy - _petY;
+    final dist = math.sqrt(relX * relX + relY * relY);
+    // 点击在猫咪外部时，猫咪机敏转动眼珠与耳尖注视指尖落点
+    if (dist > 50.0 && dist < 340.0) {
+      setState(() {
+        _lookTargetPos = Offset(relX, relY);
+        _twitchEar = relX < 0 ? 'LEFT' : 'RIGHT';
+      });
+      _glanceTimer?.cancel();
+      _glanceTimer = Timer(const Duration(milliseconds: 1300), () {
+        if (mounted && !_isDragging) {
+          setState(() {
+            _lookTargetPos = null;
+            _twitchEar = null;
+          });
+          _triggerWink();
+        }
+      });
+    }
   }
 
   @override
@@ -2202,6 +2316,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     return Scaffold(
       body: Listener(
+        onPointerDown: (event) => _onBackgroundPointerDown(event.position, screenSize),
         onPointerHover: (event) => _onPointerHoverOrMove(event.position),
         onPointerMove: (event) => _onPointerHoverOrMove(event.position),
         onPointerUp: (_) => _onPointerUpOrExit(),
@@ -2573,6 +2688,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         return;
                       }
 
+                      // 拖放于暖绒圆垫中心时，直接触发幸福踩奶特技
+                      if ((_petX - nestX).abs() < 42.0 && (_petY - nestY).abs() < 42.0) {
+                        _onBedTap(nestX, nestY);
+                        return;
+                      }
+
                       // 拖拽释放平稳平滑着陆，回归自然待机状态 (方向四：肉垫减震轻弹 Cushioned Landing + 触地微扬尘)
                       if (_state != 'DIZZY') {
                         _state = 'IDLE';
@@ -2587,29 +2708,32 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   child: AnimatedBuilder(
                     animation: Listenable.merge([_idleAnimController, _squishController]),
                     builder: (context, child) {
-                      return Transform.scale(
-                        scaleX: _squishScaleX.value,
-                        scaleY: _squishScaleY.value,
-                        child: CustomPaint(
-                          size: const Size(200, 200),
-                          painter: PetPainter(
-                            model: widget.petModel,
-                            animTime: _idleAnimController.value * 10,
-                            state: _state,
-                            touchPos: (_isYarnFlying || _isYarnDragging)
-                                ? Offset(_yarnX - _petX, _yarnY - _petY)
-                                : (_touchPos ?? _lookTargetPos),
-                            facingLeft: _facingLeft,
-                            petProgress: _petProgress,
-                            isPurring: _isPurring,
-                            twitchEar: _twitchEar,
-                            isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null),
-                            isTailPuffed: _isTailPuffed,
-                            isAirplaneEars: _isAirplaneEars,
-                            isBlep: _isBlep,
-                            isSlowBlink: _isSlowBlink,
-                            winkEye: _winkEye,
-                            isNight: isNight,
+                      return Transform.rotate(
+                        angle: _bodyTiltAngle,
+                        child: Transform.scale(
+                          scaleX: _squishScaleX.value,
+                          scaleY: _squishScaleY.value,
+                          child: CustomPaint(
+                            size: const Size(200, 200),
+                            painter: PetPainter(
+                              model: widget.petModel,
+                              animTime: _idleAnimController.value * 10,
+                              state: _state,
+                              touchPos: (_isYarnFlying || _isYarnDragging)
+                                  ? Offset(_yarnX - _petX, _yarnY - _petY)
+                                  : (_touchPos ?? _lookTargetPos),
+                              facingLeft: _facingLeft,
+                              petProgress: _petProgress,
+                              isPurring: _isPurring,
+                              twitchEar: _twitchEar,
+                              isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null || _showFoodTray || (widget.petModel.hunger < 50 && _state == 'IDLE')),
+                              isTailPuffed: _isTailPuffed,
+                              isAirplaneEars: _isAirplaneEars,
+                              isBlep: _isBlep,
+                              isSlowBlink: _isSlowBlink,
+                              winkEye: _winkEye,
+                              isNight: isNight,
+                            ),
                           ),
                         ),
                       );
@@ -2956,10 +3080,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       left: bubbleLeft,
       top: bubbleTop,
       child: GestureDetector(
-        onTap: () {
-          // 点击气泡换一句台词
-          _checkAutoDialogue();
-        },
+        key: const ValueKey('smart_dialogue_bubble'),
+        onTap: _onDialogueBubbleTap,
         child: Container(
           width: bubbleWidth,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -3013,183 +3135,197 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       bottom: 16,
       left: 0,
       right: 0,
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 1. 奇妙背包
-            GestureDetector(
-              onTap: () => _openBackpackDrawer(isNight),
-              onVerticalDragEnd: (details) {
-                if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
-                  _openBackpackDrawer(isNight);
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                decoration: BoxDecoration(
-                  color: isNight
-                      ? const Color(0xFF1E1A40).withOpacity(0.9)
-                      : Colors.white.withOpacity(0.94),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        builder: (context, val, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - val) * 16),
+            child: Opacity(
+              opacity: val.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. 奇妙背包
+              GestureDetector(
+                onTap: () => _openBackpackDrawer(isNight),
+                onVerticalDragEnd: (details) {
+                  if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
+                    _openBackpackDrawer(isNight);
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  decoration: BoxDecoration(
                     color: isNight
-                        ? const Color(0xFF6366F1).withOpacity(0.4)
-                        : const Color(0xFFE2E8F0),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
+                        ? const Color(0xFF1E1A40).withOpacity(0.9)
+                        : Colors.white.withOpacity(0.94),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
                       color: isNight
-                          ? const Color(0xFF0F0C24).withOpacity(0.5)
-                          : const Color(0xFF6366F1).withOpacity(0.1),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
+                          ? const Color(0xFF6366F1).withOpacity(0.4)
+                          : const Color(0xFFE2E8F0),
+                      width: 1.5,
                     ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('🎒', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '奇妙背包',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
-                        letterSpacing: 0.3,
+                    boxShadow: [
+                      BoxShadow(
+                        color: isNight
+                            ? const Color(0xFF0F0C24).withOpacity(0.5)
+                            : const Color(0xFF6366F1).withOpacity(0.1),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
                       ),
-                    ),
-                    const SizedBox(width: 2),
-                    Icon(
-                      Icons.keyboard_arrow_up_rounded,
-                      size: 16,
-                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 7),
-
-            // 2. 魔法换装 / 品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
-            GestureDetector(
-              onTap: () {
-                _idleSeconds = 0;
-                _isRoaming = false;
-                _targetWalkX = null;
-                SoundService.playMeow();
-                if (widget.petModel.enableHaptics) {
-                  HapticFeedback.lightImpact();
-                }
-                setState(() {
-                  _isWardrobeMode = true;
-                  _isActionMode = false;
-                  _wardrobeTab = 0;
-                });
-                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
-                _showDialogueBubble('开启魔法换装！点选下方任意品种，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                decoration: BoxDecoration(
-                  color: isNight
-                      ? const Color(0xFF311E66).withOpacity(0.9)
-                      : const Color(0xFFFAF5FF).withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: isNight
-                        ? const Color(0xFFA855F7).withOpacity(0.5)
-                        : const Color(0xFFE9D5FF),
-                    width: 1.5,
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFA855F7).withOpacity(0.14),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('👗', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '魔法换装',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
-                        letterSpacing: 0.3,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🎒', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '奇妙背包',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 7),
-
-            // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞，零遮挡全景观赏)
-            GestureDetector(
-              onTap: () {
-                _idleSeconds = 0;
-                _isRoaming = false;
-                _targetWalkX = null;
-                SoundService.playMeow();
-                if (widget.petModel.enableHaptics) {
-                  HapticFeedback.lightImpact();
-                }
-                setState(() {
-                  _isActionMode = true;
-                  _isWardrobeMode = false;
-                });
-                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
-                _showDialogueBubble('专属绝活点播台已就绪！点选下方任意绝活，看波可大展身手~ 🎭✨', duration: const Duration(seconds: 4));
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
-                decoration: BoxDecoration(
-                  color: isNight
-                      ? const Color(0xFF3D2714).withOpacity(0.9)
-                      : const Color(0xFFFFFBEB).withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: isNight
-                        ? const Color(0xFFF59E0B).withOpacity(0.55)
-                        : const Color(0xFFFDE68A),
-                    width: 1.5,
+                      const SizedBox(width: 2),
+                      Icon(
+                        Icons.keyboard_arrow_up_rounded,
+                        size: 16,
+                        color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFF59E0B).withOpacity(0.18),
-                      blurRadius: 12,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('✨', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '专属绝活',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 7),
+
+              // 2. 魔法换装 / 品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
+              GestureDetector(
+                onTap: () {
+                  _idleSeconds = 0;
+                  _isRoaming = false;
+                  _targetWalkX = null;
+                  SoundService.playMeow();
+                  if (widget.petModel.enableHaptics) {
+                    HapticFeedback.lightImpact();
+                  }
+                  setState(() {
+                    _isWardrobeMode = true;
+                    _isActionMode = false;
+                    _wardrobeTab = 0;
+                  });
+                  _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
+                  _showDialogueBubble('开启魔法换装！点选下方任意品种，波可即刻变身给你看~ 👗✨', duration: const Duration(seconds: 4));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  decoration: BoxDecoration(
+                    color: isNight
+                        ? const Color(0xFF311E66).withOpacity(0.9)
+                        : const Color(0xFFFAF5FF).withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: isNight
+                          ? const Color(0xFFA855F7).withOpacity(0.5)
+                          : const Color(0xFFE9D5FF),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFA855F7).withOpacity(0.14),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('👗', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '魔法换装',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+
+              // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞，零遮挡全景观赏)
+              GestureDetector(
+                onTap: () {
+                  _idleSeconds = 0;
+                  _isRoaming = false;
+                  _targetWalkX = null;
+                  SoundService.playMeow();
+                  if (widget.petModel.enableHaptics) {
+                    HapticFeedback.lightImpact();
+                  }
+                  setState(() {
+                    _isActionMode = true;
+                    _isWardrobeMode = false;
+                  });
+                  _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
+                  _showDialogueBubble('专属绝活点播台已就绪！点选下方任意绝活，看波可大展身手~ 🎭✨', duration: const Duration(seconds: 4));
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7.5),
+                  decoration: BoxDecoration(
+                    color: isNight
+                        ? const Color(0xFF3D2714).withOpacity(0.9)
+                        : const Color(0xFFFFFBEB).withOpacity(0.95),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: isNight
+                          ? const Color(0xFFF59E0B).withOpacity(0.55)
+                          : const Color(0xFFFDE68A),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFF59E0B).withOpacity(0.18),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('✨', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 4),
+                      Text(
+                        '专属绝活',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -3253,12 +3389,25 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       bottom: 12,
       left: 12,
       right: 12,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: borderColor, width: 1.5),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        builder: (context, val, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - val) * 20),
+            child: Opacity(
+              opacity: val.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: borderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: isNight
@@ -3645,7 +3794,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   /// 画布级无遮挡专属绝活滑轨点播台 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
@@ -3674,12 +3824,25 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       bottom: 12,
       left: 12,
       right: 12,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: borderColor, width: 1.5),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        builder: (context, val, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - val) * 20),
+            child: Opacity(
+              opacity: val.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: borderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: isNight
@@ -3872,7 +4035,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildDockTabPill(int index, String label, bool isNight) {
@@ -4798,62 +4962,109 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 食碗凹槽组件
   Widget _buildCatFoodBowl(double nestX, double nestY, bool isNight) {
-    return GestureDetector(
-      key: const ValueKey('cat_food_bowl'),
-      onTap: () {
-        SoundService.playPop();
-        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
-        setState(() {
-          _showFoodTray = !_showFoodTray;
-          if (_showFoodTray) {
-            _isWardrobeMode = false;
-            _isActionMode = false;
-          }
-        });
-        if (_showFoodTray) {
-          _showDialogueBubble('喵~ 好吃的！按住小鱼干拖给波可吧~ 🥣✨', duration: const Duration(seconds: 3));
-        }
-      },
-      onDoubleTap: () => _popFishFromBowl(nestX, nestY),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: _showFoodTray
-              ? const Color(0xFFF43F5E).withOpacity(0.18)
-              : (isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9)),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _showFoodTray
-                ? const Color(0xFFF43F5E)
-                : (isNight ? const Color(0xFF4338CA).withOpacity(0.3) : const Color(0xFFE2E8F0)),
-            width: 1.0,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('🥣', style: TextStyle(fontSize: 14)),
-                SizedBox(width: 2),
-                Text('🐟', style: TextStyle(fontSize: 11)),
-              ],
-            ),
-            const SizedBox(height: 1.5),
-            Text(
-              _showFoodTray ? '投喂中' : '食碗',
-              style: TextStyle(
-                fontSize: 8.5,
-                fontWeight: FontWeight.bold,
+    final isHungry = widget.petModel.hunger < 50;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        GestureDetector(
+          key: const ValueKey('cat_food_bowl'),
+          onTap: () {
+            SoundService.playPop();
+            if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+            setState(() {
+              _showFoodTray = !_showFoodTray;
+              if (_showFoodTray) {
+                _isWardrobeMode = false;
+                _isActionMode = false;
+              }
+            });
+            if (_showFoodTray) {
+              _showDialogueBubble('喵~ 好吃的！按住小鱼干拖给波可吧~ 🥣✨', duration: const Duration(seconds: 3));
+            }
+          },
+          onDoubleTap: () => _popFishFromBowl(nestX, nestY),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _showFoodTray
+                  ? const Color(0xFFF43F5E).withOpacity(0.18)
+                  : (isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9)),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
                 color: _showFoodTray
                     ? const Color(0xFFF43F5E)
-                    : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B)),
+                    : (isHungry
+                        ? const Color(0xFFF43F5E)
+                        : (isNight ? const Color(0xFF4338CA).withOpacity(0.3) : const Color(0xFFE2E8F0))),
+                width: isHungry ? 1.4 : 1.0,
+              ),
+              boxShadow: isHungry
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFFF43F5E).withOpacity(0.28),
+                        blurRadius: 6,
+                        offset: const Offset(0, 1.5),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('🥣', style: TextStyle(fontSize: 14)),
+                    SizedBox(width: 2),
+                    Text('🐟', style: TextStyle(fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(height: 1.5),
+                Text(
+                  _showFoodTray ? '投喂中' : '食碗',
+                  style: TextStyle(
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.bold,
+                    color: _showFoodTray
+                        ? const Color(0xFFF43F5E)
+                        : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (isHungry)
+          Positioned(
+            top: -10,
+            left: -4,
+            right: -4,
+            child: IgnorePointer(
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEF4444), Color(0xFFF97316)],
+                    ),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFEF4444).withOpacity(0.35),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Text(
+                    '求投喂 🥣',
+                    style: TextStyle(fontSize: 7, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+      ],
     );
   }
 
@@ -4959,80 +5170,109 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     return GestureDetector(
       key: const ValueKey('french_arch_window'),
       onTap: _cycleWindowWeather,
-      child: Container(
-        width: 86,
-        height: 112,
-        decoration: BoxDecoration(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(43), bottom: Radius.circular(6)),
-          border: Border.all(
-            color: isNight ? const Color(0xFF4338CA).withOpacity(0.8) : const Color(0xFFE2E8F0),
-            width: 3.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(isNight ? 0.35 : 0.08),
-              blurRadius: 10,
-              offset: const Offset(0, 3),
+      child: AnimatedScale(
+        scale: _windowScale,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutBack,
+        child: Container(
+          width: 86,
+          height: 112,
+          decoration: BoxDecoration(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(43), bottom: Radius.circular(6)),
+            border: Border.all(
+              color: isNight ? const Color(0xFF4338CA).withOpacity(0.8) : const Color(0xFFE2E8F0),
+              width: 3.5,
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(39), bottom: Radius.circular(3)),
-          child: Stack(
-            children: [
-              Container(decoration: BoxDecoration(gradient: gradients[_windowWeather])),
-              if (_windowWeather == 0) ...[
-                const Positioned(top: 10, right: 10, child: Text('☀️', style: TextStyle(fontSize: 16))),
-                const Positioned(bottom: 22, left: 10, child: Text('☁️', style: TextStyle(fontSize: 14))),
-              ] else if (_windowWeather == 1) ...[
-                const Positioned(top: 8, left: 12, child: Text('🌧️', style: TextStyle(fontSize: 16))),
-                Positioned(
-                  bottom: 20,
-                  right: 14,
-                  child: Text('💧', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.8))),
-                ),
-              ] else if (_windowWeather == 2) ...[
-                const Positioned(top: 12, left: 10, child: Text('🌸', style: TextStyle(fontSize: 14))),
-                const Positioned(bottom: 22, right: 10, child: Text('🌸', style: TextStyle(fontSize: 11))),
-              ] else ...[
-                const Positioned(top: 8, right: 10, child: Text('🌙', style: TextStyle(fontSize: 14))),
-                const Positioned(bottom: 22, left: 12, child: Text('✨', style: TextStyle(fontSize: 11))),
-              ],
-              Center(
-                child: Container(
-                  width: 2.0,
-                  height: double.infinity,
-                  color: Colors.white.withOpacity(0.45),
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isNight ? 0.35 : 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
-              Positioned(
-                top: 48,
-                left: 0,
-                right: 0,
-                child: Container(
-                  height: 2.0,
-                  color: Colors.white.withOpacity(0.45),
-                ),
-              ),
-              Positioned(
-                bottom: 3,
-                left: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.32),
-                    borderRadius: BorderRadius.circular(6),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(39), bottom: Radius.circular(3)),
+            child: Stack(
+              children: [
+                Container(decoration: BoxDecoration(gradient: gradients[_windowWeather])),
+                if (_windowWeather == 0) ...[
+                  const Positioned(top: 10, right: 10, child: Text('☀️', style: TextStyle(fontSize: 16))),
+                  const Positioned(bottom: 22, left: 10, child: Text('☁️', style: TextStyle(fontSize: 14))),
+                ] else if (_windowWeather == 1) ...[
+                  const Positioned(top: 8, left: 12, child: Text('🌧️', style: TextStyle(fontSize: 16))),
+                  Positioned(
+                    bottom: 20,
+                    right: 14,
+                    child: Text('💧', style: TextStyle(fontSize: 10, color: Colors.white.withOpacity(0.8))),
                   ),
-                  child: Center(
-                    child: Text(
-                      weatherTags[_windowWeather],
-                      style: const TextStyle(fontSize: 8.5, color: Colors.white, fontWeight: FontWeight.bold),
+                  Positioned(
+                    top: 36,
+                    left: 22,
+                    child: Container(
+                      width: 1.5,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.6),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 55,
+                    right: 28,
+                    child: Container(
+                      width: 1.5,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.55),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                ] else if (_windowWeather == 2) ...[
+                  const Positioned(top: 12, left: 10, child: Text('🌸', style: TextStyle(fontSize: 14))),
+                  const Positioned(bottom: 22, right: 10, child: Text('🌸', style: TextStyle(fontSize: 11))),
+                ] else ...[
+                  const Positioned(top: 8, right: 10, child: Text('🌙', style: TextStyle(fontSize: 14))),
+                  const Positioned(bottom: 22, left: 12, child: Text('✨', style: TextStyle(fontSize: 11))),
+                ],
+                Center(
+                  child: Container(
+                    width: 2.0,
+                    height: double.infinity,
+                    color: Colors.white.withOpacity(0.45),
+                  ),
+                ),
+                Positioned(
+                  top: 48,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 2.0,
+                    color: Colors.white.withOpacity(0.45),
+                  ),
+                ),
+                Positioned(
+                  bottom: 3,
+                  left: 6,
+                  right: 6,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.32),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Center(
+                      child: Text(
+                        weatherTags[_windowWeather],
+                        style: const TextStyle(fontSize: 8.5, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -5153,17 +5393,30 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       bottom: 14,
       left: 16,
       right: 16,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(
-          color: isNight
-              ? const Color(0xFF161334).withOpacity(0.96)
-              : Colors.white.withOpacity(0.98),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isNight ? const Color(0xFFFB7185).withOpacity(0.45) : const Color(0xFFFDA4AF),
-            width: 1.5,
-          ),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0.0, end: 1.0),
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutBack,
+        builder: (context, val, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - val) * 20),
+            child: Opacity(
+              opacity: val.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: isNight
+                ? const Color(0xFF161334).withOpacity(0.96)
+                : Colors.white.withOpacity(0.98),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isNight ? const Color(0xFFFB7185).withOpacity(0.45) : const Color(0xFFFDA4AF),
+              width: 1.5,
+            ),
           boxShadow: [
             BoxShadow(
               color: const Color(0xFFF43F5E).withOpacity(isNight ? 0.28 : 0.12),
@@ -5235,6 +5488,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 return Expanded(
                   child: GestureDetector(
                     onTap: () {
+                      _draggingFoodId = id;
+                      _draggingFoodName = name;
+                      _draggingFoodIcon = icon;
+                      _draggingFoodPos = Offset(_petX, _petY - 20);
                       _finishDragToFeed(hunger, intimacy);
                       _spawnParticles(Offset(_petX, _petY - 20), emoji: icon, count: 4);
                     },
@@ -5329,7 +5586,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   /// 舒睡暖垫小被子 (Tuck-in Blanket - 随呼吸起伏，支持盖被被与掀被被微互动)
