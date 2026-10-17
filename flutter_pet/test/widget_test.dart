@@ -454,5 +454,41 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 1400));
   });
+
+  testWidgets('Compact Screen Top Bar and Unified Cat Dining Station test', (WidgetTester tester) async {
+    // 模拟窄屏移动设备 (360px 宽度)
+    tester.view.physicalSize = const Size(360, 780);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 验证顶部灵动岛即使在 360px 窄屏下也绝无溢出，所有按钮均在屏幕范围内
+    final homeIconFinder = find.byIcon(Icons.home_rounded);
+    expect(homeIconFinder, findsOneWidget);
+    final homeBottomRight = tester.getBottomRight(homeIconFinder);
+    expect(homeBottomRight.dx, lessThan(360.0));
+
+    final fpButtonFinder = find.byKey(const ValueKey('footprint_toggle_button'));
+    expect(fpButtonFinder, findsOneWidget);
+    final fpBottomRight = tester.getBottomRight(fpButtonFinder);
+    expect(fpBottomRight.dx, lessThan(360.0));
+
+    // 2. 验证左下角萌宠双联食水一体托盘
+    final foodBowlFinder = find.byKey(const ValueKey('cat_food_bowl'));
+    final waterBowlFinder = find.byKey(const ValueKey('cat_water_bowl'));
+    expect(foodBowlFinder, findsOneWidget);
+    expect(waterBowlFinder, findsOneWidget);
+
+    // 验证食水双碗并列在一体化托盘中且宽度适度、绝不超界
+    final foodRect = tester.getRect(foodBowlFinder);
+    final waterRect = tester.getRect(waterBowlFinder);
+    expect(foodRect.left, lessThan(waterRect.left));
+    expect(waterRect.right, lessThan(200.0));
+  });
 }
 
