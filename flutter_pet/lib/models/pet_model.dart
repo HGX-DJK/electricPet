@@ -159,6 +159,7 @@ class PetModel extends ChangeNotifier {
   bool isStudying = false;
   bool enableSound = true;
   bool enableHaptics = true;
+  bool enableFootprints = true;
 
   Map<String, String> decorations = {
     'head': 'none',
@@ -338,6 +339,12 @@ class PetModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleFootprints() {
+    enableFootprints = !enableFootprints;
+    notifyListeners();
+    saveToDisk();
+  }
+
   Future<void> saveToDisk() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -356,6 +363,7 @@ class PetModel extends ChangeNotifier {
         'decorations': decorations,
         'enableSound': enableSound,
         'enableHaptics': enableHaptics,
+        'enableFootprints': enableFootprints,
       };
       await prefs.setString('poko_pet_data', jsonEncode(data));
     } catch (_) {}
@@ -383,6 +391,7 @@ class PetModel extends ChangeNotifier {
         }
         enableSound = data['enableSound'] ?? enableSound;
         enableHaptics = data['enableHaptics'] ?? enableHaptics;
+        enableFootprints = data['enableFootprints'] ?? enableFootprints;
         notifyListeners();
       }
     } catch (_) {}

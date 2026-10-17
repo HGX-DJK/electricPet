@@ -160,6 +160,9 @@ class PetPainter extends CustomPainter {
       _drawTail(canvas, skin);
     }
 
+    // 绘制背部披风后摆 (挂在后背向两侧舒展，正面时在身体后层，绝不遮挡胸腹与猫爪)
+    _drawBackCape(canvas, isBackView: isSpinBackView);
+
     // 绘制身体与背部花纹 (背身时呈现圆滚滚后背与背脊毛色)
     _drawBody(canvas, skin, isBackView: isSpinBackView);
 
@@ -1478,29 +1481,100 @@ class PetPainter extends CustomPainter {
         canvas.drawLine(Offset(i.toDouble(), 44), Offset(i.toDouble(), 48), fringePaint);
       }
     } else if (neckDeco == 'royal_cape') {
-      // 🦸‍♂️ 皇家丝绒披风 (羁绊3阶专属装扮：尊贵深紫红丝绒 + 贵气纯金饰边 + 领口星辉金扣)
-      final capePaint = Paint()
-        ..color = const Color(0xFF6B21A8)
-        ..style = PaintingStyle.fill;
-      final goldTrim = Paint()
-        ..color = const Color(0xFFF59E0B)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2;
+      // 🦸‍♂️ 皇家丝绒披风前饰 (正面视角：仅绘制纯金领扣与双肩搭扣，披风主体在身后飘逸；背面视角：披风主体覆盖后背)
+      if (isBackView) {
+        // 背面视角：披风覆盖后背，展示威武金纹与丝绒褶皱
+        final capePaint = Paint()
+          ..color = const Color(0xFF581C87)
+          ..style = PaintingStyle.fill;
+        final goldTrim = Paint()
+          ..color = const Color(0xFFF59E0B)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4;
 
-      // 披风下摆向后背与两侧舒展
-      final capePath = Path()
-        ..moveTo(-22, 22)
-        ..quadraticBezierTo(-36, 44, -28, 64)
-        ..quadraticBezierTo(0, 70, 28, 64)
-        ..quadraticBezierTo(36, 44, 22, 22)
-        ..close();
-      canvas.drawPath(capePath, capePaint);
-      canvas.drawPath(capePath, goldTrim);
+        final capePath = Path()
+          ..moveTo(-22, 18)
+          ..quadraticBezierTo(-38, 44, -30, 68)
+          ..quadraticBezierTo(0, 74, 30, 68)
+          ..quadraticBezierTo(38, 44, 22, 18)
+          ..close();
+        canvas.drawPath(capePath, capePaint);
+        canvas.drawPath(capePath, goldTrim);
 
-      // 披风领口金扣
-      canvas.drawCircle(const Offset(0, 23), 5.0, Paint()..color = const Color(0xFFF59E0B));
-      canvas.drawCircle(const Offset(0, 23), 2.2, Paint()..color = Colors.white);
+        // 背部皇家金徽刺绣
+        final emblemPaint = Paint()
+          ..color = const Color(0xFFFBBF24)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8;
+        canvas.drawCircle(const Offset(0, 42), 7.0, emblemPaint);
+        canvas.drawLine(const Offset(-4, 42), const Offset(4, 42), emblemPaint);
+        canvas.drawLine(const Offset(0, 38), const Offset(0, 46), emblemPaint);
+      } else {
+        // 正面视角：精致纯金领链与星辉红宝石胸扣，披风主体在身后的 _drawBackCape 绘制，胸腹与爪爪绝不遮挡！
+        final chainPaint = Paint()
+          ..color = const Color(0xFFF59E0B)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.2
+          ..strokeCap = StrokeCap.round;
+        final chainPath = Path()
+          ..moveTo(-20, 20)
+          ..quadraticBezierTo(0, 26, 20, 20);
+        canvas.drawPath(chainPath, chainPaint);
+
+        // 两侧纯金肩扣
+        final goldBuckle = Paint()..color = const Color(0xFFF59E0B);
+        canvas.drawCircle(const Offset(-19, 20), 3.2, goldBuckle);
+        canvas.drawCircle(const Offset(19, 20), 3.2, goldBuckle);
+
+        // 领口中央星辉皇家宝扣 (纯金底托配深红宝石与高光)
+        canvas.drawCircle(const Offset(0, 24), 5.5, goldBuckle);
+        final rubyPaint = Paint()..color = const Color(0xFFE11D48);
+        canvas.drawCircle(const Offset(0, 24), 3.2, rubyPaint);
+        canvas.drawCircle(const Offset(-1, 23), 1.0, Paint()..color = Colors.white);
+      }
     }
+  }
+
+  /// 绘制背部披风后摆 (挂在后背，正面视角下垂于身体后侧向两翼自然舒展，绝不遮挡肚子和爪爪)
+  void _drawBackCape(Canvas canvas, {bool isBackView = false}) {
+    final neckDeco = model.decorations['neck'];
+    if (neckDeco != 'royal_cape') return;
+    if (isBackView) return; // 背面视角在 _drawDecorations 中绘制覆盖在背上的披风主体
+
+    final capePaint = Paint()
+      ..color = const Color(0xFF581C87)
+      ..style = PaintingStyle.fill;
+    final goldTrim = Paint()
+      ..color = const Color(0xFFF59E0B)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4;
+
+    // 自然微风拂动飘逸波动
+    final wave = math.sin(animTime * 3.2) * 3.5;
+    final wave2 = math.cos(animTime * 3.2) * 2.0;
+
+    // 披风后摆：从后肩向后背两侧舒展，宽于猫咪身体轮廓
+    final capePath = Path()
+      ..moveTo(-22, 22)
+      ..cubicTo(-46 + wave, 44, -44 + wave, 62, -34 + wave, 72)
+      ..quadraticBezierTo(0, 78 + wave2, 34 + wave, 72)
+      ..cubicTo(44 + wave, 62, 46 + wave, 44, 22, 22)
+      ..close();
+
+    canvas.drawPath(capePath, capePaint);
+    canvas.drawPath(capePath, goldTrim);
+
+    // 披风内衬深紫丝绒阴影细节
+    final innerFold = Paint()
+      ..color = const Color(0xFF3B0764).withOpacity(0.4)
+      ..style = PaintingStyle.fill;
+    final innerPath = Path()
+      ..moveTo(-18, 26)
+      ..quadraticBezierTo(-34 + wave, 52, -26 + wave, 70)
+      ..quadraticBezierTo(0, 74 + wave2, 26 + wave, 70)
+      ..quadraticBezierTo(34 + wave, 52, 18, 26)
+      ..close();
+    canvas.drawPath(innerPath, innerFold);
   }
 
   /// 绘制头部帽子配饰

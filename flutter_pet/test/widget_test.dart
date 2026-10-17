@@ -373,4 +373,33 @@ void main() {
     // 验证拖拽结束后平稳回归 IDLE，绝不残留贴贴屏幕气泡
     expect(find.textContaining('波可跑来贴贴屏幕啦'), findsNothing);
   });
+
+  testWidgets('Footprint toggle and Cape back-layering test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 验证顶部灵动胶囊栏中的爪印切换按钮存在 (默认开启 🐾)
+    final fpToggleFinder = find.byKey(const ValueKey('footprint_toggle_button'));
+    expect(fpToggleFinder, findsOneWidget);
+    expect(find.descendant(of: fpToggleFinder, matching: find.text('🐾')), findsOneWidget);
+
+    // 点击切换为纯净地板 (🧹)
+    await tester.tap(fpToggleFinder);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.descendant(of: fpToggleFinder, matching: find.text('🧹')), findsOneWidget);
+    expect(find.textContaining('已收起爪印，保持地板纯净洁白'), findsOneWidget);
+
+    // 再次点击恢复温润爪印 (🐾)
+    await tester.tap(fpToggleFinder);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.descendant(of: fpToggleFinder, matching: find.text('🐾')), findsOneWidget);
+    expect(find.textContaining('已开启温润小猫肉垫爪印'), findsOneWidget);
+  });
 }

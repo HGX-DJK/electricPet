@@ -31,7 +31,7 @@ class _Particle {
   });
 }
 
-/// 地板粉嫩小猫爪印数据模型 (漫步巡视与追球冲刺时左右交替踩出)
+/// 地板治愈微光小猫爪印数据模型 (漫步巡视与追球冲刺时自然交替踩出)
 class _Footprint {
   final Offset position;
   final double angle;
@@ -42,11 +42,11 @@ class _Footprint {
     required this.position,
     required this.angle,
     required this.isLeft,
-    this.opacity = 0.65,
+    this.opacity = 0.45,
   });
 }
 
-/// 地板粉嫩小猫爪印极速渲染器 (中心小肉垫 + 3 个半透明粉嫩趾印)
+/// 地板治愈微光小猫爪印渲染器 (温润木质压痕 + 4 个萌态真实猫脚趾印 + 呼吸感微光淡隐)
 class _FootprintPainter extends CustomPainter {
   final List<_Footprint> footprints;
 
@@ -60,21 +60,34 @@ class _FootprintPainter extends CustomPainter {
       canvas.translate(fp.position.dx, fp.position.dy);
       canvas.rotate(fp.angle);
 
-      final padPaint = Paint()
-        ..color = const Color(0xFFFB7185).withOpacity((fp.opacity * 0.70).clamp(0.0, 1.0))
+      // 1. 底层：木地板温润受力微压痕 (温和琥珀暖棕，柔和融入地板，告别假印油感)
+      final woodIndentPaint = Paint()
+        ..color = const Color(0xFF78350F).withOpacity((fp.opacity * 0.26).clamp(0.0, 1.0))
         ..style = PaintingStyle.fill;
 
-      // 掌心中心主肉垫
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: 8.5, height: 7.0),
-        padPaint,
-      );
+      // 2. 表层：猫咪体温留下的极淡粉嫩微光 (轻盈半透，温润治愈)
+      final glowBlushPaint = Paint()
+        ..color = const Color(0xFFF472B6).withOpacity((fp.opacity * 0.20).clamp(0.0, 1.0))
+        ..style = PaintingStyle.fill;
 
-      // 3 个粉嫩饱满小脚趾印
-      const toeY = -6.0;
-      canvas.drawCircle(const Offset(-4.5, toeY + 1.0), 2.2, padPaint);
-      canvas.drawCircle(const Offset(0.0, toeY), 2.5, padPaint);
-      canvas.drawCircle(const Offset(4.5, toeY + 1.0), 2.2, padPaint);
+      // 掌心三瓣主肉垫 (真实猫咪肉垫底弧向上凹陷三叶造型)
+      final mainPadRect = Rect.fromCenter(center: const Offset(0.0, 1.0), width: 7.6, height: 6.0);
+      canvas.drawOval(mainPadRect, woodIndentPaint);
+      canvas.drawOval(mainPadRect, glowBlushPaint);
+
+      // 真实猫爪 4 个萌态脚趾印 (外低内高优美弧线分布，告别三趾机械假感)
+      final toes = [
+        const Offset(-4.6, -3.2), // 外左趾
+        const Offset(-1.6, -5.4), // 内左趾
+        const Offset(1.6, -5.4),  // 内右趾
+        const Offset(4.6, -3.2),  // 外右趾
+      ];
+      final radii = [1.5, 1.7, 1.7, 1.5];
+
+      for (int i = 0; i < 4; i++) {
+        canvas.drawCircle(toes[i], radii[i], woodIndentPaint);
+        canvas.drawCircle(toes[i], radii[i], glowBlushPaint);
+      }
 
       canvas.restore();
     }
@@ -261,10 +274,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         needRepaint = true;
       }
 
-      // 地板粉嫩小猫爪印渐隐消退 (左右脚印在 1.5 秒内优雅淡出)
+      // 地板温润小猫爪印渐隐消退 (左右脚印在约 1.2 秒内如体温散去般优雅淡化消散)
       if (_footprints.isNotEmpty) {
         _footprints.removeWhere((fp) {
-          fp.opacity -= 0.018;
+          fp.opacity -= 0.022;
           return fp.opacity <= 0.0;
         });
         needRepaint = true;
@@ -1826,34 +1839,37 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
-  /// 踩出地板粉嫩小猫肉垫爪印
+  /// 踩出地板温润小猫肉垫爪印
   void _maybeAddFootprint(Offset currentPos) {
+    if (!widget.petModel.enableFootprints) return;
     if (_lastFootprintPos == null) {
       _lastFootprintPos = currentPos;
       return;
     }
     final diff = currentPos - _lastFootprintPos!;
     final dist = diff.distance;
-    if (dist >= 18.0) {
+    // 真实猫咪步幅节奏：间距 34px，告别密集紧凑假印
+    if (dist >= 34.0) {
       _lastFootprintPos = currentPos;
       _footprintLeft = !_footprintLeft;
 
       // 运动朝向角
       final angle = math.atan2(diff.dy, diff.dx) + math.pi / 2;
 
-      // 左右两脚横向交替
+      // 左右两脚横向交替自然步宽 (±7px)
       final perp = Offset(-diff.dy, diff.dx) / dist;
-      final lateral = perp * (_footprintLeft ? -9.0 : 9.0);
+      final lateral = perp * (_footprintLeft ? -7.0 : 7.0);
 
-      // 脚印位于猫咪爪底 (垂直向下偏移约 56px)
-      final footPos = currentPos + const Offset(0, 56.0) + lateral;
+      // 脚印精准落点：猫咪双前爪着地接触面 (+58px)
+      final footPos = currentPos + const Offset(0, 58.0) + lateral;
       _footprints.add(_Footprint(
         position: footPos,
         angle: angle,
         isLeft: _footprintLeft,
-        opacity: 0.65,
+        opacity: 0.45,
       ));
-      if (_footprints.length > 25) {
+      // 保持地板洁净纯粹：最多仅保留最近 8 处轻微爪印
+      if (_footprints.length > 8) {
         _footprints.removeAt(0);
       }
     }
@@ -4028,6 +4044,44 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   ),
                   child: Text(
                     SoundService.soundEnabled ? '🔊' : '🔇',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 5),
+              // 地板猫爪印开关 (温润猫爪印 / 纯净洁白地板一键切换)
+              GestureDetector(
+                key: const ValueKey('footprint_toggle_button'),
+                onTap: () {
+                  setState(() {
+                    widget.petModel.toggleFootprints();
+                    if (!widget.petModel.enableFootprints) {
+                      _footprints.clear();
+                    }
+                  });
+                  if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                  _showDialogueBubble(
+                    widget.petModel.enableFootprints
+                        ? '已开启温润小猫肉垫爪印~ 🐾'
+                        : '已收起爪印，保持地板纯净洁白✨',
+                    duration: const Duration(seconds: 3),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: widget.petModel.enableFootprints
+                        ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFFF1F2))
+                        : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: widget.petModel.enableFootprints
+                          ? const Color(0xFFFB7185)
+                          : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                    ),
+                  ),
+                  child: Text(
+                    widget.petModel.enableFootprints ? '🐾' : '🧹',
                     style: const TextStyle(fontSize: 10),
                   ),
                 ),
