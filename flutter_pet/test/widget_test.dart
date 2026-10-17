@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/main.dart';
+import 'package:flutter_pet/services/sound_service.dart';
 
 void main() {
   testWidgets('Poko Pet App smoke test', (WidgetTester tester) async {
@@ -402,4 +403,56 @@ void main() {
     expect(find.descendant(of: fpToggleFinder, matching: find.text('🐾')), findsOneWidget);
     expect(find.textContaining('已开启温润小猫肉垫爪印'), findsOneWidget);
   });
+
+  testWidgets('Four Major Dimensions (Slow Blink, ASMR Rain, Water Bowl & Sakura, Cushioned Landing) test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 方向二：观景窗切换“细雨”触发 ASMR 白噪音联动
+    final windowFinder = find.byKey(const ValueKey('french_arch_window'));
+    expect(windowFinder, findsOneWidget);
+
+    // 切换至雨季
+    await tester.tap(windowFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('🌧️ 细雨'), findsOneWidget);
+    expect(SoundService.ambientMode, equals('rain'));
+
+    // 切换至落樱，雨声白噪音自动平稳停止
+    await tester.tap(windowFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('🌸 落樱'), findsOneWidget);
+    expect(SoundService.ambientMode, equals('none'));
+
+    // 2. 方向二：春日落樱可轻触花瓣消散
+    final sakuraFinder = find.byKey(const ValueKey('sakura_petal_0'));
+    expect(sakuraFinder, findsOneWidget);
+    await tester.tap(sakuraFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('轻触飘落的樱花瓣'), findsOneWidget);
+
+    // 3. 方向三：左侧就餐角清澈小水碗
+    final waterBowlFinder = find.byKey(const ValueKey('cat_water_bowl'));
+    expect(waterBowlFinder, findsOneWidget);
+    await tester.tap(waterBowlFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('波光粼粼'), findsOneWidget);
+
+    // 4. 方向四：半空拖拽轻盈落足肉垫缓冲微弹
+    final center = tester.getCenter(find.byType(CustomPaint).first);
+    final gesture = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(0, -60));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 1400));
+  });
 }
+

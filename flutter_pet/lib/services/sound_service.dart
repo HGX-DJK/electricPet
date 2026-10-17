@@ -71,6 +71,26 @@ class SoundService {
     }
   }
 
+  /// 直接设置环境白噪音模式 ('none', 'rain', 'purr')
+  static Future<void> setAmbientMode(String mode) async {
+    if (!soundEnabled || mode == 'none') {
+      await stopAmbient();
+      return;
+    }
+    _ambientMode = mode;
+    try {
+      if (mode == 'rain') {
+        await ambientPlayer.setVolume(0.52);
+        await ambientPlayer.setReleaseMode(ReleaseMode.loop);
+        await ambientPlayer.play(AssetSource('audio/rain.wav'));
+      } else if (mode == 'purr') {
+        await ambientPlayer.setVolume(0.70);
+        await ambientPlayer.setReleaseMode(ReleaseMode.loop);
+        await ambientPlayer.play(AssetSource('audio/purr.wav'));
+      }
+    } catch (_) {}
+  }
+
   /// 停止环境白噪音
   static Future<void> stopAmbient() async {
     _ambientMode = 'none';

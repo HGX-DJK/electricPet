@@ -242,6 +242,18 @@ class PetModel extends ChangeNotifier {
     saveToDisk();
   }
 
+  void addCleanliness(double amount) {
+    cleanliness = (cleanliness + amount).clamp(0.0, 100.0);
+    notifyListeners();
+    saveToDisk();
+  }
+
+  void addMood(double amount) {
+    mood = (mood + amount).clamp(0.0, 100.0);
+    notifyListeners();
+    saveToDisk();
+  }
+
   /// 投喂美食
   bool feed(String foodId) {
     if (isSleeping) return false;

@@ -19,6 +19,7 @@ class PetPainter extends CustomPainter {
   final bool isAirplaneEars;// 飞机耳警戒态 (受惊/开灯时双耳向两侧水平压平)
   final bool isBlep;         // 呆萌吐小舌头 (露粉嫩小舌尖)
   final String? winkEye;     // 'LEFT' | 'RIGHT' 俏皮单眼眨眼放电
+  final bool isSlowBlink;    // 慢眨眼“猫咪之吻” (表达极致信任与爱意)
 
   PetPainter({
     required this.model,
@@ -35,6 +36,7 @@ class PetPainter extends CustomPainter {
     this.isAirplaneEars = false,
     this.isBlep = false,
     this.winkEye,
+    this.isSlowBlink = false,
   });
 
   @override
@@ -83,6 +85,11 @@ class PetPainter extends CustomPainter {
     } else if (state == 'IDLE') {
       // 待机时猫咪骨骼自然重心微摆动 (Body sway)
       bodySwayX = math.sin(animTime * 0.9) * 1.8;
+      if (isPurring) {
+        // 抓挠喉腔打呼噜时高频细腻喉腔有机起伏微颤
+        bodySwayX += math.sin(animTime * 24.0) * 0.8;
+        breathY += math.sin(animTime * 24.0) * 0.9;
+      }
     } else if (state == 'EATING') {
       // 投喂进食欢快咀嚼微动
       breathY = math.sin(animTime * 14.0) * 2.5;
@@ -689,8 +696,8 @@ class PetPainter extends CustomPainter {
     // 正面视角：五官沿 3D 球形头面轻柔滑动
     final faceCenter = Offset(headCenter.dx + featureShiftX, headCenter.dy);
 
-    // 腮红
-    final blushAlpha = (petProgress > 0 || state == 'HAPPY_SPIN' || state == 'KNEADING_BISCUITS') ? 0x90 : 0x55;
+    // 腮红 (慢眨眼猫咪之吻时双颊泛起粉红微晕)
+    final blushAlpha = (isSlowBlink || petProgress > 0 || state == 'HAPPY_SPIN' || state == 'KNEADING_BISCUITS') ? 0xA0 : 0x55;
     final blushPaint = Paint()
       ..color = Color.fromARGB(blushAlpha, 244, 63, 94)
       ..style = PaintingStyle.fill;
@@ -972,6 +979,33 @@ class PetPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round;
       canvas.drawLine(Offset(leftEyeCenter.dx - 10, leftEyeCenter.dy), Offset(leftEyeCenter.dx + 10, leftEyeCenter.dy), sleepyPaint);
       canvas.drawLine(Offset(rightEyeCenter.dx - 10, rightEyeCenter.dy), Offset(rightEyeCenter.dx + 10, rightEyeCenter.dy), sleepyPaint);
+      return;
+    }
+
+    // 2.5 慢眨眼“猫咪之吻” (Slow Blink - 极度深情的弯弯细眯笑眼与轻微睫毛，表达爱意与绝对信任)
+    if (isSlowBlink) {
+      final slowBlinkPaint = Paint()
+        ..color = const Color(0xFF1E293B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round;
+
+      for (final ec in [leftEyeCenter, rightEyeCenter]) {
+        final p = Path()
+          ..moveTo(ec.dx - 12, ec.dy + 1)
+          ..quadraticBezierTo(ec.dx, ec.dy - 6, ec.dx + 12, ec.dy + 1);
+        canvas.drawPath(p, slowBlinkPaint);
+        // 上挑俏皮小睫毛
+        final lashDir = (ec == leftEyeCenter) ? -1.0 : 1.0;
+        canvas.drawLine(
+          Offset(ec.dx + lashDir * 9, ec.dy - 1),
+          Offset(ec.dx + lashDir * 13, ec.dy - 4),
+          Paint()
+            ..color = const Color(0xFF1E293B)
+            ..strokeWidth = 1.8
+            ..strokeCap = StrokeCap.round,
+        );
+      }
       return;
     }
 

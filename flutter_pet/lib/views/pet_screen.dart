@@ -152,6 +152,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   bool _isBlep = false;
   String? _winkEye;
   Timer? _winkTimer;
+  bool _isSlowBlink = false; // 慢眨眼“猫咪之吻”
+  Timer? _slowBlinkTimer;
+  bool _isWaterRippling = false; // 水碗波光粼粼涟漪
+  Timer? _waterRippleTimer;
 
   // 方向二：沉浸式养宠仪式感 (拖拽投喂 + 睡垫盖小被子)
   bool _showFoodTray = false;
@@ -304,6 +308,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           } else if (_yarnX >= maxX) {
             _yarnX = maxX;
             _yarnVx = -_yarnVx * 0.75;
+          }
+
+          // 剑麻猫抓柱实体物理碰撞反弹 (右上角障碍物自然反弹)
+          final postCenterX = _lastScreenSize.width - 48.0;
+          final postCenterY = floorTop + 42.0;
+          if ((_yarnX - postCenterX).abs() < 28.0 && (_yarnY - postCenterY).abs() < 38.0) {
+            _yarnVx = -_yarnVx.abs() * 0.82; // 弹向左侧
+            _yarnVy = -_yarnVy * 0.72;
+            _spawnParticles(Offset(postCenterX, postCenterY), emoji: '🪵', count: 2);
+            SoundService.playClick();
           }
 
           // 地板与踢脚线弹性反弹
@@ -540,6 +554,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _postAnimTimer?.cancel();
     _photoAnimTimer?.cancel();
     _roamTimer?.cancel();
+    _slowBlinkTimer?.cancel();
+    _waterRippleTimer?.cancel();
     SoundService.dispose();
     super.dispose();
   }
@@ -619,6 +635,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     setState(() {
       _windowWeather = (_windowWeather + 1) % 4;
     });
+
+    // 0: ☀️ 暖阳晴空, 1: 🌧️ 治愈雨季, 2: 🌸 春日落樱, 3: 🌙 浪漫星空
+    if (_windowWeather == 1) {
+      // 联动开启治愈自然雨声 ASMR 白噪音
+      SoundService.setAmbientMode('rain');
+    } else {
+      // 切换至其他天象时停止雨声
+      if (SoundService.ambientMode == 'rain') {
+        SoundService.stopAmbient();
+      }
+    }
+
     final names = ['暖阳晴空 ☀️', '治愈雨季 🌧️', '春日落樱 🌸', '浪漫星空 🌙'];
     final quotes = [
       '推开法式拱形窗~ 窗外是暖洋洋的晴空万里！☀️',
@@ -1963,13 +1991,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             t.cancel();
           } else {
             HapticFeedback.selectionClick();
+            _spawnParticles(Offset(_petX + (purrTick.isEven ? -18 : 18), _petY - 24), emoji: '🫧', count: 1);
           }
         });
       }
       _purrTimer?.cancel();
       _purrTimer = Timer(const Duration(milliseconds: 2600), () {
         SoundService.stopPurr();
-        if (mounted) setState(() => _isPurring = false);
+        if (mounted) {
+          setState(() => _isPurring = false);
+          _triggerSlowBlink();
+        }
       });
       widget.petModel.petHead();
       _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 5);
@@ -2041,6 +2073,32 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 7. 头部一般触碰
     _onPetTap(Offset(_petX, _petY));
+  }
+
+  /// 方向一：慢眨眼“猫咪之吻” (Slow Blink - 表达爱意与极致信任)
+  void _triggerSlowBlink() {
+    if (!mounted || _isSlowBlink || _state != 'IDLE') return;
+    setState(() => _isSlowBlink = true);
+    SoundService.playMeow(tone: MeowTone.soft);
+    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+    _spawnParticles(Offset(_petX, _petY - 35), emoji: '💖', count: 3);
+    _spawnTextParticle(Offset(_petX - 35, _petY - 60), '猫咪之吻 🐾💕', const Color(0xFFF43F5E));
+    widget.petModel.addIntimacy(3);
+    _showDialogueBubble('波可正在对主人慢眨眼哦~ 在小猫的世界里，这是表达最深爱意与信任的‘猫咪之吻’呢！(˘ω˘)💕', duration: const Duration(seconds: 4));
+
+    _slowBlinkTimer?.cancel();
+    _slowBlinkTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _isSlowBlink = false);
+    });
+  }
+
+  /// 方向一：呆萌吐小舌头 (Blep)
+  void _triggerBlep({Duration duration = const Duration(milliseconds: 2200)}) {
+    if (!mounted) return;
+    setState(() => _isBlep = true);
+    Timer(duration, () {
+      if (mounted) setState(() => _isBlep = false);
+    });
   }
 
   /// 维度五：跑过来贴贴屏幕 (Glass Boop)
@@ -2312,6 +2370,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 child: _buildCatFoodBowl(nestX, nestY, isNight),
               ),
 
+              // 软装家具 3-B：左侧就餐角 · 清澈小水碗 (与食碗并列，点击粼粼波光、解渴补水)
+              Positioned(
+                left: 80.0,
+                top: nestY + 105.0,
+                child: _buildCatWaterBowl(nestX, nestY, isNight),
+              ),
+
               // 美味零食投喂已移至底部悬浮投喂坞 _buildLiveFeedingDock (保持中景纯净无遮挡)
 
               // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫咪嘴边)
@@ -2357,6 +2422,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               // 阳光暖阳下木地板柔和光斑
               if (_windowWeather == 0 && !isNight)
                 _buildSunbeamPatch(nestX, nestY, isNight),
+
+              // 春日落樱轻盈飘落花瓣 (轻触化作粉红光尘消散)
+              if (_windowWeather == 2)
+                ..._buildSakuraPetals(screenSize, isNight),
 
               // 萌宠专属舒睡暖绒圆垫 (极简轻奢，铺展于猫咪身后地板上，猫咪坐于其上)
               _buildCatRug(nestX, nestY, isNight),
@@ -2479,9 +2548,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         return;
                       }
 
-                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (绝不残留变形或卡在膨胀态)
+                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (方向四：肉垫减震轻弹 Cushioned Landing + 触地微扬尘)
                       if (_state != 'DIZZY') {
                         _state = 'IDLE';
+                        _squishController.forward(from: 0.0);
+                        if (widget.petModel.enableHaptics) {
+                          HapticFeedback.lightImpact();
+                        }
+                        _spawnParticles(Offset(_petX, _petY + 28), emoji: '🐾', count: 2);
                       }
                     });
                   },
@@ -2508,6 +2582,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             isTailPuffed: _isTailPuffed,
                             isAirplaneEars: _isAirplaneEars,
                             isBlep: _isBlep,
+                            isSlowBlink: _isSlowBlink,
                             winkEye: _winkEye,
                             isNight: isNight,
                           ),
@@ -4674,6 +4749,84 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
+  /// 软装家具 3-B：左侧就餐角 · 清澈小水碗 (点击波光粼粼、解渴补水、猫咪舔水微动作)
+  Widget _buildCatWaterBowl(double nestX, double nestY, bool isNight) {
+    return GestureDetector(
+      key: const ValueKey('cat_water_bowl'),
+      onTap: () {
+        SoundService.playPop();
+        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+        setState(() {
+          _isWaterRippling = true;
+        });
+        _spawnParticles(Offset(100, nestY + 115), emoji: '💧', count: 4);
+        _spawnTextParticle(Offset(80, nestY + 95), '解渴补水 💧✨', const Color(0xFF0284C7));
+        widget.petModel.addCleanliness(8);
+        widget.petModel.addMood(6);
+        widget.petModel.addIntimacy(2);
+
+        // 如果猫咪在就餐角附近，触发低头小舔水微表情动作
+        if ((_petX - 80).abs() < 100 && (_petY - (nestY + 105)).abs() < 90) {
+          _triggerBlep();
+          _showDialogueBubble('咕嘟咕嘟~ 清凉甘甜的水好解渴呀！清洁+8 心情+6 💧(ฅ>ω<*ฅ)', duration: const Duration(seconds: 4));
+        } else {
+          _showDialogueBubble('水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨', duration: const Duration(seconds: 3));
+        }
+
+        _waterRippleTimer?.cancel();
+        _waterRippleTimer = Timer(const Duration(milliseconds: 1200), () {
+          if (mounted) setState(() => _isWaterRippling = false);
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isWaterRippling
+              ? const Color(0xFF38BDF8).withOpacity(0.25)
+              : (isNight ? const Color(0xFF1E1838) : Colors.white.withOpacity(0.96)),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _isWaterRippling
+                ? const Color(0xFF0284C7)
+                : (isNight ? const Color(0xFF38BDF8).withOpacity(0.5) : const Color(0xFFBAE6FD)),
+            width: 1.4,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF38BDF8).withOpacity(_isWaterRippling ? 0.35 : 0.12),
+              blurRadius: _isWaterRippling ? 10 : 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('🥣', style: TextStyle(fontSize: 16)),
+                const SizedBox(width: 3),
+                Text(_isWaterRippling ? '🫧' : '💧', style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+            const SizedBox(height: 1.5),
+            Text(
+              _isWaterRippling ? '波光粼粼' : '水碗',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold,
+                color: _isWaterRippling
+                    ? const Color(0xFF0284C7)
+                    : (isNight ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 空间环境 1：法式拱形观景窗 (French Arch Window - 4 季天象点按切换)
   Widget _buildFrenchArchWindow(bool isNight) {
     // 0: ☀️ 暖阳晴空, 1: 🌧️ 治愈雨季, 2: 🌸 春日落樱, 3: 🌙 浪漫星空
@@ -4785,37 +4938,105 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 空间环境 2：阳光光斑 (Sunbeam Patch - 晴空暖阳下映照在木地板上的柔和光斑)
+  /// 空间环境 2：阳光光斑 (Sunbeam Patch - 晴空暖阳下映照在木地板上的柔和光斑 + 丁达尔浮动金尘)
   Widget _buildSunbeamPatch(double nestX, double nestY, bool isNight) {
     return Positioned(
       left: nestX + 32,
       top: nestY - 22,
       child: IgnorePointer(
-        child: Transform.rotate(
-          angle: -0.16,
-          child: Container(
-            width: 120,
-            height: 62,
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.all(Radius.elliptical(60, 31)),
-              gradient: RadialGradient(
-                colors: [
-                  const Color(0xFFFEF08A).withOpacity(0.36),
-                  const Color(0xFFFDE047).withOpacity(0.14),
-                  Colors.transparent,
-                ],
+        child: AnimatedBuilder(
+          animation: _idleAnimController,
+          builder: (context, _) {
+            final animVal = _idleAnimController.value * 2 * math.pi;
+            return Transform.rotate(
+              angle: -0.16,
+              child: Container(
+                width: 120,
+                height: 62,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.all(Radius.elliptical(60, 31)),
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFFEF08A).withOpacity(0.36),
+                      const Color(0xFFFDE047).withOpacity(0.14),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    const Opacity(
+                      opacity: 0.28,
+                      child: Text('☀️', style: TextStyle(fontSize: 18, color: Color(0xFFF59E0B))),
+                    ),
+                    // 丁达尔金光微尘 (Dust Motes ✨ ⭐)
+                    Positioned(
+                      top: 14 + math.sin(animVal) * 3,
+                      left: 28 + math.cos(animVal) * 4,
+                      child: Opacity(
+                        opacity: (0.45 + math.sin(animVal).abs() * 0.35).clamp(0.0, 1.0),
+                        child: const Text('✨', style: TextStyle(fontSize: 10)),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: 12 - math.sin(animVal) * 3,
+                      right: 24 - math.cos(animVal) * 4,
+                      child: Opacity(
+                        opacity: (0.35 + math.cos(animVal).abs() * 0.35).clamp(0.0, 1.0),
+                        child: const Text('⭐', style: TextStyle(fontSize: 9)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            child: const Center(
-              child: Opacity(
-                opacity: 0.28,
-                child: Text('☀️', style: TextStyle(fontSize: 18, color: Color(0xFFF59E0B))),
-              ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
+  }
+
+  /// 空间环境 3：春日落樱花瓣 (Sakura Petals - 随风摇曳，轻触化为粉红光尘)
+  List<Widget> _buildSakuraPetals(Size screenSize, bool isNight) {
+    final basePositions = [
+      Offset(screenSize.width * 0.22, 175),
+      Offset(screenSize.width * 0.76, 215),
+      Offset(screenSize.width * 0.48, 290),
+    ];
+
+    return List.generate(basePositions.length, (index) {
+      final base = basePositions[index];
+      final phase = index * 1.8;
+      final animVal = _idleAnimController.value * 2 * math.pi;
+      final floatX = base.dx + math.sin(animVal + phase) * 14;
+      final floatY = base.dy + math.cos(animVal + phase) * 10;
+      final angle = math.sin(animVal + phase) * 0.35;
+
+      return Positioned(
+        key: ValueKey('sakura_petal_$index'),
+        left: floatX,
+        top: floatY,
+        child: GestureDetector(
+          onTap: () {
+            SoundService.playPop();
+            if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+            _spawnParticles(Offset(floatX + 10, floatY + 10), emoji: '🌸', count: 3);
+            _spawnParticles(Offset(floatX + 10, floatY + 10), emoji: '✨', count: 2);
+            _spawnTextParticle(Offset(floatX - 15, floatY - 20), '落樱轻抚 🌸+1💖', const Color(0xFFF43F5E));
+            widget.petModel.addIntimacy(1);
+            _showDialogueBubble('轻触飘落的樱花瓣~ 化作粉红微尘消散在风中啦！(🌸´▽`🌸)', duration: const Duration(seconds: 3));
+          },
+          child: Transform.rotate(
+            angle: angle,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              child: const Text('🌸', style: TextStyle(fontSize: 16)),
+            ),
+          ),
+        ),
+      );
+    });
   }
 
   /// 底部沉浸式美食投喂坞 (Live Feeding Dock - 位于底部黄金触控区，零中景遮挡，轻触或向上拖拽喂猫)
