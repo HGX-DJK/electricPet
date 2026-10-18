@@ -2656,116 +2656,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ),
                 ],
-                // 0. 天光罗盘时空胶囊 (真实太阳天文四季时角与 24h 连续平滑天光流转，支持一键切换预览)
-                Positioned(
-                  top: 58,
-                  right: 18,
-                  child: _BouncyTouchFeedback(
-                    key: const ValueKey('sky_rhythm_toggle_button'),
-                    onTap: _cycleSkyTheme,
-                    scaleDown: 0.92,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: isNight
-                            ? const Color(0xFF1E1B4B).withOpacity(0.78)
-                            : Colors.white.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isNight
-                              ? const Color(0xFF818CF8).withOpacity(0.45)
-                              : const Color(0xFFFDE68A).withOpacity(0.85),
-                          width: 1.2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isNight
-                                ? const Color(0xFF0F0C24).withOpacity(0.45)
-                                : const Color(0xFFF59E0B).withOpacity(0.14),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2.5),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            ambientIcon,
-                            style: TextStyle(
-                              fontSize: 16,
-                              shadows: isNight
-                                  ? [
-                                      Shadow(
-                                        color: const Color(0xFFFDE047).withOpacity(0.6),
-                                        blurRadius: 8,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    circadian['name'] as String,
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: _skyManualMode == -1
-                                          ? (isNight ? const Color(0xFF312E81) : const Color(0xFFDCFCE7))
-                                          : (isNight ? const Color(0xFF4C1D95) : const Color(0xFFFEF3C7)),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      _skyManualMode == -1 ? '自然' : '模式',
-                                      style: TextStyle(
-                                        fontSize: 7.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: _skyManualMode == -1
-                                            ? (isNight ? const Color(0xFFC7D2FE) : const Color(0xFF166534))
-                                            : (isNight ? const Color(0xFFDDD6FE) : const Color(0xFFB45309)),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                _skyManualMode == -1
-                                    ? (isNight
-                                        ? '日出 ${(circadian['solarTimes'] as SolarTimes).sunriseStr}'
-                                        : '日落 ${(circadian['solarTimes'] as SolarTimes).sunsetStr}')
-                                    : '点击切换天光',
-                                style: TextStyle(
-                                  fontSize: 8,
-                                  color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 5),
-                          Icon(
-                            Icons.sync_rounded,
-                            size: 13,
-                            color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFFD97706),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
                 // 背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
                 if (isNight) ...[
                   // 漫天静谧微星 (支持轻触交互，飘出星光)
@@ -4545,7 +4435,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       children: [
         // 1. 左侧灵动岛：萌宠等级、名称与亲密称号徽章 (双层精简卡片，绝不挤压横向空间)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4.5),
           decoration: BoxDecoration(
             color: isNight
                 ? const Color(0xFF181534).withOpacity(0.88)
@@ -4570,63 +4460,63 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             children: [
               // 等级徽章
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 2.5),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     colors: [Color(0xFF6366F1), Color(0xFF4F46E5)],
                   ),
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   'Lv.${widget.petModel.level}',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 9.5,
+                    fontSize: 9.0,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 5),
               // 垂直布局：上方名称，下方亲密度与称号徽章
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: (screenSize.width * 0.28).clamp(70.0, 110.0)),
+                    constraints: BoxConstraints(maxWidth: (screenSize.width * 0.22).clamp(55.0, 85.0)),
                     child: Text(
                       widget.petModel.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10.5,
                         fontWeight: FontWeight.bold,
                         color: isNight ? Colors.white : const Color(0xFF1E293B),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1.5),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         '❤️ ${widget.petModel.intimacy}',
                         style: TextStyle(
-                          fontSize: 8.5,
+                          fontSize: 8.0,
                           fontWeight: FontWeight.w600,
                           color: isNight ? const Color(0xFFFB7185) : const Color(0xFFE11D48),
                         ),
                       ),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: 3.5),
                       // 亲密羁绊称号勋章胶囊 (点按呼出成就卡片)
                       GestureDetector(
                         key: const ValueKey('intimacy_bond_badge'),
                         onTap: _showIntimacyBondModal,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
                           decoration: BoxDecoration(
                             color: bondColor.withOpacity(0.16),
-                            borderRadius: BorderRadius.circular(5),
+                            borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: bondColor.withOpacity(0.55),
                               width: 0.8,
@@ -4635,12 +4525,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(bondInfo['icon'] as String, style: const TextStyle(fontSize: 8)),
+                              Text(bondInfo['icon'] as String, style: const TextStyle(fontSize: 7.5)),
                               const SizedBox(width: 1.5),
                               Text(
                                 bondInfo['title'] as String,
                                 style: TextStyle(
-                                  fontSize: 7.5,
+                                  fontSize: 7.0,
                                   fontWeight: FontWeight.bold,
                                   color: bondColor,
                                 ),
@@ -4659,7 +4549,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
         // 2. 右侧灵动岛：饱腹与心情 + 快捷工具组 (双层设计，通透呼吸，绝不溢出)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
             color: isNight
                 ? const Color(0xFF181534).withOpacity(0.88)
@@ -4679,175 +4569,262 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // 上排：饱腹与心情状态数值
-              Row(
+          child: Builder(
+            builder: (context) {
+              final circadian = _getCircadianTheme();
+              final isManual = _skyManualMode != -1;
+              return Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  const Text('🍗', style: TextStyle(fontSize: 10)),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${widget.petModel.hunger.toInt()}%',
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFF59E0B),
-                    ),
+                  // 上排：饱腹与心情状态数值 + 真实天象时空徽章
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🍗', style: TextStyle(fontSize: 8.5)),
+                      const SizedBox(width: 1.5),
+                      Text(
+                        '${widget.petModel.hunger.toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 8.0,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFF59E0B),
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Container(
+                        width: 2.0,
+                        height: 2.0,
+                        decoration: BoxDecoration(
+                          color: isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      const Text('💖', style: TextStyle(fontSize: 8.5)),
+                      const SizedBox(width: 1.5),
+                      Text(
+                        '${widget.petModel.mood.toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 8.0,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF10B981),
+                        ),
+                      ),
+                      const SizedBox(width: 3.5),
+                      Container(
+                        width: 1.0,
+                        height: 7.5,
+                        color: isNight ? const Color(0xFF475569) : const Color(0xFFE2E8F0),
+                      ),
+                      const SizedBox(width: 3.5),
+                      // 时空天光微徽章 (轻触亦可流转天光)
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _cycleSkyTheme,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              circadian['name'] as String,
+                              style: TextStyle(
+                                fontSize: 7.5,
+                                fontWeight: FontWeight.bold,
+                                color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                              ),
+                            ),
+                            const SizedBox(width: 2),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 0.5),
+                              decoration: BoxDecoration(
+                                color: !isManual
+                                    ? (isNight ? const Color(0xFF312E81) : const Color(0xFFDCFCE7))
+                                    : (isNight ? const Color(0xFF4C1D95) : const Color(0xFFFEF3C7)),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                !isManual ? '自然' : '模式',
+                                style: TextStyle(
+                                  fontSize: 6.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: !isManual
+                                      ? (isNight ? const Color(0xFFC7D2FE) : const Color(0xFF166534))
+                                      : (isNight ? const Color(0xFFDDD6FE) : const Color(0xFFB45309)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 5),
-                  Container(
-                    width: 2.5,
-                    height: 2.5,
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  const Text('💖', style: TextStyle(fontSize: 10)),
-                  const SizedBox(width: 2),
-                  Text(
-                    '${widget.petModel.mood.toInt()}%',
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF10B981),
-                    ),
+                  const SizedBox(height: 2.5),
+                  // 下排：快捷控制按钮 (声音开关、爪印开关、天光罗盘、回窝按钮)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 1. 音效开关
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() {
+                            SoundService.soundEnabled = !SoundService.soundEnabled;
+                          });
+                          if (SoundService.soundEnabled) SoundService.playMeow();
+                        },
+                        child: Container(
+                          width: 25,
+                          height: 25,
+                          decoration: BoxDecoration(
+                            color: SoundService.soundEnabled
+                                ? (isNight ? const Color(0xFF312E81) : const Color(0xFFEEF2FF))
+                                : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: SoundService.soundEnabled
+                                  ? const Color(0xFF6366F1)
+                                  : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1.5),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              SoundService.soundEnabled ? '🔊' : '🔇',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 3.5),
+                      // 2. 地板猫爪印开关
+                      GestureDetector(
+                        key: const ValueKey('footprint_toggle_button'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          setState(() {
+                            widget.petModel.toggleFootprints();
+                            if (!widget.petModel.enableFootprints) {
+                              _footprints.clear();
+                            }
+                          });
+                          if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                          _showDialogueBubble(
+                            widget.petModel.enableFootprints
+                                ? '已开启温润小猫肉垫爪印~ 🐾'
+                                : '已收起爪印，保持地板纯净洁白✨',
+                            duration: const Duration(seconds: 3),
+                          );
+                        },
+                        child: Container(
+                          width: 25,
+                          height: 25,
+                          decoration: BoxDecoration(
+                            color: widget.petModel.enableFootprints
+                                ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFFF1F2))
+                                : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: widget.petModel.enableFootprints
+                                  ? const Color(0xFFFB7185)
+                                  : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1.5),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              widget.petModel.enableFootprints ? '🐾' : '🧹',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 3.5),
+                      // 3. 天光罗盘开关 (一键流转 24h 太阳天文与 4 大光影模式)
+                      GestureDetector(
+                        key: const ValueKey('sky_rhythm_toggle_button'),
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _cycleSkyTheme,
+                        child: Container(
+                          width: 25,
+                          height: 25,
+                          decoration: BoxDecoration(
+                            color: !isManual
+                                ? (isNight ? const Color(0xFF312E81) : const Color(0xFFF0FDF4))
+                                : (isNight ? const Color(0xFF3B0764) : const Color(0xFFFFFBEB)),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: !isManual
+                                  ? (isNight ? const Color(0xFF6366F1) : const Color(0xFF86EFAC))
+                                  : (isNight ? const Color(0xFFA855F7) : const Color(0xFFFBBF24)),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1.5),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              circadian['icon'] as String,
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 3.5),
+                      // 4. 回到小窝按钮
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _resetToMat(screenSize),
+                        child: Container(
+                          width: 25,
+                          height: 25,
+                          decoration: BoxDecoration(
+                            color: isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1.5),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Icon(
+                              Icons.home_rounded,
+                              size: 14.0,
+                              color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-              const SizedBox(height: 3),
-              // 下排：快捷控制按钮 (声音开关、爪印开关、回窝按钮)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 音效开关
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      setState(() {
-                        SoundService.soundEnabled = !SoundService.soundEnabled;
-                      });
-                      if (SoundService.soundEnabled) SoundService.playMeow();
-                    },
-                    child: Container(
-                      width: 29,
-                      height: 29,
-                      decoration: BoxDecoration(
-                        color: SoundService.soundEnabled
-                            ? (isNight ? const Color(0xFF312E81) : const Color(0xFFEEF2FF))
-                            : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: SoundService.soundEnabled
-                              ? const Color(0xFF6366F1)
-                              : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
-                          width: 1.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          SoundService.soundEnabled ? '🔊' : '🔇',
-                          style: const TextStyle(fontSize: 13.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // 地板猫爪印开关
-                  GestureDetector(
-                    key: const ValueKey('footprint_toggle_button'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      setState(() {
-                        widget.petModel.toggleFootprints();
-                        if (!widget.petModel.enableFootprints) {
-                          _footprints.clear();
-                        }
-                      });
-                      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
-                      _showDialogueBubble(
-                        widget.petModel.enableFootprints
-                            ? '已开启温润小猫肉垫爪印~ 🐾'
-                            : '已收起爪印，保持地板纯净洁白✨',
-                        duration: const Duration(seconds: 3),
-                      );
-                    },
-                    child: Container(
-                      width: 29,
-                      height: 29,
-                      decoration: BoxDecoration(
-                        color: widget.petModel.enableFootprints
-                            ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFFF1F2))
-                            : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: widget.petModel.enableFootprints
-                              ? const Color(0xFFFB7185)
-                              : (isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0)),
-                          width: 1.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          widget.petModel.enableFootprints ? '🐾' : '🧹',
-                          style: const TextStyle(fontSize: 13.5),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // 回到小窝按钮
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _resetToMat(screenSize),
-                    child: Container(
-                      width: 29,
-                      height: 29,
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isNight ? const Color(0xFF4F46E5).withOpacity(0.4) : const Color(0xFFE2E8F0),
-                          width: 1.0,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Icon(
-                          Icons.home_rounded,
-                          size: 16,
-                          color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              );
+            },
           ),
         ),
       ],
