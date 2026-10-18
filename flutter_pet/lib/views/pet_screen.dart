@@ -13,6 +13,7 @@ import 'dialogs/memory_album_dialog.dart';
 import 'memo_screen.dart';
 import '../services/overlay_service.dart';
 import '../services/sound_service.dart';
+import '../services/solar_service.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -167,6 +168,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   // 方向三：空间环境与天象治愈 (法式拱形观景窗 + 阳光光斑晒太阳)
   int _windowWeather = 0; // 0: ☀️ 阳光暖阳, 1: 🌧️ 细雨水滴, 2: 🌸 春日落樱, 3: 🌙 浪漫星空
+  int _skyManualMode = -1; // -1: 自然天文自动, 0: 破晓晨曦, 1: 澄澈晴空, 2: 落日晚霞, 3: 静谧星夜
 
   // 地板粉嫩小猫爪印系统
   final List<_Footprint> _footprints = [];
@@ -1537,6 +1539,46 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('微风拂过晴空，有波可陪伴的每一天都是大晴天~ ☀️🌈', duration: const Duration(seconds: 4));
   }
 
+  /// 天象罗盘光影模式切换 (在真实自然天文与4大四季时角天光之间平滑循环流转)
+  void _cycleSkyTheme() {
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    setState(() {
+      if (_skyManualMode == -1) {
+        _skyManualMode = 0; // 破晓晨曦
+      } else if (_skyManualMode == 0) {
+        _skyManualMode = 1; // 澄澈晴空
+      } else if (_skyManualMode == 1) {
+        _skyManualMode = 2; // 落日晚霞
+      } else if (_skyManualMode == 2) {
+        _skyManualMode = 3; // 静谧星夜
+      } else {
+        _skyManualMode = -1; // 回归真实自然天文
+      }
+    });
+
+    final currentTheme = SolarService.getSkyTheme(manualMode: _skyManualMode);
+
+    // 飘浮光影粒子与天象经验彩蛋
+    _spawnParticles(Offset(_petX, _petY - 60), emoji: currentTheme.icon, count: 4);
+    _spawnTextParticle(
+      Offset(_petX - 35, _petY - 95),
+      currentTheme.isManual ? '光影 · ${currentTheme.name} +10 ☀️' : '自然天文 · 自动流转 🌍✨',
+      currentTheme.isNight ? const Color(0xFFC4B5FD) : const Color(0xFFF59E0B),
+    );
+    widget.petModel.addExp(10.0);
+
+    String tip;
+    if (currentTheme.isManual) {
+      tip = currentTheme.greeting;
+    } else {
+      final st = currentTheme.solarTimes;
+      tip = '已回归「自然天文·自动流转」，今日日出 ${st.sunriseStr}、日落 ${st.sunsetStr}，天空渐变随太阳时角每分钟连续平滑流光~ 🌍✨';
+    }
+    _showDialogueBubble(tip, duration: const Duration(seconds: 4));
+  }
+
   /// 趣味交互：遮眼躲猫猫 (Peek-a-boo 藏头露尾) 开始
   void _startPeekABoo() {
     _idleSeconds = 0;
@@ -2159,46 +2201,19 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
-  /// 真实昼夜光影与陪伴生活作息
+  /// 真实太阳天文算法与四季时角光影主题 (基于分钟进度 Color.lerp 平滑流光)
   Map<String, dynamic> _getCircadianTheme() {
-    final hour = DateTime.now().hour;
-    if (hour >= 6 && hour < 11) {
-      return {
-        'name': '清晨晨光',
-        'icon': '☀️',
-        'colors': const [Color(0xFFFFFBEB), Color(0xFFF0FDF4), Color(0xFFF8FAFC)],
-        'isNight': false,
-        'greeting': '早安主人！今天也要元气满满哦，波可陪着您~ ☀️🐾',
-      };
-    } else if (hour >= 11 && hour < 17) {
-      return {
-        'name': '午后晴空',
-        'icon': '⛅',
-        'colors': const [Color(0xFFE0F2FE), Color(0xFFF0FDF4), Color(0xFFF8FAFC)],
-        'isNight': false,
-        'greeting': '午后微风轻拂，适合在软垫上伸懒腰打个小盹~ ☕✨',
-      };
-    } else if (hour >= 17 && hour < 20) {
-      return {
-        'name': '日落晚霞',
-        'icon': '🌇',
-        'colors': const [Color(0xFFFFF1F2), Color(0xFFFEF3C7), Color(0xFFF3E8FF)],
-        'isNight': false,
-        'greeting': '夕阳染上金边啦，主人今天辛苦啦，欢迎回家！🌇💕',
-      };
-    } else {
-      return {
-        'name': '静谧星夜',
-        'icon': '🌙',
-        'colors': const [
-          Color(0xFF0F0E26), // 暮夜深紫星空
-          Color(0xFF18153E), // 梦幻星夜靛蓝
-          Color(0xFF221A48), // 暖调午夜微光
-        ],
-        'isNight': true,
-        'greeting': '夜深啦，小星星都眨眼了，主人早点休息哦，波可守着您~ 💤🌙',
-      };
-    }
+    final theme = SolarService.getSkyTheme(manualMode: _skyManualMode);
+    return {
+      'name': theme.name,
+      'icon': theme.icon,
+      'colors': theme.colors,
+      'isNight': theme.isNight,
+      'greeting': theme.greeting,
+      'phaseName': theme.phaseName,
+      'solarTimes': theme.solarTimes,
+      'isManual': theme.isManual,
+    };
   }
 
   /// 踩出地板温润小猫肉垫爪印
@@ -2609,7 +2624,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         onPointerHover: (event) => _onPointerHoverOrMove(event.position),
         onPointerMove: (event) => _onPointerHoverOrMove(event.position),
         onPointerUp: (_) => _onPointerUpOrExit(),
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 700),
+          curve: Curves.easeInOutCubic,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -2639,90 +2656,162 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ),
                 ],
-                // 0. 维度四：背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
-                if (isNight) ...[
-                // 月亮：轻触触发流星雨与许愿彩蛋
+                // 0. 天光罗盘时空胶囊 (真实太阳天文四季时角与 24h 连续平滑天光流转，支持一键切换预览)
                 Positioned(
-                  top: 56,
-                  right: 22,
-                  child: GestureDetector(
-                    onTap: _onMoonTap,
+                  top: 58,
+                  right: 18,
+                  child: _BouncyTouchFeedback(
+                    key: const ValueKey('sky_rhythm_toggle_button'),
+                    onTap: _cycleSkyTheme,
+                    scaleDown: 0.92,
                     child: Container(
-                      padding: const EdgeInsets.all(6),
-                      child: Text(
-                        '🌙',
-                        style: TextStyle(
-                          fontSize: 36,
-                          shadows: [
-                            Shadow(
-                              color: const Color(0xFFFDE047).withOpacity(0.6),
-                              blurRadius: 18,
-                            ),
-                            Shadow(
-                              color: const Color(0xFFF59E0B).withOpacity(0.3),
-                              blurRadius: 28,
-                            ),
-                          ],
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: isNight
+                            ? const Color(0xFF1E1B4B).withOpacity(0.78)
+                            : Colors.white.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: isNight
+                              ? const Color(0xFF818CF8).withOpacity(0.45)
+                              : const Color(0xFFFDE68A).withOpacity(0.85),
+                          width: 1.2,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isNight
+                                ? const Color(0xFF0F0C24).withOpacity(0.45)
+                                : const Color(0xFFF59E0B).withOpacity(0.14),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2.5),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            ambientIcon,
+                            style: TextStyle(
+                              fontSize: 16,
+                              shadows: isNight
+                                  ? [
+                                      Shadow(
+                                        color: const Color(0xFFFDE047).withOpacity(0.6),
+                                        blurRadius: 8,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    circadian['name'] as String,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: _skyManualMode == -1
+                                          ? (isNight ? const Color(0xFF312E81) : const Color(0xFFDCFCE7))
+                                          : (isNight ? const Color(0xFF4C1D95) : const Color(0xFFFEF3C7)),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      _skyManualMode == -1 ? '自然' : '模式',
+                                      style: TextStyle(
+                                        fontSize: 7.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: _skyManualMode == -1
+                                            ? (isNight ? const Color(0xFFC7D2FE) : const Color(0xFF166534))
+                                            : (isNight ? const Color(0xFFDDD6FE) : const Color(0xFFB45309)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                _skyManualMode == -1
+                                    ? (isNight
+                                        ? '日出 ${(circadian['solarTimes'] as SolarTimes).sunriseStr}'
+                                        : '日落 ${(circadian['solarTimes'] as SolarTimes).sunsetStr}')
+                                    : '点击切换天光',
+                                style: TextStyle(
+                                  fontSize: 8,
+                                  color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(width: 5),
+                          Icon(
+                            Icons.sync_rounded,
+                            size: 13,
+                            color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFFD97706),
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
-                // 漫天静谧微星 (支持轻触交互，飘出星光)
-                Positioned(
-                  top: 85,
-                  left: 28,
-                  child: GestureDetector(
-                    onTap: _onMoonTap,
-                    child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withOpacity(0.7))),
-                  ),
-                ),
-                Positioned(
-                  top: 150,
-                  right: 70,
-                  child: GestureDetector(
-                    onTap: _onMoonTap,
-                    child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withOpacity(0.6))),
-                  ),
-                ),
-                Positioned(
-                  top: 205,
-                  left: 50,
-                  child: GestureDetector(
-                    onTap: _onMoonTap,
-                    child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withOpacity(0.5))),
-                  ),
-                ),
-                Positioned(
-                  top: 170,
-                  left: 110,
-                  child: GestureDetector(
-                    onTap: _onMoonTap,
-                    child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
-                  ),
-                ),
-              ] else ...[
-                // 白天环境氛围 (太阳/云朵/晚霞，轻触触发晴空微风彩蛋)
-                Positioned(
-                  top: 56,
-                  right: 22,
-                  child: GestureDetector(
-                    onTap: _onSunTap,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      child: Text(ambientIcon, style: const TextStyle(fontSize: 34)),
+                // 背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
+                if (isNight) ...[
+                  // 漫天静谧微星 (支持轻触交互，飘出星光)
+                  Positioned(
+                    top: 85,
+                    left: 28,
+                    child: GestureDetector(
+                      onTap: _onMoonTap,
+                      child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withOpacity(0.7))),
                     ),
                   ),
-                ),
-                Positioned(
-                  top: 115,
-                  left: 24,
-                  child: GestureDetector(
-                    onTap: _onSunTap,
-                    child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withOpacity(0.6))),
+                  Positioned(
+                    top: 150,
+                    right: 70,
+                    child: GestureDetector(
+                      onTap: _onMoonTap,
+                      child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withOpacity(0.6))),
+                    ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    top: 205,
+                    left: 50,
+                    child: GestureDetector(
+                      onTap: _onMoonTap,
+                      child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withOpacity(0.5))),
+                    ),
+                  ),
+                  Positioned(
+                    top: 170,
+                    left: 110,
+                    child: GestureDetector(
+                      onTap: _onMoonTap,
+                      child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
+                    ),
+                  ),
+                ] else ...[
+                  // 白天环境氛围 (云朵轻触触发晴空微风彩蛋)
+                  Positioned(
+                    top: 115,
+                    left: 24,
+                    child: GestureDetector(
+                      onTap: _onSunTap,
+                      child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withOpacity(0.6))),
+                    ),
+                  ),
+                ],
 
               // 0.1 房间立体景深：深长木质地台与高光踢脚线 (自 floorTop 处起铺展至底，填补大片空地)
               Positioned(

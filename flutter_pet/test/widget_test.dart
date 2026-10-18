@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/main.dart';
 import 'package:flutter_pet/services/sound_service.dart';
+import 'package:flutter_pet/services/solar_service.dart';
 import 'package:flutter_pet/views/dialogs/action_dialog.dart';
 
 void main() {
@@ -710,6 +711,76 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const ValueKey('covered_blanket')), findsOneWidget);
     }
+  });
+
+  testWidgets('Astronomical Solar Engine & Continuous Sky Flow test', (WidgetTester tester) async {
+    // 1. 验证 NOAA 真实天文算法：四季时角与动态日出日落
+    final summerSolstice = DateTime(2026, 6, 21); // 夏至
+    final winterSolstice = DateTime(2026, 12, 21); // 冬至
+    final summerTimes = SolarService.calculateSolarTimes(summerSolstice);
+    final winterTimes = SolarService.calculateSolarTimes(winterSolstice);
+
+    // 夏至白昼显著长于冬至
+    expect(summerTimes.dayLengthHours > winterTimes.dayLengthHours, isTrue);
+    expect(summerTimes.sunriseHours < winterTimes.sunriseHours, isTrue); // 夏至天亮更早 (约05:00 vs 07:05)
+    expect(summerTimes.sunsetHours > winterTimes.sunsetHours, isTrue);   // 夏至落日更晚 (约19:25 vs 17:05)
+
+    // 2. 验证 24h 连续基于分钟进度的 Color.lerp 平滑插值无突变
+    final noonTheme = SolarService.getSkyTheme(customTime: DateTime(2026, 10, 18, 12, 0));
+    final midnightTheme = SolarService.getSkyTheme(customTime: DateTime(2026, 10, 18, 0, 0));
+    expect(noonTheme.isNight, isFalse);
+    expect(midnightTheme.isNight, isTrue);
+    expect(noonTheme.colors.length, 3);
+    expect(midnightTheme.colors.length, 3);
+
+    // 3. 验证 4 大手动光影覆盖模式
+    expect(SolarService.getSkyTheme(manualMode: 0).name, '破晓晨曦');
+    expect(SolarService.getSkyTheme(manualMode: 1).name, '澄澈晴空');
+    expect(SolarService.getSkyTheme(manualMode: 2).name, '落日晚霞');
+    expect(SolarService.getSkyTheme(manualMode: 3).name, '静谧星夜');
+
+    // 4. 界面交互验证：时空天光罗盘胶囊按钮一键循环切换
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final skyButtonFinder = find.byKey(const ValueKey('sky_rhythm_toggle_button'));
+    expect(skyButtonFinder, findsOneWidget);
+
+    // 默认处于自然天文模式
+    expect(find.text('自然'), findsOneWidget);
+
+    // 点击 1: 切换到 0: 破晓晨曦
+    await tester.tap(skyButtonFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('破晓晨曦'), findsOneWidget);
+    expect(find.text('模式'), findsOneWidget);
+
+    // 点击 2: 切换到 1: 澄澈晴空
+    await tester.tap(skyButtonFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('澄澈晴空'), findsOneWidget);
+
+    // 点击 3: 切换到 2: 落日晚霞
+    await tester.tap(skyButtonFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('落日晚霞'), findsOneWidget);
+
+    // 点击 4: 切换到 3: 静谧星夜
+    await tester.tap(skyButtonFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('静谧星夜'), findsOneWidget);
+
+    // 点击 5: 回归自然天文模式
+    await tester.tap(skyButtonFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('自然'), findsOneWidget);
   });
 }
 
