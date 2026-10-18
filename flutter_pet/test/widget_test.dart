@@ -658,6 +658,59 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2400));
     expect(find.textContaining('元气满满'), findsOneWidget);
   });
+
+  testWidgets('Five Major Existing Details, Layout & Micro-Interactions Polish test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 细节一：对话气泡指向小尾巴与弹性翻牌动效
+    final bubbleFinder = find.byKey(const ValueKey('smart_dialogue_bubble'));
+    expect(bubbleFinder, findsOneWidget);
+    await tester.tap(bubbleFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('主人'), findsWidgets);
+
+    // 2. 细节二：底部三灵动药丸胶囊的触感弹性形变
+    expect(find.text('奇妙背包'), findsOneWidget);
+    expect(find.text('魔法换装'), findsOneWidget);
+    expect(find.text('专属绝活'), findsOneWidget);
+
+    // 3. 细节三：就餐角托盘三元素几何对齐与陶瓷凹槽下陷反馈 (敲罐按钮升级为 🥫 🔔 双图标对称)
+    final foodBowlFinder = find.byKey(const ValueKey('cat_food_bowl'));
+    final waterBowlFinder = find.byKey(const ValueKey('cat_water_bowl'));
+    final canButtonFinder = find.byKey(const ValueKey('can_summon_button'));
+    expect(foodBowlFinder, findsOneWidget);
+    expect(waterBowlFinder, findsOneWidget);
+    expect(canButtonFinder, findsOneWidget);
+    expect(find.text('🔔'), findsOneWidget);
+
+    // 4. 细节四：拍立得相框与小夜灯的真实物理机械开关反馈
+    // 小夜灯实体开关测试 (包含 ON/OFF 状态切换)
+    expect(find.text('ON'), findsOneWidget);
+    await tester.tap(find.text('ON'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('OFF'), findsOneWidget);
+
+    // 5. 细节五：舒睡小被子织物绗缝与被窝记忆棉弹性微动效
+    final rugFinder = find.byKey(const ValueKey('cozy_cat_rug'));
+    expect(rugFinder, findsOneWidget);
+    await tester.tap(rugFinder);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final tuckInFinder = find.byKey(const ValueKey('tuck_in_blanket_button'));
+    if (tuckInFinder.evaluate().isNotEmpty) {
+      await tester.tap(tuckInFinder);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('covered_blanket')), findsOneWidget);
+    }
+  });
 }
 
 

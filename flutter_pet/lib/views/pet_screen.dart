@@ -223,6 +223,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   // 趣味家具交互状态 (猫草微晃、猫抓板震颤、夜灯开关、相框摇摆)
   bool _isNightLampOn = true;
+  bool _isLampSwitchDepressed = false;
   double _plantTilt = 0.0;
   double _postWiggle = 0.0;
   double _photoAngle = -0.06;
@@ -1743,7 +1744,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       HapticFeedback.mediumImpact();
     }
     setState(() {
+      _isLampSwitchDepressed = true;
       _isNightLampOn = !_isNightLampOn;
+    });
+    Timer(const Duration(milliseconds: 140), () {
+      if (mounted) setState(() => _isLampSwitchDepressed = false);
     });
 
     if (_isNightLampOn) {
@@ -3348,7 +3353,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   );
   }
 
-  /// 智能对齐气泡：永不被猫挡住，附带指向小箭头，支持昼夜温润自适应
+  /// 智能对齐气泡：永不被猫挡住，附带指向小尾巴，支持昼夜温润自适应与弹润动效
   Widget _buildSmartDialogueBubble(Size screenSize, bool isNight) {
     final bubbleWidth = math.min(236.0, screenSize.width - 96.0);
     // 水平居中对齐猫咪；当左侧食碗展开微气泡时，气泡自动靠右避让就餐角
@@ -3359,56 +3364,103 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 垂直方向：如果猫咪在屏幕上方，气泡放猫咪下方；默认放猫咪头顶上方！
     final showAbove = _petY > 210.0;
-    final bubbleTop = showAbove ? (_petY - 142.0) : (_petY + 95.0);
+    final bubbleTop = showAbove ? (_petY - 146.0) : (_petY + 95.0);
+
+    // 计算小尾巴水平位置（对齐猫头中央，限制在气泡左右边距以内）
+    final tailX = (_petX - bubbleLeft - 7.0).clamp(20.0, bubbleWidth - 34.0);
 
     return Positioned(
       left: bubbleLeft,
       top: bubbleTop,
-      child: GestureDetector(
+      child: _BouncyTouchFeedback(
         key: const ValueKey('smart_dialogue_bubble'),
+        scaleDown: 0.96,
         onTap: _onDialogueBubbleTap,
-        child: Container(
-          width: bubbleWidth,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: isNight
-                ? const Color(0xFF1B173E).withOpacity(0.88)
-                : Colors.white.withOpacity(0.96),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isNight
-                  ? const Color(0xFF6366F1).withOpacity(0.45)
-                  : const Color(0xFFE0E7FF),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isNight
-                    ? const Color(0xFF3730A3).withOpacity(0.25)
-                    : const Color(0xFF6366F1).withOpacity(0.12),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _currentDialogue,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: isNight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
-                    fontWeight: FontWeight.w500,
-                    height: 1.35,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 当气泡位于猫咪下方时，小尾巴朝上指向猫咪
+            if (!showAbove)
+              Padding(
+                padding: EdgeInsets.only(left: tailX),
+                child: CustomPaint(
+                  size: const Size(14, 7),
+                  painter: _BubbleTailPainter(
+                    isNight: isNight,
+                    pointingUp: true,
                   ),
                 ),
               ),
-            ],
-          ),
+
+            // 主气泡容器 (附带文本切换弹性弹出动效)
+            Container(
+              width: bubbleWidth,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isNight
+                    ? const Color(0xFF1B173E).withOpacity(0.92)
+                    : Colors.white.withOpacity(0.96),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: isNight
+                      ? const Color(0xFF6366F1).withOpacity(0.45)
+                      : const Color(0xFFE0E7FF),
+                  width: 1.5,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: isNight
+                        ? const Color(0xFF3730A3).withOpacity(0.28)
+                        : const Color(0xFF6366F1).withOpacity(0.12),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                transitionBuilder: (child, anim) {
+                  return ScaleTransition(
+                    scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                    child: FadeTransition(opacity: anim, child: child),
+                  );
+                },
+                child: Row(
+                  key: ValueKey(_currentDialogue),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        _currentDialogue,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: isNight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B),
+                          fontWeight: FontWeight.w500,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // 当气泡位于头顶上方时，小尾巴朝下指向猫咪
+            if (showAbove)
+              Padding(
+                padding: EdgeInsets.only(left: tailX),
+                child: CustomPaint(
+                  size: const Size(14, 7),
+                  painter: _BubbleTailPainter(
+                    isNight: isNight,
+                    pointingUp: false,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -3438,7 +3490,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             mainAxisSize: MainAxisSize.min,
             children: [
               // 1. 奇妙背包
-              GestureDetector(
+              _BouncyTouchFeedback(
+                scaleDown: 0.92,
                 onTap: () => _openBackpackDrawer(isNight),
                 onVerticalDragEnd: (details) {
                   if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
@@ -3495,7 +3548,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               const SizedBox(width: 7),
 
               // 2. 魔法换装 / 品种 (直达 1-Tap 开启悬浮换装坞，零弹窗遮挡)
-              GestureDetector(
+              _BouncyTouchFeedback(
+                scaleDown: 0.92,
                 onTap: () {
                   _idleSeconds = 0;
                   _isRoaming = false;
@@ -3554,7 +3608,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               const SizedBox(width: 7),
 
               // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞，零遮挡全景观赏)
-              GestureDetector(
+              _BouncyTouchFeedback(
+                scaleDown: 0.92,
                 onTap: () {
                   _idleSeconds = 0;
                   _isRoaming = false;
@@ -4952,12 +5007,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 墙面拍立得相框 (初遇温馨纪念，轻触微晃冒心心)
+  /// 墙面拍立得相框 (初遇温馨纪念，轻触阻尼微晃与触感微缩放)
   Widget _buildPolaroidFrame(bool isNight) {
-    return GestureDetector(
+    return _BouncyTouchFeedback(
+      scaleDown: 0.94,
       onTap: _onPhotoTap,
-      child: Transform.rotate(
-        angle: _photoAngle,
+      child: AnimatedRotation(
+        turns: _photoAngle / (2 * math.pi),
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutBack,
         child: Container(
           padding: const EdgeInsets.fromLTRB(5, 5, 5, 6),
           decoration: BoxDecoration(
@@ -5224,6 +5282,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
+          // 陶瓷温润内沿微反光 (Ceramic Glaze Highlight)
+          BoxShadow(
+            color: isNight
+                ? const Color(0xFF6366F1).withOpacity(0.12)
+                : Colors.white.withOpacity(0.85),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
         ],
       ),
       child: Row(
@@ -5261,8 +5327,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        GestureDetector(
+        _BouncyTouchFeedback(
           key: const ValueKey('cat_food_bowl'),
+          scaleDown: 0.92,
           onTap: () {
             SoundService.playPop();
             if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
@@ -5364,8 +5431,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 水碗凹槽组件
   Widget _buildCatWaterBowl(double nestX, double nestY, bool isNight) {
-    return GestureDetector(
+    return _BouncyTouchFeedback(
       key: const ValueKey('cat_water_bowl'),
+      scaleDown: 0.92,
       onTap: () {
         SoundService.playPop();
         if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
@@ -5440,11 +5508,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 方向五：敲敲罐头召唤按钮组件 (🥫 开饭叮叮声与全速冲刺狂奔)
   Widget _buildCanSummonButton(double nestX, double nestY, bool isNight) {
-    return GestureDetector(
+    return _BouncyTouchFeedback(
       key: const ValueKey('can_summon_button'),
+      scaleDown: 0.92,
       onTap: () => _onCanSummonTap(nestX, nestY),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
           color: isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(14),
@@ -5456,7 +5525,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('🥫', style: TextStyle(fontSize: 14)),
+            const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('🥫', style: TextStyle(fontSize: 14)),
+                SizedBox(width: 2),
+                Text('🔔', style: TextStyle(fontSize: 11)),
+              ],
+            ),
             const SizedBox(height: 1.5),
             Text(
               '敲罐',
@@ -5935,7 +6011,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         key: const ValueKey('tuck_in_blanket_button'),
         left: nestX + 48,
         top: nestY + 28,
-        child: GestureDetector(
+        child: _BouncyTouchFeedback(
+          scaleDown: 0.92,
           onTap: _toggleBlanket,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
@@ -5969,7 +6046,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       key: const ValueKey('covered_blanket'),
       left: _petX - 62,
       top: _petY + 18 + breathOffset,
-      child: GestureDetector(
+      child: _BouncyTouchFeedback(
+        scaleDown: 0.95,
         onTap: () {
           SoundService.startPurr();
           if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
@@ -6015,6 +6093,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               ),
               child: Stack(
                 children: [
+                  // 绗缝暗纹压线层 (Quilting Stitches)
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(22),
+                        topRight: Radius.circular(22),
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
+                      child: CustomPaint(
+                        painter: _BlanketQuiltPainter(isNight: isNight),
+                      ),
+                    ),
+                  ),
+
+                  // 顶部白绒翻边 (White Folded Collar)
                   Positioned(
                     top: 0,
                     left: 0,
@@ -6033,6 +6127,27 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ),
                   ),
+
+                  // 翻边立体垂落阴影
+                  Positioned(
+                    top: 12,
+                    left: 0,
+                    right: 0,
+                    height: 5,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.14),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                   const Positioned(
                     top: 22,
                     left: 18,
@@ -6049,7 +6164,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             Positioned(
               top: -8,
               right: -6,
-              child: GestureDetector(
+              child: _BouncyTouchFeedback(
+                scaleDown: 0.90,
                 onTap: _toggleBlanket,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -6108,7 +6224,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         // 1. ASMR 白噪音切换胶囊 (始终可见，轻触即刻切换雨声/呼噜/宁静)
-        GestureDetector(
+        _BouncyTouchFeedback(
+          scaleDown: 0.93,
           onTap: _cycleAmbientSound,
           child: Container(
             margin: const EdgeInsets.only(bottom: 4),
@@ -6158,51 +6275,55 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ),
         ),
 
-        // 2. 小夜灯实体开关 (开灯暖光高亮，关灯安睡深蓝)
-        GestureDetector(
+        // 2. 小夜灯实体开关 (开灯暖光高亮，关灯安睡深蓝，实体机械翘板卡扣位移)
+        _BouncyTouchFeedback(
+          scaleDown: 0.93,
           onTap: _onNightLampTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
-            decoration: BoxDecoration(
-              color: _isNightLampOn
-                  ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7))
-                  : (isNight ? const Color(0xFF181330) : Colors.white.withOpacity(0.96)),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
+          child: Transform.translate(
+            offset: Offset(0, _isLampSwitchDepressed ? 2.0 : 0.0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+              decoration: BoxDecoration(
                 color: _isNightLampOn
-                    ? const Color(0xFFF59E0B)
-                    : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFF94A3B8).withOpacity(0.4)),
-                width: 1.5,
-              ),
-              boxShadow: [
-                BoxShadow(
+                    ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7))
+                    : (isNight ? const Color(0xFF181330) : Colors.white.withOpacity(0.96)),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
                   color: _isNightLampOn
-                      ? const Color(0xFFF59E0B).withOpacity(0.42)
-                      : Colors.black.withOpacity(0.08),
-                  blurRadius: _isNightLampOn ? 14 : 6,
-                  offset: const Offset(0, 3),
+                      ? const Color(0xFFF59E0B)
+                      : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFF94A3B8).withOpacity(0.4)),
+                  width: 1.5,
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _isNightLampOn ? '💡' : '🌙',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _isNightLampOn ? 'ON' : 'OFF',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                boxShadow: [
+                  BoxShadow(
                     color: _isNightLampOn
-                        ? const Color(0xFFD97706)
-                        : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8)),
+                        ? const Color(0xFFF59E0B).withOpacity(0.42)
+                        : Colors.black.withOpacity(0.08),
+                    blurRadius: _isNightLampOn ? 14 : 6,
+                    offset: Offset(0, _isLampSwitchDepressed ? 1.5 : 3.0),
                   ),
-                ),
-              ],
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _isNightLampOn ? '💡' : '🌙',
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _isNightLampOn ? 'ON' : 'OFF',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: _isNightLampOn
+                          ? const Color(0xFFD97706)
+                          : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -6289,4 +6410,124 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       ),
     );
   }
+}
+
+/// 触感微反馈包装组件：按下缩放下沉，松手柔和弹性回弹 (Jelly Spring Press Feedback)
+class _BouncyTouchFeedback extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onTap;
+  final VoidCallback? onDoubleTap;
+  final void Function(DragEndDetails)? onVerticalDragEnd;
+  final double scaleDown;
+
+  const _BouncyTouchFeedback({
+    Key? key,
+    required this.child,
+    required this.onTap,
+    this.onDoubleTap,
+    this.onVerticalDragEnd,
+    this.scaleDown = 0.93,
+  }) : super(key: key);
+
+  @override
+  State<_BouncyTouchFeedback> createState() => _BouncyTouchFeedbackState();
+}
+
+class _BouncyTouchFeedbackState extends State<_BouncyTouchFeedback> {
+  bool _isDown = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _isDown = true),
+      onTapUp: (_) => setState(() => _isDown = false),
+      onTapCancel: () => setState(() => _isDown = false),
+      onTap: widget.onTap,
+      onDoubleTap: widget.onDoubleTap,
+      onVerticalDragEnd: widget.onVerticalDragEnd,
+      child: AnimatedScale(
+        scale: _isDown ? widget.scaleDown : 1.0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+/// 对话气泡指向猫咪的自适应小尾巴绘制器 (Comic Bubble Tail)
+class _BubbleTailPainter extends CustomPainter {
+  final bool isNight;
+  final bool pointingUp;
+
+  const _BubbleTailPainter({required this.isNight, required this.pointingUp});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fillPaint = Paint()
+      ..color = isNight
+          ? const Color(0xFF1B173E).withOpacity(0.92)
+          : Colors.white.withOpacity(0.96)
+      ..style = PaintingStyle.fill;
+
+    final borderPaint = Paint()
+      ..color = isNight
+          ? const Color(0xFF6366F1).withOpacity(0.45)
+          : const Color(0xFFE0E7FF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path();
+    if (pointingUp) {
+      path.moveTo(0, size.height + 0.5);
+      path.lineTo(size.width / 2, 0);
+      path.lineTo(size.width, size.height + 0.5);
+      canvas.drawPath(path, fillPaint);
+      final borderPath = Path()
+        ..moveTo(0, size.height)
+        ..lineTo(size.width / 2, 0)
+        ..lineTo(size.width, size.height);
+      canvas.drawPath(borderPath, borderPaint);
+    } else {
+      path.moveTo(0, -0.5);
+      path.lineTo(size.width / 2, size.height);
+      path.lineTo(size.width, -0.5);
+      canvas.drawPath(path, fillPaint);
+      final borderPath = Path()
+        ..moveTo(0, 0)
+        ..lineTo(size.width / 2, size.height)
+        ..lineTo(size.width, 0);
+      canvas.drawPath(borderPath, borderPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BubbleTailPainter oldDelegate) =>
+      oldDelegate.isNight != isNight || oldDelegate.pointingUp != pointingUp;
+}
+
+/// 舒睡暖垫羽绒被绗缝暗纹绘制器 (Quilting Diamond Stitches)
+class _BlanketQuiltPainter extends CustomPainter {
+  final bool isNight;
+  const _BlanketQuiltPainter({required this.isNight});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stitchPaint = Paint()
+      ..color = (isNight ? const Color(0xFFC4B5FD) : Colors.white).withOpacity(0.24)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    const step = 22.0;
+    for (double x = -size.height; x < size.width + size.height; x += step) {
+      canvas.drawLine(Offset(x, 12), Offset(x + size.height, size.height), stitchPaint);
+      canvas.drawLine(Offset(x, size.height), Offset(x + size.height, 12), stitchPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _BlanketQuiltPainter oldDelegate) => oldDelegate.isNight != isNight;
 }
