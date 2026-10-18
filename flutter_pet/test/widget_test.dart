@@ -485,11 +485,11 @@ void main() {
     expect(foodBowlFinder, findsOneWidget);
     expect(waterBowlFinder, findsOneWidget);
 
-    // 验证食水双碗并列在一体化托盘中且宽度适度、绝不超界
+    // 验证食水双碗竖向排布在立式一体化托盘中且靠左紧凑、绝不遮挡中央萌宠
     final foodRect = tester.getRect(foodBowlFinder);
     final waterRect = tester.getRect(waterBowlFinder);
-    expect(foodRect.left, lessThan(waterRect.left));
-    expect(waterRect.right, lessThan(200.0));
+    expect(foodRect.top, lessThan(waterRect.top));
+    expect(waterRect.right, lessThan(100.0));
 
     // 3. 验证床头小夜灯与全屋光影沉浸切换
     final lampOnFinder = find.text('ON');

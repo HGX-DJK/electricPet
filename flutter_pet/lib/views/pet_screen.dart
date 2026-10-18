@@ -2511,7 +2511,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     SoundService.playPop();
     setState(() {
       _fishPopping = true;
-      _poppingFishPos = Offset(42.0, nestY + 115.0);
+      _poppingFishPos = Offset(38.0, nestY + 52.0);
     });
     if (widget.petModel.enableHaptics) {
       HapticFeedback.mediumImpact();
@@ -3038,10 +3038,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 ),
               ),
 
-              // 软装家具 3：左侧就餐角 · 萌宠双联食水一体托盘 (原木陶瓷防滑托盘，餐盘置于前侧，永不被猫咪遮挡)
+              // 软装家具 3：左侧就餐角 · 萌宠立式三联食水一体托盘 (竖向陶瓷立式托盘，靠左侧边，开阔通透，零遮挡猫咪身躯)
               Positioned(
-                left: 20.0,
-                top: nestY + 102.0,
+                left: 16.0,
+                top: nestY + 36.0,
                 child: _buildCatDiningStation(nestX, nestY, isNight),
               ),
 
@@ -5261,15 +5261,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 软装家具 3：左下角就餐角 · 萌宠双联食水一体托盘 (原木陶瓷质感，双碗一体化防滑托盘)
+  /// 软装家具 3：左侧就餐角 · 萌宠立式三联食水一体托盘 (竖向陶瓷立式托盘，靠左侧边，开阔通透，彻底告别遮挡)
   Widget _buildCatDiningStation(double nestX, double nestY, bool isNight) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 5),
       decoration: BoxDecoration(
         color: isNight
             ? const Color(0xFF1B1635).withOpacity(0.92)
             : Colors.white.withOpacity(0.96),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isNight
               ? const Color(0xFF6366F1).withOpacity(0.35)
@@ -5292,28 +5292,28 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 左侧：精致小食碗 (点击投喂，双击弹鲜鱼)
+          // 顶部：精致小食碗 (点击投喂，双击弹鲜鱼)
           _buildCatFoodBowl(nestX, nestY, isNight),
-          // 优雅陶瓷分隔微线
+          // 优雅陶瓷横向分隔微线
           Container(
-            width: 1.0,
-            height: 24,
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+            width: 24,
+            height: 1.0,
+            margin: const EdgeInsets.symmetric(vertical: 3),
             color: isNight ? const Color(0xFF3730A3).withOpacity(0.4) : const Color(0xFFE2E8F0),
           ),
           // 中间：清澈小水碗 (点击波光粼粼涟漪，解渴补水)
           _buildCatWaterBowl(nestX, nestY, isNight),
-          // 优雅陶瓷分隔微线
+          // 优雅陶瓷横向分隔微线
           Container(
-            width: 1.0,
-            height: 24,
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+            width: 24,
+            height: 1.0,
+            margin: const EdgeInsets.symmetric(vertical: 3),
             color: isNight ? const Color(0xFF3730A3).withOpacity(0.4) : const Color(0xFFE2E8F0),
           ),
-          // 右侧：敲敲罐头召唤按钮 (点击发出清脆开饭叮叮声，猫咪全速冲刺狂奔而来)
+          // 底部：敲敲罐头召唤按钮 (点击发出清脆开饭叮叮声，猫咪全速冲刺狂奔而来)
           _buildCanSummonButton(nestX, nestY, isNight),
         ],
       ),
@@ -5346,7 +5346,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           },
           onDoubleTap: () => _popFishFromBowl(nestX, nestY),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
             decoration: BoxDecoration(
               color: _showFoodTray
                   ? const Color(0xFFF43F5E).withOpacity(0.18)
@@ -5440,8 +5440,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         setState(() {
           _isWaterRippling = true;
         });
-        _spawnParticles(Offset(100, nestY + 115), emoji: '💧', count: 4);
-        _spawnTextParticle(Offset(80, nestY + 95), '解渴补水 💧✨', const Color(0xFF0284C7));
+        _spawnParticles(Offset(45, nestY + 95), emoji: '💧', count: 4);
+        _spawnTextParticle(Offset(35, nestY + 75), '解渴补水 💧✨', const Color(0xFF0284C7));
 
         // 如果猫咪在就餐角附近，直接触发低头小舔水微表情动作 (方向四)
         if ((_petX - 85.0).abs() < 100 && (_petY - (nestY + 85.0)).abs() < 90) {
@@ -5465,7 +5465,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         });
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
         decoration: BoxDecoration(
           color: _isWaterRippling
               ? const Color(0xFF38BDF8).withOpacity(0.25)
@@ -5513,7 +5513,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       scaleDown: 0.92,
       onTap: () => _onCanSummonTap(nestX, nestY),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
         decoration: BoxDecoration(
           color: isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9),
           borderRadius: BorderRadius.circular(14),
