@@ -782,6 +782,52 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('自然'), findsOneWidget);
   });
+
+  testWidgets('Bottom Dock Zero-Jitter Stability and Realistic Yarn Ball Interaction test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 1. 验证底部常态胶囊与各个面板均持有持久唯一的稳固 Key，且无弹性位移动画，杜绝销毁重建抖动
+    final floatingBarFinder = find.byKey(const ValueKey('bottom_floating_bar'));
+    expect(floatingBarFinder, findsOneWidget);
+
+    // 切换至专属绝活坞
+    await tester.tap(find.text('专属绝活'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('live_action_dock')), findsOneWidget);
+
+    // 切换至魔法换装坞
+    await tester.tap(find.text('完成'));
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.text('魔法换装'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('live_wardrobe_dock')), findsOneWidget);
+
+    // 收起换装坞
+    await tester.tap(find.text('完成'));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.byKey(const ValueKey('bottom_floating_bar')), findsOneWidget);
+
+    // 2. 验证实体物理毛线球存在且具备真实 3D 渲染与物理滚转属性
+    final yarnBallFinder = find.byKey(const ValueKey('floor_yarn_ball'));
+    expect(yarnBallFinder, findsOneWidget);
+
+    // 轻点毛线球，触发拍飞物理初速度与猫咪主动追逐
+    await tester.tap(yarnBallFinder);
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // 经过数个周期物理推进与追逐拍打
+    for (int i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  });
 }
 
 

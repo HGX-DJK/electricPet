@@ -189,6 +189,12 @@ class PetPainter extends CustomPainter {
       scaleX = 1.25;
       scaleY = 0.84;
       breathY = 12.0;
+    } else if (state == 'PLAY_YARN') {
+      // 玩毛线球：身体压低低重心伏地扑球，左右欢快起伏轻摇，与双爪拍击节奏共振
+      scaleX = 1.06 + math.sin(animTime * 7.0) * 0.03;
+      scaleY = 0.96 - math.sin(animTime * 7.0) * 0.02;
+      breathY = 4.5 + math.sin(animTime * 14.0).abs() * 2.0;
+      bodySwayX = math.sin(animTime * 7.0) * 3.5;
     }
 
     // 独立地面阴影：绘制在脚底地板上，随跳跃高度柔和缩放与淡化，绝不随纸片翻折在半空中飘
@@ -616,6 +622,11 @@ class PetPainter extends CustomPainter {
       // 打瞌睡点头
       final nodAngle = math.max(0.0, math.sin(animTime * 2.0)) * 0.18;
       canvas.rotate(nodAngle);
+    } else if (state == 'PLAY_YARN') {
+      // 专注盯球：小脑瓜灵巧低头并随爪爪扑球节奏微幅歪头注视
+      final yarnHeadTilt = math.sin(animTime * 7.0) * 0.08;
+      canvas.rotate(yarnHeadTilt);
+      headCenter = Offset(math.sin(animTime * 7.0) * 1.5, -15);
     }
 
     // 耳朵绘制：每 5.5 秒自然机敏抖耳，摸头时高频微颤，触摸单耳独立高频弹颤
@@ -1315,6 +1326,10 @@ class PetPainter extends CustomPainter {
       // 俯视盯小老鼠
       gazeX = math.sin(animTime * 4.5) * 4.0;
       gazeY = 3.5;
+    } else if (state == 'PLAY_YARN') {
+      // 玩毛线球：专注低头盯球，瞳孔随球在双爪间快速晃动
+      gazeX = math.sin(animTime * 7.0) * 3.5;
+      gazeY = 4.2;
     }
 
     final eyeList = [
@@ -1971,6 +1986,50 @@ class PetPainter extends CustomPainter {
       return;
     }
 
+    // 玩毛线球：两只圆润山竹肉爪真实交替拍打拨弄 (Alternating Swat & Bat)
+    if (state == 'PLAY_YARN') {
+      final pawW = (skin.id == 'cat_orange') ? 26.0 : ((skin.id == 'cat_siamese') ? 19.0 : 22.0);
+      final pawH = (skin.id == 'cat_orange') ? 18.0 : ((skin.id == 'cat_siamese') ? 14.0 : 16.0);
+      final playCycle = animTime * 7.0;
+
+      // 左爪与右爪交替抬起下拍 (反相拍击)
+      final leftSlap = math.sin(playCycle).clamp(0.0, 1.0) * 12.0;
+      final rightSlap = (-math.sin(playCycle)).clamp(0.0, 1.0) * 12.0;
+      final leftNudgeX = math.cos(playCycle) * 4.0;
+      final rightNudgeX = -math.cos(playCycle) * 4.0;
+
+      // 左爪
+      canvas.save();
+      final leftPawPos = Offset(-18.0 + leftNudgeX, 54.0 - leftSlap);
+      canvas.translate(leftPawPos.dx, leftPawPos.dy);
+      canvas.rotate(0.12 - leftSlap * 0.015);
+      _drawPlumpSegmentedPaw(
+        canvas,
+        Offset.zero,
+        pawW,
+        pawH,
+        Color(skin.primaryColor),
+        hasWhiteSock: skin.id == 'cat_black',
+      );
+      canvas.restore();
+
+      // 右爪
+      canvas.save();
+      final rightPawPos = Offset(18.0 + rightNudgeX, 54.0 - rightSlap);
+      canvas.translate(rightPawPos.dx, rightPawPos.dy);
+      canvas.rotate(-0.12 + rightSlap * 0.015);
+      _drawPlumpSegmentedPaw(
+        canvas,
+        Offset.zero,
+        pawW,
+        pawH,
+        Color(skin.primaryColor),
+        hasWhiteSock: skin.id == 'cat_black',
+      );
+      canvas.restore();
+      return;
+    }
+
     // 漫步小碎步踱步：双前爪交替抬落起伏 (分瓣萌态小肉爪)
     if (state == 'WALK') {
       final pawW = (skin.id == 'cat_orange') ? 26.0 : ((skin.id == 'cat_siamese') ? 19.0 : 22.0);
@@ -2432,37 +2491,85 @@ class PetPainter extends CustomPainter {
       canvas.restore();
     }
 
-    // 2. 玩毛线球 (粉红毛线团在地板蹦跳滚动)
+    // 2. 玩毛线球 (粉红毛线团在双爪间真实滚动受力反弹，解开拖尾毛线绳蜿蜒于地面)
     else if (state == 'PLAY_YARN') {
-      final yarnX = math.sin(animTime * 3.5) * 46.0;
-      final yarnY = 56.0 - math.sin(animTime * 7.0).abs() * 20.0;
+      final ballSwayX = math.sin(animTime * 7.0) * 8.5;
+      final ballBounceY = 54.0 - math.sin(animTime * 14.0).abs() * 5.0;
+      final ballCenter = Offset(ballSwayX, ballBounceY);
+      const ballRadius = 13.5;
 
-      canvas.save();
-      canvas.translate(yarnX, yarnY);
+      // 1. 地面柔和接触阴影
+      final shadowPaint = Paint()..color = const Color(0x35000000);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(ballSwayX, 64.0), width: 26.0, height: 7.0),
+        shadowPaint,
+      );
 
-      // 散开的毛线线圈
+      // 2. 解开蜿蜒于猫咪身前地面的毛线拖尾
       final threadPaint = Paint()
-        ..color = const Color(0xFFF472B6)
+        ..color = const Color(0xFFF43F5E)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
+        ..strokeWidth = 2.0
+        ..strokeCap = StrokeCap.round;
       final tPath = Path()
-        ..moveTo(-35, 10)
-        ..quadraticBezierTo(-20, 18, -8, 2)
-        ..lineTo(0, 0);
+        ..moveTo(ballCenter.dx, ballCenter.dy + 8)
+        ..cubicTo(ballCenter.dx - 14, ballCenter.dy + 12, ballCenter.dx - 24, 62, ballCenter.dx - 42, 62)
+        ..quadraticBezierTo(ballCenter.dx - 52, 62, ballCenter.dx - 56, 56);
       canvas.drawPath(tPath, threadPaint);
 
-      // 毛线球本体
-      final ballPaint = Paint()..color = const Color(0xFFEC4899);
-      canvas.drawCircle(Offset.zero, 14, ballPaint);
-      // 毛线纹理
-      final linePaint = Paint()
-        ..color = const Color(0xFFFBCFE8)
+      // 3. 毛线球 3D 球体渐变
+      final ballRect = Rect.fromCircle(center: ballCenter, radius: ballRadius);
+      final sphereShader = RadialGradient(
+        center: const Alignment(-0.35, -0.35),
+        radius: 0.95,
+        colors: const [Color(0xFFFFE4E6), Color(0xFFFB7185), Color(0xFFBE123C)],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(ballRect);
+      canvas.drawCircle(ballCenter, ballRadius, Paint()..shader = sphereShader);
+
+      // 4. 毛线缠绕立体纹理 (随爪爪拨弄节奏高速自转)
+      canvas.save();
+      canvas.translate(ballCenter.dx, ballCenter.dy);
+      canvas.rotate(animTime * 10.0);
+
+      final lineLight = Paint()
+        ..color = Colors.white.withOpacity(0.60)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.8;
-      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: 10), 0.2, 2.5, false, linePaint);
-      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: 11), 3.2, 2.2, false, linePaint);
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.round;
+      final lineDark = Paint()
+        ..color = const Color(0xFF881337).withOpacity(0.40)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.3
+        ..strokeCap = StrokeCap.round;
+
+      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: ballRadius * 0.70), 0.2, 2.4, false, lineDark);
+      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: ballRadius * 0.68), 0.2, 2.4, false, lineLight);
+
+      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: ballRadius * 0.85), 3.0, 2.2, false, lineDark);
+      canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: ballRadius * 0.83), 3.0, 2.2, false, lineLight);
+
+      canvas.drawArc(Rect.fromCircle(center: const Offset(2, -2), radius: ballRadius * 0.55), 1.6, 2.6, false, lineLight);
+
+      // 散开的羊毛小绒毛
+      canvas.drawLine(
+        const Offset(ballRadius * 0.7, -ballRadius * 0.3),
+        const Offset(ballRadius * 1.2, -ballRadius * 0.55),
+        lineLight..strokeWidth = 1.6,
+      );
 
       canvas.restore();
+
+      // 5. 球体高光点
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(ballCenter.dx - 4, ballCenter.dy - 4), width: 5.5, height: 3.2),
+        Paint()..color = Colors.white.withOpacity(0.70),
+      );
+
+      // 6. 爪爪拍球激起的欢快微绒毛粒子 (Playful fluff puffs)
+      final fluffPaint = Paint()..color = const Color(0xFFFBCFE8).withOpacity(0.65);
+      canvas.drawCircle(Offset(ballCenter.dx - 12 + math.sin(animTime * 12.0) * 3, ballCenter.dy - 10), 1.6, fluffPaint);
+      canvas.drawCircle(Offset(ballCenter.dx + 14 + math.cos(animTime * 12.0) * 3, ballCenter.dy - 8), 1.4, fluffPaint);
     }
 
     // 3. 听歌点头 (戴着酷酷的 DJ 大耳机 + 音符漂浮)

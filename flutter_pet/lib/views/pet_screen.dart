@@ -180,6 +180,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   double _yarnY = 0.0;
   double _yarnVx = 0.0;
   double _yarnVy = 0.0;
+  double _yarnRollAngle = 0.0;
+  int _yarnBatCount = 0;
   bool _isYarnDragging = false;
   bool _isYarnFlying = false;
   bool _isChasingYarn = false;
@@ -307,6 +309,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         if (_isYarnFlying) {
           _yarnX += _yarnVx;
           _yarnY += _yarnVy;
+          _yarnRollAngle += (_yarnVx * 0.08); // 旋转滚动物理
           _yarnVx *= 0.95;
           _yarnVy = (_yarnVy + 0.42) * 0.96;
 
@@ -363,12 +366,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             _facingLeft = diff.dx < 0;
           }
 
-          if (dist > 45.0) {
+          if (dist > 48.0) {
             // 未抓住时：猫咪迈动小碎步疾速奔跑追赶！
             if (_state != 'WALK' && _state != 'PLAY_YARN') {
               _state = 'WALK';
             }
-            final speed = math.min(dist * 0.18, 9.5);
+            final speed = math.min(dist * 0.16, 9.0);
             final norm = diff / dist;
             _petX += norm.dx * speed;
             _petY += norm.dy * speed;
@@ -377,36 +380,60 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             _petY = _petY.clamp(floorTop + 25.0, _lastScreenSize.height - 115.0);
             _maybeAddFootprint(Offset(_petX, _petY));
           } else {
-            // 飞扑捕获成功瞬间！(Pounce & Catch)
-            _isYarnFlying = false;
-            _isChasingYarn = false;
-            _yarnVx = 0.0;
-            _yarnVy = 0.0;
-
-            _yarnX = _petX + (_facingLeft ? -25.0 : 25.0);
-            _yarnY = _petY + 48.0;
-
-            _playAction('PLAY_YARN');
-            SoundService.playMeow();
-            if (widget.petModel.enableHaptics) {
-              HapticFeedback.heavyImpact();
-            }
-
-            _squishController.forward(from: 0.0);
-            _spawnParticles(ballPos, emoji: '🧶', count: 4);
-            _spawnParticles(ballPos, emoji: '✨', count: 3);
-            _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐾', count: 3);
-            _spawnTextParticle(Offset(_petX - 35, _petY - 55), '扑到毛线球啦！🐾🧶', const Color(0xFFF43F5E));
-            _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+8 经验 ✨', const Color(0xFF6366F1));
-            widget.petModel.addExp(8.0);
-            _showDialogueBubble('哇！猛虎飞扑抓住毛线球啦！抱紧紧滚来滚去~ 🧶🐾💕', duration: const Duration(seconds: 4));
-
-            _actionTimer?.cancel();
-            _actionTimer = Timer(const Duration(milliseconds: 3500), () {
-              if (mounted && _state == 'PLAY_YARN') {
-                setState(() => _state = 'SIT_WAG_TAIL');
+            // 追上毛线球瞬间！真实生物天性：前 1~2 次追上时，探爪拍飞 (Bat & Swat)！
+            if (_yarnBatCount < 2) {
+              _yarnBatCount++;
+              SoundService.playPop();
+              if (widget.petModel.enableHaptics) {
+                HapticFeedback.mediumImpact();
               }
-            });
+              // 爪爪一拍，球球带着初速度向前弹开！
+              final forwardDir = _facingLeft ? -1.0 : 1.0;
+              final rnd = math.Random();
+              _yarnVx = forwardDir * (rnd.nextDouble() * 7.0 + 8.0);
+              _yarnVy = -(rnd.nextDouble() * 4.0 + 3.0);
+              _isYarnFlying = true;
+              _isChasingYarn = true;
+              _spawnParticles(ballPos, emoji: '🐾', count: 3);
+              _spawnParticles(ballPos, emoji: '💨', count: 2);
+              _showDialogueBubble(
+                _yarnBatCount == 1 ? '嗷呜！一爪拍飞~ 球球别跑，波可接着追！🐾💨' : '看波可无影快爪，再拍一下！(ฅ>ω<*ฅ)🧶',
+                duration: const Duration(seconds: 3),
+              );
+            } else {
+              // 飞扑抱球抓牢成功！(Pounce & Catch & Hug Roll)
+              _yarnBatCount = 0;
+              _isYarnFlying = false;
+              _isChasingYarn = false;
+              _yarnVx = 0.0;
+              _yarnVy = 0.0;
+
+              _yarnX = _petX + (_facingLeft ? -22.0 : 22.0);
+              _yarnY = _petY + 44.0;
+
+              _playAction('PLAY_YARN');
+              SoundService.playMeow();
+              if (widget.petModel.enableHaptics) {
+                HapticFeedback.heavyImpact();
+              }
+
+              _squishController.forward(from: 0.0);
+              _spawnParticles(ballPos, emoji: '🧶', count: 4);
+              _spawnParticles(ballPos, emoji: '✨', count: 3);
+              _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐾', count: 3);
+              _spawnTextParticle(Offset(_petX - 35, _petY - 55), '抓牢抱球滚滚玩耍！🐾🧶', const Color(0xFFF43F5E));
+              _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验 ✨', const Color(0xFF6366F1));
+              widget.petModel.addExp(10.0);
+              widget.petModel.addIntimacy(4);
+              _showDialogueBubble('哇！猛虎飞扑抓住毛线球啦！两只小爪爪抱紧紧滚来滚去~ 🧶🐾💕', duration: const Duration(seconds: 4));
+
+              _actionTimer?.cancel();
+              _actionTimer = Timer(const Duration(milliseconds: 3800), () {
+                if (mounted && _state == 'PLAY_YARN') {
+                  setState(() => _state = 'SIT_WAG_TAIL');
+                }
+              });
+            }
           }
         }
         needRepaint = true;
@@ -1108,7 +1135,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _playAction(String actionId) {
     _idleSeconds = 0;
     _stopRoaming();
-    if (actionId != 'PLAY_YARN') {
+    if (actionId == 'PLAY_YARN') {
+      _isChasingYarn = false;
+      _isYarnFlying = false;
+      _yarnVx = 0.0;
+      _yarnVy = 0.0;
+      _yarnBatCount = 0;
+      _yarnX = _petX + (_facingLeft ? -22.0 : 22.0);
+      _yarnY = _petY + 44.0;
+    } else {
       _isChasingYarn = false;
     }
     if (actionId == 'DOZE_OFF' || actionId == 'KNEADING_BISCUITS') {
@@ -3031,8 +3066,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               // 维度二：开阔活动地板：实体物理毛线球 (在猫咪扑玩期间隐藏外部球，玩耍结束后恢复在猫爪旁)
               if (_state != 'PLAY_YARN')
                 Positioned(
-                  left: _yarnX - 18,
-                  top: _yarnY - 18,
+                  key: const ValueKey('floor_yarn_ball'),
+                  left: _yarnX - 22,
+                  top: _yarnY - 22,
                   child: _buildYarnBall(screenSize, isNight),
                 ),
 
@@ -3315,7 +3351,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               if (_draggingFoodPos != null)
                 _buildDraggingFoodOverlay(),
 
-              // 6. 底部交互控制：常态下三灵动胶囊；进入对应模式呈现画布级无遮挡点播坞/换装坞/投喂坞
+              // 6. 底部交互控制：常态下三灵动胶囊；进入对应模式呈现画布级无遮挡点播坞/换装坞/投喂坞 (固定稳定渲染，杜绝任何跳动)
               if (_isWardrobeMode)
                 _buildLiveWardrobeDock(screenSize, isNight)
               else if (_isActionMode)
@@ -3448,26 +3484,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 底部三灵动悬浮胶囊 (奇妙背包 + 魔法换装 + 专属绝活，1-Tap 直达，零层级深度)
   Widget _buildBottomFloatingBar(Size screenSize, bool isNight) {
     return Positioned(
+      key: const ValueKey('bottom_floating_bar'),
       bottom: 16,
       left: 0,
       right: 0,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        builder: (context, val, child) {
-          return Transform.translate(
-            offset: Offset(0, (1.0 - val) * 16),
-            child: Opacity(
-              opacity: val.clamp(0.0, 1.0),
-              child: child,
-            ),
-          );
-        },
-        child: Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
               // 1. 奇妙背包
               _BouncyTouchFeedback(
                 scaleDown: 0.92,
@@ -3646,8 +3670,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   /// 画布级无遮挡换装滑轨坞 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
@@ -3705,23 +3728,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
 
     return Positioned(
+      key: const ValueKey('live_wardrobe_dock'),
       bottom: 12,
       left: 12,
       right: 12,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        builder: (context, val, child) {
-          return Transform.translate(
-            offset: Offset(0, (1.0 - val) * 20),
-            child: Opacity(
-              opacity: val.clamp(0.0, 1.0),
-              child: child,
-            ),
-          );
-        },
-        child: Container(
+      child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
             color: bgColor,
@@ -4113,8 +4124,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 
   /// 画布级无遮挡专属绝活滑轨点播台 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
@@ -4140,23 +4150,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         : '✨ 绝活点播台 · 点击下方卡片即刻开演 (共${actions.length}项)';
 
     return Positioned(
+      key: const ValueKey('live_action_dock'),
       bottom: 12,
       left: 12,
       right: 12,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        builder: (context, val, child) {
-          return Transform.translate(
-            offset: Offset(0, (1.0 - val) * 20),
-            child: Opacity(
-              opacity: val.clamp(0.0, 1.0),
-              child: child,
-            ),
-          );
-        },
-        child: Container(
+      child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
             color: bgColor,
@@ -4354,8 +4352,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 
   Widget _buildDockTabPill(int index, String label, bool isNight) {
@@ -5868,20 +5865,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       bottom: 14,
       left: 16,
       right: 16,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutBack,
-        builder: (context, val, child) {
-          return Transform.translate(
-            offset: Offset(0, (1.0 - val) * 20),
-            child: Opacity(
-              opacity: val.clamp(0.0, 1.0),
-              child: child,
-            ),
-          );
-        },
-        child: Container(
+      child: Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
             color: isNight
@@ -6061,8 +6045,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           ],
         ),
       ),
-    ),
-  );
+    );
   }
 
   /// 舒睡暖垫小被子 (Tuck-in Blanket - 随呼吸起伏，支持盖被被与掀被被微互动)
@@ -6406,6 +6389,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         if (widget.petModel.enableHaptics) {
           HapticFeedback.mediumImpact();
         }
+        _yarnBatCount = 0; // 重置拍球计数
         final rnd = math.Random();
         final vx = (rnd.nextDouble() * 10.0 + 4.0) * (rnd.nextBool() ? 1.0 : -1.0);
         final vy = -(rnd.nextDouble() * 9.0 + 7.0);
@@ -6424,12 +6408,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _isChasingYarn = false;
           _yarnVx = 0.0;
           _yarnVy = 0.0;
+          _yarnBatCount = 0;
         });
       },
       onPanUpdate: (details) {
         setState(() {
           _yarnX += details.delta.dx;
           _yarnY += details.delta.dy;
+          _yarnRollAngle += details.delta.dx * 0.08;
           _yarnX = _yarnX.clamp(20.0, screenSize.width - 20.0);
           _yarnY = _yarnY.clamp(80.0, screenSize.height - 100.0);
         });
@@ -6445,6 +6431,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _isYarnDragging = false;
           _isYarnFlying = hasVelocity;
           _isChasingYarn = true;
+          _yarnBatCount = 0;
           _yarnVx = vx;
           _yarnVy = vy;
         });
@@ -6452,29 +6439,120 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           HapticFeedback.lightImpact();
         }
       },
-      child: Transform.rotate(
-        angle: _yarnX * 0.05,
-        child: Container(
-          padding: const EdgeInsets.all(5),
-          decoration: BoxDecoration(
-            color: isNight ? const Color(0xFF1E1A40) : Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: isNight ? const Color(0xFFF43F5E).withOpacity(0.6) : const Color(0xFFFBCFE8),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFF43F5E).withOpacity(isNight ? 0.25 : 0.18),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: const Text('🧶', style: TextStyle(fontSize: 18)),
+      child: CustomPaint(
+        size: const Size(44, 44),
+        painter: _YarnBallPainter(
+          rollAngle: _yarnRollAngle,
+          isNight: isNight,
+          isFlying: _isYarnFlying || _isYarnDragging,
         ),
       ),
     );
+  }
+}
+
+/// 逼真 3D 渐变实体物理毛线球绘制器 (具有真实经纬羊毛编织线圈、随位移滚转角、拖尾线绳与地面柔影)
+class _YarnBallPainter extends CustomPainter {
+  final double rollAngle;
+  final bool isNight;
+  final bool isFlying;
+
+  const _YarnBallPainter({
+    required this.rollAngle,
+    required this.isNight,
+    required this.isFlying,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2 - 2);
+    const radius = 14.5;
+
+    // 1. 地面动态接触阴影 (在飞行或抛起时阴影缩小淡化)
+    final shadowScale = isFlying ? 0.65 : 1.0;
+    final shadowAlpha = isFlying ? (isNight ? 24 : 32) : (isNight ? 80 : 64);
+    final shadowPaint = Paint()..color = Color.fromARGB(shadowAlpha, 0, 0, 0);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(center.dx, size.height - 4),
+        width: 32.0 * shadowScale,
+        height: 7.5 * shadowScale,
+      ),
+      shadowPaint,
+    );
+
+    // 2. 拖尾解开的毛线小线头绳 (随滚动自然拖在身后地面上)
+    final threadPaint = Paint()
+      ..color = isNight ? const Color(0xFFFB7185) : const Color(0xFFF43F5E)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+    final trailPath = Path()
+      ..moveTo(center.dx - radius * 0.4, center.dy + radius * 0.8)
+      ..quadraticBezierTo(center.dx - 12, size.height - 5, center.dx - 18, size.height - 6)
+      ..quadraticBezierTo(center.dx - 24, size.height - 7, center.dx - 28, size.height - 4);
+    canvas.drawPath(trailPath, threadPaint);
+
+    // 3. 毛线球 3D 球体渐变 (深粉至绛红质感)
+    final ballRect = Rect.fromCircle(center: center, radius: radius);
+    final sphereShader = RadialGradient(
+      center: const Alignment(-0.35, -0.35),
+      radius: 0.95,
+      colors: isNight
+          ? const [Color(0xFFFDA4AF), Color(0xFFF43F5E), Color(0xFF9F1239)]
+          : const [Color(0xFFFFE4E6), Color(0xFFFB7185), Color(0xFFE11D48)],
+      stops: const [0.0, 0.55, 1.0],
+    ).createShader(ballRect);
+
+    canvas.drawCircle(center, radius, Paint()..shader = sphereShader);
+
+    // 4. 毛线缠绕立体纹理 (随 rollAngle 物理滚动旋转)
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(rollAngle);
+
+    final lineLight = Paint()
+      ..color = Colors.white.withOpacity(0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round;
+
+    final lineDark = Paint()
+      ..color = const Color(0xFF881337).withOpacity(0.38)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+
+    // 纬向与经向交叉缠绕毛线环
+    canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: radius * 0.72), 0.2, 2.4, false, lineDark);
+    canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: radius * 0.70), 0.2, 2.4, false, lineLight);
+
+    canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: radius * 0.85), 3.0, 2.2, false, lineDark);
+    canvas.drawArc(Rect.fromCircle(center: Offset.zero, radius: radius * 0.83), 3.0, 2.2, false, lineLight);
+
+    canvas.drawArc(Rect.fromCircle(center: const Offset(2, -2), radius: radius * 0.55), 1.6, 2.6, false, lineLight);
+
+    // 散出的一小撮立体毛线绒头
+    canvas.drawLine(
+      const Offset(radius * 0.7, -radius * 0.3),
+      const Offset(radius * 1.2, -radius * 0.55),
+      lineLight..strokeWidth = 1.8,
+    );
+
+    canvas.restore();
+
+    // 5. 球体高光点 (球面上方左侧环境光微反射)
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(center.dx - 4.5, center.dy - 4.5), width: 6.5, height: 3.8),
+      Paint()..color = Colors.white.withOpacity(0.65),
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _YarnBallPainter oldDelegate) {
+    return oldDelegate.rollAngle != rollAngle ||
+        oldDelegate.isNight != isNight ||
+        oldDelegate.isFlying != isFlying;
   }
 }
 
