@@ -195,6 +195,29 @@ class SoundService {
     }
   }
 
+  /// 敲敲猫罐头清脆金属音 (Can Chime)
+  static Future<void> playCanChime() async {
+    SystemSound.play(SystemSoundType.click);
+    if (!soundEnabled) return;
+    try {
+      await sfxPlayer.stop();
+      await sfxPlayer.play(AssetSource('audio/pop.wav'), volume: 0.95);
+    } catch (_) {
+      SystemSound.play(SystemSoundType.click);
+    }
+  }
+
+  /// 猫咪小口舔水吧唧音效 (Water Lapping)
+  static Future<void> playWaterLap() async {
+    if (!soundEnabled) return;
+    try {
+      await sfxPlayer.stop();
+      await sfxPlayer.play(AssetSource('audio/pop.wav'), volume: 0.65);
+    } catch (_) {
+      SystemSound.play(SystemSoundType.click);
+    }
+  }
+
   /// 释放音频资源
   static void dispose() {
     _sfxPlayer?.dispose();

@@ -298,6 +298,15 @@ class PetModel extends ChangeNotifier {
     return isSleeping;
   }
 
+  /// 唤醒
+  void wakeUp() {
+    if (isSleeping) {
+      isSleeping = false;
+      notifyListeners();
+      saveToDisk();
+    }
+  }
+
   /// 专注学习
   bool toggleStudy() {
     isStudying = !isStudying;

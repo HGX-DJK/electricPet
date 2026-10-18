@@ -146,11 +146,39 @@ class PetPainter extends CustomPainter {
       scaleX = 1.0 + math.sin(animTime * 10.0) * 0.03;
       scaleY = 1.0 - math.sin(animTime * 10.0) * 0.02;
       bodySwayX = math.sin(animTime * 5.0) * 2.5;
-    } else if (state == 'DRAGGING') {
-      // 拖拽抱起：身体受重力自然悬垂微动 (稳定保真，杜绝拉伸走样)
-      scaleX = 0.98;
+    } else if (state == 'DRAGGING' || state == 'DANGLING') {
+      // 方向一：物理悬空与被拎起体态 (身体受重力微拉长，四爪悬空)
+      scaleX = 0.94;
+      scaleY = 1.08;
+      breathY = math.sin(animTime * 3.5) * 2.5;
+      bodySwayX = math.sin(animTime * 2.5) * 2.0;
+    } else if (state == 'HIGH_FIVE') {
+      // 方向二：默契击掌 (身体微前倾)
+      scaleX = 1.03;
       scaleY = 1.02;
-      breathY = 0.0;
+      breathY = -2.0;
+    } else if (state == 'ROLL_ON_BACK' || state == 'BUNNY_KICKS') {
+      // 方向三：翻滚露肚皮与兔子蹬腿 (侧卧横躺下沉)
+      scaleX = 1.12;
+      scaleY = 0.92;
+      breathY = 12.0;
+      bodySwayX = math.sin(animTime * 4.0) * 1.5;
+    } else if (state == 'DRINK_WATER') {
+      // 方向四：就餐角小口舔水 (低头饮水)
+      scaleX = 1.05;
+      scaleY = 0.95;
+      breathY = 14.0;
+    } else if (state == 'SPRINT') {
+      // 方向五：罐头召唤全速冲刺狂奔！
+      scaleX = 1.18;
+      scaleY = 0.84;
+      breathY = -math.sin(animTime * 26.0).abs() * 8.0;
+      bodySwayX = math.sin(animTime * 18.0) * 3.5;
+    } else if (state == 'CAT_STRETCH') {
+      // 方向六：猫式伸展拉伸瑜伽 (前爪贴地、屁股与尾巴高翘)
+      scaleX = 1.25;
+      scaleY = 0.84;
+      breathY = 12.0;
     }
 
     // 独立地面阴影：绘制在脚底地板上，随跳跃高度柔和缩放与淡化，绝不随纸片翻折在半空中飘
@@ -219,8 +247,17 @@ class PetPainter extends CustomPainter {
       tailWag = math.sin(animTime * 35.0) * 16.0;
     } else if (state == 'SIT_WAG_TAIL') {
       tailWag = math.sin(animTime * 9.0) * 36.0 + math.sin(animTime * 18.0) * 8.0;
-    } else if (state == 'STRETCH_YAWN') {
-      tailWag = 5.0 + math.sin(animTime * 14.0) * 6.0;
+    } else if (state == 'STRETCH_YAWN' || state == 'CAT_STRETCH') {
+      tailWag = -16.0 + math.sin(animTime * 14.0) * 6.0;
+    } else if (state == 'DANGLING' || state == 'DRAGGING') {
+      // 悬空时尾巴受自然重力垂直下垂微摆
+      tailWag = math.sin(animTime * 4.0) * 8.0;
+    } else if (state == 'ROLL_ON_BACK' || state == 'BUNNY_KICKS') {
+      // 肚皮朝天时尾巴在侧边轻拍地面
+      tailWag = 20.0 + math.sin(animTime * 6.0) * 10.0;
+    } else if (state == 'SPRINT') {
+      // 全速冲刺时尾巴向后舒展
+      tailWag = -26.0 + math.sin(animTime * 24.0) * 6.0;
     } else if (state == 'HAPPY_SPIN') {
       tailWag = math.sin(animTime * 12.0) * 25.0;
     } else if (state == 'KNEADING_BISCUITS') {
@@ -334,9 +371,11 @@ class PetPainter extends CustomPainter {
               : (skin.id == 'cat_calico' ? Color(skin.secondaryColor) : Color(skin.primaryColor)))
       ..style = PaintingStyle.fill;
 
-    final tipOffset = state == 'STRETCH_YAWN'
-        ? Offset(40 + tailWag, -65)
-        : Offset(52 + tailWag, -25);
+    final tipOffset = (state == 'STRETCH_YAWN' || state == 'CAT_STRETCH')
+        ? Offset(38 + tailWag, -70)
+        : ((state == 'DANGLING' || state == 'DRAGGING')
+            ? Offset(26 + tailWag, 28)
+            : Offset(52 + tailWag, -25));
     final double tipRadius = isLonghair ? 12.0 : (isOtter ? 9.5 : (isSleek ? 4.5 : 7.0));
     canvas.drawCircle(tipOffset, tipRadius, tipPaint);
   }
@@ -479,6 +518,20 @@ class PetPainter extends CustomPainter {
       canvas.drawLine(const Offset(0, 22), const Offset(0, 48), ruffLine);
       canvas.drawLine(const Offset(-14, 26), const Offset(-10, 40), ruffLine);
       canvas.drawLine(const Offset(14, 26), const Offset(10, 40), ruffLine);
+    }
+
+    // 方向三：翻滚露肚皮与开心兔子蹬腿 (柔软棉花糖粉嫩大肚皮)
+    if (state == 'ROLL_ON_BACK' || state == 'BUNNY_KICKS') {
+      final bellyHighlight = Paint()..color = const Color(0xFFFFFBEB);
+      canvas.drawOval(
+        Rect.fromCenter(center: const Offset(0, 36), width: 72, height: 50),
+        bellyHighlight,
+      );
+      final bellyGlow = Paint()..color = const Color(0xFFFDE2E4).withOpacity(0.7);
+      canvas.drawOval(
+        Rect.fromCenter(center: const Offset(0, 38), width: 44, height: 32),
+        bellyGlow,
+      );
     }
   }
 
@@ -1016,9 +1069,13 @@ class PetPainter extends CustomPainter {
         state == 'PEEK_A_BOO' ||
         state == 'WASH_FACE' ||
         state == 'STRETCH_YAWN' ||
+        state == 'CAT_STRETCH' ||
         state == 'HAPPY_SPIN' ||
         state == 'SIT_WAG_TAIL' ||
         state == 'KNEADING_BISCUITS' ||
+        state == 'ROLL_ON_BACK' ||
+        state == 'BUNNY_KICKS' ||
+        state == 'DRINK_WATER' ||
         (blinkCycle > 3.55 && blinkCycle < 3.75) ||
         (petProgress > 0.35);
 
@@ -1170,12 +1227,24 @@ class PetPainter extends CustomPainter {
     canvas.drawPath(nosePath, nosePaint);
 
     // 嘴巴绘制
-    if (state == 'STRETCH_YAWN') {
+    if (state == 'STRETCH_YAWN' || state == 'CAT_STRETCH') {
       // 伸懒腰打大哈欠 (张大的圆嘴巴 + 粉红小舌头)
       final yawnPaint = Paint()..color = const Color(0xFF451A03);
       canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 8), width: 14, height: 18), yawnPaint);
       final tonguePaint = Paint()..color = const Color(0xFFFB7185);
       canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 12), width: 10, height: 9), tonguePaint);
+      return;
+    }
+
+    if (state == 'DRINK_WATER') {
+      // 小口舔水吧唧动画 (粉嫩小舌尖规律快速探出)
+      final lapCycle = math.sin(animTime * 16.0);
+      final openMouth = Paint()..color = const Color(0xFF451A03);
+      canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 5), width: 8, height: 5), openMouth);
+      if (lapCycle > 0) {
+        final tongue = Paint()..color = const Color(0xFFFB7185);
+        canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 7 + lapCycle * 2.5), width: 6, height: 5), tongue);
+      }
       return;
     }
 
@@ -1371,6 +1440,94 @@ class PetPainter extends CustomPainter {
       if (rightPush > 0.8) {
         canvas.drawOval(Rect.fromCenter(center: Offset(rightCenter.dx, rightCenter.dy + 1), width: 10, height: 8), padPaint);
       }
+      return;
+    }
+
+    // 方向一：悬空拎起体态：双前爪向中间收拢悬垂，双后脚爪自然垂下微晃
+    if (state == 'DANGLING' || state == 'DRAGGING') {
+      final dangleWiggle = math.sin(animTime * 5.0) * 2.5;
+      // 前爪向中收拢悬垂
+      canvas.drawOval(Rect.fromCenter(center: Offset(-14, 50 + dangleWiggle), width: 20, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(-14, 50 + dangleWiggle), width: 20, height: 16), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: Offset(14, 50 - dangleWiggle), width: 20, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(14, 50 - dangleWiggle), width: 20, height: 16), pawBorder);
+      // 后爪悬挂向下微摆
+      canvas.drawOval(Rect.fromCenter(center: Offset(-20, 68 - dangleWiggle), width: 18, height: 14), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(-20, 68 - dangleWiggle), width: 18, height: 14), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: Offset(20, 68 + dangleWiggle), width: 18, height: 14), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(20, 68 + dangleWiggle), width: 18, height: 14), pawBorder);
+      return;
+    }
+
+    // 方向二：指尖击掌：左前爪稳稳撑地，右前爪向前高高抬起展示粉嫩肉垫
+    if (state == 'HIGH_FIVE') {
+      // 左前爪着地
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: 22, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-22, 60), width: 22, height: 16), pawBorder);
+      // 右前爪抬起迎合击掌 (露出粉嫩大肉垫与脚趾)
+      final highPawCenter = Offset(32, 16 + math.sin(animTime * 6.0) * 2.5);
+      canvas.drawOval(Rect.fromCenter(center: highPawCenter, width: 26, height: 24), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: highPawCenter, width: 26, height: 24), pawBorder);
+      final padPaint = Paint()..color = const Color(0xFFFB7185);
+      canvas.drawOval(Rect.fromCenter(center: highPawCenter, width: 13, height: 10), padPaint);
+      canvas.drawCircle(Offset(highPawCenter.dx - 7, highPawCenter.dy - 9), 3.2, padPaint);
+      canvas.drawCircle(Offset(highPawCenter.dx, highPawCenter.dy - 11), 3.4, padPaint);
+      canvas.drawCircle(Offset(highPawCenter.dx + 7, highPawCenter.dy - 9), 3.2, padPaint);
+      return;
+    }
+
+    // 方向三：翻滚露肚皮与开心兔子蹬腿
+    if (state == 'ROLL_ON_BACK' || state == 'BUNNY_KICKS') {
+      // 前爪向胸口蜷起
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-20, 22), width: 20, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-20, 22), width: 20, height: 16), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(20, 22), width: 20, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(20, 22), width: 20, height: 16), pawBorder);
+      // 后爪在空中欢快踢踏 (兔子蹬腿则高频双向踩单车)
+      final kickAmp = state == 'BUNNY_KICKS' ? 14.0 : 4.0;
+      final kickSpeed = state == 'BUNNY_KICKS' ? 24.0 : 6.0;
+      final kickL = math.sin(animTime * kickSpeed) * kickAmp;
+      final kickR = -math.sin(animTime * kickSpeed) * kickAmp;
+      final hindLPaw = Offset(-30, 52 + kickL);
+      final hindRPaw = Offset(30, 52 + kickR);
+      canvas.drawOval(Rect.fromCenter(center: hindLPaw, width: 22, height: 18), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: hindLPaw, width: 22, height: 18), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: hindRPaw, width: 22, height: 18), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: hindRPaw, width: 22, height: 18), pawBorder);
+      // 露出的后脚粉嫩小肉垫
+      final padPaint = Paint()..color = const Color(0xFFFB7185);
+      canvas.drawOval(Rect.fromCenter(center: hindLPaw, width: 9, height: 7), padPaint);
+      canvas.drawOval(Rect.fromCenter(center: hindRPaw, width: 9, height: 7), padPaint);
+      return;
+    }
+
+    // 方向四：就餐角小口饮水
+    if (state == 'DRINK_WATER') {
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-18, 56), width: 22, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-18, 56), width: 22, height: 16), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(18, 56), width: 22, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(18, 56), width: 22, height: 16), pawBorder);
+      return;
+    }
+
+    // 方向五：全速冲刺狂奔 (罐头召唤)
+    if (state == 'SPRINT') {
+      final runCycle = animTime * 24.0;
+      final leftStride = math.sin(runCycle) * 12.0;
+      final rightStride = -math.sin(runCycle) * 12.0;
+      canvas.drawOval(Rect.fromCenter(center: Offset(-20 + leftStride, 58), width: 24, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(-20 + leftStride, 58), width: 24, height: 16), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: Offset(20 + rightStride, 58), width: 24, height: 16), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: Offset(20 + rightStride, 58), width: 24, height: 16), pawBorder);
+      return;
+    }
+
+    // 方向六：正宗猫式伸展拉伸 (双前爪前伸贴地)
+    if (state == 'CAT_STRETCH') {
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-36, 68), width: 28, height: 14), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(-36, 68), width: 28, height: 14), pawBorder);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(36, 68), width: 28, height: 14), pawPaint);
+      canvas.drawOval(Rect.fromCenter(center: const Offset(36, 68), width: 28, height: 14), pawBorder);
       return;
     }
 

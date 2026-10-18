@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/main.dart';
 import 'package:flutter_pet/services/sound_service.dart';
+import 'package:flutter_pet/views/dialogs/action_dialog.dart';
 
 void main() {
   testWidgets('Poko Pet App smoke test', (WidgetTester tester) async {
@@ -558,5 +559,105 @@ void main() {
     await tester.tapAt(const Offset(300, 450));
     await tester.pump(const Duration(milliseconds: 200));
   });
+
+  testWidgets('Six Major High-Order Interactions test', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(const DesktopElectricPetApp());
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 0. 验证专属绝活坞与列表中包含新增的猫式伸展、击掌对拳、翻肚皮蹬腿
+    await tester.tap(find.text('专属绝活'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.textContaining('点击下方卡片即刻开演'), findsOneWidget);
+    expect(ActionDialog.actions.any((a) => a['name'] == '猫式伸展' && a['icon'] == '🧘'), isTrue);
+    expect(ActionDialog.actions.any((a) => a['name'] == '击掌对拳' && a['icon'] == '✋'), isTrue);
+    expect(ActionDialog.actions.any((a) => a['name'] == '翻肚皮蹬腿' && a['icon'] == '🐰'), isTrue);
+    await tester.tap(find.text('完成'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final catFinder = find.byWidgetPredicate(
+      (w) => w is GestureDetector && w.child is AnimatedBuilder,
+    );
+    expect(catFinder, findsOneWidget);
+    var catTopLeft = tester.getTopLeft(catFinder);
+
+    // 1. 方向二：指尖对掌与默契击掌 (High-Five & Finger Boop 🐾)
+    // 轻触猫咪前爪区域 (dy >= 142 即在 catTopLeft 下方约 150px)
+    await tester.tapAt(Offset(catTopLeft.dx + 100.0, catTopLeft.dy + 150.0));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('击掌'), findsWidgets);
+
+    // 2. 方向三：翻滚露肚皮 (Belly Rub Roll) 与持续揉按开心兔子蹬腿 (Bunny Kicks)
+    // 挠软萌腹部肚皮 (dy 位于 105 ~ 142 即在 catTopLeft 下方约 125px)
+    await tester.tapAt(Offset(catTopLeft.dx + 100.0, catTopLeft.dy + 125.0));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('软肚皮'), findsWidgets);
+    // 处于翻肚皮态下，再次轻揉肚皮触发兔子踩单车蹬腿
+    await tester.tapAt(Offset(catTopLeft.dx + 100.0, catTopLeft.dy + 125.0));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.textContaining('踩单车'), findsWidgets);
+
+    // 3. 方向五：敲敲罐头瞬间冲刺狂奔召唤 (Can Spoon Tap & Sprint Summon 🥫)
+    final canFinder = find.byKey(const ValueKey('can_summon_button'));
+    expect(canFinder, findsOneWidget);
+    await tester.tap(canFinder);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.textContaining('敲罐头的声音'), findsOneWidget);
+    // 等待冲刺飞奔到达餐盘前方
+    for (int i = 0; i < 15; i++) {
+      await tester.pump(const Duration(milliseconds: 30));
+    }
+    expect(find.textContaining('波可已飞奔就位'), findsOneWidget);
+
+    // 4. 方向四：就餐角小口饮水仪式与水花涟漪 (Water Lapping 🥣💧)
+    final waterFinder = find.byKey(const ValueKey('cat_water_bowl'));
+    expect(waterFinder, findsOneWidget);
+    await tester.tap(waterFinder);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.textContaining('纯净水'), findsOneWidget);
+
+    // 收起展开的投喂坞，恢复底部三灵动胶囊
+    await tester.tap(find.text('完成'));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 5. 方向一：物理悬空与被拎起体态 (Scruff Lift & Air Dangling Physics)
+    catTopLeft = tester.getTopLeft(catFinder);
+    final catCenter = Offset(catTopLeft.dx + 100.0, catTopLeft.dy + 100.0);
+    final gesture = await tester.startGesture(catCenter);
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.moveBy(const Offset(0, -60));
+    await tester.pump(const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // 6. 方向六：睡眠唤醒正宗猫式伸展瑜伽仪式 (Gentle Wake-up & Cat Stretch Yoga 🧘‍♀️)
+    // 打开奇妙背包伴眠哄睡
+    await tester.tap(find.text('奇妙背包'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('伴眠哄睡'), findsOneWidget);
+    await tester.tap(find.text('伴眠哄睡'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // 轻戳睡梦中的小猫，触发三阶段唤醒仪式
+    await tester.tap(catFinder);
+    await tester.pump(const Duration(milliseconds: 400));
+    // 阶段 1：揉揉睡眼洗小脸
+    expect(find.textContaining('揉揉睡眼'), findsOneWidget);
+    // 推进时间进入阶段 2：正宗猫式大伸展
+    await tester.pump(const Duration(milliseconds: 1400));
+    expect(find.textContaining('猫式懒腰'), findsOneWidget);
+    // 推进时间进入阶段 3：欢喜抖毛元气百倍
+    await tester.pump(const Duration(milliseconds: 2400));
+    expect(find.textContaining('元气满满'), findsOneWidget);
+  });
 }
+
 

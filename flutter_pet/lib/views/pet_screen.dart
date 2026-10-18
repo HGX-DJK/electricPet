@@ -244,6 +244,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _glanceTimer;
   double _windowScale = 1.0;
 
+  // 6大高阶交互演进定时器
+  Timer? _highFiveTimer;
+  Timer? _drinkTimer;
+  Timer? _sprintTimer;
+  Timer? _bunnyKickTimer;
+
   @override
   void initState() {
     super.initState();
@@ -564,6 +570,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _waterRippleTimer?.cancel();
     _tiltTimer?.cancel();
     _glanceTimer?.cancel();
+    _highFiveTimer?.cancel();
+    _drinkTimer?.cancel();
+    _sprintTimer?.cancel();
+    _bunnyKickTimer?.cancel();
     SoundService.dispose();
     super.dispose();
   }
@@ -629,6 +639,23 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       } else {
         _showDialogueBubble('嗷呜一大口！吃掉了$foodName，最喜欢主人啦~ 😋💕');
       }
+
+      // 吃完零食后 40% 概率口渴主动踱步去水碗饮水 (方向四：餐后补水习惯)
+      if (math.Random().nextDouble() < 0.40) {
+        Timer(const Duration(milliseconds: 1800), () {
+          if (mounted && !_isDragging && !widget.petModel.isSleeping) {
+            final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+            final nestY = floorTop + 130.0;
+            _startWalkingTo(
+              85.0,
+              nestY + 85.0,
+              'WATER_BOWL',
+              '吃得香喷喷，嘴巴有点干啦~ 踱步去水碗喝口清甜的水水！💧🐾',
+            );
+          }
+        });
+      }
+
       setState(() {
         _showFoodTray = false;
         _draggingFoodPos = null;
@@ -1107,6 +1134,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       'HEAD_BOB_MUSIC': '戴上潮流大耳机！动次打次跟着节拍摇头晃脑~ 🎵🎧',
       'CHASE_BUTTERFLY': '哇！彩光小蝴蝶飞来啦~ 灵巧一扑！🦋✨',
       'HAPPY_SPIN': '开心到飞起！旋转跳跃转圈圈~ 💫(✧ω✧)',
+      'CAT_STRETCH': '哈欠~~~ 伸个大大的猫式懒腰，小屁股翘高高，浑身舒展开啦！🥱✨',
+      'HIGH_FIVE': '啪嗒！小爪爪和主人击掌啦~ 专属默契+100！(ฅ^ω^ฅ)🐾💕',
+      'ROLL_ON_BACK': '呀啊~ 被挠到痒痒肉啦！翻个身把软乎乎的小肚皮露给主人摸~ (ฅ>ω<*ฅ)💕',
       'DOZE_OFF': '小脑瓜一点一点... 困意来袭，打个小瞌睡~ 💤',
       'DIZZY': '小星星在头上转呀转~ 晕乎乎晃悠悠~ ⭐🌀',
     };
@@ -1125,6 +1155,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       'HEAD_BOB_MUSIC': '🎵',
       'CHASE_BUTTERFLY': '🦋',
       'HAPPY_SPIN': '💫',
+      'CAT_STRETCH': '🧘',
+      'HIGH_FIVE': '✋',
+      'ROLL_ON_BACK': '🐰',
       'DOZE_OFF': '💤',
       'DIZZY': '⭐',
     };
@@ -1331,6 +1364,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _popFishFromBowl(nestX, nestY);
         _playAction('LOOK_AROUND');
         _showDialogueBubble('来到小猫碗边啦~ 闻闻还有没有酥脆小鱼干！🥣😋');
+        break;
+      case 'WATER_BOWL':
+        _startDrinkingWater(nestY);
         break;
       case 'NIGHT_LAMP':
         _onNightLampTap();
@@ -1839,6 +1875,222 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble(quote, duration: const Duration(seconds: 4));
   }
 
+  /// 方向二：指尖对掌与默契击掌 (High-Five & Finger Boop 🐾)
+  void _triggerHighFive(Offset touchPos) {
+    if (_isDragging || _isLaserMode || widget.petModel.isSleeping) return;
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.playMeow(tone: MeowTone.short);
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    setState(() {
+      _state = 'HIGH_FIVE';
+      _facingLeft = touchPos.dx < _petX;
+    });
+    _spawnParticles(touchPos, emoji: '🐾', count: 3);
+    _spawnParticles(touchPos, emoji: '✨', count: 3);
+    _spawnTextParticle(Offset(touchPos.dx - 35, touchPos.dy - 40), '默契击掌 🐾💖', const Color(0xFFF43F5E));
+    widget.petModel.addIntimacy(3);
+    _triggerWink();
+    _showDialogueBubble('啪嗒！小爪爪和主人击掌啦~ 专属默契+100！(ฅ^ω^ฅ)🐾💕', duration: const Duration(seconds: 4));
+    _highFiveTimer?.cancel();
+    _highFiveTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted && _state == 'HIGH_FIVE') {
+        setState(() => _state = 'IDLE');
+      }
+    });
+  }
+
+  /// 方向三：翻滚露肚皮与软萌小腹 (Roll on Back 🐾)
+  void _triggerRollOnBack() {
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.playMeow(tone: MeowTone.soft);
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    _squishController.forward(from: 0.0);
+    setState(() {
+      _state = 'ROLL_ON_BACK';
+    });
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '💕', count: 4);
+    _spawnTextParticle(Offset(_petX - 35, _petY - 50), '袒露软肚皮 💕', const Color(0xFFF43F5E));
+    widget.petModel.addIntimacy(2);
+    _showDialogueBubble('呀啊~ 被挠到痒痒肉啦！翻个身把软乎乎的小肚皮露给主人摸~ (ฅ>ω<*ฅ)💕', duration: const Duration(seconds: 4));
+    _bunnyKickTimer?.cancel();
+    _bunnyKickTimer = Timer(const Duration(milliseconds: 3800), () {
+      if (mounted && (_state == 'ROLL_ON_BACK' || _state == 'BUNNY_KICKS')) {
+        setState(() => _state = 'IDLE');
+      }
+    });
+  }
+
+  /// 方向三：持续揉肚皮触发开心兔子蹬腿 (Bunny Kicks 🐰🐾)
+  void _triggerBunnyKicks() {
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.startPurr();
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    setState(() {
+      _state = 'BUNNY_KICKS';
+    });
+    _spawnParticles(Offset(_petX, _petY - 15), emoji: '💖', count: 3);
+    _spawnParticles(Offset(_petX + 25, _petY + 20), emoji: '🐾', count: 2);
+    _spawnTextParticle(Offset(_petX - 35, _petY - 55), '兔子蹬腿 🐾🚴', const Color(0xFFEC4899));
+    widget.petModel.addIntimacy(3);
+    _showDialogueBubble('咕噜噜噜~ 别挠肚皮啦，小爪爪在空中踩单车停不下来啦！🐾🚴💕', duration: const Duration(seconds: 4));
+    _bunnyKickTimer?.cancel();
+    _bunnyKickTimer = Timer(const Duration(milliseconds: 3200), () {
+      SoundService.stopPurr();
+      if (mounted && (_state == 'ROLL_ON_BACK' || _state == 'BUNNY_KICKS')) {
+        setState(() => _state = 'IDLE');
+      }
+    });
+  }
+
+  /// 方向四：就餐角小口饮水仪式 (Water Lapping 🥣💧)
+  void _startDrinkingWater(double nestY) {
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.playWaterLap();
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    setState(() {
+      _state = 'DRINK_WATER';
+      _isWaterRippling = true;
+      _facingLeft = true;
+    });
+    _spawnParticles(Offset(78.0, nestY + 115.0), emoji: '💧', count: 4);
+    _spawnParticles(Offset(85.0, nestY + 105.0), emoji: '✨', count: 2);
+    _spawnTextParticle(Offset(55.0, nestY + 90.0), '咕嘟咕嘟喝饱水 💧✨', const Color(0xFF0284C7));
+    widget.petModel.addCleanliness(8);
+    widget.petModel.addMood(6);
+    widget.petModel.addIntimacy(2);
+    _showDialogueBubble('吧唧吧唧~ 纯净水甘甜清冽，小猫咕嘟咕嘟喝饱啦！清洁+8 心情+6 💧(ฅ^ω^ฅ)', duration: const Duration(seconds: 4));
+
+    _drinkTimer?.cancel();
+    _drinkTimer = Timer(const Duration(milliseconds: 2400), () {
+      if (mounted) {
+        setState(() {
+          _isWaterRippling = false;
+          _state = 'WASH_FACE';
+        });
+        _showDialogueBubble('喝完水水洗洗小脸蛋，理理胡须帅帅哒~ 🫧✨');
+        Timer(const Duration(milliseconds: 1800), () {
+          if (mounted && _state == 'WASH_FACE') {
+            setState(() => _state = 'IDLE');
+          }
+        });
+      }
+    });
+  }
+
+  /// 方向五：敲敲罐头瞬间冲刺狂奔召唤 (Can Spoon Tap & Sprint Summon 🥫)
+  void _onCanSummonTap(double nestX, double nestY) {
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.playCanChime();
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.heavyImpact();
+    }
+    if (widget.petModel.isSleeping) {
+      widget.petModel.wakeUp();
+    }
+    setState(() {
+      _state = 'SPRINT';
+      _isCoveredWithBlanket = false;
+    });
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '🥫', count: 4);
+    _spawnParticles(Offset(_petX, _petY + 20), emoji: '💨', count: 3);
+    _showDialogueBubble('罐头？！是开饭敲罐头的声音！！小猫全速飞奔而来啦——！！🥫💨', duration: const Duration(seconds: 4));
+
+    // 全速冲刺位移至餐盘前方
+    final targetX = 85.0;
+    final targetY = nestY + 85.0;
+    final startX = _petX;
+    final startY = _petY;
+    int step = 0;
+    const totalSteps = 12;
+
+    _sprintTimer?.cancel();
+    _sprintTimer = Timer.periodic(const Duration(milliseconds: 28), (timer) {
+      step++;
+      final progress = (step / totalSteps).clamp(0.0, 1.0);
+      final curve = Curves.easeInOutCubic.transform(progress);
+      if (mounted) {
+        setState(() {
+          _petX = startX + (targetX - startX) * curve;
+          _petY = startY + (targetY - startY) * curve;
+          _facingLeft = targetX < startX;
+          _maybeAddFootprint(Offset(_petX, _petY));
+        });
+      }
+      if (step >= totalSteps) {
+        timer.cancel();
+        if (mounted) {
+          _squishController.forward(from: 0.0);
+          SoundService.playMeow(tone: MeowTone.sweet);
+          setState(() {
+            _state = 'IDLE';
+            _showFoodTray = true;
+          });
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '😋', count: 3);
+          _spawnParticles(Offset(_petX, _petY - 35), emoji: '✨', count: 3);
+          _showDialogueBubble('报告主人！波可已飞奔就位，小碗空空求加餐！(๑´ڡ`๑)🥫💕', duration: const Duration(seconds: 4));
+        }
+      }
+    });
+  }
+
+  /// 方向六：睡眠唤醒猫式伸展拉伸瑜伽仪式 (Gentle Wake-up & Cat Stretch Yoga 🧘‍♀️)
+  void _wakeUpWithCatYoga() {
+    _stopRoaming();
+    _idleSeconds = 0;
+    SoundService.stopPurr();
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.lightImpact();
+    }
+    // 阶段 1：揉揉睡眼洗小脸
+    setState(() {
+      _state = 'WASH_FACE';
+      _isCoveredWithBlanket = false;
+    });
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 3);
+    _showDialogueBubble('呼呜... 睡得好香呀，揉揉睡眼惺忪的小脸蛋~ 🫧', duration: const Duration(milliseconds: 1400));
+
+    Timer(const Duration(milliseconds: 1200), () {
+      if (!mounted) return;
+      // 阶段 2：正宗猫式大伸展
+      SoundService.playMeow(tone: MeowTone.sweet);
+      if (widget.petModel.enableHaptics) {
+        HapticFeedback.mediumImpact();
+      }
+      setState(() {
+        _state = 'CAT_STRETCH';
+      });
+      _spawnParticles(Offset(_petX, _petY - 25), emoji: '🥱', count: 3);
+      _spawnParticles(Offset(_petX + 30, _petY - 40), emoji: '✨', count: 3);
+      _showDialogueBubble('哈欠~~~ 伸个大大的猫式懒腰，小屁股翘高高，浑身舒展开啦！🥱✨', duration: const Duration(seconds: 3));
+
+      Timer(const Duration(milliseconds: 2200), () {
+        if (!mounted) return;
+        // 阶段 3：欢喜抖毛，精神百倍
+        _squishController.forward(from: 0.0);
+        if (widget.petModel.isSleeping) {
+          widget.petModel.toggleSleep();
+        }
+        setState(() {
+          _state = 'IDLE';
+        });
+        _showDialogueBubble('睡饱伸展完毕！波可元气满满，准备好和主人玩耍啦~ ☀️🐾');
+      });
+    });
+  }
+
   /// 屏幕全域动态视线与手指追踪
   void _onPointerHoverOrMove(Offset globalPos) {
     if (_isDragging) return;
@@ -1859,6 +2111,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   }
 
   void _onPointerUpOrExit() {
+    _highFiveTimer?.cancel();
     if (_lookTargetPos != null) {
       setState(() => _lookTargetPos = null);
     }
@@ -2024,6 +2277,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isRoaming = false;
     _targetWalkX = null;
 
+    // 方向六：触碰睡眠中的猫咪，触发正宗猫式伸展唤醒仪式
+    if (widget.petModel.isSleeping || _state == 'DOZE_OFF') {
+      _wakeUpWithCatYoga();
+      return;
+    }
+
+    // 方向三：若已处于翻肚皮态，继续揉按触发高频兔子蹬腿
+    if (_state == 'ROLL_ON_BACK' || _state == 'BUNNY_KICKS') {
+      _triggerBunnyKicks();
+      return;
+    }
+
     // 0. 揪尾巴炸毛微互动 (Tail Boop / Pinch - 尾巴敏感禁区惊跳炸毛与高频电波甩尾)
     final isTailTouch = (!_facingLeft && localPos.dx >= 135 && localPos.dx <= 192 && localPos.dy >= 55 && localPos.dy <= 135) ||
                         (_facingLeft && localPos.dx >= 8 && localPos.dx <= 65 && localPos.dy >= 55 && localPos.dy <= 135);
@@ -2151,7 +2416,19 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       return;
     }
 
-    // 6. 摸肉垫 / 肚皮 (High Five / Tummy Poke)
+    // 方向二：摸前爪肉垫触发默契击掌 (High Five 🐾)
+    if (localPos.dy >= 142) {
+      _triggerHighFive(Offset(_petX + (localPos.dx - 100), _petY + (localPos.dy - 100)));
+      return;
+    }
+
+    // 方向三：挠软萌小腹肚皮 (Belly Rub -> 翻滚露肚皮)
+    if (localPos.dy >= 105 && localPos.dy < 142 && (localPos.dx - 100).abs() < 40) {
+      _triggerRollOnBack();
+      return;
+    }
+
+    // 6. 摸肉垫 / 肚皮其他区域
     if (localPos.dy > 120) {
       final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
       final nestX = screenSize.width / 2;
@@ -2160,10 +2437,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _onBedTap(nestX, nestY);
         return;
       }
-      SoundService.playPop();
-      if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
-      _spawnParticles(Offset(_petX, _petY - 10), emoji: '🐾', count: 4);
-      _showDialogueBubble('击掌！High Five~ 击退一切烦恼！🐾⭐');
+      _triggerHighFive(Offset(_petX + (localPos.dx - 100), _petY + (localPos.dy - 100)));
       return;
     }
 
@@ -2275,6 +2549,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _triggerWink();
         }
       });
+
+      // 方向二：在猫咪身前长按手指 (> 450ms) 触发指尖对掌击掌
+      _highFiveTimer?.cancel();
+      if (dist >= 50.0 && dist <= 165.0 && relY >= -25.0 && relY <= 90.0) {
+        _highFiveTimer = Timer(const Duration(milliseconds: 450), () {
+          if (mounted && !_isDragging && _state != 'HIGH_FIVE') {
+            _triggerHighFive(globalPos);
+          }
+        });
+      }
     }
   }
 
@@ -2482,13 +2766,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 child: _buildCatScratchingPost(isNight),
               ),
 
-              // 软装家具 3：左侧就餐角 · 萌宠双联食水一体托盘 (原木陶瓷质感，双碗一体化防滑托盘)
-              Positioned(
-                left: 20.0,
-                top: nestY + 102.0,
-                child: _buildCatDiningStation(nestX, nestY, isNight),
-              ),
-
               // 美味零食投喂已移至底部悬浮投喂坞 _buildLiveFeedingDock (保持中景纯净无遮挡)
 
               // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫咪嘴边)
@@ -2605,7 +2882,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       _stopRoaming();
                       _isChasingYarn = false;
                       _isYarnFlying = false;
-                      _state = 'DRAGGING';
+                      _state = 'DANGLING';
                       _strokeDistance = 0.0;
                       _dragDirectionReversals = 0;
                       _lastDragDirection = 0.0;
@@ -2694,13 +2971,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         return;
                       }
 
-                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (方向四：肉垫减震轻弹 Cushioned Landing + 触地微扬尘)
+                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (方向一/四：肉垫减震轻弹 Cushioned Landing + 触地微扬尘)
                       if (_state != 'DIZZY') {
                         _state = 'IDLE';
                         _squishController.forward(from: 0.0);
                         if (widget.petModel.enableHaptics) {
                           HapticFeedback.lightImpact();
                         }
+                        _spawnParticles(Offset(_petX, _petY + 28), emoji: '💨', count: 2);
                         _spawnParticles(Offset(_petX, _petY + 28), emoji: '🐾', count: 2);
                       }
                     });
@@ -2742,17 +3020,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 ),
               ),
 
-              // 暖绒圆垫前侧轻触响应区 (零视觉遮挡，纯净透明交互，支持轻触圆垫触发幸福踩奶)
+              // 暖绒圆垫前侧轻触响应区 (位于圆垫前缘，零遮挡猫爪，支持轻触圆垫触发幸福踩奶)
               Positioned(
                 key: const ValueKey('cozy_cat_rug'),
-                left: nestX - 90.0,
-                top: nestY + 30.0,
-                width: 180.0,
-                height: 60.0,
+                left: nestX - 85.0,
+                top: nestY + 65.0,
+                width: 170.0,
+                height: 28.0,
                 child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
+                  behavior: HitTestBehavior.opaque,
                   onTap: () => _onBedTap(nestX, nestY),
                 ),
+              ),
+
+              // 软装家具 3：左侧就餐角 · 萌宠双联食水一体托盘 (原木陶瓷防滑托盘，餐盘置于前侧，永不被猫咪遮挡)
+              Positioned(
+                left: 20.0,
+                top: nestY + 102.0,
+                child: _buildCatDiningStation(nestX, nestY, isNight),
               ),
 
               // 暖绒舒睡圆垫小被子 (随呼吸起伏，支持盖被被与掀被被微互动)
@@ -4953,8 +5238,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             margin: const EdgeInsets.symmetric(horizontal: 2.5),
             color: isNight ? const Color(0xFF3730A3).withOpacity(0.4) : const Color(0xFFE2E8F0),
           ),
-          // 右侧：清澈小水碗 (点击波光粼粼涟漪，解渴补水)
+          // 中间：清澈小水碗 (点击波光粼粼涟漪，解渴补水)
           _buildCatWaterBowl(nestX, nestY, isNight),
+          // 优雅陶瓷分隔微线
+          Container(
+            width: 1.0,
+            height: 24,
+            margin: const EdgeInsets.symmetric(horizontal: 2.5),
+            color: isNight ? const Color(0xFF3730A3).withOpacity(0.4) : const Color(0xFFE2E8F0),
+          ),
+          // 右侧：敲敲罐头召唤按钮 (点击发出清脆开饭叮叮声，猫咪全速冲刺狂奔而来)
+          _buildCanSummonButton(nestX, nestY, isNight),
         ],
       ),
     );
@@ -5080,16 +5374,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         });
         _spawnParticles(Offset(100, nestY + 115), emoji: '💧', count: 4);
         _spawnTextParticle(Offset(80, nestY + 95), '解渴补水 💧✨', const Color(0xFF0284C7));
-        widget.petModel.addCleanliness(8);
-        widget.petModel.addMood(6);
-        widget.petModel.addIntimacy(2);
 
-        // 如果猫咪在就餐角附近，触发低头小舔水微表情动作
-        if ((_petX - 80).abs() < 100 && (_petY - (nestY + 105)).abs() < 90) {
-          _triggerBlep();
-          _showDialogueBubble('咕嘟咕嘟~ 清凉甘甜的水好解渴呀！清洁+8 心情+6 💧(ฅ>ω<*ฅ)', duration: const Duration(seconds: 4));
+        // 如果猫咪在就餐角附近，直接触发低头小舔水微表情动作 (方向四)
+        if ((_petX - 85.0).abs() < 100 && (_petY - (nestY + 85.0)).abs() < 90) {
+          _startDrinkingWater(nestY);
         } else {
+          widget.petModel.addCleanliness(8);
+          widget.petModel.addMood(6);
+          widget.petModel.addIntimacy(2);
           _showDialogueBubble('水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨', duration: const Duration(seconds: 3));
+          _startWalkingTo(
+            85.0,
+            nestY + 85.0,
+            'WATER_BOWL',
+            '水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨',
+          );
         }
 
         _waterRippleTimer?.cancel();
@@ -5131,6 +5430,40 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 color: _isWaterRippling
                     ? const Color(0xFF0284C7)
                     : (isNight ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 方向五：敲敲罐头召唤按钮组件 (🥫 开饭叮叮声与全速冲刺狂奔)
+  Widget _buildCanSummonButton(double nestX, double nestY, bool isNight) {
+    return GestureDetector(
+      key: const ValueKey('can_summon_button'),
+      onTap: () => _onCanSummonTap(nestX, nestY),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        decoration: BoxDecoration(
+          color: isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isNight ? const Color(0xFFF59E0B).withOpacity(0.4) : const Color(0xFFFDE68A),
+            width: 1.0,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🥫', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 1.5),
+            Text(
+              '敲罐',
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.bold,
+                color: isNight ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
               ),
             ),
           ],
