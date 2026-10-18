@@ -1353,63 +1353,37 @@ class PetPainter extends CustomPainter {
 
       // 眼白
       final eyeWhitePaint = Paint()..color = Colors.white;
-      final eyeWhiteRect = Rect.fromCenter(center: eyeCenter, width: 22, height: 26);
-      canvas.drawOval(eyeWhiteRect, eyeWhitePaint);
-
-      // 内眼角微润感 (Inner Canthus Tear Glint)
-      final isLeftEye = (eyeCenter == leftEyeCenter);
-      final canthusX = isLeftEye ? eyeCenter.dx + 8.5 : eyeCenter.dx - 8.5;
-      final canthusPaint = Paint()..color = const Color(0x35FB7185);
-      canvas.drawCircle(Offset(canthusX, eyeCenter.dy + 3.0), 1.2, canthusPaint);
+      canvas.drawOval(Rect.fromCenter(center: eyeCenter, width: 22, height: 26), eyeWhitePaint);
 
       final irisCenter = Offset(eyeCenter.dx + gazeX, eyeCenter.dy + gazeY);
       final irisRect = Rect.fromCenter(center: irisCenter, width: 17.5, height: 21.5);
 
+      // 角膜缘柔和深色暗环 (Limbal Ring)
+      final limbalPaint = Paint()..color = const Color(0x30000000);
+      canvas.drawOval(Rect.fromCenter(center: irisCenter, width: 18.5, height: 22.5), limbalPaint);
+
       // 虹膜 3D 宝石凹面渐变 (Iris Gemstone Gradient)
-      // 上方处于眼睑阴影呈现浓郁深宝石色，下方受凹面折射呈现清透焦散光泽
       final irisShader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          _darken(irisColor, 0.40),
+          _darken(irisColor, 0.35),
           irisColor,
           _lighten(irisColor, 0.38),
         ],
         stops: const [0.0, 0.52, 1.0],
       ).createShader(irisRect);
-
-      // 角膜缘深色暗环 (Limbal Ring)
-      final limbalPaint = Paint()
-        ..color = _darken(irisColor, 0.55).withOpacity(0.55)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4;
       canvas.drawOval(irisRect, Paint()..shader = irisShader);
-      canvas.drawOval(irisRect, limbalPaint);
 
-      // 虹膜放射状微细肌理 (Radial Iris Fibers)
-      final spokePaint = Paint()
-        ..color = _lighten(irisColor, 0.45).withOpacity(0.20)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.9;
-      for (double angle = 0; angle < 2 * math.pi; angle += math.pi / 4) {
-        final cosA = math.cos(angle);
-        final sinA = math.sin(angle);
-        canvas.drawLine(
-          Offset(irisCenter.dx + cosA * 4.2, irisCenter.dy + sinA * 5.2),
-          Offset(irisCenter.dx + cosA * 7.5, irisCenter.dy + sinA * 9.2),
-          spokePaint,
-        );
-      }
-
-      // 下缘焦散透光弧 (Bottom Caustic Crescent Glow)
+      // 下缘焦散透光弧 (Bottom Caustic Crescent Glow - 琉璃通透感)
       final causticPaint = Paint()
         ..color = _lighten(irisColor, 0.70).withOpacity(0.50)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5
+        ..strokeWidth = 1.4
         ..strokeCap = StrokeCap.round;
       final causticPath = Path()
-        ..moveTo(irisCenter.dx - 4.8, irisCenter.dy + 6.2)
-        ..quadraticBezierTo(irisCenter.dx, irisCenter.dy + 8.8, irisCenter.dx + 4.8, irisCenter.dy + 6.2);
+        ..moveTo(irisCenter.dx - 4.5, irisCenter.dy + 6.0)
+        ..quadraticBezierTo(irisCenter.dx, irisCenter.dy + 8.4, irisCenter.dx + 4.5, irisCenter.dy + 6.0);
       canvas.drawPath(causticPath, causticPaint);
 
       if (isDilated) {
@@ -1445,32 +1419,6 @@ class PetPainter extends CustomPainter {
         canvas.drawCircle(Offset(irisCenter.dx + 2.0, irisCenter.dy + 2.8), 1.5, starPaint);
         canvas.drawCircle(Offset(irisCenter.dx - 0.2, irisCenter.dy - 6.0), 1.0, starPaint);
       }
-
-      // 上眼睑眼窝自然嵌入立体投影 (Upper Eyelid Ambient Occlusion)
-      final lidShadowPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.center,
-          colors: const [
-            Color(0x550F172A),
-            Color(0x000F172A),
-          ],
-        ).createShader(eyeWhiteRect);
-      canvas.save();
-      canvas.clipPath(Path()..addOval(eyeWhiteRect));
-      canvas.drawRect(eyeWhiteRect, lidShadowPaint);
-      canvas.restore();
-
-      // 精致上睫线外轮廓 (Tapered Lash Line)
-      final lashLinePaint = Paint()
-        ..color = const Color(0xFF1E293B)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0
-        ..strokeCap = StrokeCap.round;
-      final lashPath = Path()
-        ..moveTo(eyeCenter.dx - 11.0, eyeCenter.dy)
-        ..quadraticBezierTo(eyeCenter.dx, eyeCenter.dy - 13.0, eyeCenter.dx + 11.0, eyeCenter.dy);
-      canvas.drawPath(lashPath, lashLinePaint);
     }
   }
 
@@ -1714,25 +1662,6 @@ class PetPainter extends CustomPainter {
       ..moveTo(headCenter.dx + 18, headCenter.dy + 17)
       ..quadraticBezierTo(headCenter.dx + 38, headCenter.dy + 22, headCenter.dx + 55, headCenter.dy + 26);
     canvas.drawPath(rightBot, whiskerPaint);
-
-    // 3. 额头眉毛触觉须 (Superciliary Whiskers - 猫咪标志性超长纤细眉毛触须)
-    final browPaint = Paint()
-      ..color = whiskerColor.withOpacity(0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.1
-      ..strokeCap = StrokeCap.round;
-
-    // 左眉须：从左眼上方优雅上扬外飘
-    final leftBrow = Path()
-      ..moveTo(headCenter.dx - 14, headCenter.dy - 14)
-      ..quadraticBezierTo(headCenter.dx - 26, headCenter.dy - 26, headCenter.dx - 36, headCenter.dy - 32);
-    canvas.drawPath(leftBrow, browPaint);
-
-    // 右眉须：从右眼上方对称上扬外飘
-    final rightBrow = Path()
-      ..moveTo(headCenter.dx + 14, headCenter.dy - 14)
-      ..quadraticBezierTo(headCenter.dx + 26, headCenter.dy - 26, headCenter.dx + 36, headCenter.dy - 32);
-    canvas.drawPath(rightBrow, browPaint);
   }
 
   void _drawPlumpSegmentedPaw(
