@@ -6,6 +6,7 @@ import 'package:flutter_pet/main.dart';
 import 'package:flutter_pet/models/pet_model.dart';
 import 'package:flutter_pet/services/sensor_service.dart';
 import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
+import 'package:flutter_pet/renderers/pet_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -208,5 +209,68 @@ void main() {
       expect(find.byKey(const ValueKey('bottom_floating_bar')), findsOneWidget);
       expect(find.byKey(const ValueKey('cyber_gacha_fab')), findsOneWidget);
     });
+
+    testWidgets('Realistic Billowing Cape Physics & 3D Turtle Shell Backpack Render Test', (WidgetTester tester) async {
+      final pet = PetModel();
+      pet.setDecoration('back', 'shell_turtle');
+      pet.setDecoration('neck', 'royal_cape');
+
+      // 验证正面视角正常绘制
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomPaint(
+              size: const Size(220, 220),
+              painter: PetPainter(
+                model: pet,
+                animTime: 1.5,
+                state: 'IDLE',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(CustomPaint), findsWidgets);
+
+      // 验证赛博披风在待机与快乐旋转(背身视角)下正常绘制
+      pet.setDecoration('back', 'cape_cyber');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomPaint(
+              size: const Size(220, 220),
+              painter: PetPainter(
+                model: pet,
+                animTime: 2.0,
+                state: 'HAPPY_SPIN',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(CustomPaint), findsWidgets);
+
+      // 验证龟壳在背身视角(3D浮雕六边形全壳)下正常绘制
+      pet.setDecoration('back', 'shell_turtle');
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CustomPaint(
+              size: const Size(220, 220),
+              painter: PetPainter(
+                model: pet,
+                animTime: 2.5,
+                state: 'HAPPY_SPIN',
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(CustomPaint), findsWidgets);
+    });
   });
 }
+

@@ -2217,36 +2217,46 @@ class PetPainter extends CustomPainter {
         canvas.drawLine(Offset(i.toDouble(), 44), Offset(i.toDouble(), 48), fringePaint);
       }
     } else if (neckDeco == 'royal_cape') {
-      // 🦸‍♂️ 皇家丝绒披风前饰 (正面视角：仅绘制纯金领扣与双肩搭扣，披风主体在身后飘逸；背面视角：披风主体覆盖后背)
+      // 🦸‍♂️ 皇家丝绒披风前饰 (正面视角：纯金领扣、肩部丝绒搭扣与星辉宝扣；背面视角：披风主体覆盖后背展示金纹刺绣)
       if (isBackView) {
         // 背面视角：披风覆盖后背，展示威武金纹与丝绒褶皱
         final capePaint = Paint()
-          ..color = const Color(0xFF581C87)
-          ..style = PaintingStyle.fill;
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
+          ).createShader(const Rect.fromLTRB(-42, 16, 42, 74));
         final goldTrim = Paint()
           ..color = const Color(0xFFF59E0B)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.4;
+          ..strokeWidth = 2.6;
 
         final capePath = Path()
-          ..moveTo(-22, 18)
-          ..quadraticBezierTo(-38, 44, -30, 68)
-          ..quadraticBezierTo(0, 74, 30, 68)
-          ..quadraticBezierTo(38, 44, 22, 18)
+          ..moveTo(-24, 16)
+          ..quadraticBezierTo(-44, 42, -34, 70)
+          ..quadraticBezierTo(0, 76, 34, 70)
+          ..quadraticBezierTo(44, 42, 24, 16)
           ..close();
         canvas.drawPath(capePath, capePaint);
         canvas.drawPath(capePath, goldTrim);
 
-        // 背部皇家金徽刺绣
+        // 背部皇家金徽刺绣 (Royal Crest Sunburst)
         final emblemPaint = Paint()
           ..color = const Color(0xFFFBBF24)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.8;
-        canvas.drawCircle(const Offset(0, 42), 7.0, emblemPaint);
-        canvas.drawLine(const Offset(-4, 42), const Offset(4, 42), emblemPaint);
-        canvas.drawLine(const Offset(0, 38), const Offset(0, 46), emblemPaint);
+          ..strokeWidth = 2.0;
+        canvas.drawCircle(const Offset(0, 42), 8.5, emblemPaint);
+        canvas.drawCircle(const Offset(0, 42), 4.5, Paint()..color = const Color(0xFFFDE047));
+        for (int i = 0; i < 8; i++) {
+          final rad = i * math.pi / 4;
+          canvas.drawLine(
+            Offset(9.5 * math.cos(rad), 42 + 9.5 * math.sin(rad)),
+            Offset(14.0 * math.cos(rad), 42 + 14.0 * math.sin(rad)),
+            emblemPaint,
+          );
+        }
       } else {
-        // 正面视角：精致纯金领链与星辉红宝石胸扣，披风主体在身后的 _drawBackCape 绘制，胸腹与爪爪绝不遮挡！
+        // 正面视角：精致纯金领链与星辉红宝石胸扣，披风主体在身后飘逸
         final chainPaint = Paint()
           ..color = const Color(0xFFF59E0B)
           ..style = PaintingStyle.stroke
@@ -2269,6 +2279,243 @@ class PetPainter extends CustomPainter {
         canvas.drawCircle(const Offset(-1, 23), 1.0, Paint()..color = Colors.white);
       }
     }
+
+    // --- 背部配饰的前胸构件 (皮质双肩背带/赛博肩甲) 与背身视角覆盖 (3D 浮雕龟壳/赛博披风后背) ---
+    final backDeco = model.decorations['back'];
+    if (backDeco == 'shell_turtle') {
+      if (isBackView) {
+        // 🐢 背面视角：完整 3D 浮雕六边形翡翠乌龟壳背包
+        final shellCenter = const Offset(0, 38);
+        final shellW = 98.0;
+        final shellH = 80.0;
+
+        // 1. 软萌龟爪与小尾巴 (Tiny cute flippers & tail)
+        final limbPaint = Paint()..color = const Color(0xFF22C55E);
+        // 小尾巴
+        final tailPath = Path()
+          ..moveTo(-4, 76)
+          ..quadraticBezierTo(0, 84, 0, 85)
+          ..quadraticBezierTo(0, 84, 4, 76)
+          ..close();
+        canvas.drawPath(tailPath, limbPaint);
+        canvas.drawPath(tailPath, Paint()
+          ..color = const Color(0xFF166534)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+
+        // 四个小龟爪 (从龟壳下伸出)
+        canvas.drawCircle(const Offset(-42, 24), 6.0, limbPaint);
+        canvas.drawCircle(const Offset(42, 24), 6.0, limbPaint);
+        canvas.drawCircle(const Offset(-38, 62), 6.0, limbPaint);
+        canvas.drawCircle(const Offset(38, 62), 6.0, limbPaint);
+
+        // 2. 龟壳底层阴影
+        canvas.drawOval(
+          Rect.fromCenter(center: const Offset(0, 41), width: shellW + 2, height: shellH + 2),
+          Paint()..color = const Color(0x44000000),
+        );
+
+        // 3. 3D 金绿波浪卷边 (Scalloped Bevel Rim)
+        final rimPaint = Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFEF08A), Color(0xFF84CC16), Color(0xFF15803D)],
+          ).createShader(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4.2;
+        canvas.drawOval(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH), rimPaint);
+
+        // 4. 翡翠球体主甲 (Emerald Spherical Dome)
+        final domePaint = Paint()
+          ..shader = const RadialGradient(
+            center: Alignment(0.0, -0.2),
+            radius: 0.85,
+            colors: [Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D), Color(0xFF14532D)],
+            stops: [0.0, 0.45, 0.8, 1.0],
+          ).createShader(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH));
+        canvas.drawOval(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH), domePaint);
+
+        // 5. 立体浮雕六边形背甲蜂窝花纹 (Hexagonal Embossed Scutes)
+        void drawHexScute(Offset center, double radius) {
+          final path = Path();
+          for (int i = 0; i < 6; i++) {
+            final angle = (i * 60 + 30) * math.pi / 180;
+            final pt = Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle));
+            if (i == 0) {
+              path.moveTo(pt.dx, pt.dy);
+            } else {
+              path.lineTo(pt.dx, pt.dy);
+            }
+          }
+          path.close();
+
+          canvas.drawPath(path, Paint()..color = const Color(0xFF16A34A).withOpacity(0.65));
+          canvas.drawPath(path, Paint()
+            ..color = const Color(0xFF14532D)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2.2);
+          canvas.drawPath(path, Paint()
+            ..color = const Color(0xFF86EFAC).withOpacity(0.55)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0);
+        }
+
+        drawHexScute(const Offset(0, 22), 10.0);
+        drawHexScute(const Offset(0, 38), 11.5);
+        drawHexScute(const Offset(0, 54), 10.0);
+        drawHexScute(const Offset(-24, 29), 9.0);
+        drawHexScute(const Offset(24, 29), 9.0);
+        drawHexScute(const Offset(-24, 47), 9.0);
+        drawHexScute(const Offset(24, 47), 9.0);
+
+        // 6. 3D 球形玻璃高光
+        final shinePaint = Paint()
+          ..color = Colors.white.withOpacity(0.28)
+          ..style = PaintingStyle.fill;
+        canvas.drawOval(
+          Rect.fromCenter(center: const Offset(-16, 24), width: 22, height: 12),
+          shinePaint,
+        );
+      } else {
+        // 🐢 正面视角：精致焦糖皮革双肩背带 + 黄铜日字调节扣 + 胸口小乌龟萌趣徽章
+        final strapPaint = Paint()
+          ..color = const Color(0xFFB45309)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4.0
+          ..strokeCap = StrokeCap.round;
+        final strapStitch = Paint()
+          ..color = const Color(0xFFFDE68A).withOpacity(0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..strokeCap = StrokeCap.round;
+
+        // 左肩背带
+        final leftStrap = Path()
+          ..moveTo(-22, 12)
+          ..quadraticBezierTo(-24, 28, -17, 48);
+        canvas.drawPath(leftStrap, strapPaint);
+        canvas.drawPath(leftStrap, strapStitch);
+
+        // 右肩背带
+        final rightStrap = Path()
+          ..moveTo(22, 12)
+          ..quadraticBezierTo(24, 28, 17, 48);
+        canvas.drawPath(rightStrap, strapPaint);
+        canvas.drawPath(rightStrap, strapStitch);
+
+        // 胸前防滑横置固定胸带
+        final chestStrap = Path()
+          ..moveTo(-20, 30)
+          ..quadraticBezierTo(0, 33, 20, 30);
+        canvas.drawPath(chestStrap, Paint()
+          ..color = const Color(0xFF92400E)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round);
+
+        // 双肩黄铜日字调节扣
+        final brassBuckle = Paint()..color = const Color(0xFFFBBF24);
+        final brassHole = Paint()..color = const Color(0xFF78350F);
+        for (final bx in [-21.0, 21.0]) {
+          final bRect = RRect.fromRectAndRadius(
+            Rect.fromCenter(center: Offset(bx, 22), width: 7.0, height: 5.5),
+            const Radius.circular(1.5),
+          );
+          canvas.drawRRect(bRect, brassBuckle);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromCenter(center: Offset(bx, 22), width: 3.2, height: 2.2),
+              const Radius.circular(0.8),
+            ),
+            brassHole,
+          );
+        }
+
+        // 胸口中央可爱小乌龟徽章
+        canvas.drawCircle(const Offset(0, 32), 6.5, Paint()..color = const Color(0xFFFBBF24));
+        canvas.drawCircle(const Offset(0, 32), 5.0, Paint()..color = const Color(0xFF16A34A));
+        canvas.drawCircle(const Offset(-1.5, 30.5), 1.2, Paint()..color = Colors.white.withOpacity(0.8));
+      }
+    } else if (backDeco == 'cape_cyber') {
+      if (isBackView) {
+        // 🦸‍♂️ 赛博披风背身视角：覆盖后背的战术纳米护甲斗篷与能量脊椎
+        final backMantle = Path()
+          ..moveTo(-24, 18)
+          ..lineTo(-36, 42)
+          ..lineTo(-26, 68)
+          ..lineTo(0, 74)
+          ..lineTo(26, 68)
+          ..lineTo(36, 42)
+          ..lineTo(24, 18)
+          ..close();
+        canvas.drawPath(backMantle, Paint()..color = const Color(0xFF0F172A));
+        canvas.drawPath(backMantle, Paint()
+          ..color = const Color(0xFF00F0FF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.0);
+
+        // 赛博脊椎能量光轨 (Cyber Spine Vertebrae)
+        final spinePaint = Paint()
+          ..color = const Color(0xFF00F0FF)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round;
+        for (int y = 28; y <= 58; y += 8) {
+          canvas.drawLine(Offset(-6, y.toDouble()), Offset(6, y.toDouble()), spinePaint);
+        }
+        canvas.drawLine(const Offset(0, 24), const Offset(0, 64), Paint()
+          ..color = const Color(0xFFEC4899)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8);
+      } else {
+        // 🦸‍♂️ 赛博披风正面视角：两肩碳纤维高科技肩甲 + 青蓝能量灯 + 领口全息能量核心反应堆
+        canvas.drawPath(
+          Path()..moveTo(-24, 20)..quadraticBezierTo(0, 26, 24, 20),
+          Paint()
+            ..color = const Color(0xFF1E293B)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3.6
+            ..strokeCap = StrokeCap.round,
+        );
+
+        // 左肩战术碳纤肩甲
+        final leftShoulder = Path()
+          ..moveTo(-26, 14)
+          ..lineTo(-18, 17)
+          ..lineTo(-20, 26)
+          ..lineTo(-29, 23)
+          ..close();
+        canvas.drawPath(leftShoulder, Paint()..color = const Color(0xFF0F172A));
+        canvas.drawPath(leftShoulder, Paint()
+          ..color = const Color(0xFF38BDF8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+        canvas.drawCircle(const Offset(-23, 20), 1.8, Paint()..color = const Color(0xFF00F0FF));
+
+        // 右肩战术碳纤肩甲
+        final rightShoulder = Path()
+          ..moveTo(26, 14)
+          ..lineTo(18, 17)
+          ..lineTo(20, 26)
+          ..lineTo(29, 23)
+          ..close();
+        canvas.drawPath(rightShoulder, Paint()..color = const Color(0xFF0F172A));
+        canvas.drawPath(rightShoulder, Paint()
+          ..color = const Color(0xFF38BDF8)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5);
+        canvas.drawCircle(const Offset(23, 20), 1.8, Paint()..color = const Color(0xFF00F0FF));
+
+        // 领口中央全息能量反应堆 (Cyan Arc Core)
+        final coreGlow = Paint()
+          ..color = const Color(0x6600F0FF)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+        canvas.drawCircle(const Offset(0, 23), 5.5, coreGlow);
+        canvas.drawCircle(const Offset(0, 23), 4.2, Paint()..color = const Color(0xFF00F0FF));
+        canvas.drawCircle(const Offset(0, 23), 2.0, Paint()..color = Colors.white);
+      }
+    }
   }
 
   /// 绘制背部配饰 (挂在后背向两侧舒展，正面时在身体后层，绝不遮挡胸腹与猫爪)
@@ -2276,75 +2523,164 @@ class PetPainter extends CustomPainter {
     final neckDeco = model.decorations['neck'];
     final backDeco = model.decorations['back'];
 
-    // 1. 皇家丝绒披风后摆
+    // 1. 皇家丝绒披风后摆 (宽体大摆 132dp，双层丝绒暗褶与纯金麦穗流苏)
     if (neckDeco == 'royal_cape' && !isBackView) {
-      final capePaint = Paint()
-        ..color = const Color(0xFF581C87)
-        ..style = PaintingStyle.fill;
+      final t = animTime;
+      final waveL = math.sin(t * 3.2) * 4.5;
+      final waveR = math.cos(t * 3.2 + 0.6) * 4.5;
+      final waveMid = math.sin(t * 2.2) * 2.8;
+
+      final leftX = -64.0 + waveL;
+      final rightX = 64.0 + waveR;
+      final bottomY = 76.0 + waveMid;
+
+      // 内层丝绒深暗阴影褶皱 (Ambient Shadow Fold)
+      final innerVelvetPath = Path()
+        ..moveTo(-20, 20)
+        ..cubicTo(-46 + waveL * 0.6, 42, -54 + waveL * 0.8, 58, leftX + 5, bottomY - 3)
+        ..quadraticBezierTo(0, bottomY + 5, rightX - 5, bottomY - 3)
+        ..cubicTo(54 + waveR * 0.8, 58, 46 + waveR * 0.6, 42, 20, 20)
+        ..close();
+      canvas.drawPath(innerVelvetPath, Paint()..color = const Color(0xFF2E0854));
+
+      // 外层勃艮第与皇家紫丝绒渐变 (Imperial Velvet Gradient)
+      final capePath = Path()
+        ..moveTo(-22, 18)
+        ..cubicTo(-48 + waveL * 0.7, 40, -58 + waveL * 0.9, 56, leftX, bottomY)
+        ..quadraticBezierTo(0, bottomY + 6, rightX, bottomY)
+        ..cubicTo(58 + waveR * 0.9, 56, 48 + waveR * 0.7, 40, 22, 18)
+        ..close();
+
+      final velvetGradient = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
+      ).createShader(Rect.fromLTRB(-66, 18, 66, 84));
+      canvas.drawPath(capePath, Paint()..shader = velvetGradient);
+
+      // 纯金双层麦穗流苏滚边 (Gold Bullion Fringe & Trim)
       final goldTrim = Paint()
         ..color = const Color(0xFFF59E0B)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4;
-
-      final wave = math.sin(animTime * 3.2) * 3.5;
-      final wave2 = math.cos(animTime * 3.2) * 2.0;
-
-      final capePath = Path()
-        ..moveTo(-22, 22)
-        ..cubicTo(-46 + wave, 44, -44 + wave, 62, -34 + wave, 72)
-        ..quadraticBezierTo(0, 78 + wave2, 34 + wave, 72)
-        ..cubicTo(44 + wave, 62, 46 + wave, 44, 22, 22)
-        ..close();
-
-      canvas.drawPath(capePath, capePaint);
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round;
       canvas.drawPath(capePath, goldTrim);
 
-      final innerFold = Paint()
-        ..color = const Color(0xFF3B0764).withOpacity(0.4)
-        ..style = PaintingStyle.fill;
-      final innerPath = Path()
-        ..moveTo(-18, 26)
-        ..quadraticBezierTo(-34 + wave, 52, -26 + wave, 70)
-        ..quadraticBezierTo(0, 74 + wave2, 26 + wave, 70)
-        ..quadraticBezierTo(34 + wave, 52, 18, 26)
-        ..close();
-      canvas.drawPath(innerPath, innerFold);
+      // 底边华丽金珠麦穗流苏点缀
+      final goldBead = Paint()..color = const Color(0xFFFEF08A);
+      for (double step = 0.15; step <= 0.85; step += 0.14) {
+        final bx = leftX + (rightX - leftX) * step;
+        final by = bottomY + math.sin(step * math.pi) * 6.0;
+        canvas.drawCircle(Offset(bx, by), 2.0, goldBead);
+        canvas.drawLine(Offset(bx, by), Offset(bx, by + 4), Paint()
+          ..color = const Color(0xFFF59E0B)
+          ..strokeWidth = 1.4);
+      }
     }
 
     if (backDeco == null || backDeco == 'none') return;
 
     if (backDeco == 'cape_cyber') {
       // 🦸‍♂️ 赛博霓虹披风 (Cyberpunk Neon Cape)
-      final wave = math.sin(animTime * 3.8) * 4.0;
-      final wave2 = math.cos(animTime * 3.8) * 2.5;
+      // 真实布料多频谐波风浪物理仿真 (Primary wave + High-frequency flutter)
+      final t = animTime;
+      final waveL = math.sin(t * 3.6) * 5.0 + math.cos(t * 5.2 + 0.4) * 2.5;
+      final waveR = math.cos(t * 3.6 + 0.9) * 5.0 + math.sin(t * 5.2 + 1.2) * 2.5;
+      final waveMid = math.sin(t * 2.6) * 3.0;
 
-      final cyberPaint = Paint()
-        ..color = const Color(0xFF0F172A)
-        ..style = PaintingStyle.fill;
-      final neonCyanTrim = Paint()
-        ..color = const Color(0xFF00F0FF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2;
+      // 宽体大摆外扩：翼展大幅扩展至 134dp (从 -67 到 +67)，两翼自如外扩翻飞，气势威武
+      final leftWingX = -67.0 + waveL;
+      final rightWingX = 67.0 + waveR;
+      final leftWingY = 74.0 + waveL * 0.4;
+      final rightWingY = 74.0 + waveR * 0.4;
+      final midTailY = 84.0 + waveMid;
 
-      final cyberPath = Path()
-        ..moveTo(-22, 20)
-        ..cubicTo(-48 + wave, 44, -46 + wave, 64, -36 + wave, 74)
-        ..quadraticBezierTo(0, 80 + wave2, 36 + wave, 74)
-        ..cubicTo(46 + wave, 64, 48 + wave, 44, 22, 20)
+      // --- 第 1 层：环境遮蔽与内衬暗褶 (Deep Ambient Shadow & Inner Cloth Fold) ---
+      final innerShadowPath = Path()
+        ..moveTo(-20, 18)
+        ..cubicTo(-46 + waveL * 0.6, 38, -58 + waveL * 0.8, 56, leftWingX + 6, leftWingY)
+        ..lineTo(-28 + waveL * 0.3, 72 + waveMid * 0.5)
+        ..lineTo(0, midTailY - 3)
+        ..lineTo(28 + waveR * 0.3, 72 + waveMid * 0.5)
+        ..lineTo(rightWingX - 6, rightWingY)
+        ..cubicTo(58 + waveR * 0.8, 56, 46 + waveR * 0.6, 38, 20, 18)
+        ..close();
+      canvas.drawPath(innerShadowPath, Paint()..color = const Color(0xFF080C16));
+
+      // --- 第 2 层：外层披风主体 (战术午夜深紫渐变，立体布料质感) ---
+      final outerCapePath = Path()
+        ..moveTo(-22, 16)
+        ..cubicTo(-48 + waveL * 0.7, 36, -62 + waveL * 0.9, 54, leftWingX, leftWingY)
+        // 燕尾锯齿战术多边形切割
+        ..lineTo(-32 + waveL * 0.4, 73 + waveMid * 0.6)
+        ..lineTo(0, midTailY)
+        ..lineTo(32 + waveR * 0.4, 73 + waveMid * 0.6)
+        ..lineTo(rightWingX, rightWingY)
+        ..cubicTo(62 + waveR * 0.9, 54, 48 + waveR * 0.7, 36, 22, 16)
         ..close();
 
-      canvas.drawPath(cyberPath, cyberPaint);
-      canvas.drawPath(cyberPath, neonCyanTrim);
+      final capeGradient = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF312E81)],
+        stops: [0.0, 0.55, 1.0],
+      ).createShader(Rect.fromLTRB(-70, 16, 70, 88));
+      canvas.drawPath(outerCapePath, Paint()..shader = capeGradient);
 
-      // 电路线路光纹与粉紫光斑
-      final circuitPaint = Paint()
-        ..color = const Color(0xFFEC4899)
+      // --- 第 3 层：立体面料流线光泽折痕 (Volumetric Fabric Highlights) ---
+      final creasePaint = Paint()
+        ..color = const Color(0xFF6366F1).withOpacity(0.35)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4;
-      canvas.drawLine(Offset(-16 + wave * 0.5, 34), Offset(-24 + wave, 60), circuitPaint);
-      canvas.drawLine(Offset(16 + wave * 0.5, 34), Offset(24 + wave, 60), circuitPaint);
-      canvas.drawCircle(Offset(-24 + wave, 60), 2.2, Paint()..color = const Color(0xFF00F0FF));
-      canvas.drawCircle(Offset(24 + wave, 60), 2.2, Paint()..color = const Color(0xFF00F0FF));
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(const Offset(-16, 20), Offset(-32 + waveL * 0.4, 73 + waveMid * 0.6), creasePaint);
+      canvas.drawLine(const Offset(16, 20), Offset(32 + waveR * 0.4, 73 + waveMid * 0.6), creasePaint);
+      canvas.drawLine(const Offset(0, 20), Offset(0, midTailY - 2), creasePaint);
+
+      // --- 第 4 层：青蓝全息激光发光滚边 (Luminous Cyber Cyan Laser Bloom & Core) ---
+      final laserGlow = Paint()
+        ..color = const Color(0x6600F0FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.8
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+      canvas.drawPath(outerCapePath, laserGlow);
+
+      final laserCore = Paint()
+        ..color = const Color(0xFF00F0FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(outerCapePath, laserCore);
+
+      // --- 第 5 层：流动赛博回路与荧光脉冲节点 (Pulsing Cyber Circuits) ---
+      final pulse = (math.sin(t * 5.0) * 0.5 + 0.5);
+      final circuitMagenta = Paint()
+        ..color = Color.lerp(const Color(0xFFEC4899), const Color(0xFFF43F5E), pulse)!
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6;
+
+      // 左翼电路流
+      final leftCircuit = Path()
+        ..moveTo(-26 + waveL * 0.3, 36)
+        ..lineTo(-44 + waveL * 0.6, 52)
+        ..lineTo(-44 + waveL * 0.6, 62)
+        ..lineTo(leftWingX + 8, leftWingY - 6);
+      canvas.drawPath(leftCircuit, circuitMagenta);
+
+      // 右翼电路流
+      final rightCircuit = Path()
+        ..moveTo(26 + waveR * 0.3, 36)
+        ..lineTo(44 + waveR * 0.6, 52)
+        ..lineTo(44 + waveR * 0.6, 62)
+        ..lineTo(rightWingX - 8, rightWingY - 6);
+      canvas.drawPath(rightCircuit, circuitMagenta);
+
+      // 脉冲发光能量节点
+      final nodeGlow = Paint()..color = const Color(0xFF00F0FF);
+      canvas.drawCircle(Offset(-44 + waveL * 0.6, 52), 2.5 + pulse * 1.2, nodeGlow);
+      canvas.drawCircle(Offset(44 + waveR * 0.6, 52), 2.5 + pulse * 1.2, nodeGlow);
+      canvas.drawCircle(Offset(0, midTailY - 10), 2.8 + pulse * 1.0, Paint()..color = const Color(0xFFEC4899));
 
     } else if (backDeco == 'wings_angel') {
       // 🪽 天使羽翼 (Radiant Angel Wings)
@@ -2384,25 +2720,78 @@ class PetPainter extends CustomPainter {
       canvas.restore();
 
     } else if (backDeco == 'shell_turtle') {
-      // 🐢 萌趣龟壳 (Cute Turtle Shell)
-      final shellCenter = const Offset(0, 42);
-      final shellRect = Rect.fromCenter(center: shellCenter, width: 62, height: 46);
-      canvas.drawOval(shellRect, Paint()..color = const Color(0xFF15803D));
-      canvas.drawOval(
-        shellRect,
-        Paint()
-          ..color = const Color(0xFF166534)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0,
-      );
+      // 🐢 萌趣龟壳背包：身后饱满隆起的翡翠小龟壳 (左右各露出 16dp，两翼圆润饱满，无论正面或侧身均极其醒目)
+      if (!isBackView) {
+        final shellCenter = const Offset(0, 36);
+        final shellW = 126.0;
+        final shellH = 88.0;
 
-      // 龟壳六边形斑块
-      final platePaint = Paint()
-        ..color = const Color(0xFF4ADE80)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(shellCenter, 9.0, platePaint);
-      for (final ox in [-16.0, 16.0]) {
-        canvas.drawCircle(Offset(shellCenter.dx + ox, shellCenter.dy), 7.0, platePaint);
+        // 1. 龟壳底层环境阴影 (Soft Ambient Occlusion)
+        canvas.drawOval(
+          Rect.fromCenter(center: const Offset(0, 40), width: shellW + 4, height: shellH + 4),
+          Paint()..color = const Color(0x33000000),
+        );
+
+        // 2. 3D 立体金绿边缘裙边 (Golden Lime Bevel Rim)
+        final rimPaint = Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFDE047), Color(0xFF84CC16), Color(0xFF166534)],
+          ).createShader(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH))
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.8;
+        canvas.drawOval(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH), rimPaint);
+
+        // 3. 翡翠天然龟甲球形主甲 (Emerald Dome with Volumetric Gradient)
+        final domePaint = Paint()
+          ..shader = const RadialGradient(
+            center: Alignment(0.0, -0.2),
+            radius: 0.85,
+            colors: [Color(0xFF4ADE80), Color(0xFF22C55E), Color(0xFF15803D), Color(0xFF14532D)],
+            stops: [0.0, 0.45, 0.8, 1.0],
+          ).createShader(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH));
+        canvas.drawOval(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH), domePaint);
+
+        // 4. 猫咪身侧清晰可见的两侧蜂窝龟甲纹理 (Flank Hexagonal Scutes)
+        final flankScuteFill = Paint()..color = const Color(0xFF86EFAC).withOpacity(0.45);
+        final flankScuteBorder = Paint()
+          ..color = const Color(0xFF14532D)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8;
+
+        // 左侧翼露出龟板 (3 块错落蜂窝鳞片)
+        final leftScutes = [
+          const Offset(-52, 22),
+          const Offset(-56, 38),
+          const Offset(-50, 54),
+        ];
+        for (final pos in leftScutes) {
+          canvas.drawCircle(pos, 8.5, flankScuteFill);
+          canvas.drawCircle(pos, 8.5, flankScuteBorder);
+        }
+
+        // 右侧翼露出龟板 (3 块错落蜂窝鳞片)
+        final rightScutes = [
+          const Offset(52, 22),
+          const Offset(56, 38),
+          const Offset(50, 54),
+        ];
+        for (final pos in rightScutes) {
+          canvas.drawCircle(pos, 8.5, flankScuteFill);
+          canvas.drawCircle(pos, 8.5, flankScuteBorder);
+        }
+
+        // 顶部小背包提手挂环 (Backpack Loop peeking over neck)
+        final loopPaint = Paint()
+          ..color = const Color(0xFFB45309)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.2
+          ..strokeCap = StrokeCap.round;
+        final loopPath = Path()
+          ..moveTo(-10, -3)
+          ..quadraticBezierTo(0, -11, 10, -3);
+        canvas.drawPath(loopPath, loopPaint);
       }
     }
   }
