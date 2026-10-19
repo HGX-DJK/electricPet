@@ -156,17 +156,25 @@ class FeedingDialog extends StatelessWidget {
               itemCount: PetModel.foodMenu.length,
               itemBuilder: (context, index) {
                 final food = PetModel.foodMenu[index];
-                final pType = food['personality'] as String?;
+                final pData = food['personality'];
+                String pType = '';
+                int pVal = 1;
+                if (pData is List && pData.isNotEmpty) {
+                  pType = pData[0].toString().toLowerCase();
+                  if (pData.length > 1 && pData[1] is num) {
+                    pVal = (pData[1] as num).toInt();
+                  }
+                }
                 String pBadge = '';
                 Color pColor = const Color(0xFFD97706);
-                if (pType == 'HACKER') {
-                  pBadge = ' · 极客+1';
+                if (pType == 'tech') {
+                  pBadge = ' · 极客+$pVal';
                   pColor = const Color(0xFF0EA5E9);
-                } else if (pType == 'ATHLETE') {
-                  pBadge = ' · 运动+1';
+                } else if (pType == 'sport') {
+                  pBadge = ' · 运动+$pVal';
                   pColor = const Color(0xFFEF4444);
-                } else if (pType == 'LAZY') {
-                  pBadge = ' · 佛系+1';
+                } else if (pType == 'lazy') {
+                  pBadge = ' · 佛系+$pVal';
                   pColor = const Color(0xFF10B981);
                 }
 

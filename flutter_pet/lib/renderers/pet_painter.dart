@@ -2827,7 +2827,7 @@ class PetPainter extends CustomPainter {
 
   /// 绘制禅意蒲团软垫 (佛系大懒喵或榻榻米房专属)
   void _drawZenCushion(Canvas canvas, Offset center) {
-    final isZenNeeded = model.personality == 'LAZY' || model.habitat == 'zen_tatami';
+    final isZenNeeded = model.personality == 'LAZY' || model.habitat == 'zen_tatami' || model.decorations['back'] == 'cushion_zen';
     if (!isZenNeeded) return;
 
     final cushionCenter = Offset(center.dx, center.dy + 66);

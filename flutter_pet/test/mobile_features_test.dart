@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_pet/models/pet_model.dart';
@@ -9,6 +10,10 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('dev.fluttercommunity.plus/sensors/method'),
+      (MethodCall methodCall) async => null,
+    );
   });
 
   group('Mobile Pet 100% Alignment & Hardware Perceiving Tests', () {
@@ -104,6 +109,41 @@ void main() {
       SensorService.stopListening();
       expect(SensorService.tiltX, equals(0.0));
       expect(SensorService.isRunning, isFalse);
+    });
+
+    test('All 10 Foods Feeding and Personality Integration Test', () {
+      final pet = PetModel();
+      expect(PetModel.foodMenu.length, equals(10));
+
+      for (final food in PetModel.foodMenu) {
+        final id = food['id'] as String;
+        final oldFed = pet.totalFedCount;
+        final ok = pet.feed(id);
+        expect(ok, isTrue);
+        expect(pet.totalFedCount, equals(oldFed + 1));
+        expect(food['name'].toString().isNotEmpty, isTrue);
+        expect(food['icon'].toString().isNotEmpty, isTrue);
+        expect(food['personality'], isA<List>());
+      }
+    });
+
+    test('Gacha Item Buff Description & All 4 Habitat DIY Switching Test', () {
+      final pet = PetModel();
+      pet.coins = 600;
+      final draws = pet.drawGacha(10);
+      expect(draws.length, equals(10));
+      for (final d in draws) {
+        final item = GachaItem.fromMap(d);
+        expect(item.name.isNotEmpty, isTrue);
+        expect(item.desc.isNotEmpty, isTrue);
+      }
+
+      // 验证 4 大小窝场景切换
+      final habitats = ['neon_matrix', 'retro_arcade', 'summer_beach', 'zen_tatami', 'default'];
+      for (final h in habitats) {
+        pet.setHabitat(h);
+        expect(pet.habitat, equals(h));
+      }
     });
   });
 }

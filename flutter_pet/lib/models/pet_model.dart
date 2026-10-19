@@ -133,12 +133,12 @@ class PetModel extends ChangeNotifier {
   };
 
   static const List<Map<String, dynamic>> foodMenu = [
-    {'id': 'dried_fish', 'name': '香脆小鱼干', 'icon': '🐟', 'hunger': 18.0, 'mood': 10.0, 'exp': 15.0, 'personality': ['sport', 2]},
+    {'id': 'dried_fish', 'name': '香酥小鱼干', 'icon': '🐟', 'hunger': 18.0, 'mood': 10.0, 'exp': 15.0, 'personality': ['sport', 2]},
     {'id': 'canned_tuna', 'name': '特级金枪鱼罐头', 'icon': '🥫', 'hunger': 35.0, 'mood': 25.0, 'exp': 30.0, 'personality': ['sport', 3]},
-    {'id': 'freeze_dried_salmon', 'name': '冻干三文鱼块', 'icon': '🍣', 'hunger': 28.0, 'mood': 20.0, 'exp': 25.0, 'personality': ['sport', 2]},
+    {'id': 'freeze_dried_salmon', 'name': '纯肉三文鱼', 'icon': '🍣', 'hunger': 28.0, 'mood': 20.0, 'exp': 25.0, 'personality': ['sport', 2]},
     {'id': 'cyber_chip', 'name': '赛博能量芯片', 'icon': '⚡', 'hunger': 25.0, 'mood': 20.0, 'exp': 35.0, 'personality': ['tech', 4]},
     {'id': 'hacker_coffee', 'name': '极客黑客冷萃', 'icon': '☕', 'hunger': 15.0, 'mood': 30.0, 'exp': 30.0, 'personality': ['tech', 3]},
-    {'id': 'milk', 'name': '香浓舒化羊奶', 'icon': '🥛', 'hunger': 12.0, 'mood': 15.0, 'exp': 10.0, 'personality': ['lazy', 3]},
+    {'id': 'milk', 'name': '舒化羊奶', 'icon': '🥛', 'hunger': 12.0, 'mood': 15.0, 'exp': 10.0, 'personality': ['lazy', 3]},
     {'id': 'cat_pudding', 'name': '焦糖猫布丁', 'icon': '🍮', 'hunger': 15.0, 'mood': 22.0, 'exp': 18.0, 'personality': ['lazy', 2]},
     {'id': 'cat_grass', 'name': '有机猫草沙拉', 'icon': '🌿', 'hunger': 8.0, 'mood': 12.0, 'exp': 12.0, 'personality': ['sport', 1]},
     {'id': 'strawberry_cake', 'name': '草莓千层蛋糕', 'icon': '🍰', 'hunger': 22.0, 'mood': 28.0, 'exp': 26.0, 'personality': ['lazy', 2]},
@@ -281,25 +281,26 @@ class PetModel extends ChangeNotifier {
   /// 赛博盲盒抽卡系统 (单抽 / 十连保底 SSR/UR)
   List<Map<String, dynamic>> drawGacha(int count) {
     final pool = [
-      {'rarity': 'UR', 'slot': 'habitat', 'code': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '🌃', 'weight': 4},
-      {'rarity': 'UR', 'slot': 'habitat', 'code': 'retro_arcade', 'name': '复古像素游戏机房', 'icon': '🕹️', 'weight': 4},
-      {'rarity': 'UR', 'slot': 'back', 'code': 'wings', 'name': '反重力光子羽翼', 'icon': '🪽', 'weight': 5},
-      {'rarity': 'UR', 'slot': 'head', 'code': 'crown', 'name': '黄金华贵王冠', 'icon': '👑', 'weight': 5},
-      {'rarity': 'SSR', 'slot': 'face', 'code': 'hacker_viser', 'name': '赛博战术目镜', 'icon': '🥽', 'weight': 10},
-      {'rarity': 'SSR', 'slot': 'head', 'code': 'band_sport', 'name': '热血运动发带', 'icon': '🥊', 'weight': 10},
-      {'rarity': 'SSR', 'slot': 'back', 'code': 'cushion_zen', 'name': '禅意榻榻米软垫', 'icon': '🍵', 'weight': 10},
-      {'rarity': 'SSR', 'slot': 'hand', 'code': 'keyboard', 'name': 'RGB机械键盘', 'icon': '⌨️', 'weight': 12},
-      {'rarity': 'SSR', 'slot': 'hand', 'code': 'gamepad', 'name': '8-bit 复古掌机', 'icon': '🎮', 'weight': 12},
-      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'summer_beach', 'name': '夏日阳光海滩', 'icon': '🏖️', 'weight': 10},
-      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🌸', 'weight': 10},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'fish_wand', 'name': '全息光纤逗猫棒', 'icon': '🪄', 'weight': 18},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'coffee', 'name': '极客外带咖啡', 'icon': '☕', 'weight': 18},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'dumbbell', 'name': '能量健身哑铃', 'icon': '🏋️', 'weight': 18},
-      {'rarity': 'SR', 'slot': 'face', 'code': 'sunglasses', 'name': '酷炫战术黑超', 'icon': '🕶️', 'weight': 20},
-      {'rarity': 'SR', 'slot': 'head', 'code': 'wizard_hat', 'name': '魔法巫师尖帽', 'icon': '🧙', 'weight': 20},
-      {'rarity': 'R', 'slot': 'neck', 'code': 'bow', 'name': '优雅赤红蝴蝶结', 'icon': '🎀', 'weight': 25},
-      {'rarity': 'R', 'slot': 'neck', 'code': 'bell', 'name': '招财金小挂铃', 'icon': '🔔', 'weight': 25},
-      {'rarity': 'R', 'slot': 'face', 'code': 'blush_hearts', 'name': '心动爱心面贴', 'icon': '💖', 'weight': 25},
+      {'rarity': 'UR', 'slot': 'habitat', 'code': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '💻', 'weight': 4, 'desc': '全景赛博代码雨，专注效率提升+20%'},
+      {'rarity': 'UR', 'slot': 'habitat', 'code': 'retro_arcade', 'name': '复古像素电玩厅', 'icon': '🕹️', 'weight': 4, 'desc': '80s 霓虹晚霞与十字星，心情回复加速'},
+      {'rarity': 'UR', 'slot': 'back', 'code': 'wings_angel', 'name': '圣洁天使羽翼', 'icon': '🪽', 'weight': 5, 'desc': '神圣光翼展开，高空轻盈缓降，飘落治愈爱心'},
+      {'rarity': 'UR', 'slot': 'head', 'code': 'gold_crown_sparkle', 'name': '璀璨星辉皇冠', 'icon': '👑', 'weight': 5, 'desc': '纯金钻石皇冠，闪烁星辉尊贵非凡'},
+      {'rarity': 'SSR', 'slot': 'face', 'code': 'hacker_viser', 'name': '赛博战术目镜', 'icon': '🥽', 'weight': 10, 'desc': '战术全息HUD扫描，周围触发二进制流动光环'},
+      {'rarity': 'SSR', 'slot': 'head', 'code': 'band_sport', 'name': '热血运动发带', 'icon': '🥊', 'weight': 10, 'desc': '元气运动加成，步履矫健，移动速度+30%'},
+      {'rarity': 'SSR', 'slot': 'back', 'code': 'cushion_zen', 'name': '禅意榻榻米软垫', 'icon': '🍵', 'weight': 10, 'desc': '随心躺平蒲团，安睡体力恢复+35%'},
+      {'rarity': 'SSR', 'slot': 'hand', 'code': 'keyboard_rgb', 'name': 'RGB机械键盘', 'icon': '⌨️', 'weight': 12, 'desc': '敲击彩色发光键帽，经验获取速度+25%'},
+      {'rarity': 'SSR', 'slot': 'hand', 'code': 'gamepad_retro', 'name': '8-bit 复古掌机', 'icon': '🎮', 'weight': 12, 'desc': '怀旧像素游戏快乐，玩耍兴奋度+30%'},
+      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'summer_beach', 'name': '夏日阳光海滩', 'icon': '🏖️', 'weight': 10, 'desc': '碧海金沙与椰树微风，清凉舒爽海浪'},
+      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🌸', 'weight': 10, 'desc': '和室障子与漫天落樱，静心禅意'},
+      {'rarity': 'SR', 'slot': 'back', 'code': 'cape_cyber', 'name': '赛博霓虹披风', 'icon': '🦸‍♂️', 'weight': 15, 'desc': '暗夜流光披风，霓虹电路线路'},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'teaser_laser', 'name': '全息光纤逗猫棒', 'icon': '🪄', 'weight': 18, 'desc': '发光小鱼摇曳，猫咪最爱逗趣神器'},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'coffee_cyber', 'name': '极客外带咖啡', 'icon': '☕', 'weight': 18, 'desc': '冷萃浓郁提神，陪伴学习专注Buff'},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'dumbbell_power', 'name': '能量健身哑铃', 'icon': '🏋️', 'weight': 18, 'desc': '活力力量训练，健康值提升'},
+      {'rarity': 'SR', 'slot': 'face', 'code': 'sunglasses_cool', 'name': '酷炫战术黑超', 'icon': '🕶️', 'weight': 20, 'desc': '飞行员金色边框墨镜，帅气逼人'},
+      {'rarity': 'SR', 'slot': 'head', 'code': 'wizard_hat', 'name': '魔法巫师尖帽', 'icon': '🧙', 'weight': 20, 'desc': '神秘星夜魔术帽，智慧气息'},
+      {'rarity': 'R', 'slot': 'neck', 'code': 'ribbon', 'name': '优雅赤红蝴蝶结', 'icon': '🎀', 'weight': 25, 'desc': '精致红丝绸结，淑女气质'},
+      {'rarity': 'R', 'slot': 'neck', 'code': 'bell', 'name': '招财金小挂铃', 'icon': '🔔', 'weight': 25, 'desc': '清脆招财金铃铛，叮当悦耳'},
+      {'rarity': 'R', 'slot': 'face', 'code': 'glasses_black', 'name': '黑框智能平光镜', 'icon': '🤓', 'weight': 25, 'desc': '学霸文青标配，斯文温和'},
     ];
 
     final cost = count == 1 ? 30 : 270;
@@ -354,6 +355,7 @@ class PetModel extends ChangeNotifier {
         'code': code,
         'name': chosen['name'],
         'icon': chosen['icon'],
+        'desc': chosen['desc'] ?? '专属装扮与成长加成',
         'isNew': isNew,
       });
     }
