@@ -43,6 +43,8 @@ class SoundManager:
             self._sound_cache["dizzy"] = self._generate_dizzy()
             self._sound_cache["dance"] = self._generate_dance()
             self._sound_cache["curious"] = self._generate_curious()
+            self._sound_cache["cyber_scan"] = self._generate_cyber_scan()
+            self._sound_cache["focus_chime"] = self._generate_focus_chime()
         except Exception as e:
             print(f"[SoundManager] Init sounds warning: {e}")
 
@@ -244,6 +246,45 @@ class SoundManager:
             freq = 520.0 + (t / duration) * 440.0
             envelope = math.sin(math.pi * (i / total_samples)) * 0.55
             sample = math.sin(2 * math.pi * freq * t) * envelope
+            samples.append(sample)
+        return self._create_wav_bytes(samples, sample_rate)
+
+    def _generate_cyber_scan(self, sample_rate=22050):
+        # 赛博高频激光扫描微型啁啾滑音 (~0.32秒)
+        duration = 0.32
+        total_samples = int(sample_rate * duration)
+        samples = []
+        for i in range(total_samples):
+            t = i / sample_rate
+            # 频率从 1680Hz 快速下扫至 920Hz，随后回旋至 1380Hz，伴随 75Hz 全息高频振颤
+            if t < 0.20:
+                freq = 1680.0 - (t / 0.20) * 760.0
+            else:
+                freq = 920.0 + ((t - 0.20) / 0.12) * 460.0
+            freq += math.sin(2 * math.pi * 75.0 * t) * 35.0
+            envelope = math.sin(math.pi * (i / total_samples)) * 0.45
+            sample = (
+                0.75 * math.sin(2 * math.pi * freq * t) +
+                0.25 * math.sin(2 * math.pi * freq * 2.0 * t)
+            ) * envelope
+            samples.append(sample)
+        return self._create_wav_bytes(samples, sample_rate)
+
+    def _generate_focus_chime(self, sample_rate=22050):
+        # 禅意温润空灵铜钟专注开闭音效 (~1.2秒，指数级自然衰减)
+        duration = 1.2
+        total_samples = int(sample_rate * duration)
+        samples = []
+        for i in range(total_samples):
+            t = i / sample_rate
+            decay = math.exp(-3.2 * t)
+            # 440Hz 基频 + 443Hz 双音微差拍拍频 + 880Hz / 1320Hz 柔和泛音
+            sample = (
+                0.55 * math.sin(2 * math.pi * 440.0 * t) +
+                0.25 * math.sin(2 * math.pi * 443.0 * t) +
+                0.15 * math.sin(2 * math.pi * 880.0 * t) +
+                0.05 * math.sin(2 * math.pi * 1320.0 * t)
+            ) * decay * 0.55
             samples.append(sample)
         return self._create_wav_bytes(samples, sample_rate)
 

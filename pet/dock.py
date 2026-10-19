@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QColor, QCursor
 from pet.audio import sound_manager
-from pet.menus import FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialog, QuickActionMenu
+from pet.menus import FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialog, QuickActionMenu, FocusDialog
 
 DOCK_PASTELS = {
     "feed": {
@@ -32,6 +32,12 @@ DOCK_PASTELS = {
     },
     "memo": {
         "bg": "rgba(30, 41, 59, 0.8)", "border": "#0EA5E9", "hover_bg": "rgba(14, 165, 233, 0.2)", "hover_border": "#38BDF8", "pressed": "rgba(3, 105, 161, 0.4)"
+    },
+    "focus": {
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#EF4444", "hover_bg": "rgba(239, 68, 68, 0.2)", "hover_border": "#F87171", "pressed": "rgba(185, 28, 28, 0.4)"
+    },
+    "focus_active": {
+        "bg": "rgba(14, 165, 233, 0.25)", "border": "#38BDF8", "hover_bg": "rgba(56, 189, 248, 0.35)", "hover_border": "#7DD3FC", "pressed": "rgba(2, 132, 199, 0.4)"
     },
     "more": {
         "bg": "rgba(30, 41, 59, 0.8)", "border": "#64748B", "hover_bg": "rgba(100, 116, 139, 0.2)", "hover_border": "#94A3B8", "pressed": "rgba(51, 65, 85, 0.4)"
@@ -150,13 +156,17 @@ class PetCompanionDock(QWidget):
         self.btn_memo = DockIconButton("📝", "📝 桌面便签 (随时记录待办与灵感闪念)", self._on_memo, "memo", self)
         dock_layout.addWidget(self.btn_memo)
 
+        # 8. 深度专注力场 (番茄钟)
+        self.btn_focus = DockIconButton("🍅", "🍅 赛博深度专注时钟 (心流守护)", self._on_focus, "focus", self)
+        dock_layout.addWidget(self.btn_focus)
+
         # 竖向细微分割线
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
         sep.setStyleSheet("background-color: #334155; min-width: 1px; max-width: 1px; margin: 4px 1px;")
         dock_layout.addWidget(sep)
 
-        # 8. 全部菜单与设置
+        # 9. 全部菜单与设置
         self.btn_more = DockIconButton("⚙️", "⚙️ 快捷档案与偏好设置 (点击打开完整面板)", self._on_more, "more", self)
         dock_layout.addWidget(self.btn_more)
 
@@ -170,6 +180,7 @@ class PetCompanionDock(QWidget):
             self._current_anim = None
         self.hide_timer.stop()
         self.update_sleep_icon()
+        self.update_focus_state()
         self.sync_position()
 
         if not self.isVisible() or self.windowOpacity() < 0.9:
@@ -274,6 +285,17 @@ class PetCompanionDock(QWidget):
             self.btn_sleep.setToolTip("💤 哄睡就寝 (休养充沛活力)")
             self.btn_sleep.update_style("sleep")
 
+    def update_focus_state(self):
+        if hasattr(self, "btn_focus"):
+            if getattr(self.model, "is_studying", False):
+                mins = max(0, int(self.model.study_time_left // 60))
+                secs = max(0, int(self.model.study_time_left % 60))
+                self.btn_focus.setToolTip(f"🍅 专注心流守护中: {mins:02d}:{secs:02d} (点击查看力场/提前结束)")
+                self.btn_focus.update_style("focus_active")
+            else:
+                self.btn_focus.setToolTip("🍅 赛博深度专注时钟 (开启静默心流守护)")
+                self.btn_focus.update_style("focus")
+
     # ================= 按钮交互逻辑 =================
     def _on_feed(self):
         self.hide()
@@ -307,6 +329,10 @@ class PetCompanionDock(QWidget):
     def _on_memo(self):
         if hasattr(self.pet_window, "toggle_memo"):
             self.pet_window.toggle_memo()
+
+    def _on_focus(self):
+        self.hide()
+        QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
 
     def _on_more(self):
         self.hide()

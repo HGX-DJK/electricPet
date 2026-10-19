@@ -3,8 +3,9 @@ import sys
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush
 from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
-from pet.menus import StatusDialog, SettingsDialog, WardrobeDialog, FeedingDialog, ActionShowDialog
+from pet.menus import StatusDialog, SettingsDialog, WardrobeDialog, FeedingDialog, ActionShowDialog, FocusDialog, PlayDialog
 from pet.audio import sound_manager
+from pet.system_monitor import get_system_stats
 
 def create_app_icon():
     """获取或动态生成高清晰度可爱的桌面萌宠托盘图标"""
@@ -85,26 +86,33 @@ class PetTrayIcon(QSystemTrayIcon):
         menu = QMenu()
         menu.setStyleSheet("""
             QMenu {
-                background-color: #FFFFFF;
-                border: 1px solid #E2E4E8;
-                border-radius: 8px;
+                background-color: #0B0F19;
+                border: 1.5px solid #0EA5E9;
+                border-radius: 10px;
                 padding: 6px;
                 font-family: "Microsoft YaHei UI";
                 font-size: 13px;
+                color: #F1F5F9;
             }
             QMenu::item {
-                padding: 6px 24px;
-                border-radius: 4px;
+                padding: 7px 26px 7px 22px;
+                border-radius: 6px;
+                background-color: transparent;
+                color: #F1F5F9;
             }
             QMenu::item:selected {
-                background-color: #FFF7ED;
-                color: #EA580C;
+                background: rgba(14, 165, 233, 0.25);
+                color: #38BDF8;
+                border: 1px solid rgba(56, 189, 248, 0.4);
             }
             QMenu::item:disabled {
-                color: #C2410C;
+                color: #38BDF8;
                 font-weight: bold;
-                background: #FFF7ED;
-                padding: 6px 24px;
+                background: rgba(15, 23, 42, 0.85);
+                border: 1px solid rgba(14, 165, 233, 0.4);
+                border-radius: 6px;
+                padding: 7px 22px;
+                margin-bottom: 2px;
             }
             QMenu::indicator {
                 width: 14px;
@@ -112,19 +120,19 @@ class PetTrayIcon(QSystemTrayIcon):
                 margin-left: 6px;
             }
             QMenu::indicator:checked {
-                background-color: #F97316;
-                border: 2px solid #F97316;
+                background-color: #0EA5E9;
+                border: 2px solid #38BDF8;
                 border-radius: 3px;
             }
             QMenu::indicator:unchecked {
-                background-color: #FFFFFF;
-                border: 2px solid #CBD5E1;
+                background-color: #1E293B;
+                border: 1.5px solid #475569;
                 border-radius: 3px;
             }
             QMenu::separator {
                 height: 1px;
-                background: #FED7AA;
-                margin: 4px 8px;
+                background: #1E293B;
+                margin: 5px 8px;
             }
         """)
 
@@ -144,6 +152,14 @@ class PetTrayIcon(QSystemTrayIcon):
         # 随手便签
         memo_action = menu.addAction("📝 桌面随手便签")
         memo_action.triggered.connect(self._toggle_memo)
+
+        # 赛博全息深度专注力场
+        focus_action = menu.addAction("🍅 赛博深度专注时钟")
+        focus_action.triggered.connect(self._open_focus)
+
+        # 趣味互动与游乐
+        play_action = menu.addAction("🎮 趣味互动与游乐")
+        play_action.triggered.connect(self._open_play)
 
         # 贴边探头偷看
         peek_action = menu.addAction("👀 贴边探头偷看")
@@ -207,10 +223,20 @@ class PetTrayIcon(QSystemTrayIcon):
         if hasattr(self, "sound_action") and self.sound_action:
             self.sound_action.setChecked(self.model.sound_enabled)
 
-        # 动态更新系统托盘丰富健康状态 Tooltip
+        # 动态更新系统托盘丰富健康状态 Tooltip (注入 CPU、内存与系统运行时间)
+        try:
+            hw = get_system_stats()
+            cpu_s = f"{hw.get('cpu', 0)}%"
+            mem_s = f"{hw.get('memory', 0)}%"
+            uptime_s = hw.get('uptime', '0m')
+            hw_line = f"\n💻 CPU: {cpu_s}  🧠 内存: {mem_s}  ⏱️ 运行: {uptime_s}"
+        except Exception:
+            hw_line = ""
+
         self.setToolTip(
-            f"{self.model.name} (Lv.{self.model.level}) · {stage_name}\n"
+            f"🐾 {self.model.name} (Lv.{self.model.level} · {stage_name})\n"
             f"🍗 饱食: {int(self.model.hunger)}%  💖 心情: {int(self.model.mood)}%  ⚡ 精力: {int(self.model.energy)}%"
+            f"{hw_line}"
         )
 
     def _toggle_visibility(self):
@@ -266,6 +292,14 @@ class PetTrayIcon(QSystemTrayIcon):
 
     def _open_settings(self):
         dialog = SettingsDialog(self.model, self.pet_window)
+        dialog.exec()
+
+    def _open_focus(self):
+        dialog = FocusDialog(self.model, self.pet_window)
+        dialog.exec()
+
+    def _open_play(self):
+        dialog = PlayDialog(self.model, self.pet_window)
         dialog.exec()
 
     def _on_single_click(self):

@@ -267,7 +267,7 @@ class PetModel:
         self.study_duration = minutes * 60
         self.study_time_left = self.study_duration
         self.is_sleeping = False
-        sound_manager.play("click")
+        sound_manager.play("focus_chime")
         self._notify_change()
 
     def cancel_focus_timer(self):

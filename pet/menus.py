@@ -693,11 +693,7 @@ class QuickActionMenu(QWidget):
     def _on_focus(self):
         sound_manager.play("click")
         self.close()
-        if self.model.is_studying:
-            self.model.cancel_focus_timer()
-            self.pet_window.dialogue.say("专注模式已结束。休息一下吧！")
-        else:
-            QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
 
     def _on_stats(self):
         sound_manager.play("click")
@@ -1972,44 +1968,287 @@ class ActionShowDialog(ModernBaseDialog):
         self.pet_window.play_action(action_code)
 
 class FocusDialog(ModernBaseDialog):
-    """番茄钟专注陪伴设置"""
+    """赛博全息深度专注力场 (Cyber Focus Matrix)"""
     def __init__(self, model, pet_window, parent=None):
         super().__init__(
-            title="专注时钟 · 番茄钟陪伴",
-            subtitle="设定专注时长，波可将佩戴眼镜在身旁安静守护",
+            title="深度专注 · 赛博心流力场",
+            subtitle="设定专注时长，波可将开启静默心流守护",
             icon_emoji="🍅",
             parent=pet_window or parent,
-            fixed_width=360,
-            fixed_height=290
+            fixed_width=450,
+            fixed_height=440
         )
         self.model = model
         self.pet_window = pet_window
+        self.selected_minutes = 25
 
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._on_tick_update)
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # 清空现有子控件
+        while self.content_layout.count():
+            item = self.content_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        if self.model.is_studying:
+            self._build_active_view()
+            self._refresh_timer.start(1000)
+        else:
+            self._build_setup_view()
+            self._refresh_timer.stop()
+
+    def _build_active_view(self):
         layout = self.content_layout
-        layout.setSpacing(12)
+        layout.setSpacing(14)
 
-        title = QLabel("选择专注工作/学习时长：")
-        title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        layout.addWidget(title)
+        # 正在专注全息 HUD 卡片
+        hud_card = QFrame()
+        hud_card.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(11, 15, 25, 0.95), stop:1 rgba(15, 23, 42, 0.95));
+                border: 1.5px solid #0EA5E9;
+                border-radius: 16px;
+            }
+        """)
+        card_l = QVBoxLayout(hud_card)
+        card_l.setContentsMargins(18, 16, 18, 16)
+        card_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        desc = QLabel("在专注期间，波可会佩戴眼镜安静守候在您身边不打扰。倒计时结束后会播放清脆闹铃提醒休息！")
-        desc.setWordWrap(True)
-        desc.setStyleSheet("color: #64748B; font-size: 11px; line-height: 1.4;")
-        layout.addWidget(desc)
+        status_lbl = QLabel("🛡️ 深度心流守护力场已展开")
+        status_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+        status_lbl.setStyleSheet("color: #38BDF8;")
+        status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_l.addWidget(status_lbl)
 
+        # 倒计时大字符
+        self.time_lbl = QLabel(self._format_time_left())
+        self.time_lbl.setFont(QFont("Consolas", 36, QFont.Weight.Bold))
+        self.time_lbl.setStyleSheet("color: #F8FAFC; letter-spacing: 2px; padding: 10px 0;")
+        self.time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_l.addWidget(self.time_lbl)
+
+        # 全息进度条
+        self.pbar = QProgressBar()
+        self.pbar.setFixedHeight(8)
+        self.pbar.setTextVisible(False)
+        self.pbar.setStyleSheet("""
+            QProgressBar {
+                background-color: #1E293B;
+                border: none;
+                border-radius: 4px;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #38BDF8);
+                border-radius: 4px;
+            }
+        """)
+        total = max(1, int(self.model.study_duration))
+        left = max(0, int(self.model.study_time_left))
+        elapsed = max(0, total - left)
+        self.pbar.setRange(0, total)
+        self.pbar.setValue(elapsed)
+        card_l.addWidget(self.pbar)
+
+        tip_lbl = QLabel(f"总时长: {int(total // 60)} 分钟 · 达成后自动奖励 50 EXP 与大量好心情 ✨")
+        tip_lbl.setFont(QFont("Microsoft YaHei UI", 9))
+        tip_lbl.setStyleSheet("color: #94A3B8; margin-top: 6px;")
+        tip_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        card_l.addWidget(tip_lbl)
+
+        layout.addWidget(hud_card)
         layout.addStretch()
 
+        # 底部操作按钮
         btn_box = QHBoxLayout()
-        for mins in [15, 25, 45]:
-            btn = QPushButton(f"{mins} 分钟")
-            btn.setFixedHeight(38)
-            btn.clicked.connect(lambda checked, m=mins: self._start(m))
-            btn_box.addWidget(btn)
+        btn_cancel = QPushButton("⏹️ 提前结束专注")
+        btn_cancel.setFixedHeight(38)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(244, 63, 94, 0.15);
+                border: 1px solid #F43F5E;
+                color: #FDA4AF;
+                border-radius: 12px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: rgba(244, 63, 94, 0.3);
+                color: #FFFFFF;
+            }
+        """)
+        btn_cancel.clicked.connect(self._stop_focus)
+        btn_box.addWidget(btn_cancel)
+
+        btn_keep = QPushButton("🛡️ 保持静默守护")
+        btn_keep.setObjectName("PrimaryBtn")
+        btn_keep.setFixedHeight(38)
+        btn_keep.clicked.connect(self.accept)
+        btn_box.addWidget(btn_keep)
+
         layout.addLayout(btn_box)
 
-    def _start(self, minutes):
-        self.model.start_focus_timer(minutes)
-        self.pet_window.dialogue.say(f"番茄钟开启！接下来的 {minutes} 分钟，波可会认真陪伴主人专注工作哦~ 📖✏️")
+    def _format_time_left(self):
+        secs = max(0, int(getattr(self.model, "study_time_left", 0)))
+        m = secs // 60
+        s = secs % 60
+        return f"{m:02d}:{s:02d}"
+
+    def _on_tick_update(self):
+        if not self.model.is_studying:
+            self._refresh_timer.stop()
+            self._build_ui()
+            return
+        if hasattr(self, "time_lbl"):
+            self.time_lbl.setText(self._format_time_left())
+        if hasattr(self, "pbar"):
+            total = max(1, int(self.model.study_duration))
+            left = max(0, int(self.model.study_time_left))
+            self.pbar.setValue(max(0, total - left))
+
+    def _stop_focus(self):
+        self.model.cancel_focus_timer()
+        if self.pet_window:
+            self.pet_window.dialogue.say("专注提前结束啦。随时欢迎开启下一次心流旅程！☕")
+        self._build_ui()
+
+    def _build_setup_view(self):
+        layout = self.content_layout
+        layout.setSpacing(10)
+
+        title = QLabel("🎯 选择极客专注模式或滑动微调：")
+        title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+        title.setStyleSheet("color: #F8FAFC;")
+        layout.addWidget(title)
+
+        # 4 战术预设网格
+        grid = QGridLayout()
+        grid.setSpacing(8)
+
+        presets = [
+            (15, "⚡ 15m 灵感极速跑", "短促高能冲刺"),
+            (25, "🍅 25m 经典番茄钟", "标准心流节拍"),
+            (45, "💻 45m 深度工坊", "深度复杂任务"),
+            (60, "🚀 60m 极客沉浸代码", "彻底心流模式"),
+        ]
+
+        self.preset_btns = []
+        for idx, (m, name, desc) in enumerate(presets):
+            btn = QPushButton(f"{name}\n{desc}")
+            btn.setFixedHeight(54)
+            btn.setFont(QFont("Microsoft YaHei UI", 9))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda checked, mins=m: self._select_preset(mins))
+            grid.addWidget(btn, idx // 2, idx % 2)
+            self.preset_btns.append((m, btn))
+
+        layout.addLayout(grid)
+
+        # 滑块自由微调
+        slider_card = QFrame()
+        slider_card.setStyleSheet("""
+            QFrame {
+                background: rgba(15, 23, 42, 0.7);
+                border: 1px solid #334155;
+                border-radius: 12px;
+                padding: 6px;
+            }
+        """)
+        sl_layout = QVBoxLayout(slider_card)
+        sl_layout.setContentsMargins(10, 6, 10, 6)
+        sl_layout.setSpacing(4)
+
+        self.custom_val_lbl = QLabel(f"自定义时长调节: {self.selected_minutes} 分钟")
+        self.custom_val_lbl.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
+        self.custom_val_lbl.setStyleSheet("color: #38BDF8;")
+        sl_layout.addWidget(self.custom_val_lbl)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(5, 120)
+        self.slider.setValue(self.selected_minutes)
+        self.slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px;
+                background: #1E293B;
+                border-radius: 3px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #0EA5E9;
+                border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #38BDF8;
+                width: 16px;
+                margin-top: -5px;
+                margin-bottom: -5px;
+                border-radius: 8px;
+            }
+        """)
+        self.slider.valueChanged.connect(self._on_slider_change)
+        sl_layout.addWidget(self.slider)
+
+        layout.addWidget(slider_card)
+        layout.addStretch()
+
+        # 底部操作栏
+        btn_box = QHBoxLayout()
+        btn_cancel = QPushButton("取消")
+        btn_cancel.setFixedHeight(38)
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+
+        self.btn_start = QPushButton(f"🚀 启动专注 ({self.selected_minutes}分钟)", self)
+        self.btn_start.setObjectName("PrimaryBtn")
+        self.btn_start.setFixedHeight(38)
+        self.btn_start.clicked.connect(self._start_focus)
+        btn_box.addWidget(self.btn_start)
+
+        layout.addLayout(btn_box)
+        self._update_preset_button_styles()
+
+    def _select_preset(self, mins):
+        self.selected_minutes = mins
+        self.slider.setValue(mins)
+        self._update_preset_button_styles()
+
+    def _on_slider_change(self, val):
+        self.selected_minutes = val
+        self.custom_val_lbl.setText(f"自定义时长调节: {val} 分钟")
+        self.btn_start.setText(f"🚀 启动专注 ({val}分钟)")
+        self._update_preset_button_styles()
+
+    def _update_preset_button_styles(self):
+        for m, btn in getattr(self, "preset_btns", []):
+            if m == self.selected_minutes:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(14, 165, 233, 0.25);
+                        border: 1.5px solid #38BDF8;
+                        color: #FFFFFF;
+                        border-radius: 12px;
+                        font-weight: bold;
+                    }
+                """)
+            else:
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(30, 41, 59, 0.7);
+                        border: 1px solid rgba(51, 65, 85, 0.8);
+                        color: #94A3B8;
+                        border-radius: 12px;
+                    }
+                    QPushButton:hover {
+                        border-color: #0EA5E9;
+                        color: #F8FAFC;
+                    }
+                """)
+
+    def _start_focus(self):
+        self.model.start_focus_timer(self.selected_minutes)
+        if self.pet_window:
+            self.pet_window.dialogue.say(f"🍅 全息专注力场启动！接下来的 {self.selected_minutes} 分钟，波可会认真陪伴主人专注工作哦~ 📖✏️")
         self.accept()
 
 class StatusDialog(ModernBaseDialog):

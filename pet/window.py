@@ -710,8 +710,8 @@ class PetWindow(QWidget):
             return
         if hasattr(self, "renderer"):
             self.renderer.trigger_holo_scan()
-            if getattr(self.model, "sound_enabled", True) and random.random() < 0.25:
-                sound_manager.play("pop")
+            if getattr(self.model, "sound_enabled", True) and random.random() < 0.65:
+                sound_manager.play("cyber_scan")
         if hasattr(self, "dock"):
             self.dock.show_dock()
         super().enterEvent(event)
