@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
+from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF, QEvent
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
     QPushButton, QGraphicsDropShadowEffect, QApplication, QFrame,
@@ -19,6 +19,14 @@ MEMO_THEMES = {
         "header": "#FEF08A",
         "text": "#1E293B",
         "sub": "#854D0E"
+    },
+    "peach": {
+        "name": "暖蜜桃",
+        "bg": "#FFF7ED",
+        "border": "#FDBA74",
+        "header": "#FFEDD5",
+        "text": "#1E293B",
+        "sub": "#C2410C"
     },
     "pink": {
         "name": "落樱粉",
@@ -43,6 +51,14 @@ MEMO_THEMES = {
         "header": "#DBEAFE",
         "text": "#1E293B",
         "sub": "#1E40AF"
+    },
+    "cyber": {
+        "name": "赛博暗夜",
+        "bg": "#0B0F19",
+        "border": "#0EA5E9",
+        "header": "#1E293B",
+        "text": "#F8FAFC",
+        "sub": "#38BDF8"
     }
 }
 
@@ -110,7 +126,7 @@ class PetStickyNote(QWidget):
         # 时间戳按钮
         self.btn_time = QPushButton("🕒")
         self.btn_time.setFixedSize(24, 24)
-        self.btn_time.setToolTip("插入当前时间戳")
+        self.btn_time.setToolTip("插入当前时间戳 (Ctrl + T)")
         self.btn_time.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_time.clicked.connect(self._insert_timestamp)
         header.addWidget(self.btn_time)
@@ -134,7 +150,7 @@ class PetStickyNote(QWidget):
         # 关闭按钮
         self.btn_close = QPushButton("✕")
         self.btn_close.setFixedSize(24, 24)
-        self.btn_close.setToolTip("收起便签 (自动保存)")
+        self.btn_close.setToolTip("收起便签 (Esc，自动保存)")
         self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_close.clicked.connect(self.hide_memo)
         header.addWidget(self.btn_close)
@@ -146,6 +162,7 @@ class PetStickyNote(QWidget):
         self.text_edit.setPlaceholderText("在这里记下待办、灵感闪念或备忘...\n(自动即时保存，关闭不丢失)")
         self.text_edit.setFont(QFont("Microsoft YaHei UI", 10))
         self.text_edit.textChanged.connect(self._on_text_changed)
+        self.text_edit.installEventFilter(self)
         card_layout.addWidget(self.text_edit)
 
         # 3. 底部工具栏 (字数统计与主题色切换)
@@ -158,11 +175,13 @@ class PetStickyNote(QWidget):
 
         bottom_layout.addStretch()
 
-        # 4 个马卡龙色圆点
+        # 6 个主题色圆点 (支持悬浮提示，含全新赛博暗夜)
         self.theme_dots = {}
-        for t_key in ["yellow", "pink", "green", "blue"]:
+        for t_key in ["yellow", "peach", "pink", "green", "blue", "cyber"]:
             dot_btn = QPushButton()
             dot_btn.setFixedSize(14, 14)
+            dot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            dot_btn.setToolTip(f"切换主题: {MEMO_THEMES[t_key]['name']}")
             dot_btn.clicked.connect(lambda checked, k=t_key: self.set_theme(k))
             self.theme_dots[t_key] = dot_btn
             bottom_layout.addWidget(dot_btn)
@@ -185,6 +204,7 @@ class PetStickyNote(QWidget):
         border = theme["border"]
         text_col = theme["text"]
         sub_col = theme["sub"]
+        is_dark = (self.current_theme == "cyber")
 
         self.card.setStyleSheet(f"""
             QFrame#MemoCard {{
@@ -196,9 +216,13 @@ class PetStickyNote(QWidget):
         self.title_lbl.setStyleSheet(f"color: {sub_col}; background: transparent; border: none;")
         self.char_lbl.setStyleSheet(f"color: {sub_col}; background: transparent; border: none; font-size: 10px;")
 
+        btn_bg = "rgba(30, 41, 59, 0.85)" if is_dark else "rgba(255, 255, 255, 0.7)"
+        btn_hover = "rgba(14, 165, 233, 0.25)" if is_dark else "#FFFFFF"
+        btn_pressed = "rgba(15, 23, 42, 0.95)" if is_dark else "rgba(0, 0, 0, 0.08)"
+
         btn_css = f"""
             QPushButton {{
-                background-color: rgba(255, 255, 255, 0.7);
+                background-color: {btn_bg};
                 border: 1px solid {border};
                 border-radius: 12px;
                 color: {sub_col};
@@ -207,17 +231,20 @@ class PetStickyNote(QWidget):
                 padding: 0px;
             }}
             QPushButton:hover {{
-                background-color: #FFFFFF;
+                background-color: {btn_hover};
                 border-color: {sub_col};
             }}
             QPushButton:pressed {{
-                background-color: rgba(0, 0, 0, 0.08);
+                background-color: {btn_pressed};
             }}
         """
         self.btn_time.setStyleSheet(btn_css)
         self.btn_clear.setStyleSheet(btn_css)
         self.btn_pin.setStyleSheet(btn_css)
         self.btn_close.setStyleSheet(btn_css)
+
+        sb_handle = "#0EA5E9" if is_dark else "rgba(0, 0, 0, 0.15)"
+        sb_hover = "#38BDF8" if is_dark else "rgba(0, 0, 0, 0.25)"
 
         self.text_edit.setStyleSheet(f"""
             QTextEdit {{
@@ -234,12 +261,12 @@ class PetStickyNote(QWidget):
                 margin: 2px 0;
             }}
             QScrollBar::handle:vertical {{
-                background: rgba(0, 0, 0, 0.15);
+                background: {sb_handle};
                 border-radius: 3px;
                 min-height: 30px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: rgba(0, 0, 0, 0.25);
+                background: {sb_hover};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -271,6 +298,39 @@ class PetStickyNote(QWidget):
             self.current_theme = theme_key
             self.apply_theme_style()
             self.save_data()
+            sound_manager.play("click")
+
+    def eventFilter(self, watched, event):
+        if watched == self.text_edit and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self.hide_memo()
+                return True
+            if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+                if event.key() == Qt.Key.Key_S:
+                    self.save_data()
+                    sound_manager.play("click")
+                    return True
+                elif event.key() == Qt.Key.Key_T:
+                    self._insert_timestamp()
+                    return True
+        return super().eventFilter(watched, event)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide_memo()
+            event.accept()
+            return
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            if event.key() == Qt.Key.Key_S:
+                self.save_data()
+                sound_manager.play("click")
+                event.accept()
+                return
+            elif event.key() == Qt.Key.Key_T:
+                self._insert_timestamp()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     def _insert_timestamp(self):
         t_str = time.strftime("[%m-%d %H:%M] ")

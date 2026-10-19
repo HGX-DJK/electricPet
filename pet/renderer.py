@@ -81,6 +81,14 @@ class PetRenderer:
         self.blink_total = 1
         self.blink_style = "normal"
 
+        # 赛博全息生物扫描仪动效 (Holo-Scan Sweep)
+        self.holo_scan_timer = 0.0
+        self.is_sweating = False
+
+    def trigger_holo_scan(self):
+        """触发全息生物扫描仪扫光动效 (0.45s 激光扫描线从头扫到脚)"""
+        self.holo_scan_timer = 0.45
+
     def set_cursor_gaze(self, gaze_x, gaze_y, dist_px=999.0):
         """设置鼠标光标引起的眼神注视目标方位与空间距离"""
         self.target_gaze_x = gaze_x
@@ -243,6 +251,8 @@ class PetRenderer:
             self.bath_timer -= delta_time
         if self.evolution_aura_timer > 0:
             self.evolution_aura_timer -= delta_time
+        if self.holo_scan_timer > 0:
+            self.holo_scan_timer = max(0.0, self.holo_scan_timer - delta_time)
 
         # 动作专属动态粒子发射
         if current_state == "HEAD_BOB_MUSIC" and random.random() < 0.14:
@@ -568,6 +578,62 @@ class PetRenderer:
         # 10. 独立粒子特效绘制
         self._draw_particles(painter, cx, cy)
 
+        # 11. 全息生物扫描仪扫光特效 (Holo-Scan Sweep)
+        if self.holo_scan_timer > 0:
+            self._draw_holo_scan(painter)
+
+        # 12. 高负载流汗软萌水滴
+        if getattr(self, "is_sweating", False):
+            self._draw_sweat_drop(painter, cx, cy)
+
+        painter.restore()
+
+    def _draw_holo_scan(self, painter: QPainter):
+        """绘制半透明天青流光全息生物扫描线与战术准星"""
+        progress = max(0.0, min(1.0, 1.0 - (self.holo_scan_timer / 0.45)))
+        # 扫描范围从头部 y=25 到脚底 y=185
+        beam_y = 25.0 + progress * 160.0
+        alpha = int(220 * math.sin(progress * math.pi))
+
+        painter.save()
+        # 激光扫光横梁 (带有高斯光晕质感渐变)
+        grad = QLinearGradient(0, beam_y - 7, 0, beam_y + 7)
+        grad.setColorAt(0.0, QColor(56, 189, 248, 0))
+        grad.setColorAt(0.35, QColor(56, 189, 248, int(alpha * 0.55)))
+        grad.setColorAt(0.5, QColor(240, 249, 255, alpha))
+        grad.setColorAt(0.65, QColor(56, 189, 248, int(alpha * 0.55)))
+        grad.setColorAt(1.0, QColor(56, 189, 248, 0))
+
+        painter.setBrush(QBrush(grad))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRect(QRectF(25.0, beam_y - 7, 170.0, 14.0))
+
+        # 左右两端科技刻度与小微标
+        painter.setPen(QPen(QColor(56, 189, 248, alpha), 1.5))
+        painter.drawLine(int(26), int(beam_y - 5), int(26), int(beam_y + 5))
+        painter.drawLine(int(194), int(beam_y - 5), int(194), int(beam_y + 5))
+
+        painter.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+        painter.setPen(QColor(56, 189, 248, alpha))
+        painter.drawText(QRectF(32.0, beam_y - 14, 110.0, 12.0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "BIO-SCAN // 99.8%")
+        painter.restore()
+
+    def _draw_sweat_drop(self, painter: QPainter, cx, cy):
+        """绘制高负载流汗软萌水滴"""
+        painter.save()
+        sw_offset = (self.anim_time * 24.0) % 16.0
+        sw_x = cx + 34.0
+        sw_y = cy - 36.0 + sw_offset
+        sw_alpha = int(max(0, min(230, (1.0 - sw_offset / 16.0) * 255)))
+
+        path = QPainterPath()
+        path.moveTo(sw_x, sw_y - 6)
+        path.cubicTo(sw_x + 3.5, sw_y - 1, sw_x + 3.5, sw_y + 4, sw_x, sw_y + 5)
+        path.cubicTo(sw_x - 3.5, sw_y + 4, sw_x - 3.5, sw_y - 1, sw_x, sw_y - 6)
+
+        painter.setBrush(QBrush(QColor(56, 189, 248, sw_alpha)))
+        painter.setPen(QPen(QColor(224, 242, 254, sw_alpha), 1.0))
+        painter.drawPath(path)
         painter.restore()
 
     # ================= 究极体光环与背部装饰 =================

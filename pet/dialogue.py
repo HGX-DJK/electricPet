@@ -86,15 +86,15 @@ class SpeechBalloonCard(QFrame):
             path.addRoundedRect(body_rect, radius, radius)
             united_path = path
 
-        # 纯白温润背景 + 细腻微浅灰边框
-        painter.setBrush(QBrush(QColor(255, 255, 255, 252)))
-        painter.setPen(QPen(QColor(226, 232, 240, 240), 1.5))
+        # 赛博深空全息暗黑背景 + 天青微光发光边框
+        painter.setBrush(QBrush(QColor(11, 15, 25, 245)))
+        painter.setPen(QPen(QColor(56, 189, 248, 220), 1.5))
         painter.drawPath(united_path)
 
-        # 右下角专属超淡萌爪水印印章 (Watermark Paw Stamp)
+        # 右下角专属超淡全息萌爪水印印章 (Watermark Paw Stamp)
         wm_x = w - 25.0
         wm_y = (h - tail_height - 16.0) if self.tail_position == "bottom" else (h - 18.0)
-        wm_color = QColor(203, 213, 225, 95)
+        wm_color = QColor(56, 189, 248, 65)
         painter.setBrush(QBrush(wm_color))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(wm_x - 5, wm_y - 4, 10, 8))
@@ -130,10 +130,10 @@ class SpeechBubbleWidget(QWidget):
         # 气泡主卡片（自绘带指向尾巴的温润圆角多边形）
         self.card = SpeechBalloonCard(self)
 
-        # 柔和高阶环境阴影
+        # 赛博天青全息光晕阴影
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor(15, 23, 42, 35))
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(14, 165, 233, 60))
         shadow.setOffset(0, 4)
         self.card.setGraphicsEffect(shadow)
 
@@ -150,10 +150,11 @@ class SpeechBubbleWidget(QWidget):
         self.badge_lbl = QLabel("")
         self.badge_lbl.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
         self.badge_lbl.setStyleSheet("""
-            background-color: #EEF2FF;
-            color: #4F46E5;
+            background-color: rgba(14, 165, 233, 0.2);
+            color: #38BDF8;
             padding: 2px 7px;
             border-radius: 6px;
+            border: 1px solid #0EA5E9;
         """)
         top_bar.addWidget(self.badge_lbl)
         top_bar.addStretch()
@@ -165,7 +166,7 @@ class SpeechBubbleWidget(QWidget):
         self.text_lbl = QLabel("")
         self.text_lbl.setFont(QFont("Microsoft YaHei UI", 10))
         self.text_lbl.setWordWrap(True)
-        self.text_lbl.setStyleSheet("color: #1E293B; background: transparent;")
+        self.text_lbl.setStyleSheet("color: #F8FAFC; background: transparent;")
         self.card_layout.addWidget(self.text_lbl)
 
         main_layout.addWidget(self.card)
@@ -181,11 +182,11 @@ class SpeechBubbleWidget(QWidget):
         if badge and badge not in ("🐾 波可", ""):
             self.badge_lbl.setText(badge)
             if "健康" in badge:
-                self.badge_lbl.setStyleSheet("background-color: #ECFDF5; color: #059669; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet("background-color: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid #10B981; padding: 2px 7px; border-radius: 6px;")
             elif "喜讯" in badge or "成长" in badge:
-                self.badge_lbl.setStyleSheet("background-color: #FEF3C7; color: #D97706; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet("background-color: rgba(245, 158, 11, 0.2); color: #FBBF24; border: 1px solid #F59E0B; padding: 2px 7px; border-radius: 6px;")
             else:
-                self.badge_lbl.setStyleSheet("background-color: #EEF2FF; color: #4F46E5; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet("background-color: rgba(14, 165, 233, 0.2); color: #38BDF8; border: 1px solid #0EA5E9; padding: 2px 7px; border-radius: 6px;")
             self.top_bar_widget.show()
         else:
             self.top_bar_widget.hide()

@@ -672,7 +672,7 @@ class PetWindow(QWidget):
             self.state = "IDLE"
 
     def _on_status_tick(self):
-        """每秒更新一次宠物数值与自适应能耗调节"""
+        """每秒更新一次宠物数值与自适应能耗调节，并进行硬件全息状态轮询"""
         self.model.tick(1.0)
         # 自适应能耗调节：休眠中降低帧率至 30 FPS 节约系统开销，醒来恢复 60 FPS
         if self.model.is_sleeping:
@@ -682,13 +682,36 @@ class PetWindow(QWidget):
             if self.anim_timer.interval() != 16:
                 self.anim_timer.setInterval(16)
 
+        # 硬件性能感知与高负载流汗彩蛋 (每 15 秒轮询一次)
+        now = time.time()
+        if now - getattr(self, "_last_hw_check_time", 0.0) >= 15.0:
+            self._last_hw_check_time = now
+            try:
+                from pet.system_monitor import get_system_stats
+                hw = get_system_stats()
+                if hw["cpu"] >= 85 and not getattr(self, "is_boss_hidden", False) and not self.model.is_sleeping:
+                    if hasattr(self, "renderer"):
+                        self.renderer.is_sweating = True
+                    if now - getattr(self, "_last_cpu_warn_time", 0.0) > 120.0:  # 2 分钟防重复打扰
+                        self._last_cpu_warn_time = now
+                        self.dialogue.say(f"🔥 哎呀主人！CPU算力跑满啦 ({hw['cpu']}%)，波可热得直冒汗，快注意给电脑通风散热呀~ 💦", duration=5.5)
+                else:
+                    if hasattr(self, "renderer"):
+                        self.renderer.is_sweating = False
+            except Exception:
+                pass
+
     # ================= 鼠标与交互事件 =================
     def enterEvent(self, event):
-        """鼠标靠近/移入宠物，平滑浮现伴侣交互岛"""
+        """鼠标靠近/移入宠物，平滑浮现伴侣交互岛并触发全息生物扫描仪扫光"""
         if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
             self.pop_out_from_edge()
             super().enterEvent(event)
             return
+        if hasattr(self, "renderer"):
+            self.renderer.trigger_holo_scan()
+            if getattr(self.model, "sound_enabled", True) and random.random() < 0.25:
+                sound_manager.play("pop")
         if hasattr(self, "dock"):
             self.dock.show_dock()
         super().enterEvent(event)
@@ -807,6 +830,8 @@ class PetWindow(QWidget):
                 if not self.is_dragging:
                     self.is_dragging = True
                     self.state = "DRAGGING"
+                    if getattr(self.model, "sound_enabled", True):
+                        sound_manager.play("pop")
                 self.move(new_pos)
             else:
                 # 鼠标在宠物头上轻微晃动视为“抚摸”

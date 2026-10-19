@@ -70,6 +70,7 @@ class PetTrayIcon(QSystemTrayIcon):
         self._single_click_timer.timeout.connect(self._on_single_click)
 
         self._init_menu()
+        self._sync_menu_state()
         self.activated.connect(self._on_tray_activated)
 
         # 监听模型状态变更以实时同步托盘选项与等级
@@ -96,13 +97,13 @@ class PetTrayIcon(QSystemTrayIcon):
                 border-radius: 4px;
             }
             QMenu::item:selected {
-                background-color: #EEF2FF;
-                color: #4F46E5;
+                background-color: #FFF7ED;
+                color: #EA580C;
             }
             QMenu::item:disabled {
-                color: #334155;
+                color: #C2410C;
                 font-weight: bold;
-                background: #F8FAFC;
+                background: #FFF7ED;
                 padding: 6px 24px;
             }
             QMenu::indicator {
@@ -111,8 +112,8 @@ class PetTrayIcon(QSystemTrayIcon):
                 margin-left: 6px;
             }
             QMenu::indicator:checked {
-                background-color: #6366F1;
-                border: 2px solid #6366F1;
+                background-color: #F97316;
+                border: 2px solid #F97316;
                 border-radius: 3px;
             }
             QMenu::indicator:unchecked {
@@ -122,7 +123,7 @@ class PetTrayIcon(QSystemTrayIcon):
             }
             QMenu::separator {
                 height: 1px;
-                background: #E5E7EB;
+                background: #FED7AA;
                 margin: 4px 8px;
             }
         """)
@@ -190,12 +191,14 @@ class PetTrayIcon(QSystemTrayIcon):
 
         # 退出应用
         exit_action = menu.addAction("🚪 退出电子宠物")
+        exit_action.triggered.connect(self._exit_app)
         menu.aboutToShow.connect(self._sync_menu_state)
         self.setContextMenu(menu)
 
     def _sync_menu_state(self):
+        stage_name = self.model.stage_info.get("name", "萌宠") if hasattr(self.model, "stage_info") else "萌宠"
         if hasattr(self, "status_action") and self.status_action:
-            self.status_action.setText(f"🐾 {self.model.name} (Lv.{self.model.level})")
+            self.status_action.setText(f"🐾 {self.model.name} (Lv.{self.model.level} · {stage_name})")
         if hasattr(self, "toggle_show_action") and self.toggle_show_action:
             is_vis = self.pet_window.isVisible() and not getattr(self.pet_window, "is_boss_hidden", False)
             self.toggle_show_action.setText("👁️ 隐藏萌宠" if is_vis else "👁️ 显示萌宠")
@@ -203,6 +206,12 @@ class PetTrayIcon(QSystemTrayIcon):
             self.ontop_action.setChecked(self.model.always_on_top)
         if hasattr(self, "sound_action") and self.sound_action:
             self.sound_action.setChecked(self.model.sound_enabled)
+
+        # 动态更新系统托盘丰富健康状态 Tooltip
+        self.setToolTip(
+            f"{self.model.name} (Lv.{self.model.level}) · {stage_name}\n"
+            f"🍗 饱食: {int(self.model.hunger)}%  💖 心情: {int(self.model.mood)}%  ⚡ 精力: {int(self.model.energy)}%"
+        )
 
     def _toggle_visibility(self):
         if self.pet_window.isVisible():

@@ -10,31 +10,31 @@ from pet.menus import FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialo
 
 DOCK_PASTELS = {
     "feed": {
-        "bg": "#FFF7ED", "border": "#FED7AA", "hover_bg": "#FFEDD5", "hover_border": "#FB923C", "pressed": "#FDBA74"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#F59E0B", "hover_bg": "rgba(245, 158, 11, 0.2)", "hover_border": "#FBBF24", "pressed": "rgba(180, 83, 9, 0.4)"
     },
     "wardrobe": {
-        "bg": "#FAF5FF", "border": "#E9D5FF", "hover_bg": "#F3E8FF", "hover_border": "#C084FC", "pressed": "#D8B4FE"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#A855F7", "hover_bg": "rgba(168, 85, 247, 0.2)", "hover_border": "#C084FC", "pressed": "rgba(126, 34, 206, 0.4)"
     },
     "talent": {
-        "bg": "#FFF1F2", "border": "#FECDD3", "hover_bg": "#FFE4E6", "hover_border": "#FB7185", "pressed": "#FDA4AF"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#FB7185", "hover_bg": "rgba(251, 113, 133, 0.2)", "hover_border": "#FDA4AF", "pressed": "rgba(190, 18, 60, 0.4)"
     },
     "play": {
-        "bg": "#F0F9FF", "border": "#BAE6FD", "hover_bg": "#E0F2FE", "hover_border": "#38BDF8", "pressed": "#7DD3FC"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#38BDF8", "hover_bg": "rgba(56, 189, 248, 0.2)", "hover_border": "#7DD3FC", "pressed": "rgba(2, 132, 199, 0.4)"
     },
     "bath": {
-        "bg": "#ECFDF5", "border": "#A7F3D0", "hover_bg": "#D1FAE5", "hover_border": "#34D399", "pressed": "#6EE7B7"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#34D399", "hover_bg": "rgba(52, 211, 153, 0.2)", "hover_border": "#6EE7B7", "pressed": "rgba(5, 150, 105, 0.4)"
     },
     "sleep": {
-        "bg": "#EEF2FF", "border": "#C7D2FE", "hover_bg": "#E0E7FF", "hover_border": "#818CF8", "pressed": "#A5B4FC"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#818CF8", "hover_bg": "rgba(129, 140, 248, 0.2)", "hover_border": "#A5B4FC", "pressed": "rgba(67, 56, 202, 0.4)"
     },
     "wake": {
-        "bg": "#FEFCE8", "border": "#FEF08A", "hover_bg": "#FEF9C3", "hover_border": "#FACC15", "pressed": "#FDE047"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#FACC15", "hover_bg": "rgba(250, 204, 21, 0.2)", "hover_border": "#FDE047", "pressed": "rgba(161, 98, 7, 0.4)"
     },
     "memo": {
-        "bg": "#FEFCE8", "border": "#FEF08A", "hover_bg": "#FEF9C3", "hover_border": "#FACC15", "pressed": "#FDE047"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#0EA5E9", "hover_bg": "rgba(14, 165, 233, 0.2)", "hover_border": "#38BDF8", "pressed": "rgba(3, 105, 161, 0.4)"
     },
     "more": {
-        "bg": "#F8FAFC", "border": "#E2E8F0", "hover_bg": "#F1F5F9", "hover_border": "#94A3B8", "pressed": "#CBD5E1"
+        "bg": "rgba(30, 41, 59, 0.8)", "border": "#64748B", "hover_bg": "rgba(100, 116, 139, 0.2)", "hover_border": "#94A3B8", "pressed": "rgba(51, 65, 85, 0.4)"
     }
 }
 
@@ -61,7 +61,7 @@ class DockIconButton(QPushButton):
                 border: 1.5px solid {pal["border"]};
                 border-radius: 18px;
                 padding: 0px;
-                color: #1E293B;
+                color: #F8FAFC;
             }}
             QPushButton:hover {{
                 background-color: {pal["hover_bg"]};
@@ -98,21 +98,21 @@ class PetCompanionDock(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 琉璃玉石磨砂胶囊底座 (带微光边缘反射)
+        # 赛博深空全息微透胶囊底座 (带天青霓虹微光反射)
         self.capsule = QFrame(self)
         self.capsule.setStyleSheet("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255, 255, 255, 254), stop:1 rgba(248, 250, 252, 248));
-                border: 1.5px solid rgba(226, 232, 240, 0.95);
-                border-top: 1.5px solid rgba(255, 255, 255, 1.0);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(11, 15, 25, 0.95), stop:1 rgba(17, 24, 39, 0.95));
+                border: 1.5px solid #0EA5E9;
+                border-top: 1.5px solid #38BDF8;
                 border-radius: 24px;
             }
         """)
 
-        # 柔和高阶环境阴影
+        # 赛博天青全息多阶环境阴影
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(24)
-        shadow.setColor(QColor(15, 23, 42, 40))
+        shadow.setBlurRadius(28)
+        shadow.setColor(QColor(14, 165, 233, 70))
         shadow.setOffset(0, 4)
         self.capsule.setGraphicsEffect(shadow)
 
@@ -153,7 +153,7 @@ class PetCompanionDock(QWidget):
         # 竖向细微分割线
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("background-color: #E2E8F0; min-width: 1px; max-width: 1px; margin: 4px 1px;")
+        sep.setStyleSheet("background-color: #334155; min-width: 1px; max-width: 1px; margin: 4px 1px;")
         dock_layout.addWidget(sep)
 
         # 8. 全部菜单与设置
@@ -203,6 +203,14 @@ class PetCompanionDock(QWidget):
         """鼠标滑出快捷岛：平滑延时收起"""
         self.schedule_hide(1600)
         super().leaveEvent(event)
+
+    def keyPressEvent(self, event):
+        """支持 Esc 键极速收起伴侣岛"""
+        if event.key() == Qt.Key.Key_Escape:
+            self._do_fade_out()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def _do_fade_out(self):
         if not self.isVisible():

@@ -3,113 +3,165 @@ import sys
 import copy
 import random
 import winreg
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF, QEvent
+import math
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF, QEvent, QPoint, QPointF
 from PyQt6.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QProgressBar, QSlider, QCheckBox, QComboBox,
-    QFrame, QGridLayout, QTabWidget, QScrollArea, QGraphicsDropShadowEffect
+    QFrame, QGridLayout, QTabWidget, QScrollArea, QGraphicsDropShadowEffect,
+    QApplication
 )
-from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen
+from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen, QLinearGradient, QRadialGradient
 from pet.audio import sound_manager
 from pet.renderer import PetRenderer
 
-# 现代毛玻璃与卡片样式表
+# 赛博高科技全息毛玻璃与霓虹全局 QSS
 MODERN_STYLE = """
 QDialog {
-    background-color: #FAFAFD;
-    border-radius: 0px;
+    background: transparent;
+}
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+/* 赛博极窄霓虹青半透明滚动条 */
+QScrollBar:vertical {
+    border: none;
+    background: rgba(15, 23, 42, 0.6);
+    width: 6px;
+    margin: 0px 0px 0px 0px;
+    border-radius: 3px;
+}
+QScrollBar::handle:vertical {
+    background: #0EA5E9;
+    min-height: 24px;
+    border-radius: 3px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #38BDF8;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: transparent;
+}
+QScrollBar:horizontal {
+    border: none;
+    background: rgba(15, 23, 42, 0.6);
+    height: 6px;
+    margin: 0px 0px 0px 0px;
+    border-radius: 3px;
+}
+QScrollBar::handle:horizontal {
+    background: #0EA5E9;
+    min-width: 24px;
+    border-radius: 3px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #38BDF8;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0px;
+}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
+    background: transparent;
 }
 QLabel {
     font-family: "Microsoft YaHei UI", sans-serif;
-    color: #1F2937;
+    color: #F1F5F9;
 }
 QPushButton {
     font-family: "Microsoft YaHei UI", sans-serif;
-    background-color: #FFFFFF;
-    border: 1px solid #E2E8F0;
+    background-color: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(51, 65, 85, 0.8);
     border-radius: 12px;
     padding: 8px 16px;
     font-size: 13px;
-    color: #334155;
+    color: #F1F5F9;
     font-weight: 500;
 }
 QPushButton:hover {
-    background-color: #F8FAFC;
-    border-color: #818CF8;
-    color: #4338CA;
+    background-color: rgba(51, 65, 85, 0.95);
+    border-color: #38BDF8;
+    color: #FFFFFF;
 }
 QPushButton:pressed {
-    background-color: #EEF2FF;
+    background-color: rgba(14, 165, 233, 0.25);
 }
 QPushButton#PrimaryBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #4F46E5);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
     color: #FFFFFF;
-    border: none;
-    font-weight: 600;
+    border: 1px solid #38BDF8;
+    font-weight: bold;
     border-radius: 12px;
 }
 QPushButton#PrimaryBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #4338CA);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+}
+QPushButton#PrimaryBtn:pressed {
+    background: #075985;
 }
 QPushButton#SelectedBtn {
-    background-color: #EEF2FF;
-    border: 2px solid #6366F1;
-    color: #4338CA;
-    font-weight: 600;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(14, 165, 233, 0.25), stop:1 rgba(15, 23, 42, 0.85));
+    border: 1.5px solid #38BDF8;
+    color: #FFFFFF;
+    font-weight: bold;
 }
 QProgressBar {
-    border: none;
-    background-color: #F1F5F9;
+    border: 1px solid #1E293B;
+    background-color: rgba(15, 23, 42, 0.8);
     border-radius: 6px;
     height: 12px;
     text-align: center;
     font-size: 9px;
-    color: #475569;
+    color: #94A3B8;
     font-weight: bold;
 }
 QProgressBar::chunk {
     border-radius: 6px;
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #818CF8);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
 }
 QTabWidget::pane {
-    border: 1px solid #E2E8F0;
+    border: 1px solid #1E293B;
     border-radius: 16px;
-    background-color: #FFFFFF;
+    background: transparent;
     top: -1px;
 }
 QTabBar::tab {
-    background: #F1F5F9;
-    border: 1px solid #E2E8F0;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(51, 65, 85, 0.6);
     padding: 8px 18px;
     margin-right: 6px;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
     font-family: "Microsoft YaHei UI";
     font-size: 12px;
-    color: #64748B;
+    color: #94A3B8;
 }
 QTabBar::tab:selected {
-    background: #FFFFFF;
-    border-bottom-color: #FFFFFF;
-    color: #4F46E5;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+    border-bottom: 2px solid #38BDF8;
+    color: #FFFFFF;
     font-weight: bold;
 }
 QTabBar::tab:hover:!selected {
-    background: #E2E8F0;
-    color: #4338CA;
+    background: rgba(51, 65, 85, 0.8);
+    color: #F1F5F9;
+    border: 1px solid #0EA5E9;
 }
 QSlider::groove:horizontal {
     height: 6px;
-    background: #E2E8F0;
+    background: #1E293B;
     border-radius: 3px;
 }
 QSlider::sub-page:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #818CF8);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
     border-radius: 3px;
 }
 QSlider::handle:horizontal {
-    background: #FFFFFF;
-    border: 2px solid #6366F1;
+    background: #F8FAFC;
+    border: 2px solid #0EA5E9;
     width: 18px;
     margin-top: -6px;
     margin-bottom: -6px;
@@ -118,22 +170,22 @@ QSlider::handle:horizontal {
 QCheckBox {
     font-family: "Microsoft YaHei UI", sans-serif;
     font-size: 13px;
-    color: #334155;
+    color: #E2E8F0;
     spacing: 8px;
 }
 QCheckBox::indicator {
     width: 16px;
     height: 16px;
-    border: 2px solid #CBD5E1;
+    border: 1.5px solid #475569;
     border-radius: 4px;
-    background-color: #FFFFFF;
+    background-color: rgba(30, 41, 59, 0.8);
 }
 QCheckBox::indicator:hover {
-    border-color: #818CF8;
+    border-color: #38BDF8;
 }
 QCheckBox::indicator:checked {
-    background-color: #6366F1;
-    border-color: #6366F1;
+    background-color: #0EA5E9;
+    border-color: #38BDF8;
     width: 16px;
     height: 16px;
 }
@@ -171,31 +223,31 @@ PASTEL_PALETTE = {
 }
 
 class ActionCardButton(QPushButton):
-    """具有现代毛玻璃流光质感的交互卡片按钮"""
+    """具有赛博高科技微光质感的交互卡片按钮"""
     def __init__(self, icon_str, title, subtitle="", bg_color=None, border_color=None, parent=None):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setMinimumHeight(54)
 
         if not bg_color or not border_color:
-            bg_c, brd_c = PASTEL_PALETTE.get(icon_str, ("#F8FAFC", "#E2E8F0"))
+            bg_c, brd_c = PASTEL_PALETTE.get(icon_str, ("rgba(15, 23, 42, 0.7)", "#0EA5E9"))
             bg_color = bg_color or bg_c
             border_color = border_color or brd_c
 
         self.setStyleSheet("""
             QPushButton {
-                background-color: #FFFFFF;
-                border: 1.5px solid #F1F5F9;
+                background-color: rgba(30, 41, 59, 0.7);
+                border: 1px solid rgba(51, 65, 85, 0.8);
                 border-radius: 14px;
                 padding: 0px;
                 text-align: left;
             }
             QPushButton:hover {
-                background-color: #F8FAFC;
-                border: 1.5px solid #818CF8;
+                background-color: rgba(51, 65, 85, 0.95);
+                border: 1.5px solid #38BDF8;
             }
             QPushButton:pressed {
-                background-color: #EEF2FF;
+                background-color: rgba(14, 165, 233, 0.25);
             }
         """)
 
@@ -203,15 +255,15 @@ class ActionCardButton(QPushButton):
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(10)
 
-        # 柔和底色图标徽章容器
+        # 全息高科技图标徽章容器
         icon_box = QFrame()
-        icon_box.setFixedSize(36, 36)
-        icon_box.setStyleSheet(f"""
-            QFrame {{
-                background-color: {bg_color};
-                border: 1px solid {border_color};
+        icon_box.setFixedSize(38, 38)
+        icon_box.setStyleSheet("""
+            QFrame {
+                background-color: rgba(15, 23, 42, 0.7);
+                border: 1.5px solid #0EA5E9;
                 border-radius: 11px;
-            }}
+            }
         """)
         icon_box_layout = QVBoxLayout(icon_box)
         icon_box_layout.setContentsMargins(0, 0, 0, 0)
@@ -230,14 +282,14 @@ class ActionCardButton(QPushButton):
 
         title_lbl = QLabel(title)
         title_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #1E293B; background: transparent; border: none;")
+        title_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
         text_layout.addWidget(title_lbl)
 
         if subtitle:
             sub_lbl = QLabel(subtitle)
             sub_lbl.setFont(QFont("Microsoft YaHei UI", 9))
             sub_lbl.setWordWrap(True)
-            sub_lbl.setStyleSheet("color: #64748B; background: transparent; border: none;")
+            sub_lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
             text_layout.addWidget(sub_lbl)
 
         layout.addLayout(text_layout, stretch=1)
@@ -252,7 +304,7 @@ class QuickActionMenu(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.model = model
         self.pet_window = pet_window
-        self.setFixedWidth(384)
+        self.setFixedWidth(410)
 
         # 主卡片背景容器
         outer_layout = QVBoxLayout(self)
@@ -262,16 +314,16 @@ class QuickActionMenu(QWidget):
         card.setObjectName("MainCard")
         card.setStyleSheet("""
             QFrame#MainCard {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(255, 255, 255, 0.98), stop:1 rgba(248, 250, 252, 0.96));
-                border: 1px solid rgba(226, 232, 240, 0.95);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0B0F19, stop:1 #111827);
+                border: 1.5px solid #0EA5E9;
                 border-radius: 22px;
             }
         """)
 
-        # 柔和多阶环境阴影
+        # 赛博天青全息多阶环境阴影
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(36)
-        shadow.setColor(QColor(15, 23, 42, 50))
+        shadow.setColor(QColor(14, 165, 233, 50))
         shadow.setOffset(0, 10)
         card.setGraphicsEffect(shadow)
 
@@ -287,9 +339,9 @@ class QuickActionMenu(QWidget):
         avatar_frame.setFixedSize(50, 50)
         avatar_frame.setStyleSheet("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #EEF2FF, stop:1 #E0E7FF);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0369A1, stop:1 #0284C7);
                 border-radius: 25px;
-                border: 2px solid #818CF8;
+                border: 2px solid #38BDF8;
             }
         """)
         av_layout = QVBoxLayout(avatar_frame)
@@ -301,52 +353,77 @@ class QuickActionMenu(QWidget):
         av_layout.addWidget(avatar)
         profile_box.addWidget(avatar_frame)
 
-        name_box = QVBoxLayout()
-        name_box.setSpacing(3)
-        top_name = QHBoxLayout()
-        name_lbl = QLabel(model.name)
-        name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
-        name_lbl.setStyleSheet("color: #0F172A; background: transparent; border: none;")
-
-        stage_pill = QLabel(f"✨ {model.stage_info['name']}")
-        stage_pill.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
-        stage_pill.setStyleSheet("""
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EEF2FF, stop:1 #E0E7FF);
-            color: #4338CA;
-            padding: 2px 9px;
-            border-radius: 9px;
-            border: 1px solid rgba(99, 102, 241, 0.25);
-        """)
-        top_name.addWidget(name_lbl)
-        top_name.addWidget(stage_pill)
-
-        mode_text = "🧲 贴地重力" if model.enable_gravity else "📌 任意悬停"
+        mode_text = "🧲 重力" if model.enable_gravity else "📌 悬停"
         self.btn_mode_pill = QPushButton(mode_text)
-        self.btn_mode_pill.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
+        self.btn_mode_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
         self.btn_mode_pill.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_mode_pill.setToolTip("点击切换定位模式：\n【任意悬停】可立在屏幕中间或顶部任意位置不掉落\n【贴地重力】受桌面物理重力自动落回底部任务栏")
+        self.btn_mode_pill.setToolTip("点击切换定位模式：\n【悬停】自由停靠屏幕任意位置\n【重力】落回底部任务栏")
         self.btn_mode_pill.setStyleSheet("""
             QPushButton {
-                background: #F8FAFC;
-                color: #475569;
-                padding: 2px 8px;
-                border-radius: 9px;
-                border: 1px solid #CBD5E1;
+                background: rgba(30, 41, 59, 0.8);
+                color: #94A3B8;
+                padding: 1px 7px;
+                border-radius: 6px;
+                border: 1px solid #334155;
             }
             QPushButton:hover {
-                background: #EEF2FF;
-                color: #4F46E5;
-                border-color: #818CF8;
+                background: rgba(14, 165, 233, 0.2);
+                color: #38BDF8;
+                border-color: #38BDF8;
             }
         """)
         self.btn_mode_pill.clicked.connect(self._toggle_gravity_mode)
+
+        name_box = QVBoxLayout()
+        name_box.setSpacing(4)
+        top_name = QHBoxLayout()
+        top_name.setSpacing(6)
+        name_lbl = QLabel(model.name)
+        name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
+        name_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+
+        stage_pill = QLabel(f"✨ {model.stage_info['name']}")
+        stage_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+        stage_pill.setStyleSheet("""
+            background: rgba(14, 165, 233, 0.15);
+            color: #38BDF8;
+            padding: 2px 7px;
+            border-radius: 8px;
+            border: 1px solid #0EA5E9;
+        """)
+        top_name.addWidget(name_lbl)
+        top_name.addWidget(stage_pill)
         top_name.addWidget(self.btn_mode_pill)
         top_name.addStretch()
         name_box.addLayout(top_name)
 
-        sub_info = QLabel(f"Lv.{model.level} · 体重 {model.weight}kg · 陪伴第 {model.total_days} 天")
-        sub_info.setStyleSheet("color: #64748B; font-size: 11px; background: transparent; border: none;")
-        name_box.addWidget(sub_info)
+        # 档案信息与系统硬件 HUD
+        sub_row = QHBoxLayout()
+        sub_row.setSpacing(8)
+        sub_info = QLabel(f"Lv.{model.level} · {model.weight}kg · 第{model.total_days}天")
+        sub_info.setStyleSheet("color: #94A3B8; font-size: 11px; background: transparent; border: none;")
+        sub_row.addWidget(sub_info)
+
+        # 硬件性能 HUD 状态药丸
+        try:
+            from pet.system_monitor import get_system_stats
+            hw_stats = get_system_stats()
+            hw_pill = QLabel(f"💻 {hw_stats['cpu']}% | 🧠 {hw_stats['memory']}%")
+            hw_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            hw_pill.setStyleSheet("""
+                background: rgba(15, 23, 42, 0.8);
+                color: #34D399;
+                padding: 1px 6px;
+                border-radius: 6px;
+                border: 1px solid rgba(52, 211, 153, 0.35);
+            """)
+            hw_pill.setToolTip(f"开机运行: {hw_stats['uptime']} · 物理内存: {hw_stats['mem_total_gb']}GB")
+            sub_row.addWidget(hw_pill)
+        except Exception:
+            pass
+
+        sub_row.addStretch()
+        name_box.addLayout(sub_row)
         profile_box.addLayout(name_box)
 
         # 关闭按钮
@@ -355,8 +432,8 @@ class QuickActionMenu(QWidget):
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.setStyleSheet("""
             QPushButton {
-                background: #F1F5F9;
-                border: none;
+                background: rgba(30, 41, 59, 0.8);
+                border: 1px solid #334155;
                 border-radius: 13px;
                 color: #94A3B8;
                 font-size: 11px;
@@ -364,8 +441,9 @@ class QuickActionMenu(QWidget):
                 padding: 0px;
             }
             QPushButton:hover {
-                background: #FEE2E2;
-                color: #EF4444;
+                background: #EF4444;
+                color: #FFFFFF;
+                border-color: #F87171;
             }
         """)
         btn_close.clicked.connect(self.close)
@@ -376,27 +454,27 @@ class QuickActionMenu(QWidget):
         status_grid = QGridLayout()
         status_grid.setSpacing(8)
         status_grid.addWidget(self._create_status_bento_item(
-            "🍗", "饱食度", int(model.hunger), "#D97706",
+            "🍗", "饱食度", int(model.hunger), "#F59E0B",
             "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #F59E0B, stop:1 #D97706)"
         ), 0, 0)
         status_grid.addWidget(self._create_status_bento_item(
-            "💖", "心情值", int(model.mood), "#E11D48",
+            "💖", "心情值", int(model.mood), "#EC4899",
             "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FB7185, stop:1 #E11D48)"
         ), 0, 1)
         status_grid.addWidget(self._create_status_bento_item(
-            "⚡", "精力值", int(model.energy), "#2563EB",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #60A5FA, stop:1 #2563EB)"
+            "⚡", "精力值", int(model.energy), "#38BDF8",
+            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #38BDF8, stop:1 #0284C7)"
         ), 1, 0)
         status_grid.addWidget(self._create_status_bento_item(
-            "🫧", "清洁度", int(model.cleanliness), "#0891B2",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #22D3EE, stop:1 #0891B2)"
+            "🫧", "清洁度", int(model.cleanliness), "#34D399",
+            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #059669)"
         ), 1, 1)
         layout.addLayout(status_grid)
 
         # 分割线
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("border: none; background-color: #F1F5F9; max-height: 1px;")
+        line.setStyleSheet("border: none; background-color: #1E293B; max-height: 1px;")
         layout.addWidget(line)
 
         # 3. 核心功能卡片网格 (2 列 x 4 行)
@@ -448,23 +526,23 @@ class QuickActionMenu(QWidget):
 
         layout.addLayout(grid)
 
-        # 4. 底部系统偏好设置条 (整条通栏，类似 iOS / macOS 设置入口)
+        # 4. 底部系统偏好设置条 (整条通栏，赛博操作卡片)
         btn_settings = QPushButton()
         btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_settings.setFixedHeight(46)
         btn_settings.setStyleSheet("""
             QPushButton {
-                background-color: #F8FAFC;
-                border: 1px solid #E2E8F0;
+                background-color: rgba(30, 41, 59, 0.6);
+                border: 1px solid #334155;
                 border-radius: 14px;
                 padding: 0px 12px;
             }
             QPushButton:hover {
-                background-color: #EEF2FF;
-                border: 1.5px solid #818CF8;
+                background-color: rgba(51, 65, 85, 0.85);
+                border: 1.5px solid #38BDF8;
             }
             QPushButton:pressed {
-                background-color: #E0E7FF;
+                background-color: rgba(15, 23, 42, 0.95);
             }
         """)
         s_layout = QHBoxLayout(btn_settings)
@@ -473,7 +551,7 @@ class QuickActionMenu(QWidget):
 
         s_icon_box = QFrame()
         s_icon_box.setFixedSize(30, 30)
-        s_icon_box.setStyleSheet("background-color: #EEF2FF; border-radius: 8px;")
+        s_icon_box.setStyleSheet("background-color: rgba(14, 165, 233, 0.2); border-radius: 8px; border: 1px solid #0EA5E9;")
         s_ib_layout = QVBoxLayout(s_icon_box)
         s_ib_layout.setContentsMargins(0, 0, 0, 0)
         s_icon = QLabel("⚙️")
@@ -488,12 +566,12 @@ class QuickActionMenu(QWidget):
         s_title_box.setSpacing(1)
         s_title = QLabel("偏好设置")
         s_title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        s_title.setStyleSheet("color: #1E293B; background: transparent; border: none;")
+        s_title.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
         s_title_box.addWidget(s_title)
 
         s_sub = QLabel("缩放调节 · 保持置顶 · 开机自启 · 音效")
         s_sub.setFont(QFont("Microsoft YaHei UI", 9))
-        s_sub.setStyleSheet("color: #64748B; background: transparent; border: none;")
+        s_sub.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
         s_title_box.addWidget(s_sub)
         s_layout.addLayout(s_title_box)
 
@@ -501,13 +579,21 @@ class QuickActionMenu(QWidget):
 
         s_arrow = QLabel("›")
         s_arrow.setFont(QFont("Microsoft YaHei UI", 16, QFont.Weight.Bold))
-        s_arrow.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+        s_arrow.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
         s_layout.addWidget(s_arrow)
 
         btn_settings.clicked.connect(self._on_settings)
         layout.addWidget(btn_settings)
 
         outer_layout.addWidget(card)
+
+    def keyPressEvent(self, event):
+        """支持 Esc 键极速收起控制中心"""
+        if event.key() == Qt.Key.Key_Escape:
+            self.close()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def changeEvent(self, event):
         """点击窗口外部失去焦点时自动平滑关闭"""
@@ -520,9 +606,12 @@ class QuickActionMenu(QWidget):
         card.setFixedHeight(46)
         card.setStyleSheet("""
             QFrame {
-                background-color: #F8FAFC;
-                border: 1px solid #F1F5F9;
+                background-color: rgba(15, 23, 42, 0.75);
+                border: 1px solid #1E293B;
                 border-radius: 12px;
+            }
+            QFrame:hover {
+                border: 1px solid #0EA5E9;
             }
         """)
         layout = QVBoxLayout(card)
@@ -534,7 +623,7 @@ class QuickActionMenu(QWidget):
 
         lbl = QLabel(f"{icon} {label}")
         lbl.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: #475569; background: transparent; border: none;")
+        lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
         top_h.addWidget(lbl)
         top_h.addStretch()
 
@@ -551,7 +640,7 @@ class QuickActionMenu(QWidget):
         bar.setTextVisible(False)
         bar.setStyleSheet(f"""
             QProgressBar {{
-                background-color: #E2E8F0;
+                background-color: rgba(30, 41, 59, 0.8);
                 border: none;
                 border-radius: 2px;
             }}
@@ -643,59 +732,575 @@ class QuickActionMenu(QWidget):
             self.pet_window.dialogue.say("已开启【任意悬停模式】！现在把我拖到屏幕中间或顶部，就能稳稳立在那里啦~ ✨")
         self.pet_window.apply_model_settings()
 
-class PetLivePreviewWidget(QWidget):
-    """衣橱中的实时交互试穿预览画布"""
+class CyberHoloChamberWidget(QWidget):
+    """
+    赛博全息试衣舱 (Cyber Holographic Chamber)
+    - 具有透视投影地台网格、双层流光粒子全息发射环、HUD 高科技角标与状态读数
+    - 具有视线跟随、点击触发欢庆与语音气泡互动
+    """
     def __init__(self, model, parent=None):
         super().__init__(parent)
-        self.setFixedSize(185, 205)
+        self.setFixedSize(240, 245)
+        self.setMouseTracking(True)
+        self.model = model
         self.preview_model = copy.copy(model)
-        # 复制独立装饰字典
         self.preview_model.decorations = dict(model.decorations)
         self.renderer = PetRenderer(self.preview_model)
 
-        # 30 FPS 试穿预览动画
+        self.ring_angle = 0.0
+        self.speech_text = "✨ 试衣舱全息链路已就绪！"
+        self.speech_timer = 3.0
+
+        # 30 FPS 刷新
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_tick)
         self.timer.start(33)
 
+    def set_speech(self, text, duration=3.0):
+        self.speech_text = text
+        self.speech_timer = duration
+        self.update()
+
     def update_skin(self, skin_id):
         self.preview_model.set_skin(skin_id)
+        self.set_speech(f"🧬 基因重组完成: {skin_id}")
         self.update()
 
     def update_decoration(self, slot, code):
         self.preview_model.set_decoration(slot, code)
+        slot_names = {"head": "头部装配", "face": "面部目镜", "neck": "核心项圈", "back": "背部推进"}
+        s_name = slot_names.get(slot, "装扮")
+        if code == "none":
+            self.set_speech(f"🚫 已卸下 {s_name}")
+        else:
+            self.set_speech(f"⚡ {s_name} 模块装载完毕！")
         self.update()
 
     def _on_tick(self):
+        self.ring_angle = (self.ring_angle + 2.5) % 360
+        if self.speech_timer > 0:
+            self.speech_timer -= 0.033
         self.renderer.update_animation(0.033, "IDLE")
         self.update()
+
+    def mouseMoveEvent(self, event):
+        cx = self.width() / 2.0
+        cy = 135.0
+        dx = (event.position().x() - cx) / cx
+        dy = (event.position().y() - cy) / cy
+        dist = math.hypot(event.position().x() - cx, event.position().y() - cy)
+        self.renderer.set_cursor_gaze(max(-1.0, min(1.0, dx)), max(-1.0, min(1.0, dy)), dist)
+        super().mouseMoveEvent(event)
+
+    def mousePressEvent(self, event):
+        self.renderer.anim_time = 0.0
+        self.renderer.trigger_landing_bounce()
+        quotes = [
+            "✨ 喵呜！这套赛博装甲超合身~",
+            "⚡ 萌力共鸣率 120% 突破！",
+            "🐾 主人选的搭配永远最帅！",
+            "🚀 推进系统全速运转中！",
+            "🌟 能量过载，随时准备出击！"
+        ]
+        self.set_speech(random.choice(quotes), duration=3.5)
+        sound_manager.play("sparkle")
+        super().mousePressEvent(event)
 
     def paintEvent(self, event):
         painter = QPainter(self)
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            w = self.width()
+            h = self.height()
 
-            # 浅色圆角展示台背景
-            painter.setBrush(QBrush(QColor("#F8FAFC")))
-            painter.setPen(QPen(QColor("#E2E8F0"), 1.5))
-            painter.drawRoundedRect(QRectF(4, 4, self.width() - 8, self.height() - 8), 16, 16)
+            # 1. 舱体深邃科技渐变背景
+            bg_grad = QLinearGradient(0, 0, 0, h)
+            bg_grad.setColorAt(0.0, QColor("#090D16"))
+            bg_grad.setColorAt(0.7, QColor("#0F172A"))
+            bg_grad.setColorAt(1.0, QColor("#0B132B"))
+            painter.setBrush(QBrush(bg_grad))
+            painter.setPen(QPen(QColor("#1E293B"), 1.5))
+            painter.drawRoundedRect(QRectF(3, 3, w - 6, h - 6), 18, 18)
 
-            # 绘制预览萌宠本体
-            self.renderer.render(painter, self.width(), self.height(), "IDLE", False)
+            # 2. 绘制全息透视网格地台 (Perspective Hologram Floor)
+            pedestal_y = 178.0
+            pedestal_w = 170.0
+            pedestal_h = 52.0
+
+            # 地台网格发射线
+            grid_pen = QPen(QColor(14, 165, 233, 40), 1)
+            painter.setPen(grid_pen)
+            for i in range(-4, 5):
+                fx = w / 2.0 + i * 22
+                painter.drawLine(int(w / 2.0 + i * 10), int(pedestal_y - 12), int(fx), int(pedestal_y + 28))
+
+            # 3. 动态旋转全息投影环 (Holographic Emitter Rings)
+            glow_grad = QRadialGradient(w / 2.0, pedestal_y + 4, pedestal_w / 2.0)
+            glow_grad.setColorAt(0.0, QColor(6, 182, 212, 70))
+            glow_grad.setColorAt(0.6, QColor(14, 165, 233, 25))
+            glow_grad.setColorAt(1.0, QColor(14, 165, 233, 0))
+            painter.setBrush(QBrush(glow_grad))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 2.0, pedestal_h / 2.0)
+
+            # 外圈全息刻度光环
+            ring_pen = QPen(QColor(56, 189, 248, 160), 1.5, Qt.PenStyle.DashLine)
+            ring_pen.setDashPattern([6, 6])
+            ring_pen.setDashOffset(self.ring_angle / 10.0)
+            painter.setPen(ring_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 2.0 - 4, pedestal_h / 2.0 - 2)
+
+            # 内圈能量核心环
+            inner_pen = QPen(QColor(168, 85, 247, 180), 1.2)
+            painter.setPen(inner_pen)
+            painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 3.0, pedestal_h / 3.0)
+
+            # 4. 绘制 HUD 高科技角标
+            hud_pen = QPen(QColor(56, 189, 248, 160), 1.5)
+            painter.setPen(hud_pen)
+            # 左上
+            painter.drawLine(12, 18, 12, 12)
+            painter.drawLine(12, 12, 18, 12)
+            # 右上
+            painter.drawLine(w - 18, 12, w - 12, 12)
+            painter.drawLine(w - 12, 12, w - 12, 18)
+            # 左下
+            painter.drawLine(12, h - 18, 12, h - 12)
+            painter.drawLine(12, h - 12, 18, h - 12)
+            # 右下
+            painter.drawLine(w - 18, h - 12, w - 12, h - 12)
+            painter.drawLine(w - 12, h - 12, w - 12, h - 18)
+
+            # 5. 顶部高科技读数
+            painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            painter.setPen(QColor("#06B6D4"))
+            painter.drawText(QRectF(16, 10, 110, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "● HOLO-POD v3.2")
+            painter.setPen(QColor("#94A3B8"))
+            painter.drawText(QRectF(w - 95, 10, 80, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "SYNC 99.8%")
+
+            # 6. 绘制高精度萌宠本体
+            painter.save()
+            scale = 0.95
+            painter.translate((w - 220 * scale) / 2.0, (h - 220 * scale) / 2.0 - 4)
+            painter.scale(scale, scale)
+            self.renderer.render(painter, 220, 220, "IDLE", False)
+            painter.restore()
+
+            # 7. 语音气泡/互动反馈胶囊
+            if self.speech_timer > 0 and self.speech_text:
+                painter.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
+                fm = painter.fontMetrics()
+                text_w = fm.horizontalAdvance(self.speech_text) + 20
+                bubble_rect = QRectF((w - text_w) / 2.0, 32, text_w, 24)
+                painter.setBrush(QBrush(QColor(15, 23, 42, 220)))
+                painter.setPen(QPen(QColor("#38BDF8"), 1))
+                painter.drawRoundedRect(bubble_rect, 12, 12)
+                painter.setPen(QColor("#E0F2FE"))
+                painter.drawText(bubble_rect, Qt.AlignmentFlag.AlignCenter, self.speech_text)
         finally:
             painter.end()
 
-class WardrobeDialog(QDialog):
+# 保持类名兼容
+PetLivePreviewWidget = CyberHoloChamberWidget
+
+
+class ModernBaseDialog(QDialog):
     """
-    全新设计的萌宠衣橱 & 试穿更衣室
-    左侧拥有专属实时试穿动态画布，右侧多标签自由切换 11 款皮肤与 4 大装扮插槽
+    全新升级的赛博全息科技无边框模态弹窗基类 (Cyber-Holo HUD)
+    - 深邃太空微透渐变外壳与 22px 圆角
+    - 赛博极光多阶微光阴影 (Cyan Glow & Deep Shadow)
+    - 全息控制中枢 Header：全息晶片徽章、版本药丸、实时跳动的绿色脉冲信号灯、霓虹珊瑚红关闭按钮
+    - 支持顶部按住拖拽、全键盘 Esc 极速关闭、活跃屏幕自动居中
+    """
+    def __init__(self, title="桌面萌宠", subtitle="", icon_emoji="🐾", parent=None, fixed_width=420, fixed_height=520, version_tag=""):
+        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setStyleSheet(MODERN_STYLE)
+        self.setFixedSize(fixed_width, fixed_height)
+        self.is_dragging = False
+        self.drag_start = QPoint()
+
+        # 居中在主屏幕或当前关联窗口所在屏幕
+        screen = QApplication.primaryScreen()
+        if parent:
+            screen = QApplication.screenAt(parent.geometry().center()) or screen
+        if screen:
+            avail = screen.availableGeometry()
+            x = avail.center().x() - fixed_width // 2
+            y = avail.center().y() - fixed_height // 2
+            self.move(int(x), int(y))
+
+        # 外层阴影容器 (预留 12px 边缘供柔和外发光阴影完整渲染)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(12, 12, 12, 12)
+
+        self.main_card = QFrame()
+        self.main_card.setObjectName("ModernDialogCard")
+        self.main_card.setStyleSheet("""
+            QFrame#ModernDialogCard {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0B0F19, stop:1 #111827);
+                border: 1.5px solid #1E293B;
+                border-radius: 20px;
+            }
+        """)
+
+        # 赛博多阶深邃阴影
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(28)
+        shadow.setColor(QColor(0, 0, 0, 160))
+        shadow.setOffset(0, 6)
+        self.main_card.setGraphicsEffect(shadow)
+
+        self.card_layout = QVBoxLayout(self.main_card)
+        self.card_layout.setContentsMargins(18, 14, 18, 16)
+        self.card_layout.setSpacing(10)
+
+        # 1. 顶部 Header 标题栏 (支持拖拽移动)
+        self.header_bar = QWidget()
+        self.header_bar.setObjectName("DialogHeaderBar")
+        header_layout = QHBoxLayout(self.header_bar)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(10)
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        # 左侧全息晶片徽章
+        self.header_icon_frame = QFrame()
+        self.header_icon_frame.setFixedSize(38, 38)
+        self.header_icon_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0369A1, stop:1 #0284C7);
+                border: 1.5px solid #38BDF8;
+                border-radius: 12px;
+            }
+        """)
+        icon_layout = QVBoxLayout(self.header_icon_frame)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.header_icon_lbl = QLabel(icon_emoji)
+        self.header_icon_lbl.setFont(QFont("Segoe UI Emoji", 17))
+        self.header_icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.header_icon_lbl.setStyleSheet("background: transparent; border: none;")
+        icon_layout.addWidget(self.header_icon_lbl)
+        header_layout.addWidget(self.header_icon_frame)
+
+        # 标题与副标题
+        title_box = QVBoxLayout()
+        title_box.setSpacing(1)
+        title_box.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        self.header_title_lbl = QLabel(title)
+        self.header_title_lbl.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
+        self.header_title_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        title_row.addWidget(self.header_title_lbl)
+
+        if version_tag:
+            self.header_ver_pill = QLabel(version_tag)
+            self.header_ver_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            self.header_ver_pill.setStyleSheet("""
+                background: rgba(14, 165, 233, 0.15);
+                color: #38BDF8;
+                border: 1px solid #0EA5E9;
+                border-radius: 4px;
+                padding: 1px 6px;
+            """)
+            title_row.addWidget(self.header_ver_pill)
+        title_row.addStretch()
+        title_box.addLayout(title_row)
+
+        if subtitle:
+            self.header_sub_lbl = QLabel(subtitle)
+            self.header_sub_lbl.setFont(QFont("Microsoft YaHei UI", 9))
+            self.header_sub_lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+            title_box.addWidget(self.header_sub_lbl)
+        header_layout.addLayout(title_box, stretch=1)
+
+        # 脉冲绿色链路在线状态
+        status_box = QHBoxLayout()
+        status_box.setSpacing(5)
+        dot_lbl = QLabel("●")
+        dot_lbl.setFont(QFont("Microsoft YaHei UI", 8))
+        dot_lbl.setStyleSheet("color: #10B981; background: transparent; border: none;")
+        status_box.addWidget(dot_lbl)
+        online_lbl = QLabel("量子链路")
+        online_lbl.setFont(QFont("Microsoft YaHei UI", 9))
+        online_lbl.setStyleSheet("color: #64748B; background: transparent; border: none;")
+        status_box.addWidget(online_lbl)
+        header_layout.addLayout(status_box)
+
+        # 右上角圆形关闭按钮
+        self.btn_close = QPushButton("✕")
+        self.btn_close.setFixedSize(28, 28)
+        self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_close.setToolTip("关闭窗口 (Esc)")
+        self.btn_close.setStyleSheet("""
+            QPushButton {
+                background: rgba(30, 41, 59, 0.8);
+                color: #94A3B8;
+                border: 1px solid #334155;
+                border-radius: 14px;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: #EF4444;
+                color: #FFFFFF;
+                border: 1px solid #F87171;
+            }
+            QPushButton:pressed {
+                background: #DC2626;
+                color: #FFFFFF;
+            }
+        """)
+        self.btn_close.clicked.connect(self.reject)
+        header_layout.addWidget(self.btn_close)
+
+        self.card_layout.addWidget(self.header_bar)
+
+        # 标题栏下方细分隔线
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background-color: #1E293B; border: none;")
+        self.card_layout.addWidget(sep)
+
+        # 内容容器区域 (子类向 content_layout 中添加具体控件)
+        self.content_widget = QWidget()
+        self.content_widget.setStyleSheet("background: transparent;")
+        self.content_layout = QVBoxLayout(self.content_widget)
+        self.content_layout.setContentsMargins(0, 4, 0, 0)
+        self.content_layout.setSpacing(10)
+        self.card_layout.addWidget(self.content_widget)
+
+        outer_layout.addWidget(self.main_card)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            if event.position().y() <= 65:
+                self.is_dragging = True
+                self.drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self.is_dragging and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self.drag_start)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.is_dragging = False
+        super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.reject()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+
+
+class CyberGearCard(QFrame):
+    """
+    赛博装备卡片 (网格化矩阵架构)
+    包含稀有度徽章、全息图标芯片、中英品质标签、装配状态与悬停霓虹流光
+    """
+    def __init__(self, code, name, desc, icon, rarity="SR", is_active=False, on_select=None):
+        super().__init__()
+        self.code = code
+        self.on_select = on_select
+        self.is_active = is_active
+        self.setFixedHeight(68)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        rarity_colors = {
+            "UR": ("#F59E0B", "rgba(245, 158, 11, 0.15)", "#FEF3C7", "UR·神话"),
+            "SSR": ("#A855F7", "rgba(168, 85, 247, 0.15)", "#F3E8FF", "SSR·幻彩"),
+            "SR": ("#0EA5E9", "rgba(14, 165, 233, 0.15)", "#E0F2FE", "SR·稀有"),
+            "R": ("#10B981", "rgba(16, 185, 129, 0.15)", "#D1FAE5", "R·特装"),
+            "BASE": ("#64748B", "rgba(100, 116, 139, 0.15)", "#F1F5F9", "原生")
+        }
+        self.border_color, self.badge_bg, self.badge_text, self.rarity_label = rarity_colors.get(
+            rarity, rarity_colors["SR"]
+        )
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(10)
+
+        # 1. 左侧：全息图标芯片 (42x42)
+        self.icon_frame = QFrame()
+        self.icon_frame.setFixedSize(42, 42)
+        icon_layout = QVBoxLayout(self.icon_frame)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_icon = QLabel(icon)
+        lbl_icon.setFont(QFont("Segoe UI Emoji", 18))
+        lbl_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_icon.setStyleSheet("background: transparent; border: none;")
+        icon_layout.addWidget(lbl_icon)
+        layout.addWidget(self.icon_frame)
+
+        # 2. 中间：标题 + 稀有度标签 + 描述
+        mid_box = QVBoxLayout()
+        mid_box.setSpacing(2)
+        mid_box.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
+        lbl_name = QLabel(name)
+        lbl_name.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        lbl_name.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        top_row.addWidget(lbl_name)
+
+        lbl_rarity = QLabel(self.rarity_label)
+        lbl_rarity.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+        lbl_rarity.setStyleSheet(f"""
+            background-color: {self.badge_bg};
+            color: {self.border_color};
+            border: 1px solid {self.border_color};
+            border-radius: 4px;
+            padding: 1px 5px;
+        """)
+        top_row.addWidget(lbl_rarity)
+        top_row.addStretch()
+        mid_box.addLayout(top_row)
+
+        lbl_desc = QLabel(desc)
+        lbl_desc.setFont(QFont("Microsoft YaHei UI", 8))
+        lbl_desc.setStyleSheet("color: #CBD5E1; background: transparent; border: none;")
+        mid_box.addWidget(lbl_desc)
+        layout.addLayout(mid_box, stretch=1)
+
+        # 3. 右侧：状态指示胶囊
+        self.lbl_status = QLabel("✔ 已装配" if is_active else "试穿")
+        self.lbl_status.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_status.setFixedWidth(64)
+        layout.addWidget(self.lbl_status)
+
+        self.update_style()
+
+    def set_active(self, active):
+        self.is_active = active
+        self.lbl_status.setText("✔ 已装配" if active else "试穿")
+        self.update_style()
+
+    def update_style(self):
+        if self.is_active:
+            self.setStyleSheet("""
+                CyberGearCard {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(14, 165, 233, 0.25), stop:1 rgba(15, 23, 42, 0.85));
+                    border: 1.5px solid #38BDF8;
+                    border-radius: 12px;
+                }
+            """)
+            self.icon_frame.setStyleSheet("""
+                QFrame {
+                    background: rgba(14, 165, 233, 0.2);
+                    border: 1.5px solid #38BDF8;
+                    border-radius: 10px;
+                }
+            """)
+            self.lbl_status.setStyleSheet("""
+                background: #0284C7;
+                color: #FFFFFF;
+                border-radius: 10px;
+                padding: 4px 0px;
+            """)
+        else:
+            self.setStyleSheet("""
+                CyberGearCard {
+                    background: rgba(30, 41, 59, 0.7);
+                    border: 1px solid rgba(51, 65, 85, 0.8);
+                    border-radius: 12px;
+                }
+                CyberGearCard:hover {
+                    background: rgba(51, 65, 85, 0.85);
+                    border: 1.5px solid #38BDF8;
+                }
+            """)
+            self.icon_frame.setStyleSheet(f"""
+                QFrame {{
+                    background: rgba(15, 23, 42, 0.6);
+                    border: 1px solid {self.border_color};
+                    border-radius: 10px;
+                }}
+            """)
+            self.lbl_status.setStyleSheet("""
+                background: rgba(15, 23, 42, 0.6);
+                color: #94A3B8;
+                border: 1px solid #475569;
+                border-radius: 10px;
+                padding: 4px 0px;
+            """)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.on_select:
+            sound_manager.play("pop")
+            self.on_select(self.code)
+        super().mousePressEvent(event)
+
+
+class CyberTabButton(QPushButton):
+    """赛博科技导航选项卡按钮"""
+    def __init__(self, text, icon_str="", is_selected=False, parent=None):
+        super().__init__(parent)
+        self.setText(f"{icon_str} {text}" if icon_str else text)
+        self.is_selected = is_selected
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(36)
+        self.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.update_style()
+
+    def set_selected(self, selected):
+        self.is_selected = selected
+        self.update_style()
+
+    def update_style(self):
+        if self.is_selected:
+            self.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+                    color: #FFFFFF;
+                    border: 1px solid #38BDF8;
+                    border-radius: 8px;
+                    padding: 0 12px;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                QPushButton {
+                    background: rgba(30, 41, 59, 0.6);
+                    color: #94A3B8;
+                    border: 1px solid rgba(51, 65, 85, 0.6);
+                    border-radius: 8px;
+                    padding: 0 12px;
+                }
+                QPushButton:hover {
+                    background: rgba(51, 65, 85, 0.8);
+                    color: #F1F5F9;
+                    border: 1px solid #0EA5E9;
+                }
+            """)
+
+
+class WardrobeDialog(ModernBaseDialog):
+    """
+    全新赛博全息萌宠更衣舱与装备矩阵 (Cyber Holographic Wardrobe)
+    左侧拥有旋转全息地台与视线追踪试衣舱，右侧平铺 5 大赛博分类导航与品质卡片矩阵
     """
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("✨ 萌宠衣橱 & 换装试衣间")
-        self.setFixedSize(620, 500)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="萌宠衣橱 · 赛博换装舱",
+            subtitle="全息投影实时试衣 · 11 款生物基因与 4 维微机甲装扮自由搭载",
+            icon_emoji="👗",
+            parent=pet_window or parent,
+            fixed_width=820,
+            fixed_height=580,
+            version_tag="CYBER ARSENAL v3.2"
+        )
         self.model = model
         self.pet_window = pet_window
 
@@ -703,167 +1308,301 @@ class WardrobeDialog(QDialog):
         self.temp_skin = model.skin_id
         self.temp_decs = dict(model.decorations)
 
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(18, 18, 18, 18)
-        main_layout.setSpacing(16)
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(18)
+        self.content_layout.addLayout(main_layout, stretch=1)
 
-        # ================= 左侧：实时预览与操作栏 =================
+        # ================= 左侧：全息试衣舱与操作面板 =================
         left_box = QVBoxLayout()
         left_box.setSpacing(10)
 
-        preview_title = QLabel("👗 实时试衣间")
-        preview_title.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
-        left_box.addWidget(preview_title)
-
-        self.preview_widget = PetLivePreviewWidget(model, self)
+        # 赛博全息试衣舱
+        self.preview_widget = CyberHoloChamberWidget(model, self)
         left_box.addWidget(self.preview_widget)
 
-        tip_lbl = QLabel("点击右侧皮肤或饰品\n左侧即可实时预览效果")
-        tip_lbl.setStyleSheet("color: #64748B; font-size: 11px; text-align: center;")
-        tip_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        left_box.addWidget(tip_lbl)
+        # 装配插槽全息指示器 (4 个迷你芯片)
+        slots_bar = QHBoxLayout()
+        slots_bar.setSpacing(6)
+        self.slot_pills = {}
+        for s_key, s_name in [("head", "头饰"), ("face", "面饰"), ("neck", "领饰"), ("back", "背饰")]:
+            val = self.temp_decs.get(s_key, "none")
+            txt = f"{s_name}: {val}" if val != "none" else f"{s_name}: 空"
+            pill = QLabel(txt)
+            pill.setFont(QFont("Microsoft YaHei UI", 8))
+            pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            pill.setFixedHeight(22)
+            pill.setStyleSheet("""
+                background: rgba(15, 23, 42, 0.7);
+                color: #38BDF8;
+                border: 1px dashed #0284C7;
+                border-radius: 6px;
+                padding: 0 4px;
+            """)
+            slots_bar.addWidget(pill)
+            self.slot_pills[s_key] = pill
+        left_box.addLayout(slots_bar)
+
+        # 🎲 赛博随机穿搭按钮 (Lucky Cyber Shuffle)
+        btn_random = QPushButton("🎲 赛博随机混搭 (Cyber Shuffle)")
+        btn_random.setFixedHeight(34)
+        btn_random.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_random.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #7C3AED);
+                color: #FFFFFF;
+                border: 1px solid #A78BFA;
+                border-radius: 10px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+            }
+        """)
+        btn_random.clicked.connect(self._random_cyber_shuffle)
+        left_box.addWidget(btn_random)
 
         left_box.addStretch()
 
-        btn_clear = QPushButton("🚫 卸下全部配饰")
-        btn_clear.clicked.connect(self._clear_all_decorations)
-        left_box.addWidget(btn_clear)
+        # 底部操作栏
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
 
-        btn_save = QPushButton("✨ 保存并穿戴", self)
-        btn_save.setObjectName("PrimaryBtn")
-        btn_save.setFixedHeight(40)
+        btn_clear = QPushButton("🚫 卸下全部")
+        btn_clear.setFixedHeight(38)
+        btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_clear.setStyleSheet("""
+            QPushButton {
+                background: rgba(30, 41, 59, 0.8);
+                color: #94A3B8;
+                border: 1px solid #334155;
+                border-radius: 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: rgba(51, 65, 85, 0.9);
+                color: #F87171;
+                border: 1px solid #EF4444;
+            }
+        """)
+        btn_clear.clicked.connect(self._clear_all_decorations)
+        action_row.addWidget(btn_clear)
+
+        btn_save = QPushButton("✨ 保存并同步装配")
+        btn_save.setFixedHeight(38)
+        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_save.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+                color: #FFFFFF;
+                border: 1px solid #38BDF8;
+                border-radius: 10px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+            }
+        """)
         btn_save.clicked.connect(self._apply_and_close)
-        left_box.addWidget(btn_save)
+        action_row.addWidget(btn_save, stretch=1)
+        left_box.addLayout(action_row)
 
         main_layout.addLayout(left_box)
 
-        # ================= 右侧：各部件装扮选项卡 =================
+        # ================= 右侧：赛博装备陈列室 =================
         right_box = QVBoxLayout()
-        tabs = QTabWidget()
+        right_box.setSpacing(12)
 
-        # Tab 1: 皮肤
-        tabs.addTab(self._create_skin_tab(), "🐾 角色皮肤")
-        # Tab 2: 头部装扮
-        tabs.addTab(self._create_slot_tab("head", [
-            ("none", "🚫 无头饰", "保持自然头顶"),
-            ("hat_wizard", "🧙 魔法巫师尖帽", "神秘紫罗兰尖顶帽"),
-            ("hat_party", "🥳 派对生日帽", "欢快粉色彩条毛绒球"),
-            ("halo", "😇 金色天使光环", "头顶悬浮圣洁光晕"),
-            ("horns", "😈 俏皮小恶魔角", "火红可爱小尖角"),
-            ("crown", "👑 黄金华贵王冠", "璀璨红宝石帝王冠"),
-            ("chef", "👨‍🍳 洁白厨师高帽", "米其林软萌主厨帽")
-        ]), "🎩 头部")
-        # Tab 3: 面部配饰
-        tabs.addTab(self._create_slot_tab("face", [
-            ("none", "🚫 无面饰", "清爽大眼睛"),
-            ("glasses", "👓 金丝博士眼镜", "斯文博学圆框镜"),
-            ("sunglasses", "🕶️ 酷炫黑超墨镜", "街头潮牌霸气出街"),
-            ("blush_hearts", "💖 心动爱心面贴", "双颊粉红心动爱心")
-        ]), "👓 面部")
-        # Tab 4: 领口脖饰
-        tabs.addTab(self._create_slot_tab("neck", [
-            ("none", "🚫 无领饰", "自然脖颈"),
-            ("bow", "🎀 优雅红蝴蝶结", "甜美艳红大蝴蝶结"),
-            ("scarf", "🧣 温暖英伦围巾", "防寒保暖冬日毛线围巾"),
-            ("bell", "🔔 招财金小挂铃", "招财进宝叮咚小响铃"),
-            ("tie", "👔 绅士西装小领结", "优雅正式商务西装领结")
-        ]), "🧣 领饰")
-        # Tab 5: 背部特效
-        tabs.addTab(self._create_slot_tab("back", [
-            ("none", "🚫 无背饰", "轻装上阵"),
-            ("wings", "🪽 天使微颤羽翼", "呼吸时轻轻扇动的羽翼"),
-            ("balloon", "🎈 浮动心形气球", "身后飘逸的粉红爱心气球")
-        ]), "🪽 背部")
+        # 5 大赛博选项卡导航 (全平铺，绝无挤压箭头)
+        tab_bar = QHBoxLayout()
+        tab_bar.setSpacing(6)
+        self.tabs_meta = [
+            ("skin", "🧬 基因皮肤"),
+            ("head", "🎩 头部神经"),
+            ("face", "👓 面部战术"),
+            ("neck", "🧣 核心项圈"),
+            ("back", "🪽 背部推进")
+        ]
+        self.tab_buttons = {}
+        for key, title in self.tabs_meta:
+            btn = CyberTabButton(title, is_selected=(key == "skin"))
+            btn.clicked.connect(lambda checked, k=key: self._switch_tab(k))
+            self.tab_buttons[key] = btn
+            tab_bar.addWidget(btn)
+        right_box.addLayout(tab_bar)
 
-        right_box.addWidget(tabs)
+        # 装备展示滚动区
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self.container = QWidget()
+        self.container.setStyleSheet("QWidget { background: transparent; }")
+        self.cards_layout = QVBoxLayout(self.container)
+        self.cards_layout.setSpacing(8)
+        self.cards_layout.setContentsMargins(0, 0, 8, 0)
+        self.scroll.setWidget(self.container)
+        right_box.addWidget(self.scroll, stretch=1)
+
         main_layout.addLayout(right_box, stretch=1)
 
-    def _create_skin_tab(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none;")
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setSpacing(6)
+        self.current_tab = "skin"
+        self.card_widgets = {}
+        self._populate_tab(self.current_tab)
 
-        skins = [
-            ("cat_calico", "🐱 萌萌三花猫", "经典奶油色加橙黑花斑，粉肉垫"),
-            ("cat_orange", "🐱 温暖大头橘猫", "金橘温暖虎斑毛色，圆润治愈"),
-            ("cat_black", "🐱 暗夜黑曜猫", "玄黑优雅皮毛与明亮金黄大眼"),
-            ("cat_white", "🐱 纯白雪球猫", "纯白底色与梦幻异色双瞳 (左冰蓝、右翠绿)"),
-            ("dog_shiba", "🐶 阳光赤柴", "元气金橙赤柴，经典白眉点"),
-            ("dog_black", "🐶 帅气黑柴", "俊俏黑柴，系着帅气蓝色领巾"),
-            ("dog_corgi", "🐶 软萌柯基", "暖金白领胸毛与呆萌大耳朵"),
-            ("slime_blue", "🫧 海蓝果冻史莱姆", "清透海蓝通透渐变与星芒天线"),
-            ("slime_pink", "🌸 草莓甜心史莱姆", "粉嫩果冻身躯与爱心天线"),
-            ("slime_gold", "🌟 欧皇黄金史莱姆", "金光闪闪尊贵身躯，吸金转运"),
-            ("penguin_tux", "🐧 燕尾服小企鹅", "呆萌企鹅幼崽，摇晃小脚丫")
-        ]
+    def _switch_tab(self, tab_key):
+        sound_manager.play("click")
+        self.current_tab = tab_key
+        for k, btn in self.tab_buttons.items():
+            btn.set_selected(k == tab_key)
+        self._populate_tab(tab_key)
 
-        self.skin_buttons = {}
-        for skin_id, name, desc in skins:
-            btn = QPushButton(f"{name}\n{desc}")
-            btn.setStyleSheet("text-align: left; padding: 8px 12px; font-size: 12px;")
-            if self.temp_skin == skin_id:
-                btn.setObjectName("SelectedBtn")
-            self.skin_buttons[skin_id] = btn
-            btn.clicked.connect(lambda checked, s=skin_id: self._select_preview_skin(s))
-            layout.addWidget(btn)
+    def _populate_tab(self, tab_key):
+        # 清空当前卡片
+        while self.cards_layout.count():
+            item = self.cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
-        scroll.setWidget(container)
-        return scroll
+        self.card_widgets = {}
 
-    def _create_slot_tab(self, slot_name, items):
-        if not hasattr(self, "slot_buttons"):
-            self.slot_buttons = {}
-        self.slot_buttons[slot_name] = {}
+        if tab_key == "skin":
+            skins = [
+                ("cat_calico", "萌萌三花猫", "经典奶油色加橙黑花斑，粉肉垫", "🐱", "BASE"),
+                ("cat_orange", "温暖大头橘猫", "金橘温暖虎斑毛色，圆润治愈", "🐱", "R"),
+                ("cat_black", "暗夜黑曜猫", "玄黑优雅皮毛与明亮金黄大眼", "🐱", "SR"),
+                ("cat_white", "纯白雪球猫", "纯白底色与梦幻异色双瞳 (左冰蓝/右翠绿)", "🐱", "SSR"),
+                ("dog_shiba", "阳光赤柴", "元气金橙赤柴，经典白眉点", "🐶", "SR"),
+                ("dog_black", "帅气黑柴", "俊俏黑柴，系着帅气蓝色领巾", "🐶", "SR"),
+                ("dog_corgi", "软萌柯基", "暖金白领胸毛与呆萌大耳朵", "🐶", "R"),
+                ("slime_blue", "海蓝果冻史莱姆", "清透海蓝通透渐变与星芒天线", "🫧", "SSR"),
+                ("slime_pink", "草莓甜心史莱姆", "粉嫩果冻身躯与爱心天线", "🌸", "SR"),
+                ("slime_gold", "欧皇黄金史莱姆", "金光闪闪尊贵身躯，吸金转运", "🌟", "UR"),
+                ("penguin_tux", "燕尾服小企鹅", "呆萌企鹅幼崽，摇晃小脚丫", "🐧", "SSR")
+            ]
+            for code, name, desc, icon, rarity in skins:
+                is_active = (self.temp_skin == code)
+                card = CyberGearCard(
+                    code, name, desc, icon, rarity, is_active,
+                    on_select=lambda c: self._select_preview_skin(c)
+                )
+                self.card_widgets[code] = card
+                self.cards_layout.addWidget(card)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none;")
-        container = QWidget()
-        layout = QVBoxLayout(container)
-        layout.setSpacing(6)
+        elif tab_key == "head":
+            items = [
+                ("none", "原生无头饰", "保持自然头顶，轻装无束缚", "🚫", "BASE"),
+                ("crown", "黄金华贵王冠", "璀璨红宝石帝王冠，尊贵金辉", "👑", "UR"),
+                ("halo", "金色天使光环", "头顶悬浮圣洁量子光晕", "😇", "SSR"),
+                ("hat_wizard", "魔法巫师尖帽", "神秘紫罗兰尖顶帽，蕴含秘法", "🧙", "SSR"),
+                ("horns", "俏皮小恶魔角", "火红可爱小尖角，捣蛋专属", "😈", "SR"),
+                ("hat_party", "派对生日帽", "欢快粉色彩条毛绒球", "🥳", "R"),
+                ("chef", "洁白厨师高帽", "米其林软萌主厨高帽", "👨‍🍳", "R")
+            ]
+            self._render_slot_items("head", items)
 
+        elif tab_key == "face":
+            items = [
+                ("none", "清爽无面饰", "清澈大眼睛，纯粹灵动自然", "🚫", "BASE"),
+                ("sunglasses", "酷炫黑超战术墨镜", "街头潮牌霸气出街，边缘数据流", "🕶️", "SSR"),
+                ("glasses", "金丝博士护目镜", "斯文博学圆框镜，搭载战术分析仪", "👓", "SR"),
+                ("blush_hearts", "心动爱心面贴", "双颊粉红心动爱心，萌力迸发", "💖", "R")
+            ]
+            self._render_slot_items("face", items)
+
+        elif tab_key == "neck":
+            items = [
+                ("none", "原生无领饰", "舒适自然脖颈", "🚫", "BASE"),
+                ("bow", "优雅赤红蝴蝶结", "甜美艳红大蝴蝶结，绅士名媛典范", "🎀", "SSR"),
+                ("tie", "绅士西装小领结", "优雅正式商务西装领结", "👔", "SR"),
+                ("bell", "招财金小挂铃", "招财进宝叮咚小响铃，清脆动听", "🔔", "SR"),
+                ("scarf", "温暖英伦围巾", "防寒保暖冬日毛线围巾", "🧣", "R")
+            ]
+            self._render_slot_items("neck", items)
+
+        elif tab_key == "back":
+            items = [
+                ("none", "原生无背饰", "轻装出击，减免风阻零负荷", "🚫", "BASE"),
+                ("wings", "反重力光子羽翼", "呼吸时伴随量子光辉轻颤扇动", "🪽", "UR"),
+                ("balloon", "浮动微引力爱心气球", "身后随风律动飘逸的粉红反物质气球", "🎈", "SR")
+            ]
+            self._render_slot_items("back", items)
+
+        self.cards_layout.addStretch()
+
+    def _render_slot_items(self, slot_name, items):
         current_val = self.temp_decs.get(slot_name, "none")
-        for code, label, desc in items:
-            btn = QPushButton(f"{label}  ·  {desc}")
-            btn.setStyleSheet("text-align: left; padding: 10px 14px; font-size: 12px;")
-            if current_val == code:
-                btn.setObjectName("SelectedBtn")
-            self.slot_buttons[slot_name][code] = btn
-            btn.clicked.connect(lambda checked, s=slot_name, c=code: self._select_preview_decoration(s, c))
-            layout.addWidget(btn)
-
-        scroll.setWidget(container)
-        return scroll
+        for code, name, desc, icon, rarity in items:
+            is_active = (current_val == code)
+            card = CyberGearCard(
+                code, name, desc, icon, rarity, is_active,
+                on_select=lambda c, s=slot_name: self._select_preview_decoration(s, c)
+            )
+            self.card_widgets[code] = card
+            self.cards_layout.addWidget(card)
 
     def _select_preview_skin(self, skin_id):
         self.temp_skin = skin_id
-        for s_id, btn in getattr(self, "skin_buttons", {}).items():
-            btn.setObjectName("SelectedBtn" if s_id == skin_id else "")
-            btn.setStyle(btn.style())
+        for code, card in self.card_widgets.items():
+            card.set_active(code == skin_id)
         self.preview_widget.update_skin(skin_id)
-        sound_manager.play("pop")
 
     def _select_preview_decoration(self, slot, code):
         self.temp_decs[slot] = code
-        slot_map = getattr(self, "slot_buttons", {}).get(slot, {})
-        for c, btn in slot_map.items():
-            btn.setObjectName("SelectedBtn" if c == code else "")
-            btn.setStyle(btn.style())
+        for c, card in self.card_widgets.items():
+            card.set_active(c == code)
         self.preview_widget.update_decoration(slot, code)
-        sound_manager.play("pop")
+        self._update_slot_pills()
+
+    def _update_slot_pills(self):
+        slot_names = {"head": "头饰", "face": "面饰", "neck": "领饰", "back": "背饰"}
+        for s_key, pill in self.slot_pills.items():
+            val = self.temp_decs.get(s_key, "none")
+            pill.setText(f"{slot_names[s_key]}: {val}" if val != "none" else f"{slot_names[s_key]}: 空")
+
+    def _random_cyber_shuffle(self):
+        """赛博随机混搭"""
+        all_skins = [
+            "cat_calico", "cat_orange", "cat_black", "cat_white",
+            "dog_shiba", "dog_black", "dog_corgi",
+            "slime_blue", "slime_pink", "slime_gold", "penguin_tux"
+        ]
+        head_items = ["none", "crown", "halo", "hat_wizard", "horns", "hat_party", "chef"]
+        face_items = ["none", "sunglasses", "glasses", "blush_hearts"]
+        neck_items = ["none", "bow", "tie", "bell", "scarf"]
+        back_items = ["none", "wings", "balloon"]
+
+        self.temp_skin = random.choice(all_skins)
+        self.temp_decs["head"] = random.choice(head_items)
+        self.temp_decs["face"] = random.choice(face_items)
+        self.temp_decs["neck"] = random.choice(neck_items)
+        self.temp_decs["back"] = random.choice(back_items)
+
+        self.preview_widget.update_skin(self.temp_skin)
+        for slot, code in self.temp_decs.items():
+            self.preview_widget.update_decoration(slot, code)
+
+        self._update_slot_pills()
+        self._populate_tab(self.current_tab)
+
+        sound_manager.play("sparkle")
+        self.preview_widget.set_speech("🎲 赛博算力为我混搭了全新装扮！", duration=3.5)
 
     def _clear_all_decorations(self):
         for slot in self.temp_decs:
             self.temp_decs[slot] = "none"
             self.preview_widget.update_decoration(slot, "none")
-            slot_map = getattr(self, "slot_buttons", {}).get(slot, {})
-            for c, btn in slot_map.items():
-                btn.setObjectName("SelectedBtn" if c == "none" else "")
-                btn.setStyle(btn.style())
+        self._update_slot_pills()
+        self._populate_tab(self.current_tab)
         sound_manager.play("click")
+        self.preview_widget.set_speech("🚫 已卸下所有外挂装配！", duration=3.0)
+
+    def reject(self):
+        if hasattr(self, "preview_widget") and hasattr(self.preview_widget, "timer"):
+            self.preview_widget.timer.stop()
+        super().reject()
 
     def closeEvent(self, event):
         if hasattr(self, "preview_widget") and hasattr(self.preview_widget, "timer"):
@@ -878,58 +1617,107 @@ class WardrobeDialog(QDialog):
             self.model.set_decoration(slot, code)
         self.model.save_to_disk()
         sound_manager.play("sparkle")
-        self.pet_window.dialogue.say("新装扮已换上！主人觉得波可爱吗？✨ (ฅ'ω'ฅ)")
+        self.pet_window.dialogue.say("⚡ 赛博装甲同步完毕！主人觉得帅气吗？(๑•̀ㅂ•́)و✧")
         self.accept()
 
-class FeedingDialog(QDialog):
+class FeedingDialog(ModernBaseDialog):
     """美食投喂与成长进阶中心"""
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("投喂美食 · 培育成长")
-        self.setFixedSize(410, 520)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="投喂美食 · 培育成长",
+            subtitle="丰富营养美食，加速萌宠发育与进阶蜕变",
+            icon_emoji="🍼",
+            parent=pet_window or parent,
+            fixed_width=460,
+            fixed_height=560
+        )
         self.model = model
         self.pet_window = pet_window
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(14)
+        layout = self.content_layout
+        layout.setSpacing(10)
 
-        # 当前阶段与体重展示卡片
+        # 当前阶段与体重展示卡片 (使用精准 ID 作用域，彻底根治子标签样式污染)
         info_card = QFrame()
-        info_card.setStyleSheet("background-color: #F8FAFC; border-radius: 16px; border: 1px solid #E2E8F0; padding: 12px;")
+        info_card.setObjectName("FeedingInfoCard")
+        info_card.setStyleSheet("""
+            QFrame#FeedingInfoCard {
+                background: rgba(30, 41, 59, 0.7);
+                border-radius: 16px;
+                border: 1px solid #334155;
+            }
+        """)
         info_layout = QVBoxLayout(info_card)
+        info_layout.setContentsMargins(14, 12, 14, 12)
         info_layout.setSpacing(8)
 
         header_h = QHBoxLayout()
         stage_info = self.model.stage_info
+
+        # 阶段与体重独立美化药丸
         self.stage_lbl = QLabel(f"🌟 当前阶梯: {stage_info['name']}")
-        self.stage_lbl.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
-        self.stage_lbl.setStyleSheet("color: #4F46E5;")
+        self.stage_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.stage_lbl.setStyleSheet("""
+            background: rgba(14, 165, 233, 0.15);
+            border: 1px solid #0EA5E9;
+            border-radius: 11px;
+            padding: 3px 10px;
+            color: #38BDF8;
+        """)
+
         self.weight_lbl = QLabel(f"⚖️ 体重: {self.model.weight} kg")
-        self.weight_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        self.weight_lbl.setStyleSheet("color: #059669;")
+        self.weight_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.weight_lbl.setStyleSheet("""
+            background: rgba(16, 185, 129, 0.15);
+            border: 1px solid #10B981;
+            border-radius: 11px;
+            padding: 3px 10px;
+            color: #34D399;
+        """)
+
         header_h.addWidget(self.stage_lbl)
         header_h.addStretch()
         header_h.addWidget(self.weight_lbl)
         info_layout.addLayout(header_h)
 
         growth_h = QHBoxLayout()
-        growth_h.addWidget(QLabel("🌱 成长蜕变积累:"))
-        self.growth_val_lbl = QLabel(f"{int(self.model.growth)} / {stage_info['next_target']}")
-        self.growth_val_lbl.setStyleSheet("color: #64748B; font-size: 11px; font-weight: bold;")
+        growth_title = QLabel("🌱 成长蜕变积累:")
+        growth_title.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        growth_title.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+        growth_h.addWidget(growth_title)
+
+        target = stage_info["next_target"]
+        curr_growth = int(self.model.growth)
+        is_max = self.model.stage == "ULTIMATE" or curr_growth >= target
+        display_growth = f"{curr_growth} (已达满阶星辉体 ✨)" if is_max else f"{curr_growth} / {target}"
+
+        self.growth_val_lbl = QLabel(display_growth)
+        self.growth_val_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.growth_val_lbl.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
         growth_h.addWidget(self.growth_val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         info_layout.addLayout(growth_h)
 
         self.growth_bar = QProgressBar()
-        self.growth_bar.setMaximum(stage_info["next_target"])
-        self.growth_bar.setValue(int(self.model.growth))
-        self.growth_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669); }")
+        self.growth_bar.setFixedHeight(12)
+        self.growth_bar.setTextVisible(False)
+        self.growth_bar.setMaximum(target)
+        self.growth_bar.setValue(min(target, curr_growth))
+        self.growth_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #1E293B;
+                background-color: rgba(15, 23, 42, 0.8);
+                border-radius: 6px;
+                height: 12px;
+            }
+            QProgressBar::chunk {
+                border-radius: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
+            }
+        """)
         info_layout.addWidget(self.growth_bar)
 
         desc_lbl = QLabel(stage_info["desc"])
-        desc_lbl.setStyleSheet("color: #64748B; font-size: 11px;")
+        desc_lbl.setStyleSheet("color: #94A3B8; font-size: 11px; background: transparent; border: none;")
         desc_lbl.setWordWrap(True)
         info_layout.addWidget(desc_lbl)
         layout.addWidget(info_card)
@@ -937,6 +1725,7 @@ class FeedingDialog(QDialog):
         # 营养美食列表
         title = QLabel("选择给萌宠投喂的营养美食：")
         title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+        title.setStyleSheet("color: #F8FAFC; margin-top: 4px; background: transparent; border: none;")
         layout.addWidget(title)
 
         foods = [
@@ -950,10 +1739,11 @@ class FeedingDialog(QDialog):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setStyleSheet("border: none; background: transparent;")
         food_container = QWidget()
         food_layout = QVBoxLayout(food_container)
-        food_layout.setContentsMargins(0, 0, 0, 0)
+        food_layout.setContentsMargins(0, 0, 6, 0)
         food_layout.setSpacing(6)
 
         for code, emoji, name, desc in foods:
@@ -972,43 +1762,65 @@ class FeedingDialog(QDialog):
         stage_info = self.model.stage_info
         self.stage_lbl.setText(f"🌟 当前阶梯: {stage_info['name']}")
         self.weight_lbl.setText(f"⚖️ 体重: {self.model.weight} kg")
-        self.growth_val_lbl.setText(f"{int(self.model.growth)} / {stage_info['next_target']}")
-        self.growth_bar.setMaximum(stage_info["next_target"])
-        self.growth_bar.setValue(int(self.model.growth))
+
+        target = stage_info["next_target"]
+        curr_growth = int(self.model.growth)
+        is_max = self.model.stage == "ULTIMATE" or curr_growth >= target
+        display_growth = f"{curr_growth} (已达满阶星辉体 ✨)" if is_max else f"{curr_growth} / {target}"
+
+        self.growth_val_lbl.setText(display_growth)
+        self.growth_bar.setMaximum(target)
+        self.growth_bar.setValue(min(target, curr_growth))
 
         self.pet_window.dialogue.say(f"啊呜！好香的【{food_name}】！成长值 +{int(growth_add)}，身体又长大啦~ (๑´ڡ`๑)")
 
-class PlayDialog(QDialog):
+class PlayDialog(ModernBaseDialog):
     """趣味小游戏互动"""
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("和波可一起玩耍")
-        self.setFixedSize(360, 420)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="趣味玩耍 · 互动游乐",
+            subtitle="猜拳对决、掷骰子比大小与逗趣互动",
+            icon_emoji="🎲",
+            parent=pet_window or parent,
+            fixed_width=440,
+            fixed_height=490
+        )
         self.model = model
         self.pet_window = pet_window
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(12)
+        layout = self.content_layout
+        layout.setSpacing(10)
 
         title = QLabel("选择好玩的娱乐活动：")
-        title.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
+        title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+        title.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
         layout.addWidget(title)
 
-        # 猜拳游戏模块
+        # 猜拳游戏模块 (使用专用 ID 选择器，杜绝子标签边框污染)
         rps_group = QFrame()
-        rps_group.setStyleSheet("background-color: #F8FAFC; border-radius: 14px; border: 1px solid #E2E8F0; padding: 10px;")
+        rps_group.setObjectName("RpsGroup")
+        rps_group.setStyleSheet("""
+            QFrame#RpsGroup {
+                background: rgba(30, 41, 59, 0.7);
+                border-radius: 14px;
+                border: 1px solid #334155;
+                padding: 10px;
+            }
+        """)
         rps_layout = QVBoxLayout(rps_group)
+        rps_layout.setContentsMargins(10, 8, 10, 8)
+        rps_layout.setSpacing(8)
+
         rps_lbl = QLabel("✂️ 猜拳大对决 (石头剪刀布)")
         rps_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
+        rps_lbl.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
         rps_layout.addWidget(rps_lbl)
 
         btn_box = QHBoxLayout()
+        btn_box.setSpacing(8)
         for choice, emoji in [("rock", "✊ 石头"), ("scissors", "✌️ 剪刀"), ("paper", "🖐️ 布")]:
             btn = QPushButton(emoji)
-            btn.setFixedHeight(38)
+            btn.setFixedHeight(36)
             btn.clicked.connect(lambda checked, c=choice: self._play_rps(c))
             btn_box.addWidget(btn)
         rps_layout.addLayout(btn_box)
@@ -1025,7 +1837,7 @@ class PlayDialog(QDialog):
         layout.addWidget(btn_wand)
 
         # 动作才艺大赏入口
-        btn_talents = ActionCardButton("🎭", "动作才艺大赏", "点播展示全部 8 项专属动作")
+        btn_talents = ActionCardButton("🎭", "动作才艺大赏", "点播展示全部 14 项专属动作")
         btn_talents.clicked.connect(self._open_talents)
         layout.addWidget(btn_talents)
 
@@ -1033,7 +1845,7 @@ class PlayDialog(QDialog):
         self.result_lbl = QLabel("")
         self.result_lbl.setWordWrap(True)
         self.result_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.result_lbl.setStyleSheet("color: #4F46E5; font-size: 12px; font-weight: bold; background: #EEF2FF; border-radius: 10px; padding: 10px;")
+        self.result_lbl.setStyleSheet("color: #38BDF8; font-size: 12px; font-weight: bold; background: rgba(14, 165, 233, 0.15); border: 1.5px solid #0EA5E9; border-radius: 10px; padding: 10px;")
         self.result_lbl.hide()
         layout.addWidget(self.result_lbl)
 
@@ -1050,12 +1862,15 @@ class PlayDialog(QDialog):
 
         if user_choice == pet_choice:
             msg = f"波可出了【{names[pet_choice]}】，主人也出了【{names[user_choice]}】！平局，太有默契啦~"
+            sound_manager.play("pop")
         elif (user_choice == "rock" and pet_choice == "scissors") or \
              (user_choice == "scissors" and pet_choice == "paper") or \
              (user_choice == "paper" and pet_choice == "rock"):
             msg = f"波可出了【{names[pet_choice]}】，主人出了【{names[user_choice]}】！太厉害了，主人获胜！🎉"
+            sound_manager.play("sparkle")
         else:
             msg = f"波可出了【{names[pet_choice]}】！嘿嘿，这局是波可赢啦~ 耶！✨"
+            sound_manager.play("pop")
 
         self.result_lbl.setText(msg)
         self.result_lbl.show()
@@ -1070,10 +1885,13 @@ class PlayDialog(QDialog):
         msg = f"主人掷出 {dice_emojis[user_num-1]} ({user_num}点)，波可掷出 {dice_emojis[pet_num-1]} ({pet_num}点)！"
         if user_num > pet_num:
             msg += " 主人获胜！🎉"
+            sound_manager.play("sparkle")
         elif pet_num > user_num:
             msg += " 波可点数更大，嘿嘿！✨"
+            sound_manager.play("pop")
         else:
             msg += " 心有灵犀平局！🤝"
+            sound_manager.play("pop")
         self.result_lbl.setText(msg)
         self.result_lbl.show()
         self.model.play_minigame("dice")
@@ -1083,49 +1901,40 @@ class PlayDialog(QDialog):
     def _play_wand(self):
         self.result_lbl.setText("🪄 飞身扑击！波可欢快抓住了逗宠棒！(ฅ'ω'ฅ)")
         self.result_lbl.show()
+        sound_manager.play("meow")
         self.model.play_minigame("wand")
         self.pet_window.renderer.trigger_pet()
         self.pet_window.dialogue.say("哇！看波可的飞身扑击！捉到逗宠棒啦！(扑腾🐾)")
         QTimer.singleShot(1200, self.accept)
 
-class ActionShowDialog(QDialog):
+class ActionShowDialog(ModernBaseDialog):
     """
     萌宠动作才艺大赏交互面板
     支持 14 种高精度专属动作随时点播与趣味演练
     """
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("🎭 波可的才艺秀大赏")
-        self.setFixedSize(400, 530)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="才艺秀场 · 动作大赏",
+            subtitle="点击任意卡片，波可将立即在桌面表演绝活",
+            icon_emoji="🎭",
+            parent=pet_window or parent,
+            fixed_width=460,
+            fixed_height=560
+        )
         self.model = model
         self.pet_window = pet_window
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(12)
-
-        header = QVBoxLayout()
-        header.setSpacing(4)
-        title = QLabel("🎭 萌宠动作才艺大赏")
-        title.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
-        header.addWidget(title)
-
-        desc = QLabel("波可学会了 14 种超丰富的趣味动作！点击任意卡片即可命令波可立即展示独门绝活：")
-        desc.setWordWrap(True)
-        desc.setStyleSheet("color: #64748B; font-size: 11px;")
-        header.addWidget(desc)
-        layout.addLayout(header)
+        layout = self.content_layout
+        layout.setSpacing(8)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
+        scroll.setStyleSheet("background: transparent; border: none;")
 
         container = QWidget()
         box = QVBoxLayout(container)
-        box.setContentsMargins(0, 0, 4, 0)
+        box.setContentsMargins(0, 0, 6, 0)
         box.setSpacing(8)
 
         actions = [
@@ -1153,12 +1962,6 @@ class ActionShowDialog(QDialog):
         scroll.setWidget(container)
         layout.addWidget(scroll)
 
-        btn_close = QPushButton("关闭", self)
-        btn_close.setObjectName("PrimaryBtn")
-        btn_close.setFixedHeight(38)
-        btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
-
     def _trigger_action(self, action_code):
         sound_manager.play("click")
         self.accept()
@@ -1168,29 +1971,33 @@ class ActionShowDialog(QDialog):
             return
         self.pet_window.play_action(action_code)
 
-class FocusDialog(QDialog):
+class FocusDialog(ModernBaseDialog):
     """番茄钟专注陪伴设置"""
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("开启番茄专注时钟")
-        self.setFixedSize(320, 240)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="专注时钟 · 番茄钟陪伴",
+            subtitle="设定专注时长，波可将佩戴眼镜在身旁安静守护",
+            icon_emoji="🍅",
+            parent=pet_window or parent,
+            fixed_width=360,
+            fixed_height=290
+        )
         self.model = model
         self.pet_window = pet_window
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
+        layout = self.content_layout
         layout.setSpacing(12)
 
         title = QLabel("选择专注工作/学习时长：")
-        title.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
+        title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
         layout.addWidget(title)
 
         desc = QLabel("在专注期间，波可会佩戴眼镜安静守候在您身边不打扰。倒计时结束后会播放清脆闹铃提醒休息！")
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #64748B; font-size: 12px; line-height: 1.4;")
+        desc.setStyleSheet("color: #64748B; font-size: 11px; line-height: 1.4;")
         layout.addWidget(desc)
+
+        layout.addStretch()
 
         btn_box = QHBoxLayout()
         for mins in [15, 25, 45]:
@@ -1205,35 +2012,39 @@ class FocusDialog(QDialog):
         self.pet_window.dialogue.say(f"番茄钟开启！接下来的 {minutes} 分钟，波可会认真陪伴主人专注工作哦~ 📖✏️")
         self.accept()
 
-class StatusDialog(QDialog):
+class StatusDialog(ModernBaseDialog):
     """宠物详细状态属性面板"""
     def __init__(self, model, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("波可的状态档案")
-        self.setFixedSize(380, 500)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="萌宠档案 · 状态体征",
+            subtitle="波可的多维健康体征与成长档案",
+            icon_emoji="📊",
+            parent=parent,
+            fixed_width=460,
+            fixed_height=560
+        )
         self.model = model
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(12)
+        layout = self.content_layout
+        layout.setSpacing(10)
 
         # 头部等级与称号
         header = QHBoxLayout()
         avatar = QLabel("🐱" if model.pet_type == "cat" else ("🐶" if model.pet_type == "dog" else ("🫧" if model.pet_type == "slime" else "🐧")))
-        avatar.setFont(QFont("Segoe UI Emoji", 32))
-        avatar.setFixedSize(54, 54)
+        avatar.setFont(QFont("Segoe UI Emoji", 30))
+        avatar.setFixedSize(50, 50)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avatar.setStyleSheet("background-color: #F1F5F9; border-radius: 27px; border: 2px solid #6366F1;")
+        avatar.setStyleSheet("background-color: rgba(30, 41, 59, 0.8); border-radius: 25px; border: 2px solid #38BDF8;")
         header.addWidget(avatar)
 
         title_info = QVBoxLayout()
+        title_info.setSpacing(2)
         name_lbl = QLabel(f"{model.name}  Lv.{model.level}")
-        name_lbl.setFont(QFont("Microsoft YaHei UI", 14, QFont.Weight.Bold))
+        name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
+        name_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
         stage_info = model.stage_info
         title_lbl = QLabel(f"{stage_info['name']} · 亲密度: {model.intimacy} 点 · 体重: {model.weight}kg")
-        title_lbl.setStyleSheet("color: #6366F1; font-weight: 500; font-size: 11px;")
+        title_lbl.setStyleSheet("color: #38BDF8; font-weight: 500; font-size: 11px;")
         title_info.addWidget(name_lbl)
         title_info.addWidget(title_lbl)
         header.addLayout(title_info)
@@ -1241,33 +2052,69 @@ class StatusDialog(QDialog):
 
         # 成长进度条
         growth_box = QVBoxLayout()
+        growth_box.setSpacing(3)
         growth_h = QHBoxLayout()
-        growth_h.addWidget(QLabel("🌱 成长蜕变积累"))
-        g_val = QLabel(f"{int(model.growth)} / {stage_info['next_target']}")
-        g_val.setStyleSheet("color: #888888; font-size: 11px;")
+        growth_title = QLabel("🌱 成长蜕变积累")
+        growth_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        growth_h.addWidget(growth_title)
+
+        target = stage_info["next_target"]
+        curr_growth = int(model.growth)
+        is_max = model.stage == "ULTIMATE" or curr_growth >= target
+        display_growth = f"{curr_growth} (已达满阶 ✨)" if is_max else f"{curr_growth} / {target}"
+
+        g_val = QLabel(display_growth)
+        g_val.setStyleSheet("color: #38BDF8; font-size: 11px; font-weight: bold;")
         growth_h.addWidget(g_val, alignment=Qt.AlignmentFlag.AlignRight)
         growth_box.addLayout(growth_h)
 
         growth_bar = QProgressBar()
-        growth_bar.setMaximum(stage_info["next_target"])
-        growth_bar.setValue(int(model.growth))
-        growth_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669); }")
+        growth_bar.setFixedHeight(10)
+        growth_bar.setTextVisible(False)
+        growth_bar.setMaximum(target)
+        growth_bar.setValue(min(target, curr_growth))
+        growth_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #1E293B;
+                background-color: rgba(15, 23, 42, 0.8);
+                border-radius: 5px;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
+            }
+        """)
         growth_box.addWidget(growth_bar)
         layout.addLayout(growth_box)
 
         # 经验条
         exp_box = QVBoxLayout()
+        exp_box.setSpacing(3)
         exp_header = QHBoxLayout()
-        exp_header.addWidget(QLabel("成长经验值"))
+        exp_title = QLabel("陪伴经验值")
+        exp_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        exp_header.addWidget(exp_title)
         exp_val = QLabel(f"{int(model.exp)} / {model.max_exp}")
-        exp_val.setStyleSheet("color: #888888; font-size: 11px;")
+        exp_val.setStyleSheet("color: #38BDF8; font-size: 11px; font-weight: bold;")
         exp_header.addWidget(exp_val, alignment=Qt.AlignmentFlag.AlignRight)
         exp_box.addLayout(exp_header)
 
         exp_bar = QProgressBar()
+        exp_bar.setFixedHeight(10)
+        exp_bar.setTextVisible(False)
         exp_bar.setMaximum(model.max_exp)
-        exp_bar.setValue(int(model.exp))
-        exp_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #818CF8); }")
+        exp_bar.setValue(min(model.max_exp, int(model.exp)))
+        exp_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #1E293B;
+                background-color: rgba(15, 23, 42, 0.8);
+                border-radius: 5px;
+            }
+            QProgressBar::chunk {
+                border-radius: 5px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
+            }
+        """)
         exp_box.addWidget(exp_bar)
         layout.addLayout(exp_box)
 
@@ -1277,56 +2124,65 @@ class StatusDialog(QDialog):
         self._add_stat_bar(layout, "⚡ 精力值", int(model.energy), "#3B82F6")
         self._add_stat_bar(layout, "🫧 清洁度", int(model.cleanliness), "#06B6D4")
 
-        # 底部关闭按钮
-        btn_ok = QPushButton("确认", self)
-        btn_ok.setObjectName("PrimaryBtn")
-        btn_ok.setFixedHeight(38)
-        btn_ok.clicked.connect(self.accept)
-        layout.addWidget(btn_ok)
-
     def _add_stat_bar(self, layout, label_text, value, color_hex):
         box = QVBoxLayout()
         box.setSpacing(3)
         h = QHBoxLayout()
-        h.addWidget(QLabel(label_text))
+        lbl = QLabel(label_text)
+        lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        h.addWidget(lbl)
         val_lbl = QLabel(f"{value}%")
-        val_lbl.setStyleSheet("color: #666666; font-size: 11px;")
+        val_lbl.setStyleSheet("color: #E2E8F0; font-size: 11px; font-weight: bold;")
         h.addWidget(val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         box.addLayout(h)
 
         bar = QProgressBar()
+        bar.setFixedHeight(10)
+        bar.setTextVisible(False)
         bar.setMaximum(100)
         bar.setValue(value)
-        bar.setStyleSheet(f"QProgressBar::chunk {{ border-radius: 6px; background-color: {color_hex}; }}")
+        bar.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid #1E293B;
+                background-color: rgba(15, 23, 42, 0.8);
+                border-radius: 5px;
+            }}
+            QProgressBar::chunk {{
+                border-radius: 5px;
+                background-color: {color_hex};
+            }}
+        """)
         box.addWidget(bar)
         layout.addLayout(box)
 
-class SettingsDialog(QDialog):
+class SettingsDialog(ModernBaseDialog):
     """系统偏好设置面板"""
     def __init__(self, model, pet_window, parent=None):
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setWindowTitle("桌面萌宠偏好设置")
-        self.setFixedSize(380, 475)
-        self.setStyleSheet(MODERN_STYLE)
+        super().__init__(
+            title="偏好设置 · 个性定制",
+            subtitle="自定义体型大小、行为习惯与系统开机项",
+            icon_emoji="⚙️",
+            parent=pet_window or parent,
+            fixed_width=460,
+            fixed_height=530
+        )
         self.model = model
         self.pet_window = pet_window
         self._initial_scale = model.user_scale_offset
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(13)
-
-        title = QLabel("个性化与系统设置")
-        title.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
-        layout.addWidget(title)
+        layout = self.content_layout
+        layout.setSpacing(11)
 
         # 大小微调缩放调节
         scale_box = QVBoxLayout()
         scale_box.setSpacing(4)
         scale_title_box = QHBoxLayout()
-        scale_title_box.addWidget(QLabel("宠物微调缩放比例:"))
+        scale_lbl = QLabel("宠物微调缩放比例:")
+        scale_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        scale_title_box.addWidget(scale_lbl)
         self.scale_val_lbl = QLabel(f"{int(model.user_scale_offset * 100)}%")
+        self.scale_val_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.scale_val_lbl.setStyleSheet("color: #38BDF8;")
         scale_title_box.addWidget(self.scale_val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         scale_box.addLayout(scale_title_box)
 
@@ -1342,7 +2198,7 @@ class SettingsDialog(QDialog):
         self.cb_ontop.setChecked(model.always_on_top)
         layout.addWidget(self.cb_ontop)
 
-        self.cb_gravity = QCheckBox("启用桌面物理重力 (关闭可自由悬停在屏幕中间或顶部)")
+        self.cb_gravity = QCheckBox("启用桌面物理重力 (关闭可自由悬停在屏幕任意位置)")
         self.cb_gravity.setChecked(model.enable_gravity)
         layout.addWidget(self.cb_gravity)
 
@@ -1362,8 +2218,15 @@ class SettingsDialog(QDialog):
         self.cb_autostart.setChecked(model.auto_start)
         layout.addWidget(self.cb_autostart)
 
+        layout.addStretch()
+
         # 底部保存应用
         btn_box = QHBoxLayout()
+        btn_cancel = QPushButton("取消")
+        btn_cancel.setFixedHeight(38)
+        btn_cancel.clicked.connect(self.reject)
+        btn_box.addWidget(btn_cancel)
+
         btn_apply = QPushButton("保存设置", self)
         btn_apply.setObjectName("PrimaryBtn")
         btn_apply.setFixedHeight(38)
@@ -1374,16 +2237,18 @@ class SettingsDialog(QDialog):
     def _on_scale_change(self, val):
         self.scale_val_lbl.setText(f"{val}%")
         self.model.user_scale_offset = val / 100.0
-        if hasattr(self.pet_window, "check_resize_for_growth"):
-            self.pet_window.check_resize_for_growth()
-        self.pet_window.update()
+        if self.pet_window:
+            if hasattr(self.pet_window, "check_resize_for_growth"):
+                self.pet_window.check_resize_for_growth()
+            self.pet_window.update()
 
     def reject(self):
         # 取消时回滚缩放至打开面板前的初始尺寸
         self.model.user_scale_offset = getattr(self, "_initial_scale", 1.0)
-        if hasattr(self.pet_window, "check_resize_for_growth"):
-            self.pet_window.check_resize_for_growth()
-        self.pet_window.update()
+        if self.pet_window:
+            if hasattr(self.pet_window, "check_resize_for_growth"):
+                self.pet_window.check_resize_for_growth()
+            self.pet_window.update()
         super().reject()
 
     def _apply_settings(self):
