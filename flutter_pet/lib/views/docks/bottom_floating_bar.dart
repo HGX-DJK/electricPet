@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
-/// 底部三灵动黄金大胶囊 (背包 + 装扮小窝 + 绝活，宽大舒适，零层级深度)
+// 底部三灵动黄金大胶囊 (背包 + 装扮小窝 + 绝活，宽大舒适，零层级深度)
 class BottomFloatingBar extends StatelessWidget {
   final bool isNight;
   final VoidCallback onBackpackTap;
