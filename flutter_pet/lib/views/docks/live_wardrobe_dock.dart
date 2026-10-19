@@ -295,43 +295,45 @@ class LiveWardrobeDock extends StatelessWidget {
                 ),
                 const Spacer(),
 
-                // 2. 🔮 赛博盲盒快捷入口
-                BouncyTouchFeedback(
-                  scaleDown: 0.94,
-                  onTap: onGachaTap,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                          blurRadius: 6,
-                          offset: const Offset(0, 1.5),
+                // 2. 🔮 赛博盲盒快捷入口 (仅在猫咪装扮模式下展示，进入小窝全景DIY时彻底隐藏，保持小窝纯净沉浸)
+                if (wardrobeTab != 6) ...[
+                  BouncyTouchFeedback(
+                    scaleDown: 0.94,
+                    onTap: onGachaTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
                         ),
-                      ],
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('🔮', style: TextStyle(fontSize: 12)),
-                        SizedBox(width: 3),
-                        Text(
-                          '盲盒',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1.5),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('🔮', style: TextStyle(fontSize: 12)),
+                          SizedBox(width: 3),
+                          Text(
+                            '盲盒',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
+                  const SizedBox(width: 6),
+                ],
 
                 // 3. 完成退出换装按钮
                 BouncyTouchFeedback(

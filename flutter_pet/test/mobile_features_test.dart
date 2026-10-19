@@ -159,19 +159,22 @@ void main() {
       await tester.pumpWidget(const DesktopElectricPetApp());
       await tester.pump(const Duration(milliseconds: 200));
 
-      // 1. 验证底部常态五灵动悬浮胶囊全部就绪 (1-Tap 直达，零层级深度)
+      // 1. 验证底部三灵动黄金大胶囊与独立发光微动扭蛋机 FAB 就绪
       expect(find.text('奇妙背包'), findsOneWidget);
-      expect(find.text('魔法换装'), findsOneWidget);
-      expect(find.text('小窝场景'), findsOneWidget);
-      expect(find.text('星愿盲盒'), findsOneWidget);
+      expect(find.text('装扮小窝'), findsOneWidget);
       expect(find.text('专属绝活'), findsOneWidget);
+      expect(find.byKey(const ValueKey('cyber_gacha_fab')), findsOneWidget);
 
-      // 2. 点击「小窝场景」：直达小窝全景模式，无需在换装坞内滑动查找
-      await tester.tap(find.text('小窝场景'));
+      // 2. 点击「装扮小窝」：直达空间坞并一键切入「小窝全景」
+      await tester.tap(find.text('装扮小窝'));
       await tester.pump(const Duration(milliseconds: 250));
       expect(find.byKey(const ValueKey('live_wardrobe_dock')), findsOneWidget);
-      expect(find.text('小窝全景'), findsOneWidget);
+
+      await tester.tap(find.text('小窝全景'));
+      await tester.pump(const Duration(milliseconds: 250));
       expect(find.text('夏日海滩'), findsOneWidget);
+      // 验证小窝全景模式下彻底隐藏盲盒按钮，保持房间沉浸纯净
+      expect(find.text('盲盒'), findsNothing);
 
       // 3. 在换装坞顶层一键无缝切至「猫咪装扮」
       await tester.tap(find.text('猫咪装扮'));
@@ -203,6 +206,7 @@ void main() {
       await tester.tap(find.text('完成'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.byKey(const ValueKey('bottom_floating_bar')), findsOneWidget);
+      expect(find.byKey(const ValueKey('cyber_gacha_fab')), findsOneWidget);
     });
   });
 }

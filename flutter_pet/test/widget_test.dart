@@ -26,7 +26,7 @@ void main() {
 
     // 验证常态三灵动悬浮胶囊存在
     expect(find.text('奇妙背包'), findsOneWidget);
-    expect(find.text('魔法换装'), findsOneWidget);
+    expect(find.text('装扮小窝'), findsOneWidget);
     expect(find.text('专属绝活'), findsOneWidget);
 
     // 1-Tap 点击进入专属绝活点播台
@@ -316,7 +316,7 @@ void main() {
     expect(find.byKey(const ValueKey('covered_blanket')), findsNothing);
 
     // 5. 方向四：换装滑轨坞内专属金饰锁定提示与形态展示
-    await tester.tap(find.text('魔法换装'));
+    await tester.tap(find.text('装扮小窝'));
     await tester.pump(const Duration(milliseconds: 300));
 
     // 切换到头部 Tab
@@ -339,7 +339,7 @@ void main() {
     // 点击完成按钮退出换装
     await tester.tap(find.text('完成'));
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('魔法换装'), findsOneWidget);
+    expect(find.text('装扮小窝'), findsOneWidget);
   });
 
   testWidgets('Pet drag stability and no inflation test', (WidgetTester tester) async {
@@ -680,7 +680,7 @@ void main() {
 
     // 2. 细节二：底部三灵动药丸胶囊的触感弹性形变
     expect(find.text('奇妙背包'), findsOneWidget);
-    expect(find.text('魔法换装'), findsOneWidget);
+    expect(find.text('装扮小窝'), findsOneWidget);
     expect(find.text('专属绝活'), findsOneWidget);
 
     // 3. 细节三：就餐角托盘三元素几何对齐与陶瓷凹槽下陷反馈 (敲罐按钮升级为 🥫 🔔 双图标对称)
@@ -803,10 +803,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('live_action_dock')), findsOneWidget);
 
-    // 切换至魔法换装坞
+    // 切换至装扮小窝坞
     await tester.tap(find.text('完成'));
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('魔法换装'));
+    await tester.tap(find.text('装扮小窝'));
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byKey(const ValueKey('live_wardrobe_dock')), findsOneWidget);
 

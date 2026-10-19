@@ -27,6 +27,7 @@ import 'docks/bottom_floating_bar.dart';
 import 'docks/live_wardrobe_dock.dart';
 import 'docks/live_action_dock.dart';
 import 'docks/live_feeding_dock.dart';
+import 'docks/cyber_gacha_fab.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -3688,25 +3689,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       _wardrobeTab = _lastCatSlotTab;
                     });
                     _spawnParticles(Offset(_petX, _petY - 20), emoji: '👗', count: 3);
-                    _showDialogueBubble('魔法衣橱已就绪！点击上方标签自由搭配头部/面部/背部与前爪装扮~ ✨', duration: const Duration(seconds: 4));
+                    _showDialogueBubble('装扮小窝已就绪！自由搭配猫咪穿戴与 5 大家园主题全屏房间~ ✨', duration: const Duration(seconds: 4));
                   },
-                  onHabitatTap: () {
-                    _idleSeconds = 0;
-                    _isRoaming = false;
-                    _targetWalkX = null;
-                    SoundService.playMeow();
-                    if (widget.petModel.enableHaptics) {
-                      HapticFeedback.lightImpact();
-                    }
-                    setState(() {
-                      _isWardrobeMode = true;
-                      _isActionMode = false;
-                      _wardrobeTab = 6;
-                    });
-                    _spawnParticles(Offset(_petX, _petY - 20), emoji: '🏠', count: 3);
-                    _showDialogueBubble('家园小窝 DIY 已开启！任意切换 5 大家园主题全屏房间与环境光影~ 🏡✨', duration: const Duration(seconds: 4));
-                  },
-                  onGachaTap: _openGachaBottomSheet,
                   onActionTap: () {
                     _idleSeconds = 0;
                     _isRoaming = false;
@@ -3722,6 +3706,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
                     _showDialogueBubble('专属绝活点播台已就绪！点选下方任意绝活，看波可大展身手~ 🎭✨', duration: const Duration(seconds: 4));
                   },
+                ),
+
+              // 7. 独立发光微动扭蛋机悬浮球 (Cyber Gacha FAB) - 常态下悬浮于右侧上方，开箱仪式感拉满
+              if (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode)
+                Positioned(
+                  right: 18,
+                  bottom: 74,
+                  child: CyberGachaFab(
+                    isNight: isNight,
+                    onTap: _openGachaBottomSheet,
+                  ),
                 ),
             ],
           ),
