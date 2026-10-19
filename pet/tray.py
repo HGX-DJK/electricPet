@@ -2,7 +2,7 @@ import os
 import sys
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
 from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush
-from PyQt6.QtCore import Qt, QRectF, QPointF
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
 from pet.menus import StatusDialog, SettingsDialog, WardrobeDialog, FeedingDialog, ActionShowDialog
 from pet.audio import sound_manager
 
@@ -64,8 +64,21 @@ class PetTrayIcon(QSystemTrayIcon):
         self.app = app
 
         self.setToolTip(f"{self.model.name} · 桌面萌宠")
+
+        self._single_click_timer = QTimer(self)
+        self._single_click_timer.setSingleShot(True)
+        self._single_click_timer.timeout.connect(self._on_single_click)
+
         self._init_menu()
         self.activated.connect(self._on_tray_activated)
+
+        # 监听模型状态变更以实时同步托盘选项与等级
+        old_cb = self.model.on_state_change
+        def _on_model_change():
+            if old_cb:
+                old_cb()
+            self._sync_menu_state()
+        self.model.on_state_change = _on_model_change
 
     def _init_menu(self):
         menu = QMenu()
@@ -85,6 +98,27 @@ class PetTrayIcon(QSystemTrayIcon):
             QMenu::item:selected {
                 background-color: #EEF2FF;
                 color: #4F46E5;
+            }
+            QMenu::item:disabled {
+                color: #334155;
+                font-weight: bold;
+                background: #F8FAFC;
+                padding: 6px 24px;
+            }
+            QMenu::indicator {
+                width: 14px;
+                height: 14px;
+                margin-left: 6px;
+            }
+            QMenu::indicator:checked {
+                background-color: #6366F1;
+                border: 2px solid #6366F1;
+                border-radius: 3px;
+            }
+            QMenu::indicator:unchecked {
+                background-color: #FFFFFF;
+                border: 2px solid #CBD5E1;
+                border-radius: 3px;
             }
             QMenu::separator {
                 height: 1px;
@@ -156,9 +190,19 @@ class PetTrayIcon(QSystemTrayIcon):
 
         # 退出应用
         exit_action = menu.addAction("🚪 退出电子宠物")
-        exit_action.triggered.connect(self._exit_app)
-
+        menu.aboutToShow.connect(self._sync_menu_state)
         self.setContextMenu(menu)
+
+    def _sync_menu_state(self):
+        if hasattr(self, "status_action") and self.status_action:
+            self.status_action.setText(f"🐾 {self.model.name} (Lv.{self.model.level})")
+        if hasattr(self, "toggle_show_action") and self.toggle_show_action:
+            is_vis = self.pet_window.isVisible() and not getattr(self.pet_window, "is_boss_hidden", False)
+            self.toggle_show_action.setText("👁️ 隐藏萌宠" if is_vis else "👁️ 显示萌宠")
+        if hasattr(self, "ontop_action") and self.ontop_action:
+            self.ontop_action.setChecked(self.model.always_on_top)
+        if hasattr(self, "sound_action") and self.sound_action:
+            self.sound_action.setChecked(self.model.sound_enabled)
 
     def _toggle_visibility(self):
         if self.pet_window.isVisible():
@@ -215,15 +259,20 @@ class PetTrayIcon(QSystemTrayIcon):
         dialog = SettingsDialog(self.model, self.pet_window)
         dialog.exec()
 
+    def _on_single_click(self):
+        if self.pet_window.isVisible():
+            self.pet_window.raise_()
+            self.pet_window.activateWindow()
+            self.pet_window.play_action("TILT_HEAD", custom_msg="主人在找波可吗？喵呜~ 🐾")
+
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             if not self.pet_window.isVisible():
                 self._toggle_visibility()
             else:
-                self.pet_window.raise_()
-                self.pet_window.activateWindow()
-                self.pet_window.play_action("TILT_HEAD", custom_msg="主人在找波可吗？喵呜~ 🐾")
+                self._single_click_timer.start(240)
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._single_click_timer.stop()
             self._toggle_visibility()
 
     def show_notification(self, title, message, duration_ms=4500):

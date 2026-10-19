@@ -17,7 +17,7 @@ from pet.renderer import PetRenderer
 MODERN_STYLE = """
 QDialog {
     background-color: #FAFAFD;
-    border-radius: 20px;
+    border-radius: 0px;
 }
 QLabel {
     font-family: "Microsoft YaHei UI", sans-serif;
@@ -94,6 +94,10 @@ QTabBar::tab:selected {
     color: #4F46E5;
     font-weight: bold;
 }
+QTabBar::tab:hover:!selected {
+    background: #E2E8F0;
+    color: #4338CA;
+}
 QSlider::groove:horizontal {
     height: 6px;
     background: #E2E8F0;
@@ -118,10 +122,10 @@ QCheckBox {
     spacing: 8px;
 }
 QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border-radius: 5px;
-    border: 1.5px solid #CBD5E1;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #CBD5E1;
+    border-radius: 4px;
     background-color: #FFFFFF;
 }
 QCheckBox::indicator:hover {
@@ -130,6 +134,8 @@ QCheckBox::indicator:hover {
 QCheckBox::indicator:checked {
     background-color: #6366F1;
     border-color: #6366F1;
+    width: 16px;
+    height: 16px;
 }
 """
 
@@ -169,7 +175,7 @@ class ActionCardButton(QPushButton):
     def __init__(self, icon_str, title, subtitle="", bg_color=None, border_color=None, parent=None):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(54)
+        self.setMinimumHeight(54)
 
         if not bg_color or not border_color:
             bg_c, brd_c = PASTEL_PALETTE.get(icon_str, ("#F8FAFC", "#E2E8F0"))
@@ -179,7 +185,7 @@ class ActionCardButton(QPushButton):
         self.setStyleSheet("""
             QPushButton {
                 background-color: #FFFFFF;
-                border: 1px solid #F1F5F9;
+                border: 1.5px solid #F1F5F9;
                 border-radius: 14px;
                 padding: 0px;
                 text-align: left;
@@ -230,11 +236,11 @@ class ActionCardButton(QPushButton):
         if subtitle:
             sub_lbl = QLabel(subtitle)
             sub_lbl.setFont(QFont("Microsoft YaHei UI", 9))
+            sub_lbl.setWordWrap(True)
             sub_lbl.setStyleSheet("color: #64748B; background: transparent; border: none;")
             text_layout.addWidget(sub_lbl)
 
-        layout.addLayout(text_layout)
-        layout.addStretch()
+        layout.addLayout(text_layout, stretch=1)
 
 class QuickActionMenu(QWidget):
     """
@@ -641,7 +647,7 @@ class PetLivePreviewWidget(QWidget):
     """衣橱中的实时交互试穿预览画布"""
     def __init__(self, model, parent=None):
         super().__init__(parent)
-        self.setFixedSize(170, 190)
+        self.setFixedSize(185, 205)
         self.preview_model = copy.copy(model)
         # 复制独立装饰字典
         self.preview_model.decorations = dict(model.decorations)
@@ -794,11 +800,13 @@ class WardrobeDialog(QDialog):
             ("penguin_tux", "🐧 燕尾服小企鹅", "呆萌企鹅幼崽，摇晃小脚丫")
         ]
 
+        self.skin_buttons = {}
         for skin_id, name, desc in skins:
             btn = QPushButton(f"{name}\n{desc}")
             btn.setStyleSheet("text-align: left; padding: 8px 12px; font-size: 12px;")
             if self.temp_skin == skin_id:
                 btn.setObjectName("SelectedBtn")
+            self.skin_buttons[skin_id] = btn
             btn.clicked.connect(lambda checked, s=skin_id: self._select_preview_skin(s))
             layout.addWidget(btn)
 
@@ -806,6 +814,10 @@ class WardrobeDialog(QDialog):
         return scroll
 
     def _create_slot_tab(self, slot_name, items):
+        if not hasattr(self, "slot_buttons"):
+            self.slot_buttons = {}
+        self.slot_buttons[slot_name] = {}
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("border: none;")
@@ -819,6 +831,7 @@ class WardrobeDialog(QDialog):
             btn.setStyleSheet("text-align: left; padding: 10px 14px; font-size: 12px;")
             if current_val == code:
                 btn.setObjectName("SelectedBtn")
+            self.slot_buttons[slot_name][code] = btn
             btn.clicked.connect(lambda checked, s=slot_name, c=code: self._select_preview_decoration(s, c))
             layout.addWidget(btn)
 
@@ -827,11 +840,18 @@ class WardrobeDialog(QDialog):
 
     def _select_preview_skin(self, skin_id):
         self.temp_skin = skin_id
+        for s_id, btn in getattr(self, "skin_buttons", {}).items():
+            btn.setObjectName("SelectedBtn" if s_id == skin_id else "")
+            btn.setStyle(btn.style())
         self.preview_widget.update_skin(skin_id)
         sound_manager.play("pop")
 
     def _select_preview_decoration(self, slot, code):
         self.temp_decs[slot] = code
+        slot_map = getattr(self, "slot_buttons", {}).get(slot, {})
+        for c, btn in slot_map.items():
+            btn.setObjectName("SelectedBtn" if c == code else "")
+            btn.setStyle(btn.style())
         self.preview_widget.update_decoration(slot, code)
         sound_manager.play("pop")
 
@@ -839,6 +859,10 @@ class WardrobeDialog(QDialog):
         for slot in self.temp_decs:
             self.temp_decs[slot] = "none"
             self.preview_widget.update_decoration(slot, "none")
+            slot_map = getattr(self, "slot_buttons", {}).get(slot, {})
+            for c, btn in slot_map.items():
+                btn.setObjectName("SelectedBtn" if c == "none" else "")
+                btn.setStyle(btn.style())
         sound_manager.play("click")
 
     def closeEvent(self, event):
@@ -853,6 +877,7 @@ class WardrobeDialog(QDialog):
         for slot, code in self.temp_decs.items():
             self.model.set_decoration(slot, code)
         self.model.save_to_disk()
+        sound_manager.play("sparkle")
         self.pet_window.dialogue.say("新装扮已换上！主人觉得波可爱吗？✨ (ฅ'ω'ฅ)")
         self.accept()
 
@@ -900,7 +925,7 @@ class FeedingDialog(QDialog):
         self.growth_bar = QProgressBar()
         self.growth_bar.setMaximum(stage_info["next_target"])
         self.growth_bar.setValue(int(self.model.growth))
-        self.growth_bar.setStyleSheet("QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669); }")
+        self.growth_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669); }")
         info_layout.addWidget(self.growth_bar)
 
         desc_lbl = QLabel(stage_info["desc"])
@@ -1004,6 +1029,14 @@ class PlayDialog(QDialog):
         btn_talents.clicked.connect(self._open_talents)
         layout.addWidget(btn_talents)
 
+        # 实时对决结果徽章展示卡片
+        self.result_lbl = QLabel("")
+        self.result_lbl.setWordWrap(True)
+        self.result_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.result_lbl.setStyleSheet("color: #4F46E5; font-size: 12px; font-weight: bold; background: #EEF2FF; border-radius: 10px; padding: 10px;")
+        self.result_lbl.hide()
+        layout.addWidget(self.result_lbl)
+
     def _open_talents(self):
         sound_manager.play("click")
         self.accept()
@@ -1024,9 +1057,11 @@ class PlayDialog(QDialog):
         else:
             msg = f"波可出了【{names[pet_choice]}】！嘿嘿，这局是波可赢啦~ 耶！✨"
 
+        self.result_lbl.setText(msg)
+        self.result_lbl.show()
         self.model.play_minigame("rps")
         self.pet_window.dialogue.say(f"【猜拳】{msg}")
-        self.accept()
+        QTimer.singleShot(1400, self.accept)
 
     def _play_dice(self):
         user_num = random.randint(1, 6)
@@ -1034,20 +1069,24 @@ class PlayDialog(QDialog):
         dice_emojis = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
         msg = f"主人掷出 {dice_emojis[user_num-1]} ({user_num}点)，波可掷出 {dice_emojis[pet_num-1]} ({pet_num}点)！"
         if user_num > pet_num:
-            msg += " 主人获胜！"
+            msg += " 主人获胜！🎉"
         elif pet_num > user_num:
-            msg += " 波可点数更大，嘿嘿！"
+            msg += " 波可点数更大，嘿嘿！✨"
         else:
-            msg += " 心有灵犀平局！"
+            msg += " 心有灵犀平局！🤝"
+        self.result_lbl.setText(msg)
+        self.result_lbl.show()
         self.model.play_minigame("dice")
         self.pet_window.dialogue.say(msg)
-        self.accept()
+        QTimer.singleShot(1400, self.accept)
 
     def _play_wand(self):
+        self.result_lbl.setText("🪄 飞身扑击！波可欢快抓住了逗宠棒！(ฅ'ω'ฅ)")
+        self.result_lbl.show()
         self.model.play_minigame("wand")
         self.pet_window.renderer.trigger_pet()
         self.pet_window.dialogue.say("哇！看波可的飞身扑击！捉到逗宠棒啦！(扑腾🐾)")
-        self.accept()
+        QTimer.singleShot(1200, self.accept)
 
 class ActionShowDialog(QDialog):
     """
@@ -1212,7 +1251,7 @@ class StatusDialog(QDialog):
         growth_bar = QProgressBar()
         growth_bar.setMaximum(stage_info["next_target"])
         growth_bar.setValue(int(model.growth))
-        growth_bar.setStyleSheet("QProgressBar::chunk { background-color: #10B981; }")
+        growth_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669); }")
         growth_box.addWidget(growth_bar)
         layout.addLayout(growth_box)
 
@@ -1228,7 +1267,7 @@ class StatusDialog(QDialog):
         exp_bar = QProgressBar()
         exp_bar.setMaximum(model.max_exp)
         exp_bar.setValue(int(model.exp))
-        exp_bar.setStyleSheet("QProgressBar::chunk { background-color: #6366F1; }")
+        exp_bar.setStyleSheet("QProgressBar::chunk { border-radius: 6px; background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #818CF8); }")
         exp_box.addWidget(exp_bar)
         layout.addLayout(exp_box)
 
@@ -1258,7 +1297,7 @@ class StatusDialog(QDialog):
         bar = QProgressBar()
         bar.setMaximum(100)
         bar.setValue(value)
-        bar.setStyleSheet(f"QProgressBar::chunk {{ background-color: {color_hex}; }}")
+        bar.setStyleSheet(f"QProgressBar::chunk {{ border-radius: 6px; background-color: {color_hex}; }}")
         box.addWidget(bar)
         layout.addLayout(box)
 
@@ -1272,6 +1311,7 @@ class SettingsDialog(QDialog):
         self.setStyleSheet(MODERN_STYLE)
         self.model = model
         self.pet_window = pet_window
+        self._initial_scale = model.user_scale_offset
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -1333,6 +1373,18 @@ class SettingsDialog(QDialog):
 
     def _on_scale_change(self, val):
         self.scale_val_lbl.setText(f"{val}%")
+        self.model.user_scale_offset = val / 100.0
+        if hasattr(self.pet_window, "check_resize_for_growth"):
+            self.pet_window.check_resize_for_growth()
+        self.pet_window.update()
+
+    def reject(self):
+        # 取消时回滚缩放至打开面板前的初始尺寸
+        self.model.user_scale_offset = getattr(self, "_initial_scale", 1.0)
+        if hasattr(self.pet_window, "check_resize_for_growth"):
+            self.pet_window.check_resize_for_growth()
+        self.pet_window.update()
+        super().reject()
 
     def _apply_settings(self):
         self.model.user_scale_offset = self.scale_slider.value() / 100.0

@@ -144,6 +144,9 @@ class PetModel:
             self.level += 1
             leveled_up = True
 
+        if self.level >= 99:
+            self.exp = min(self.exp, self.max_exp)
+
         if leveled_up:
             sound_manager.play("level_up")
             if self.on_level_up:
@@ -248,6 +251,17 @@ class PetModel:
         self._notify_change()
         return self.is_sleeping
 
+    def wake_up(self):
+        """唤醒宠物"""
+        if self.is_sleeping:
+            self.is_sleeping = False
+            sound_manager.play("meow")
+            self._notify_change()
+
+    def stop_focus_timer(self):
+        """停止专注计时器（cancel_focus_timer 别名）"""
+        self.cancel_focus_timer()
+
     def start_focus_timer(self, minutes=25):
         self.is_studying = True
         self.study_duration = minutes * 60
@@ -292,6 +306,25 @@ class PetModel:
     def _notify_change(self):
         if self.on_state_change:
             self.on_state_change()
+
+    def check_system_autostart(self) -> bool:
+        """从 Windows 注册表检测当前是否实际配置了开机自启"""
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_READ
+            )
+            try:
+                winreg.QueryValueEx(key, "DesktopElectricPet")
+                winreg.CloseKey(key)
+                return True
+            except FileNotFoundError:
+                winreg.CloseKey(key)
+                return False
+        except Exception:
+            return getattr(self, "auto_start", False)
 
     def toggle_gravity(self):
         """切换自由悬停 / 物理重力模式"""
@@ -350,12 +383,14 @@ class PetModel:
             self.name = data.get("name", self.name)
             self.skin_id = data.get("skin_id", data.get("pet_type", "cat_calico"))
             self.set_skin(self.skin_id)
-            self.hunger = float(data.get("hunger", self.hunger))
-            self.mood = float(data.get("mood", self.mood))
-            self.energy = float(data.get("energy", self.energy))
-            self.cleanliness = float(data.get("cleanliness", self.cleanliness))
-            self.level = int(data.get("level", self.level))
-            self.exp = float(data.get("exp", self.exp))
+            self.hunger = max(0.0, min(100.0, float(data.get("hunger", self.hunger))))
+            self.mood = max(0.0, min(100.0, float(data.get("mood", self.mood))))
+            self.energy = max(0.0, min(100.0, float(data.get("energy", self.energy))))
+            self.cleanliness = max(0.0, min(100.0, float(data.get("cleanliness", self.cleanliness))))
+            self.level = max(1, min(99, int(data.get("level", self.level))))
+            self.exp = max(0.0, float(data.get("exp", self.exp)))
+            if self.level >= 99:
+                self.exp = min(self.exp, self.max_exp)
             self.intimacy = int(data.get("intimacy", self.intimacy))
             self.total_days = int(data.get("total_days", self.total_days))
             self.birth_time = float(data.get("birth_time", self.birth_time))
@@ -378,12 +413,13 @@ class PetModel:
                     self.decorations["head"] = old_acc
 
             self.user_scale_offset = float(data.get("user_scale_offset", data.get("scale", 1.0)))
+            self.user_scale_offset = max(0.75, min(1.35, self.user_scale_offset))
             self.always_on_top = bool(data.get("always_on_top", self.always_on_top))
             self.sound_enabled = bool(data.get("sound_enabled", self.sound_enabled))
             sound_manager.muted = not self.sound_enabled
             self.auto_roam = bool(data.get("auto_roam", self.auto_roam))
             self.health_reminders = bool(data.get("health_reminders", self.health_reminders))
-            self.auto_start = bool(data.get("auto_start", self.auto_start))
+            self.auto_start = self.check_system_autostart()
             self.enable_gravity = bool(data.get("enable_gravity", False))
             self.last_pos_x = data.get("last_pos_x", None)
             self.last_pos_y = data.get("last_pos_y", None)

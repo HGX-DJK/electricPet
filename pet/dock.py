@@ -153,7 +153,7 @@ class PetCompanionDock(QWidget):
         # 竖向细微分割线
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("background-color: #E2E8F0; width: 1.5px; margin: 4px 1px;")
+        sep.setStyleSheet("background-color: #E2E8F0; min-width: 1px; max-width: 1px; margin: 4px 1px;")
         dock_layout.addWidget(sep)
 
         # 8. 全部菜单与设置
@@ -165,6 +165,9 @@ class PetCompanionDock(QWidget):
 
     def show_dock(self):
         """平滑浮现快捷岛"""
+        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
+            self._current_anim.stop()
+            self._current_anim = None
         self.hide_timer.stop()
         self.update_sleep_icon()
         self.sync_position()
@@ -247,8 +250,9 @@ class PetCompanionDock(QWidget):
         # 边界防溢出保护
         target_x = max(avail.left() + 8, min(target_x, avail.right() - dock_w - 8))
         if target_y < avail.top() + 6:
-            # 顶部空间不足，翻转到宠物足底下方
+            # 顶部空间不足，翻转到宠物足底下方，同时防触底防遮挡
             target_y = pet_foot_y + 4
+            target_y = min(target_y, avail.bottom() - dock_h - 6)
 
         self.move(int(target_x), int(target_y))
 
@@ -262,43 +266,29 @@ class PetCompanionDock(QWidget):
             self.btn_sleep.setToolTip("💤 哄睡就寝 (休养充沛活力)")
             self.btn_sleep.update_style("sleep")
 
-    def enterEvent(self, event):
-        self.cancel_hide()
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.schedule_hide(1800)
-        super().leaveEvent(event)
-
     # ================= 按钮交互逻辑 =================
     def _on_feed(self):
-        sound_manager.play("click")
         self.hide()
         QTimer.singleShot(30, lambda: FeedingDialog(self.model, self.pet_window).exec())
 
     def _on_wardrobe(self):
-        sound_manager.play("click")
         self.hide()
         QTimer.singleShot(30, lambda: WardrobeDialog(self.model, self.pet_window).exec())
 
     def _on_talent(self):
-        sound_manager.play("click")
         self.hide()
         QTimer.singleShot(30, lambda: ActionShowDialog(self.model, self.pet_window).exec())
 
     def _on_play(self):
-        sound_manager.play("click")
         self.hide()
         QTimer.singleShot(30, lambda: PlayDialog(self.model, self.pet_window).exec())
 
     def _on_bath(self):
-        sound_manager.play("click")
         self.model.bath()
         self.pet_window.renderer.trigger_bath()
         self.pet_window.dialogue.say("哇！泡泡浴好舒服呀~ 波可现在香喷喷哒！🧼✨")
 
     def _on_sleep(self):
-        sound_manager.play("click")
         is_sleeping = self.model.toggle_sleep()
         self.update_sleep_icon()
         if is_sleeping:
@@ -307,11 +297,9 @@ class PetCompanionDock(QWidget):
             self.pet_window.dialogue.say("伸个懒腰~ 充满能量啦！今天也要加油哦！☀️")
 
     def _on_memo(self):
-        sound_manager.play("click")
         if hasattr(self.pet_window, "toggle_memo"):
             self.pet_window.toggle_memo()
 
     def _on_more(self):
-        sound_manager.play("click")
         self.hide()
         self.pet_window._open_quick_menu()

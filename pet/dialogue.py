@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QApplication
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QPainterPath, QBrush, QPen
+from pet.audio import sound_manager
 
 class SpeechBalloonCard(QFrame):
     """
@@ -112,7 +113,8 @@ class SpeechBubbleWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedWidth(260)
+        self.setMinimumWidth(160)
+        self.setMaximumWidth(280)
 
         self._current_anim = None
         self.hide_timer = QTimer(self)
@@ -163,13 +165,16 @@ class SpeechBubbleWidget(QWidget):
         self.text_lbl = QLabel("")
         self.text_lbl.setFont(QFont("Microsoft YaHei UI", 10))
         self.text_lbl.setWordWrap(True)
-        self.text_lbl.setStyleSheet("color: #1E293B; line-height: 1.45; background: transparent;")
+        self.text_lbl.setStyleSheet("color: #1E293B; background: transparent;")
         self.card_layout.addWidget(self.text_lbl)
 
         main_layout.addWidget(self.card)
 
     def show_message(self, text, duration=5.0, badge="🐾 波可"):
         self.hide_timer.stop()
+        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
+            self._current_anim.stop()
+            self._current_anim = None
         self.text_lbl.setText(text)
 
         # 仅针对特殊系统提示显示小标签，普通闲聊或默认波可标签保持极简气泡外观
@@ -218,7 +223,8 @@ class SpeechBubbleWidget(QWidget):
         self._current_anim = anim
 
     def mousePressEvent(self, event):
-        # 点击气泡任意位置快速关闭
+        # 点击气泡任意位置快速关闭并伴随清脆音效
+        sound_manager.play("pop")
         self.dismiss()
         super().mousePressEvent(event)
 
@@ -235,6 +241,7 @@ class SpeechBubbleWidget(QWidget):
         pet_head_y = pet_window.get_head_screen_y()
         pet_foot_y = pet_window.get_foot_screen_y()
         pet_center_x = pet_window.get_center_screen_x()
+        pet_y = pet_window.y()
         scale = pet_window.width() / 220.0
 
         self.adjustSize()

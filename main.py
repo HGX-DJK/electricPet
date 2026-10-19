@@ -47,8 +47,7 @@ def main():
     except Exception:
         pass
 
-    # 启用高分屏清晰缩放与反锯齿
-    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    # Qt 6 默认自动启用高 DPI 缩放，无需手动设置环境变量
     setup_crash_logger()
     set_windows_app_id()
 
@@ -90,8 +89,8 @@ def main():
                 msg = client.readAll().data().decode("utf-8", errors="ignore").strip()
                 if "WAKE_UP" in msg:
                     if getattr(window, "is_boss_hidden", False):
-                        window.toggle_boss_mode()
-                    elif not window.isVisible():
+                        return  # 老板键隐身中，静默忽略唤醒请求
+                    if not window.isVisible():
                         window.show()
                     window.setWindowState(window.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
                     window.raise_()
@@ -127,6 +126,9 @@ def main():
 
     # 番茄钟专注完成回调绑定 (系统托盘原生通知 + 萌宠撒花祝贺)
     def on_focus_finish():
+        if getattr(window, "is_boss_hidden", False):
+            tray.show_notification("⏰ 番茄钟专注完成！", "高效专注圆满达成！站起来伸伸懒腰、向远方眺望放松一下吧~ 🐾")
+            return  # 老板键隐身中，只发送系统通知，不弹出窗口
         if not window.isVisible():
             window.show()
         window.raise_()

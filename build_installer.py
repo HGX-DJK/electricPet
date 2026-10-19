@@ -23,12 +23,14 @@ def compress_payload(source_dir, output_zip):
     print(f"[Compressed] payload.zip created successfully: {size_mb:.2f} MB")
 
 def build_installer_only():
-    """复用已编译的 dist/DesktopPet，快速封装单文件安装包 DesktopPet_Setup.exe"""
+    """编译最新核心程序并封装单文件安装包 DesktopPet_Setup.exe"""
     dist_app = os.path.abspath("dist/DesktopPet")
     exe_app = os.path.join(dist_app, "DesktopPet.exe")
 
-    if not os.path.exists(exe_app):
-        print("[Notice] 未检测到 dist/DesktopPet/DesktopPet.exe，开始完整构建...")
+    # 默认重新编译核心程序，确保包含最新源码修复；传入 --quick 可复用已编译目录
+    need_rebuild = "--quick" not in sys.argv
+    if need_rebuild or not os.path.exists(exe_app):
+        print("[Notice] 正在重新编译最新核心应用程序 (包含最新代码与界面修复)...")
         import build_exe
         build_exe.build()
 

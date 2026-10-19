@@ -35,6 +35,8 @@ class PetWindow(QWidget):
     桌面透明无边框宠物主窗口
     实现物理重力、拖拽掉落回弹、屏幕边缘碰撞、自由漫步巡逻与交互触发
     """
+    EDGE_PEEK_MARGIN = 38
+
     def __init__(self, model):
         super().__init__()
         self.model = model
@@ -65,6 +67,8 @@ class PetWindow(QWidget):
         self.is_dragging = False
         self.drag_start_pos = QPoint()
         self.mouse_press_pos = QPoint()
+        self._last_mouse_move_pos = QPoint()
+        self._stroke_triggered = False
         self.stroke_distance = 0.0
         self.anchor_y = None
         self.drag_vx = 0.0
@@ -259,6 +263,12 @@ class PetWindow(QWidget):
             if self.state not in ("FALLING", "DRAGGING"):
                 new_y = old_y - diff
                 self.move(int(old_x - diff / 2), int(new_y))
+                screen = QApplication.screenAt(self.geometry().center())
+                if screen:
+                    avail = screen.availableGeometry()
+                    new_x = max(avail.left(), min(int(old_x - diff / 2), avail.right() - target_size))
+                    new_y = max(avail.top(), min(new_y, avail.bottom() - target_size))
+                    self.move(int(new_x), int(new_y))
                 self.anchor_y = new_y
 
     def _on_evolution_triggered(self, new_stage, stage_name):
@@ -319,7 +329,8 @@ class PetWindow(QWidget):
         if not screen:
             screen = QApplication.primaryScreen()
         avail = screen.availableGeometry()
-        return avail.bottom() - self.height()
+        scale = self.width() / 220.0
+        return int(avail.bottom() - 171.0 * scale)
 
     # ================= 60 FPS 核心帧循环 =================
     def _on_animation_tick(self):
@@ -700,7 +711,16 @@ class PetWindow(QWidget):
             self.dock.hide()
         if hasattr(self, "dialogue"):
             self.dialogue.dismiss()
+        if hasattr(self, "memo") and self.memo.isVisible():
+            self._memo_was_open = True
+            self.memo.hide()
         super().hideEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if getattr(self, "_memo_was_open", False) and hasattr(self, "memo"):
+            self.memo.show()
+            self._memo_was_open = False
 
     def mousePressEvent(self, event: QMouseEvent):
         if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
@@ -711,6 +731,8 @@ class PetWindow(QWidget):
             self.is_dragging = False
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             self.mouse_press_pos = event.globalPosition().toPoint()
+            self._last_mouse_move_pos = event.globalPosition().toPoint()
+            self._stroke_triggered = False
             self.drag_start_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
             self.stroke_distance = 0.0
             self.drag_vx = 0.0
@@ -788,9 +810,12 @@ class PetWindow(QWidget):
                 self.move(new_pos)
             else:
                 # 鼠标在宠物头上轻微晃动视为“抚摸”
-                self.stroke_distance += move_delta
+                incremental_delta = (current_pos - self._last_mouse_move_pos).manhattanLength()
+                self._last_mouse_move_pos = current_pos
+                self.stroke_distance += incremental_delta
                 if self.stroke_distance > 40:
                     self.stroke_distance = 0.0
+                    self._stroke_triggered = True
                     self.model.pet_head()
                     self.renderer.trigger_pet()
 
@@ -807,10 +832,10 @@ class PetWindow(QWidget):
 
                 # 贴边探头偷看 (Screen-edge peek-a-boo) 判定 (非重力下靠近左右边框35px自动贴边偷看)
                 if avail and not self.model.enable_gravity:
-                    if self.x() <= avail.left() + 38:
+                    if self.x() <= avail.left() + self.EDGE_PEEK_MARGIN:
                         self.start_edge_peek("PEEK_LEFT", avail.left())
                         return
-                    elif self.x() >= avail.right() - self.width() - 38:
+                    elif self.x() >= avail.right() - self.width() - self.EDGE_PEEK_MARGIN:
                         self.start_edge_peek("PEEK_RIGHT", avail.right())
                         return
 
@@ -846,9 +871,9 @@ class PetWindow(QWidget):
 
                 # 贴边智能面朝屏幕内 (不把脸对着显示器边框)
                 if avail:
-                    if self.x() <= avail.left() + 35:
+                    if self.x() <= avail.left() + self.EDGE_PEEK_MARGIN:
                         self.facing_left = False
-                    elif self.x() >= avail.right() - self.width() - 35:
+                    elif self.x() >= avail.right() - self.width() - self.EDGE_PEEK_MARGIN:
                         self.facing_left = True
 
                 self.drag_vx = 0.0
@@ -858,8 +883,9 @@ class PetWindow(QWidget):
             else:
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
-                self.model.pet_head()
-                self.renderer.trigger_pet()
+                if not getattr(self, '_stroke_triggered', False):
+                    self.model.pet_head()
+                    self.renderer.trigger_pet()
                 if self.model.sound_enabled and random.random() < 0.35:
                     sound_manager.play("meow")
                 if hasattr(self, "dock"):

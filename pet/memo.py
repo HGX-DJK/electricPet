@@ -4,7 +4,8 @@ import time
 from PyQt6.QtCore import Qt, QTimer, QPoint, QRectF
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit,
-    QPushButton, QGraphicsDropShadowEffect, QApplication, QFrame
+    QPushButton, QGraphicsDropShadowEffect, QApplication, QFrame,
+    QSizeGrip, QMessageBox
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QCursor
 from pet.audio import sound_manager
@@ -158,24 +159,19 @@ class PetStickyNote(QWidget):
         bottom_layout.addStretch()
 
         # 4 个马卡龙色圆点
+        self.theme_dots = {}
         for t_key in ["yellow", "pink", "green", "blue"]:
             dot_btn = QPushButton()
             dot_btn.setFixedSize(14, 14)
-            dot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            dot_color = MEMO_THEMES[t_key]["header"]
-            dot_border = MEMO_THEMES[t_key]["border"]
-            dot_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {dot_color};
-                    border: 1.5px solid {dot_border};
-                    border-radius: 7px;
-                }}
-                QPushButton:hover {{
-                    border: 2px solid #334155;
-                }}
-            """)
             dot_btn.clicked.connect(lambda checked, k=t_key: self.set_theme(k))
+            self.theme_dots[t_key] = dot_btn
             bottom_layout.addWidget(dot_btn)
+
+        # 右下角无缝调整大小手柄
+        grip = QSizeGrip(self)
+        grip.setFixedSize(12, 12)
+        grip.setStyleSheet("background: transparent;")
+        bottom_layout.addWidget(grip)
 
         card_layout.addLayout(bottom_layout)
         main_layout.addWidget(self.card)
@@ -214,6 +210,9 @@ class PetStickyNote(QWidget):
                 background-color: #FFFFFF;
                 border-color: {sub_col};
             }}
+            QPushButton:pressed {{
+                background-color: rgba(0, 0, 0, 0.08);
+            }}
         """
         self.btn_time.setStyleSheet(btn_css)
         self.btn_clear.setStyleSheet(btn_css)
@@ -227,10 +226,45 @@ class PetStickyNote(QWidget):
                 color: {text_col};
                 font-family: "Microsoft YaHei UI";
                 font-size: 13px;
-                line-height: 1.4;
                 padding: 2px;
             }}
+            QScrollBar:vertical {{
+                width: 6px;
+                background: transparent;
+                margin: 2px 0;
+            }}
+            QScrollBar::handle:vertical {{
+                background: rgba(0, 0, 0, 0.15);
+                border-radius: 3px;
+                min-height: 30px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: rgba(0, 0, 0, 0.25);
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: transparent;
+            }}
         """)
+
+        # 更新色块圆点选中指示器
+        if hasattr(self, "theme_dots"):
+            for t_key, dot_btn in self.theme_dots.items():
+                dot_color = MEMO_THEMES[t_key]["header"]
+                dot_border = MEMO_THEMES[t_key]["border"]
+                border_str = "2px solid #334155" if t_key == self.current_theme else f"2px solid {dot_border}"
+                dot_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {dot_color};
+                        border: {border_str};
+                        border-radius: 7px;
+                    }}
+                    QPushButton:hover {{
+                        border: 2px solid #334155;
+                    }}
+                """)
 
     def set_theme(self, theme_key):
         if theme_key in MEMO_THEMES:
@@ -245,7 +279,17 @@ class PetStickyNote(QWidget):
         sound_manager.play("click")
 
     def _clear_content(self):
-        if self.text_edit.toPlainText().strip():
+        cur_text = self.text_edit.toPlainText().strip()
+        if not cur_text:
+            return
+        reply = QMessageBox.question(
+            self,
+            "清空便签",
+            "确定要清空当前的全部便签记录吗？此操作不可撤销哦~ 🐾",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
             self.text_edit.clear()
             sound_manager.play("pop")
             self.save_data()
@@ -266,9 +310,10 @@ class PetStickyNote(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # 顶部拖拽
-            self.is_dragging = True
-            self.drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            # 限制仅在顶部标题栏区域（Y <= 45）拖拽窗口，避免干扰正文文本选择
+            if event.position().y() <= 45:
+                self.is_dragging = True
+                self.drag_start = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -333,6 +378,11 @@ class PetStickyNote(QWidget):
                         self.move(int(clamped_x), int(clamped_y))
                     else:
                         self.move(int(saved_x), int(saved_y))
+
+                saved_w = data.get("width")
+                saved_h = data.get("height")
+                if saved_w and saved_h:
+                    self.resize(max(220, int(saved_w)), max(200, int(saved_h)))
 
                 self.apply_theme_style()
                 count = len(self.text_edit.toPlainText())

@@ -95,14 +95,14 @@ class PetRenderer:
         for _ in range(5):
             vx = random.uniform(-2.8, 2.8)
             vy = random.uniform(-0.9, -0.2)
-            p = Particle(100 + vx * 6, 140, "dust", vx=vx, vy=vy)
+            p = Particle(110 + vx * 6, 140, "dust", vx=vx, vy=vy)
             p.size = random.uniform(9, 15)
             p.decay = 0.045
             self.particles.append(p)
 
     def trigger_step_poof(self, facing_left):
         """漫步落脚时留下可爱小脚印与微尘烟圈"""
-        foot_x = 100 + (16 if facing_left else -16)
+        foot_x = 110 + (16 if facing_left else -16)
         foot_y = 142
         # 生成小肉垫印
         p_paw = Particle(foot_x, foot_y, "pawprint")
@@ -125,7 +125,7 @@ class PetRenderer:
         if getattr(self.model, "sound_enabled", True):
             sound_manager.play("chew")
         for _ in range(6):
-            p = Particle(100 + random.uniform(-30, 30), 100, "sparkle")
+            p = Particle(110 + random.uniform(-30, 30), 100, "sparkle")
             self.particles.append(p)
 
     def trigger_pet(self):
@@ -136,7 +136,7 @@ class PetRenderer:
                 self._last_purr_time = now_t
                 sound_manager.play("purr")
         for _ in range(2):
-            p = Particle(100 + random.uniform(-20, 20), 70, "heart")
+            p = Particle(110 + random.uniform(-20, 20), 70, "heart")
             self.particles.append(p)
 
     def trigger_bath(self):
@@ -144,7 +144,7 @@ class PetRenderer:
         if getattr(self.model, "sound_enabled", True):
             sound_manager.play("pop")
         for _ in range(8):
-            p = Particle(100 + random.uniform(-40, 40), 90, "bubble")
+            p = Particle(110 + random.uniform(-40, 40), 90, "bubble")
             self.particles.append(p)
 
     def trigger_evolution(self):
@@ -157,7 +157,7 @@ class PetRenderer:
             speed = random.uniform(2.5, 6.0)
             vx = math.cos(angle) * speed
             vy = math.sin(angle) * speed
-            p = Particle(100, 100, "sparkle", vx=vx, vy=vy)
+            p = Particle(110, 100, "sparkle", vx=vx, vy=vy)
             p.decay = random.uniform(0.008, 0.018)
             p.size = random.uniform(18, 30)
             self.particles.append(p)
@@ -247,12 +247,12 @@ class PetRenderer:
         # 动作专属动态粒子发射
         if current_state == "HEAD_BOB_MUSIC" and random.random() < 0.14:
             note = random.choice(["♪", "♫", "♬"])
-            p = Particle(100 + random.uniform(-30, 30), 45, "text", text=note)
+            p = Particle(110 + random.uniform(-30, 30), 45, "text", text=note)
             p.size = random.uniform(16, 22)
             self.particles.append(p)
 
         elif current_state == "HAPPY_SPIN" and random.random() < 0.35:
-            p = Particle(100 + random.uniform(-40, 40), 75, "sparkle")
+            p = Particle(110 + random.uniform(-40, 40), 75, "sparkle")
             p.size = random.uniform(14, 24)
             self.particles.append(p)
 
@@ -267,7 +267,7 @@ class PetRenderer:
             self.particles.append(p)
 
         elif current_state == "LOOK_AROUND" and random.random() < 0.08:
-            p = Particle(100 + random.uniform(-25, 25), 55, "sparkle", QColor("#BAE6FD"))
+            p = Particle(110 + random.uniform(-25, 25), 55, "sparkle", QColor("#BAE6FD"))
             p.size = 12
             self.particles.append(p)
 
@@ -284,6 +284,12 @@ class PetRenderer:
         elif current_state == "PLAY_YARN" and random.random() < 0.12:
             p = Particle(100 + random.uniform(0, 35), 135, "sparkle", QColor("#FDA4AF"))
             p.size = random.uniform(10, 16)
+            self.particles.append(p)
+
+        elif current_state in ("PEEK_LEFT", "PEEK_RIGHT") and random.random() < 0.08:
+            px = 15 if current_state == "PEEK_LEFT" else -15
+            p = Particle(110 + px, 55, "sparkle")
+            p.size = 12
             self.particles.append(p)
 
         # 究极体自然散发星辉粒子
@@ -550,8 +556,6 @@ class PetRenderer:
             self._draw_bouncing_yarn(painter)
         elif state == "CARDBOARD_BOX":
             self._draw_cardboard_box(painter)
-        elif state in ("PEEK_LEFT", "PEEK_RIGHT"):
-            self._draw_edge_peek_details(painter, state == "PEEK_LEFT")
 
         # 10. 正在进行的进食/洗澡覆盖物
         if self.eating_timer > 0:
@@ -730,25 +734,26 @@ class PetRenderer:
         belly_offset_x = spin_info.get("belly_offset_x", 0.0) if spin_info else 0.0
 
         # 1. 立体圆润尾巴
-        if state == "SIT_WAG_TAIL":
-            tail_angle = math.sin(self.anim_time * 9.0) * 28.0
-        else:
-            tail_angle = math.sin(self.anim_time * 4.0) * 18.0
-        tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
-        painter.save()
-        painter.translate(tail_x, 25)
-        painter.rotate(tail_angle)
-        tail_path = QPainterPath()
-        tail_path.moveTo(0, 0)
-        tail_path.cubicTo(24, 10, 32, -26, 20, -36)
-        tail_path.cubicTo(12, -40, 4, -20, 0, -10)
-        tail_grad = QLinearGradient(0, 0, 25, -30)
-        tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
-        tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
-        painter.setBrush(QBrush(tail_grad))
-        painter.setPen(QPen(QColor(palette["outline"]), 3.2))
-        painter.drawPath(tail_path)
-        painter.restore()
+        if state != "CARDBOARD_BOX":
+            if state == "SIT_WAG_TAIL":
+                tail_angle = math.sin(self.anim_time * 9.0) * 28.0
+            else:
+                tail_angle = math.sin(self.anim_time * 4.0) * 18.0
+            tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
+            painter.save()
+            painter.translate(tail_x, 25)
+            painter.rotate(tail_angle)
+            tail_path = QPainterPath()
+            tail_path.moveTo(0, 0)
+            tail_path.cubicTo(24, 10, 32, -26, 20, -36)
+            tail_path.cubicTo(12, -40, 4, -20, 0, -10)
+            tail_grad = QLinearGradient(0, 0, 25, -30)
+            tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
+            tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
+            painter.setBrush(QBrush(tail_grad))
+            painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+            painter.drawPath(tail_path)
+            painter.restore()
 
         # 2. 立体双耳 (外耳圆润柔和轮廓 + 内耳凹陷立体阴影 + 耳内萌绒毛，带 3D 轨道视差 + 偶发机敏抖耳)
         ear_twitch = math.sin(self.anim_time * 6.0) * 2.5 if state == "IDLE" else 0.0
@@ -923,11 +928,12 @@ class PetRenderer:
         painter.restore()
 
         # 8. 立体胖嘟嘟小爪爪 (3D Plush Paws)
-        painter.save()
-        if is_spin_front:
-            painter.translate(sin_a * 8.0, 0)
-        self._draw_plush_paws(painter, state, palette)
-        painter.restore()
+        if state != "CARDBOARD_BOX":
+            painter.save()
+            if is_spin_front:
+                painter.translate(sin_a * 8.0, 0)
+            self._draw_plush_paws(painter, state, palette)
+            painter.restore()
 
     def _draw_cat_back(self, painter: QPainter, palette, spin_info):
         """猫咪 3D 立体手办背影视角：展现圆润后脑勺、后背斑纹、前景甩动尾巴与可爱肉垫足跟"""
@@ -1170,22 +1176,23 @@ class PetRenderer:
         face_offset_x = spin_info.get("face_offset_x", 0.0) if spin_info else 0.0
 
         # 1. 3D 卷尾巴
-        tail_wag = math.sin(self.anim_time * 8.0) * 12.0
-        tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
-        painter.save()
-        painter.translate(tail_x, 20)
-        painter.rotate(tail_wag)
-        tail_path = QPainterPath()
-        tail_path.moveTo(0, 0)
-        tail_path.cubicTo(25, 5, 35, -20, 20, -30)
-        tail_path.cubicTo(10, -35, 5, -15, 0, -5)
-        tail_grad = QLinearGradient(0, 0, 25, -25)
-        tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
-        tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
-        painter.setBrush(QBrush(tail_grad))
-        painter.setPen(QPen(QColor(pal["outline"]), 3))
-        painter.drawPath(tail_path)
-        painter.restore()
+        if state != "CARDBOARD_BOX":
+            tail_wag = math.sin(self.anim_time * 8.0) * 12.0
+            tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
+            painter.save()
+            painter.translate(tail_x, 20)
+            painter.rotate(tail_wag)
+            tail_path = QPainterPath()
+            tail_path.moveTo(0, 0)
+            tail_path.cubicTo(25, 5, 35, -20, 20, -30)
+            tail_path.cubicTo(10, -35, 5, -15, 0, -5)
+            tail_grad = QLinearGradient(0, 0, 25, -25)
+            tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
+            tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
+            painter.setBrush(QBrush(tail_grad))
+            painter.setPen(QPen(QColor(pal["outline"]), 3))
+            painter.drawPath(tail_path)
+            painter.restore()
 
         # 2. 立体双耳 (带 3D 轨道视差偏移)
         ear_shift = sin_a * 14.0 if is_spin_front else 0.0
@@ -1277,11 +1284,12 @@ class PetRenderer:
         painter.restore()
 
         # 6. 立体肉垫爪爪
-        painter.save()
-        if is_spin_front:
-            painter.translate(sin_a * 8.0, 0)
-        self._draw_plush_paws(painter, state, pal)
-        painter.restore()
+        if state != "CARDBOARD_BOX":
+            painter.save()
+            if is_spin_front:
+                painter.translate(sin_a * 8.0, 0)
+            self._draw_plush_paws(painter, state, pal)
+            painter.restore()
 
     def _draw_dog_back(self, painter: QPainter, pal, spin_info):
         """柴犬/柯基 3D 立体手办背影视角：毛绒后背、可爱蜜桃臀与摇摆卷尾"""
@@ -1560,7 +1568,7 @@ class PetRenderer:
             painter.drawEllipse(QRectF(bx - 8, by - 5, 16, 10))
 
         # 企鹅面容表情
-        self._draw_face_by_state(painter, state, QColor("#0F172A"), QColor("#0F172A"))
+        self._draw_face_by_state(painter, state, QColor("#0F172A"), QColor("#0F172A"), draw_mouth=False)
 
         # 橙黄小企鹅喙 (3D 分面立体光泽)
         beak_left = QPolygonF([QPointF(0, 3), QPointF(-8, 3), QPointF(0, 14)])
@@ -1665,7 +1673,7 @@ class PetRenderer:
             painter.drawEllipse(QRectF(fx - 12, 42, 24, 12))
 
     # ================= 通用面部与动作特效绘制 =================
-    def _draw_face_by_state(self, painter: QPainter, state, eye_l_col=None, eye_r_col=None):
+    def _draw_face_by_state(self, painter: QPainter, state, eye_l_col=None, eye_r_col=None, draw_mouth=True):
         if eye_l_col is None:
             eye_l_col = QColor("#3D2923")
         if eye_r_col is None:
@@ -1715,7 +1723,8 @@ class PetRenderer:
             self._draw_blinking_eyes(painter)
         else:
             self._draw_normal_eyes(painter, eye_l_col, eye_r_col)
-        self._draw_standard_mouth(painter)
+        if draw_mouth:
+            self._draw_standard_mouth(painter)
 
     def _draw_surprised_dangle_face(self, painter: QPainter, col_l, col_r):
         # 拎起/下落时惊萌圆溜溜大眼 (O O) 与圆圆小口 ("o")
@@ -2106,36 +2115,6 @@ class PetRenderer:
 
         painter.restore()
 
-    def _draw_edge_peek_details(self, painter: QPainter, is_left: bool):
-        """贴边探头偷看细节：小肉垫趴在屏幕物理边缘、好奇抖动的小胡须与微气泡"""
-        painter.save()
-        edge_x = -36 if is_left else 36
-
-        # 1. 抓扶在屏幕边框上的可爱小肉垫
-        for paw_offset_y in [-12, 14]:
-            paw_x = edge_x
-            paw_y = paw_offset_y
-            painter.setBrush(QBrush(QColor("#FFF9F2")))
-            painter.setPen(QPen(QColor("#543D37"), 2.0))
-            paw = QPainterPath()
-            paw.addRoundedRect(QRectF(paw_x - 10, paw_y - 7, 20, 14), 7, 7)
-            painter.drawPath(paw)
-
-            # 粉嫩小肉垫掌印
-            painter.setBrush(QBrush(QColor("#FFAAAA")))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(QRectF(paw_x - 5, paw_y - 2, 4, 4))
-            painter.drawEllipse(QRectF(paw_x + 1, paw_y - 2, 4, 4))
-            painter.drawEllipse(QRectF(paw_x - 2, paw_y - 5, 4, 3))
-
-        # 2. 探头好奇小微粒
-        if random.random() < 0.08:
-            px = 15 if is_left else -15
-            p = Particle(100 + px, 55, "sparkle")
-            p.size = 12
-            self.particles.append(p)
-
-        painter.restore()
 
     def _draw_butterfly(self, painter: QPainter):
         painter.save()
@@ -2308,12 +2287,16 @@ class PetRenderer:
                 painter.drawPath(star_path)
 
     def _draw_standard_mouth(self, painter: QPainter):
-        painter.setBrush(QBrush(QColor("#FFA5A5")))
+        is_dark_skin = getattr(self.model, "skin_id", "") in ("cat_black", "dog_black")
+        nose_col = QColor("#E8A0A0") if is_dark_skin else QColor("#FFA5A5")
+        mouth_col = QColor("#9B8E85") if is_dark_skin else QColor("#543D37")
+
+        painter.setBrush(QBrush(nose_col))
         painter.setPen(Qt.PenStyle.NoPen)
         nose = QPolygonF([QPointF(-3, 2), QPointF(3, 2), QPointF(0, 5)])
         painter.drawPolygon(nose)
 
-        painter.setPen(QPen(QColor("#543D37"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.setPen(QPen(mouth_col, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         mouth = QPainterPath()
         mouth.moveTo(-9, 7)
         mouth.cubicTo(-5, 11, -1, 11, 0, 7)

@@ -93,11 +93,15 @@ def launch_installed_app(target_exe, target_dir):
 
 def do_core_install(target_dir, create_desktop, create_startmenu, autostart, launch_after, status_cb=None, progress_cb=None):
     """执行核心安装逻辑：解压 payload、建立快捷方式、注册表登记"""
-    if status_cb: status_cb("正在检测并关闭旧版本运行进程...", 5)
+    if status_cb: status_cb("正在检测并安全关闭旧版本运行进程...", 5)
     try:
-        subprocess.run(["taskkill", "/F", "/IM", "DesktopPet.exe"], capture_output=True)
         import time
-        time.sleep(0.8)
+        # 先发送温和关闭请求，允许主程序触发 save_to_disk() 完整保存当前成长进度与便签
+        subprocess.run(["taskkill", "/IM", "DesktopPet.exe"], capture_output=True)
+        time.sleep(1.2)
+        # 若仍有顽固残留进程再强制终止
+        subprocess.run(["taskkill", "/F", "/IM", "DesktopPet.exe"], capture_output=True)
+        time.sleep(0.4)
     except Exception:
         pass
 
@@ -146,14 +150,16 @@ def do_core_install(target_dir, create_desktop, create_startmenu, autostart, lau
         "reg delete \"HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"DesktopElectricPet\" /f >nul 2>nul\r\n"
         "echo [4/4] 正在移除应用程序文件...\r\n"
         "set \"TARGET_DIR=%~dp0\"\r\n"
+        "if \"%TARGET_DIR:~-1%\"==\"\\\" set \"TARGET_DIR=%TARGET_DIR:~0,-1%\"\r\n"
         "cd /d \"%USERPROFILE%\"\r\n"
-        "start /b \"\" cmd /c \"timeout /t 1 /nobreak >nul && rd /s /q \\\"%TARGET_DIR%\\\"\"\r\n"
         "echo.\r\n"
         "echo ========================================================\r\n"
         "echo          卸载完成！波可期待下次与您相遇~\r\n"
         "echo ========================================================\r\n"
         "echo.\r\n"
-        "pause\r\n"
+        "timeout /t 2 /nobreak >nul\r\n"
+        "start \"\" /b cmd /c \"timeout /t 1 /nobreak >nul & rd /s /q \"\"%TARGET_DIR%\"\"\"\r\n"
+        "exit\r\n"
     )
     try:
         with open(target_uninst, "w", encoding="utf-8") as f:
@@ -246,10 +252,10 @@ def create_header_banner(w, h, icon_path):
     banner = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     d = ImageDraw.Draw(banner)
     
-    # 极光紫绀色现代渐变 (#4338CA -> #6366F1 -> #7C3AED)
-    c_start = (67, 56, 202)   # #4338CA
-    c_mid   = (99, 102, 241)  # #6366F1
-    c_end   = (124, 58, 237)  # #7C3AED
+    # 暖阳蜜桃落日渐变 (#FF885A -> #FFA06A -> #FF7E92)，温润治愈，与波可猫咪原画色调自然融合
+    c_start = (255, 136, 90)   # #FF885A 暖杏珊瑚
+    c_mid   = (255, 160, 106)  # #FFA06A 暖阳蜜桃
+    c_end   = (255, 126, 146)  # #FF7E92 柔粉花瓣
     
     for x in range(sw):
         ratio = x / max(1, sw - 1)
@@ -268,8 +274,8 @@ def create_header_banner(w, h, icon_path):
     # 装饰性微光圆环（右上角）
     glow = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
     d_glow = ImageDraw.Draw(glow)
-    d_glow.ellipse((sw - 200 * scale, -50 * scale, sw + 80 * scale, 220 * scale), fill=(255, 255, 255, 18))
-    d_glow.ellipse((sw - 150 * scale, -10 * scale, sw + 30 * scale, 170 * scale), outline=(255, 255, 255, 30), width=2 * scale)
+    d_glow.ellipse((sw - 200 * scale, -50 * scale, sw + 80 * scale, 220 * scale), fill=(255, 255, 255, 22))
+    d_glow.ellipse((sw - 150 * scale, -10 * scale, sw + 30 * scale, 170 * scale), outline=(255, 255, 255, 45), width=2 * scale)
     banner = Image.alpha_composite(banner, glow)
     
     # 叠加萌宠圆形头像徽章
@@ -278,6 +284,14 @@ def create_header_banner(w, h, icon_path):
             av_size = 78 * scale
             border_w = 4 * scale
             cat_raw = Image.open(icon_path).convert("RGBA")
+            
+            # 柔和白色微光晕圈
+            badge_halo = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+            d_halo = ImageDraw.Draw(badge_halo)
+            pos_x = 22 * scale
+            pos_y = int((sh - av_size) / 2)
+            d_halo.ellipse((pos_x - 2 * scale, pos_y - 2 * scale, pos_x + av_size + 2 * scale, pos_y + av_size + 2 * scale), fill=(255, 255, 255, 55))
+            banner = Image.alpha_composite(banner, badge_halo)
             
             av_img = Image.new("RGBA", (av_size, av_size), (0, 0, 0, 0))
             d_av = ImageDraw.Draw(av_img)
@@ -289,8 +303,6 @@ def create_header_banner(w, h, icon_path):
             ImageDraw.Draw(inner_mask).ellipse((0, 0, inner_s - 1, inner_s - 1), fill=255)
             av_img.paste(cat_inner, (border_w, border_w), inner_mask)
             
-            pos_x = 22 * scale
-            pos_y = int((sh - av_size) / 2)
             banner.paste(av_img, (pos_x, pos_y), av_img)
         except Exception as e:
             print("Avatar error:", e)
@@ -302,7 +314,7 @@ def create_header_banner(w, h, icon_path):
     pill_y1 = 22 * scale
     pill_x2 = 416 * scale
     pill_y2 = 46 * scale
-    d_pill.rounded_rectangle([pill_x1, pill_y1, pill_x2, pill_y2], radius=11 * scale, fill=(255, 255, 255, 45), outline=(255, 255, 255, 80), width=scale)
+    d_pill.rounded_rectangle([pill_x1, pill_y1, pill_x2, pill_y2], radius=11 * scale, fill=(255, 255, 255, 55), outline=(255, 255, 255, 110), width=scale)
     banner = Image.alpha_composite(banner, pill_img)
     
     return banner.resize((w, h), Image.Resampling.LANCZOS)
@@ -313,31 +325,31 @@ def make_checkbox_icons():
     s = 20 * scale
     r = 5 * scale
     
-    # Checked
+    # Checked - 温暖活力珊瑚橙
     img_c = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     dc = ImageDraw.Draw(img_c)
-    dc.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#4F46E5")
+    dc.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#F97316")
     coords = [(s * 0.26, s * 0.52), (s * 0.44, s * 0.70), (s * 0.74, s * 0.30)]
     dc.line(coords, fill="#FFFFFF", width=int(2.4 * scale), joint="curve")
     checked_img = img_c.resize((20, 20), Image.Resampling.LANCZOS)
     
-    # Unchecked
+    # Unchecked - 简洁柔和浅灰边框
     img_u = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     du = ImageDraw.Draw(img_u)
     du.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#FFFFFF", outline="#CBD5E1", width=int(1.6 * scale))
     unchecked_img = img_u.resize((20, 20), Image.Resampling.LANCZOS)
     
-    # Hover Checked
+    # Hover Checked - 浓郁焦糖暖橙
     img_ch = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     dch = ImageDraw.Draw(img_ch)
-    dch.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#4338CA")
+    dch.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#EA580C")
     dch.line(coords, fill="#FFFFFF", width=int(2.4 * scale), joint="curve")
     hover_checked_img = img_ch.resize((20, 20), Image.Resampling.LANCZOS)
 
-    # Hover Unchecked
+    # Hover Unchecked - 悬停时柔和暖橙边框
     img_uh = Image.new("RGBA", (s, s), (0, 0, 0, 0))
     duh = ImageDraw.Draw(img_uh)
-    duh.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#FFFFFF", outline="#818CF8", width=int(1.8 * scale))
+    duh.rounded_rectangle([0, 0, s - 1, s - 1], radius=r, fill="#FFFFFF", outline="#FB923C", width=int(1.8 * scale))
     hover_unchecked_img = img_uh.resize((20, 20), Image.Resampling.LANCZOS)
     
     return checked_img, unchecked_img, hover_checked_img, hover_unchecked_img
@@ -381,6 +393,7 @@ class ModernOptionCard(tk.Frame):
             self.config(cursor="arrow")
         else:
             self.config(cursor="hand2")
+        self._update_view()
             
     def _update_view(self):
         val = self.var.get()
@@ -395,9 +408,9 @@ class ModernOptionCard(tk.Frame):
             
         if self.is_hover:
             img = self.icon_hc if val else self.icon_hu
-            bg_col = "#F5F3FF"
-            border_col = "#818CF8"
-            t_col = "#4338CA"
+            bg_col = "#FFFBF7"       # 极柔和暖杏乳白
+            border_col = "#FDBA74"   # 温暖琥珀橙边框
+            t_col = "#C2410C"        # 焦糖暖橙标题
         else:
             img = self.icon_c if val else self.icon_u
             bg_col = "#FFFFFF"
@@ -428,6 +441,17 @@ class ModernOptionCard(tk.Frame):
     def _on_leave(self, event=None):
         if self.is_disabled:
             return
+        # Check if mouse is still within the widget bounds
+        try:
+            x, y = self.winfo_pointerxy()
+            widget_x = self.winfo_rootx()
+            widget_y = self.winfo_rooty()
+            widget_w = self.winfo_width()
+            widget_h = self.winfo_height()
+            if widget_x <= x <= widget_x + widget_w and widget_y <= y <= widget_y + widget_h:
+                return  # Mouse is still inside the card, ignore the leave event
+        except Exception:
+            pass
         self.is_hover = False
         self._update_view()
 
@@ -449,12 +473,12 @@ class CapsuleProgressBar(tk.Canvas):
         cy = self.h / 2
         pad = self.h / 2
         # 底色轨道
-        self.create_line(pad, cy, self.w - pad, cy, width=self.h, capstyle=tk.ROUND, fill="#EEF2F6")
-        # 进度填充
+        self.create_line(pad, cy, self.w - pad, cy, width=self.h, capstyle=tk.ROUND, fill="#F1F5F9")
+        # 进度填充 - 温暖活力珊瑚橙
         if self.pct > 0:
             fill_w = pad + (self.w - pad * 2) * (self.pct / 100.0)
             fill_w = max(pad * 1.5, fill_w)
-            self.create_line(pad, cy, fill_w, cy, width=self.h, capstyle=tk.ROUND, fill="#6366F1")
+            self.create_line(pad, cy, fill_w, cy, width=self.h, capstyle=tk.ROUND, fill="#FF6B4A")
 
 class RoundedButton(tk.Canvas):
     """现代高质感圆角渐变主按钮"""
@@ -468,10 +492,10 @@ class RoundedButton(tk.Canvas):
         self.state_mode = "normal"
         self.text = "🚀 立即一键安装 (极速解压)"
         
-        # 预先生成各种状态纹理
-        self.img_normal = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#4F46E5", "#6366F1"))
-        self.img_hover  = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#4338CA", "#4F46E5"))
-        self.img_dis    = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#94A3B8"))
+        # 预先生成各种状态纹理 - 温暖夕阳珊瑚主按钮 (超柔和质感与立体微渐变)
+        self.img_normal = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#FF7A55", "#EA580C"))
+        self.img_hover  = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#FF8A6B", "#D9480F"))
+        self.img_dis    = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#CBD5E1"))
         self.img_succ   = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#10B981", "#059669"))
         self.img_succ_h = ImageTk.PhotoImage(make_rounded_rect_image(width, height, radius, "#059669", "#047857"))
         
@@ -529,7 +553,7 @@ class SetupApp(tk.Tk):
         self.title("桌面萌宠 · 波可 安装向导")
         self.geometry("580x605")
         self.resizable(False, False)
-        self.configure(bg="#F8FAFC")
+        self.configure(bg="#FAF9F6")
 
         # 尝试设置窗口图标
         ico_path = get_bundle_resource("assets/app.ico")
@@ -584,8 +608,8 @@ class SetupApp(tk.Tk):
             font=("Microsoft YaHei UI", 16, "bold")
         )
         banner_canvas.create_text(
-            290, 35,
-            anchor="w",
+            349, 34,
+            anchor="center",
             text="v1.0.0 官方正式版",
             fill="#FFFFFF",
             font=("Microsoft YaHei UI", 8, "bold")
@@ -594,22 +618,22 @@ class SetupApp(tk.Tk):
             116, 66,
             anchor="w",
             text="超治愈 3D 桌面萌宠伙伴 · 智能互动桌面宠物",
-            fill="#E0E7FF",
+            fill="#FFF7ED",
             font=("Microsoft YaHei UI", 9)
         )
         banner_canvas.create_text(
             116, 88,
             anchor="w",
             text="✦ 灵动交互   ✦ 丰富动作   ✦ 轻量极速低占用",
-            fill="#C7D2FE",
+            fill="#FFEDD5",
             font=("Microsoft YaHei UI", 8)
         )
         
         # 2. 居中白色主卡片区
-        card_outer = tk.Frame(self, bg="#F8FAFC", padx=18, pady=12)
+        card_outer = tk.Frame(self, bg="#FAF9F6", padx=18, pady=12)
         card_outer.pack(fill="both", expand=True)
         
-        main_card = tk.Frame(card_outer, bg="#FFFFFF", highlightbackground="#E2E8F0", highlightthickness=1, bd=0)
+        main_card = tk.Frame(card_outer, bg="#FFFFFF", highlightbackground="#EAE5DF", highlightthickness=1, bd=0)
         main_card.pack(fill="both", expand=True)
         
         card_inner = tk.Frame(main_card, bg="#FFFFFF", padx=18, pady=14)
@@ -636,17 +660,17 @@ class SetupApp(tk.Tk):
         ).pack(side="left", padx=(6, 0))
         
         # 输入条边框容器 (高亮聚焦微交互)
-        self.entry_box = tk.Frame(card_inner, bg="#F8FAFC", highlightbackground="#CBD5E1", highlightthickness=1, bd=0)
+        self.entry_box = tk.Frame(card_inner, bg="#FAFAF9", highlightbackground="#E2E8F0", highlightthickness=1, bd=0)
         self.entry_box.pack(fill="x", pady=(0, 6))
         
-        entry_inner = tk.Frame(self.entry_box, bg="#F8FAFC", padx=10, pady=5)
+        entry_inner = tk.Frame(self.entry_box, bg="#FAFAF9", padx=10, pady=5)
         entry_inner.pack(fill="both", expand=True)
         
         self.entry_dir = tk.Entry(
             entry_inner,
             textvariable=self.install_dir_var,
             font=("Microsoft YaHei UI", 9),
-            bg="#F8FAFC",
+            bg="#FAFAF9",
             fg="#1E293B",
             bd=0,
             relief="flat",
@@ -654,18 +678,18 @@ class SetupApp(tk.Tk):
         )
         self.entry_dir.pack(side="left", fill="x", expand=True)
         
-        self.entry_dir.bind("<FocusIn>", lambda e: self.entry_box.config(highlightbackground="#6366F1"))
-        self.entry_dir.bind("<FocusOut>", lambda e: self.entry_box.config(highlightbackground="#CBD5E1"))
+        self.entry_dir.bind("<FocusIn>", lambda e: self.entry_box.config(highlightbackground="#FB923C"))
+        self.entry_dir.bind("<FocusOut>", lambda e: self.entry_box.config(highlightbackground="#E2E8F0"))
         
         self.btn_browse = tk.Button(
             entry_inner,
             text=" 浏览... ",
             command=self._on_browse,
             font=("Microsoft YaHei UI", 9, "bold"),
-            bg="#EEF2FF",
-            fg="#4F46E5",
-            activebackground="#E0E7FF",
-            activeforeground="#4338CA",
+            bg="#FFF7ED",
+            fg="#EA580C",
+            activebackground="#FFEDD5",
+            activeforeground="#C2410C",
             relief="flat",
             bd=0,
             padx=14,
@@ -733,7 +757,7 @@ class SetupApp(tk.Tk):
             status_row,
             text="0%",
             font=("Microsoft YaHei UI", 9, "bold"),
-            fg="#6366F1",
+            fg="#EA580C",
             bg="#FFFFFF"
         )
         self.pct_lbl.pack(side="right")
@@ -843,6 +867,8 @@ class SetupApp(tk.Tk):
         self.btn_action.set_state("success", "🎉 安装完成！进入萌宠世界 ✨")
 
     def _on_install_error(self, err_msg):
+        self.progress_bar.set_progress(0)
+        self.pct_lbl.config(text="0%", fg="#DC2626")
         self.status_lbl.config(text=f"❌ 安装发生错误: {err_msg}", fg="#DC2626")
         self.btn_action.set_state("normal", "重试安装")
         self.entry_dir.config(state="normal")
