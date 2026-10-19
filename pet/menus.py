@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QProgressBar, QSlider, QCheckBox, QComboBox,
     QFrame, QGridLayout, QTabWidget, QScrollArea, QGraphicsDropShadowEffect,
-    QApplication
+    QApplication, QStackedWidget
 )
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen, QLinearGradient, QRadialGradient
 from pet.audio import sound_manager
@@ -393,6 +393,17 @@ class QuickActionMenu(QWidget):
         """)
         top_name.addWidget(name_lbl)
         top_name.addWidget(stage_pill)
+
+        pers_pill = QLabel(model.personality_info["name"])
+        pers_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+        pers_pill.setStyleSheet(f"""
+            background: rgba(15, 23, 42, 0.8);
+            color: {model.personality_info['color']};
+            padding: 2px 7px;
+            border-radius: 8px;
+            border: 1px solid {model.personality_info['color']};
+        """)
+        top_name.addWidget(pers_pill)
         top_name.addWidget(self.btn_mode_pill)
         top_name.addStretch()
         name_box.addLayout(top_name)
@@ -741,6 +752,7 @@ class CyberHoloChamberWidget(QWidget):
         self.model = model
         self.preview_model = copy.copy(model)
         self.preview_model.decorations = dict(model.decorations)
+        self.preview_model.habitat = getattr(model, "habitat", "none")
         self.renderer = PetRenderer(self.preview_model)
 
         self.ring_angle = 0.0
@@ -764,12 +776,22 @@ class CyberHoloChamberWidget(QWidget):
 
     def update_decoration(self, slot, code):
         self.preview_model.set_decoration(slot, code)
-        slot_names = {"head": "头部装配", "face": "面部目镜", "neck": "核心项圈", "back": "背部推进"}
+        slot_names = {"head": "头部装配", "face": "面部目镜", "neck": "核心项圈", "back": "背部推进", "hand": "手持道具"}
         s_name = slot_names.get(slot, "装扮")
         if code == "none":
             self.set_speech(f"🚫 已卸下 {s_name}")
         else:
             self.set_speech(f"⚡ {s_name} 模块装载完毕！")
+        self.update()
+
+    def update_habitat(self, habitat_id):
+        self.preview_model.set_habitat(habitat_id)
+        hab_names = {
+            "none": "默认无小窝", "neon_matrix": "暗夜霓虹极客房",
+            "retro_arcade": "复古像素游戏机房", "summer_beach": "夏日阳光海滩",
+            "zen_tatami": "佛系禅意蒲团室"
+        }
+        self.set_speech(f"🏠 小窝切换为: {hab_names.get(habitat_id, habitat_id)}")
         self.update()
 
     def _on_tick(self):
@@ -1282,19 +1304,336 @@ class CyberTabButton(QPushButton):
             """)
 
 
+class CyberGachaDialog(ModernBaseDialog):
+    """
+    赛博盲盒扭蛋机 (Cyber Gacha Pod)
+    消耗金币或经验抽取限定发光装扮、手持道具与稀有家园小窝场景
+    """
+    def __init__(self, model, pet_window=None, parent=None):
+        super().__init__(
+            title="赛博盲盒 · 全息扭蛋机",
+            subtitle="探寻未知装备矩阵 · 绝品发光神装与全息小窝场景解锁",
+            icon_emoji="🎰",
+            parent=pet_window or parent,
+            fixed_width=560,
+            fixed_height=580,
+            version_tag="LUCKY MATRIX v3.2"
+        )
+        self.model = model
+        self.pet_window = pet_window
+        
+        self.stack = QStackedWidget(self)
+        self.content_layout.addWidget(self.stack)
+
+        self._init_pod_page()
+        self._init_results_page()
+        self._refresh_pod_wallet()
+
+    def _init_pod_page(self):
+        self.page_pod = QWidget()
+        layout = QVBoxLayout(self.page_pod)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # 1. 顶部资产卡片
+        wallet_bar = QHBoxLayout()
+        self.coins_lbl = QLabel()
+        self.coins_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.coins_lbl.setStyleSheet("""
+            background: rgba(245, 158, 11, 0.15);
+            color: #FBBF24;
+            border: 1px solid #F59E0B;
+            border-radius: 12px;
+            padding: 4px 12px;
+        """)
+        self.exp_lbl = QLabel()
+        self.exp_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        self.exp_lbl.setStyleSheet("""
+            background: rgba(14, 165, 233, 0.15);
+            color: #38BDF8;
+            border: 1px solid #0EA5E9;
+            border-radius: 12px;
+            padding: 4px 12px;
+        """)
+        wallet_bar.addWidget(self.coins_lbl)
+        wallet_bar.addStretch()
+        wallet_bar.addWidget(self.exp_lbl)
+        layout.addLayout(wallet_bar)
+
+        # 2. 中间全息扭蛋仓展示区
+        center_frame = QFrame()
+        center_frame.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0F172A, stop:1 #0B0F19);
+                border: 1.5px solid #0EA5E9;
+                border-radius: 18px;
+            }
+        """)
+        c_layout = QVBoxLayout(center_frame)
+        c_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        c_layout.setSpacing(10)
+        c_layout.setContentsMargins(20, 20, 20, 20)
+
+        capsule_icon = QLabel("🔮")
+        capsule_icon.setFont(QFont("Segoe UI Emoji", 48))
+        capsule_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        c_layout.addWidget(capsule_icon)
+
+        banner = QLabel("CYBER REWARD MATRIX")
+        banner.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
+        banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        banner.setStyleSheet("color: #38BDF8; letter-spacing: 2px;")
+        c_layout.addWidget(banner)
+
+        hint = QLabel("盲盒内含全套 5 插槽战术神装、手持道具及家园场景\n✨ 十连抽必得 SSR 或 UR 稀有配件！")
+        hint.setFont(QFont("Microsoft YaHei UI", 10))
+        hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        hint.setStyleSheet("color: #94A3B8; line-height: 1.4;")
+        c_layout.addWidget(hint)
+
+        layout.addWidget(center_frame, stretch=1)
+
+        # 3. 抽奖控制按钮行
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(12)
+
+        btn_single = QPushButton("🎲 单抽盲盒 (30 🪙)")
+        btn_single.setFixedHeight(44)
+        btn_single.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_single.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+                color: #FFFFFF;
+                border: 1px solid #38BDF8;
+                border-radius: 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+            }
+        """)
+        btn_single.clicked.connect(lambda: self._do_draw(1))
+        btn_box.addWidget(btn_single, stretch=1)
+
+        btn_ten = QPushButton("✨ 豪华十连抽 (270 🪙 必中SSR)")
+        btn_ten.setFixedHeight(44)
+        btn_ten.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_ten.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7C3AED, stop:1 #EC4899);
+                color: #FFFFFF;
+                border: 1px solid #F472B6;
+                border-radius: 12px;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6D28D9, stop:1 #DB2777);
+            }
+        """)
+        btn_ten.clicked.connect(lambda: self._do_draw(10))
+        btn_box.addWidget(btn_ten, stretch=1)
+
+        layout.addLayout(btn_box)
+        self.stack.addWidget(self.page_pod)
+
+    def _init_results_page(self):
+        self.page_results = QWidget()
+        layout = QVBoxLayout(self.page_results)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        # 顶部提示
+        top_h = QHBoxLayout()
+        self.res_title = QLabel("🎉 成功解构赛博奖励！")
+        self.res_title.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
+        self.res_title.setStyleSheet("color: #38BDF8;")
+        top_h.addWidget(self.res_title)
+        top_h.addStretch()
+        self.res_coins_info = QLabel()
+        self.res_coins_info.setStyleSheet("color: #FBBF24; font-weight: bold;")
+        top_h.addWidget(self.res_coins_info)
+        layout.addLayout(top_h)
+
+        # 卡片滚动区
+        self.res_scroll = QScrollArea()
+        self.res_scroll.setWidgetResizable(True)
+        self.res_scroll.setStyleSheet("background: transparent; border: none;")
+        self.res_container = QWidget()
+        self.res_container.setStyleSheet("background: transparent;")
+        self.res_cards_layout = QVBoxLayout(self.res_container)
+        self.res_cards_layout.setSpacing(8)
+        self.res_cards_layout.setContentsMargins(0, 0, 8, 0)
+        self.res_scroll.setWidget(self.res_container)
+        layout.addWidget(self.res_scroll, stretch=1)
+
+        # 底部返回操作
+        bot_h = QHBoxLayout()
+        btn_back = QPushButton("🔄 再来一发")
+        btn_back.setFixedHeight(36)
+        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_back.setStyleSheet("""
+            QPushButton {
+                background: rgba(30, 41, 59, 0.8);
+                color: #E2E8F0;
+                border: 1px solid #475569;
+                border-radius: 10px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: rgba(51, 65, 85, 0.9);
+                border: 1px solid #0EA5E9;
+            }
+        """)
+        btn_back.clicked.connect(self._back_to_pod)
+        bot_h.addWidget(btn_back)
+
+        btn_close = QPushButton("✨ 收下奖励并返回")
+        btn_close.setFixedHeight(36)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+                color: #FFFFFF;
+                border: 1px solid #38BDF8;
+                border-radius: 10px;
+                font-weight: bold;
+            }
+        """)
+        btn_close.clicked.connect(self.accept)
+        bot_h.addWidget(btn_close, stretch=1)
+
+        layout.addLayout(bot_h)
+        self.stack.addWidget(self.page_results)
+
+    def _refresh_pod_wallet(self):
+        self.coins_lbl.setText(f"🪙 赛博金币: {self.model.coins} 枚")
+        self.exp_lbl.setText(f"✨ 经验备用池: {int(self.model.exp)} EXP")
+
+    def _back_to_pod(self):
+        self._refresh_pod_wallet()
+        self.stack.setCurrentWidget(self.page_pod)
+
+    def _do_draw(self, count):
+        results = self.model.draw_gacha(count)
+        self._show_results(results)
+
+    def _show_results(self, results):
+        self.res_title.setText(f"🎉 成功解构 {len(results)} 件赛博奖励！")
+        self.res_coins_info.setText(f"剩余金币: {self.model.coins} 🪙")
+
+        # 清空旧卡片
+        while self.res_cards_layout.count():
+            item = self.res_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        rarity_colors = {
+            "UR": "#F59E0B", "SSR": "#EC4899", "SR": "#38BDF8", "R": "#10B981"
+        }
+
+        slot_names = {
+            "head": "头部装扮", "face": "面饰", "neck": "领饰",
+            "back": "背饰神装", "hand": "手持道具", "habitat": "小窝背景"
+        }
+
+        for item in results:
+            card = QFrame()
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background: rgba(15, 23, 42, 0.85);
+                    border: 1.5px solid {rarity_colors.get(item['rarity'], '#38BDF8')};
+                    border-radius: 12px;
+                }}
+            """)
+            card_h = QHBoxLayout(card)
+            card_h.setContentsMargins(12, 8, 12, 8)
+            card_h.setSpacing(10)
+
+            icon_lbl = QLabel(item["icon"])
+            icon_lbl.setFont(QFont("Segoe UI Emoji", 20))
+            icon_lbl.setFixedSize(36, 36)
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            icon_lbl.setStyleSheet(f"background: rgba(30, 41, 59, 0.8); border: 1px solid {rarity_colors.get(item['rarity'], '#38BDF8')}; border-radius: 8px;")
+            card_h.addWidget(icon_lbl)
+
+            info_v = QVBoxLayout()
+            info_v.setSpacing(2)
+            name_h = QHBoxLayout()
+            name_h.setSpacing(6)
+            name_lbl = QLabel(f"{item['name']} [{item['rarity']}]")
+            name_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+            name_lbl.setStyleSheet(f"color: {rarity_colors.get(item['rarity'], '#38BDF8')};")
+            name_h.addWidget(name_lbl)
+            if item.get("is_new", False):
+                new_badge = QLabel("NEW! ✨")
+                new_badge.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+                new_badge.setStyleSheet("color: #F59E0B; background: rgba(245, 158, 11, 0.15); border: 1px solid #F59E0B; border-radius: 4px; padding: 1px 4px;")
+                name_h.addWidget(new_badge)
+            name_h.addStretch()
+            info_v.addLayout(name_h)
+
+            slot_str = slot_names.get(item["slot"], item["slot"])
+            slot_lbl = QLabel(f"部位: {slot_str}")
+            slot_lbl.setFont(QFont("Microsoft YaHei UI", 9))
+            slot_lbl.setStyleSheet("color: #94A3B8;")
+            info_v.addWidget(slot_lbl)
+            card_h.addLayout(info_v, stretch=1)
+
+            btn_equip = QPushButton("⚡ 立即穿戴/使用")
+            btn_equip.setFixedHeight(28)
+            btn_equip.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_equip.setStyleSheet("""
+                QPushButton {
+                    background: rgba(14, 165, 233, 0.2);
+                    color: #38BDF8;
+                    border: 1px solid #0EA5E9;
+                    border-radius: 6px;
+                    padding: 0 10px;
+                    font-size: 10px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background: rgba(14, 165, 233, 0.4);
+                    color: #FFFFFF;
+                }
+            """)
+            def _make_equip_func(slot=item['slot'], code=item['code'], b=btn_equip, nm=item['name']):
+                def _eq():
+                    if slot == "habitat":
+                        self.model.set_habitat(code)
+                    else:
+                        self.model.set_decoration(slot, code)
+                    self.model.save_to_disk()
+                    sound_manager.play("sparkle")
+                    if self.pet_window and hasattr(self.pet_window, "dialogue"):
+                        self.pet_window.dialogue.say(f"✨ 已成功装备新获得的【{nm}】！")
+                    b.setText("✓ 已装备")
+                    b.setEnabled(False)
+                return _eq
+            btn_equip.clicked.connect(_make_equip_func())
+            card_h.addWidget(btn_equip)
+
+            self.res_cards_layout.addWidget(card)
+
+        self.res_cards_layout.addStretch()
+        self.stack.setCurrentWidget(self.page_results)
+
+
 class WardrobeDialog(ModernBaseDialog):
     """
     全新赛博全息萌宠更衣舱与装备矩阵 (Cyber Holographic Wardrobe)
-    左侧拥有旋转全息地台与视线追踪试衣舱，右侧平铺 5 大赛博分类导航与品质卡片矩阵
+    左侧拥有旋转全息地台与视线追踪试衣舱，右侧平铺 7 大赛博分类导航与品质卡片矩阵
     """
-    def __init__(self, model, pet_window, parent=None):
+    def __init__(self, model, pet_window=None, parent=None):
         super().__init__(
             title="萌宠衣橱 · 赛博换装舱",
-            subtitle="全息投影实时试衣 · 11 款生物基因与 4 维微机甲装扮自由搭载",
+            subtitle="全息投影实时试衣 · 11 款生物基因与 5 维微机甲装扮自由搭载 · 家园场景DIY",
             icon_emoji="👗",
             parent=pet_window or parent,
-            fixed_width=820,
-            fixed_height=580,
+            fixed_width=840,
+            fixed_height=590,
             version_tag="CYBER ARSENAL v3.2"
         )
         self.model = model
@@ -1303,6 +1642,7 @@ class WardrobeDialog(ModernBaseDialog):
         # 暂存当前试穿配置
         self.temp_skin = model.skin_id
         self.temp_decs = dict(model.decorations)
+        self.temp_habitat = getattr(model, "habitat", "none")
 
         main_layout = QHBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1311,18 +1651,34 @@ class WardrobeDialog(ModernBaseDialog):
 
         # ================= 左侧：全息试衣舱与操作面板 =================
         left_box = QVBoxLayout()
-        left_box.setSpacing(10)
+        left_box.setSpacing(8)
 
         # 赛博全息试衣舱
         self.preview_widget = CyberHoloChamberWidget(model, self)
         left_box.addWidget(self.preview_widget)
 
-        # 装配插槽全息指示器 (4 个迷你芯片)
-        slots_bar = QHBoxLayout()
-        slots_bar.setSpacing(6)
+        # 装配插槽全息指示器 (6 个迷你芯片分两行展示)
+        slots_col = QVBoxLayout()
+        slots_col.setSpacing(4)
+        slots_row1 = QHBoxLayout()
+        slots_row1.setSpacing(4)
+        slots_row2 = QHBoxLayout()
+        slots_row2.setSpacing(4)
         self.slot_pills = {}
-        for s_key, s_name in [("head", "头饰"), ("face", "面饰"), ("neck", "领饰"), ("back", "背饰")]:
-            val = self.temp_decs.get(s_key, "none")
+
+        pills_config = [
+            ("head", "头饰", slots_row1),
+            ("face", "面饰", slots_row1),
+            ("neck", "领饰", slots_row1),
+            ("back", "背饰", slots_row2),
+            ("hand", "手持", slots_row2),
+            ("habitat", "小窝", slots_row2),
+        ]
+        for s_key, s_name, row_target in pills_config:
+            if s_key == "habitat":
+                val = self.temp_habitat
+            else:
+                val = self.temp_decs.get(s_key, "none")
             txt = f"{s_name}: {val}" if val != "none" else f"{s_name}: 空"
             pill = QLabel(txt)
             pill.setFont(QFont("Microsoft YaHei UI", 8))
@@ -1335,20 +1691,22 @@ class WardrobeDialog(ModernBaseDialog):
                 border-radius: 6px;
                 padding: 0 4px;
             """)
-            slots_bar.addWidget(pill)
+            row_target.addWidget(pill)
             self.slot_pills[s_key] = pill
-        left_box.addLayout(slots_bar)
+        slots_col.addLayout(slots_row1)
+        slots_col.addLayout(slots_row2)
+        left_box.addLayout(slots_col)
 
         # 🎲 赛博随机穿搭按钮 (Lucky Cyber Shuffle)
         btn_random = QPushButton("🎲 赛博随机混搭 (Cyber Shuffle)")
-        btn_random.setFixedHeight(34)
+        btn_random.setFixedHeight(32)
         btn_random.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_random.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #7C3AED);
                 color: #FFFFFF;
                 border: 1px solid #A78BFA;
-                border-radius: 10px;
+                border-radius: 8px;
                 font-weight: bold;
                 font-size: 11px;
             }
@@ -1359,6 +1717,26 @@ class WardrobeDialog(ModernBaseDialog):
         btn_random.clicked.connect(self._random_cyber_shuffle)
         left_box.addWidget(btn_random)
 
+        # 🎰 赛博盲盒扭蛋抽奖入口
+        btn_gacha = QPushButton("🎰 赛博盲盒扭蛋机 (Cyber Gacha)")
+        btn_gacha.setFixedHeight(32)
+        btn_gacha.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_gacha.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EC4899, stop:1 #8B5CF6);
+                color: #FFFFFF;
+                border: 1px solid #F472B6;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #7C3AED);
+            }
+        """)
+        btn_gacha.clicked.connect(self._open_gacha_dialog)
+        left_box.addWidget(btn_gacha)
+
         left_box.addStretch()
 
         # 底部操作栏
@@ -1366,7 +1744,7 @@ class WardrobeDialog(ModernBaseDialog):
         action_row.setSpacing(8)
 
         btn_clear = QPushButton("🚫 卸下全部")
-        btn_clear.setFixedHeight(38)
+        btn_clear.setFixedHeight(36)
         btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_clear.setStyleSheet("""
             QPushButton {
@@ -1387,7 +1765,7 @@ class WardrobeDialog(ModernBaseDialog):
         action_row.addWidget(btn_clear)
 
         btn_save = QPushButton("✨ 保存并同步装配")
-        btn_save.setFixedHeight(38)
+        btn_save.setFixedHeight(36)
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_save.setStyleSheet("""
             QPushButton {
@@ -1410,17 +1788,19 @@ class WardrobeDialog(ModernBaseDialog):
 
         # ================= 右侧：赛博装备陈列室 =================
         right_box = QVBoxLayout()
-        right_box.setSpacing(12)
+        right_box.setSpacing(10)
 
-        # 5 大赛博选项卡导航 (全平铺，绝无挤压箭头)
+        # 7 大赛博选项卡导航 (全平铺，无挤压)
         tab_bar = QHBoxLayout()
-        tab_bar.setSpacing(6)
+        tab_bar.setSpacing(4)
         self.tabs_meta = [
-            ("skin", "🧬 基因皮肤"),
-            ("head", "🎩 头部神经"),
-            ("face", "👓 面部战术"),
-            ("neck", "🧣 核心项圈"),
-            ("back", "🪽 背部推进")
+            ("skin", "🧬 基因"),
+            ("head", "🎩 头部"),
+            ("face", "👓 面部"),
+            ("neck", "🧣 领饰"),
+            ("back", "🪽 背部"),
+            ("hand", "🎮 手持"),
+            ("habitat", "🏠 小窝")
         ]
         self.tab_buttons = {}
         for key, title in self.tabs_meta:
@@ -1447,6 +1827,20 @@ class WardrobeDialog(ModernBaseDialog):
         self.current_tab = "skin"
         self.card_widgets = {}
         self._populate_tab(self.current_tab)
+
+    def _open_gacha_dialog(self):
+        sound_manager.play("click")
+        dlg = CyberGachaDialog(self.model, self.pet_window, self)
+        if dlg.exec():
+            self.temp_skin = self.model.skin_id
+            self.temp_decs = dict(self.model.decorations)
+            self.temp_habitat = getattr(self.model, "habitat", "none")
+            self.preview_widget.update_skin(self.temp_skin)
+            for s, c in self.temp_decs.items():
+                self.preview_widget.update_decoration(s, c)
+            self.preview_widget.update_habitat(self.temp_habitat)
+            self._update_slot_pills()
+            self._populate_tab(self.current_tab)
 
     def _switch_tab(self, tab_key):
         sound_manager.play("click")
@@ -1493,6 +1887,7 @@ class WardrobeDialog(ModernBaseDialog):
                 ("crown", "黄金华贵王冠", "璀璨红宝石帝王冠，尊贵金辉", "👑", "UR"),
                 ("halo", "金色天使光环", "头顶悬浮圣洁量子光晕", "😇", "SSR"),
                 ("hat_wizard", "魔法巫师尖帽", "神秘紫罗兰尖顶帽，蕴含秘法", "🧙", "SSR"),
+                ("band_sport", "热血运动发带", "元气红白绑带，燃起冲刺烈火", "🥊", "SSR"),
                 ("horns", "俏皮小恶魔角", "火红可爱小尖角，捣蛋专属", "😈", "SR"),
                 ("hat_party", "派对生日帽", "欢快粉色彩条毛绒球", "🥳", "R"),
                 ("chef", "洁白厨师高帽", "米其林软萌主厨高帽", "👨‍🍳", "R")
@@ -1502,6 +1897,7 @@ class WardrobeDialog(ModernBaseDialog):
         elif tab_key == "face":
             items = [
                 ("none", "清爽无面饰", "清澈大眼睛，纯粹灵动自然", "🚫", "BASE"),
+                ("hacker_viser", "赛博战术全息目镜", "极客HUD准星与实时代码流透析", "🥽", "SSR"),
                 ("sunglasses", "酷炫黑超战术墨镜", "街头潮牌霸气出街，边缘数据流", "🕶️", "SSR"),
                 ("glasses", "金丝博士护目镜", "斯文博学圆框镜，搭载战术分析仪", "👓", "SR"),
                 ("blush_hearts", "心动爱心面贴", "双颊粉红心动爱心，萌力迸发", "💖", "R")
@@ -1522,9 +1918,38 @@ class WardrobeDialog(ModernBaseDialog):
             items = [
                 ("none", "原生无背饰", "轻装出击，减免风阻零负荷", "🚫", "BASE"),
                 ("wings", "反重力光子羽翼", "呼吸时伴随量子光辉轻颤扇动", "🪽", "UR"),
+                ("cushion_zen", "禅意榻榻米软垫", "清香竹编蒲团，悠闲安歇发呆", "🍵", "SSR"),
                 ("balloon", "浮动微引力爱心气球", "身后随风律动飘逸的粉红反物质气球", "🎈", "SR")
             ]
             self._render_slot_items("back", items)
+
+        elif tab_key == "hand":
+            items = [
+                ("none", "空手无持物", "轻装上阵，双手保持自由", "🚫", "BASE"),
+                ("keyboard", "赛博 RGB 机械键盘", "客制化发光按键，极客代码神器", "⌨️", "SSR"),
+                ("fish_wand", "全息光纤逗猫棒", "超轻光纤握柄与发光激光游鱼", "🪄", "SR"),
+                ("coffee", "极客外带纸杯咖啡", "天青芯片印花，杯口冒着温润热汽", "☕", "SR"),
+                ("gamepad", "8-bit 复古荧光绿掌机", "经典掌上电玩，内置像素小游戏", "🎮", "SSR"),
+                ("dumbbell", "能量健身哑铃", "高密度健身器材，元气力量充沛", "🏋️", "SR")
+            ]
+            self._render_slot_items("hand", items)
+
+        elif tab_key == "habitat":
+            habitats = [
+                ("none", "原生透明小窝", "无多余背景，融入桌面原生工作流", "🖥️", "BASE"),
+                ("neon_matrix", "暗夜霓虹极客房", "深蓝全息网格与自上而下的二进制流光代码雨", "🌃", "UR"),
+                ("retro_arcade", "复古像素游戏机房", "Synthwave 霓虹洋红栅格与 8-bit 浮空星辰", "🕹️", "UR"),
+                ("summer_beach", "夏日阳光海滩", "暖金落日余晖斜射光束与金色光斑光尘", "🏖️", "SSR"),
+                ("zen_tatami", "佛系禅意蒲团室", "静谧抹茶清竹微光与徐徐慢速飘落的粉嫩樱花", "🌸", "SSR")
+            ]
+            for code, name, desc, icon, rarity in habitats:
+                is_active = (self.temp_habitat == code)
+                card = CyberGearCard(
+                    code, name, desc, icon, rarity, is_active,
+                    on_select=lambda c: self._select_preview_habitat(c)
+                )
+                self.card_widgets[code] = card
+                self.cards_layout.addWidget(card)
 
         self.cards_layout.addStretch()
 
@@ -1552,10 +1977,20 @@ class WardrobeDialog(ModernBaseDialog):
         self.preview_widget.update_decoration(slot, code)
         self._update_slot_pills()
 
+    def _select_preview_habitat(self, code):
+        self.temp_habitat = code
+        for c, card in self.card_widgets.items():
+            card.set_active(c == code)
+        self.preview_widget.update_habitat(code)
+        self._update_slot_pills()
+
     def _update_slot_pills(self):
-        slot_names = {"head": "头饰", "face": "面饰", "neck": "领饰", "back": "背饰"}
+        slot_names = {"head": "头饰", "face": "面饰", "neck": "领饰", "back": "背饰", "hand": "手持", "habitat": "小窝"}
         for s_key, pill in self.slot_pills.items():
-            val = self.temp_decs.get(s_key, "none")
+            if s_key == "habitat":
+                val = self.temp_habitat
+            else:
+                val = self.temp_decs.get(s_key, "none")
             pill.setText(f"{slot_names[s_key]}: {val}" if val != "none" else f"{slot_names[s_key]}: 空")
 
     def _random_cyber_shuffle(self):
@@ -1565,35 +2000,42 @@ class WardrobeDialog(ModernBaseDialog):
             "dog_shiba", "dog_black", "dog_corgi",
             "slime_blue", "slime_pink", "slime_gold", "penguin_tux"
         ]
-        head_items = ["none", "crown", "halo", "hat_wizard", "horns", "hat_party", "chef"]
-        face_items = ["none", "sunglasses", "glasses", "blush_hearts"]
+        head_items = ["none", "crown", "halo", "hat_wizard", "band_sport", "horns", "hat_party", "chef"]
+        face_items = ["none", "hacker_viser", "sunglasses", "glasses", "blush_hearts"]
         neck_items = ["none", "bow", "tie", "bell", "scarf"]
-        back_items = ["none", "wings", "balloon"]
+        back_items = ["none", "wings", "balloon", "cushion_zen"]
+        hand_items = ["none", "keyboard", "fish_wand", "coffee", "gamepad", "dumbbell"]
+        habitat_items = ["none", "neon_matrix", "retro_arcade", "summer_beach", "zen_tatami"]
 
         self.temp_skin = random.choice(all_skins)
         self.temp_decs["head"] = random.choice(head_items)
         self.temp_decs["face"] = random.choice(face_items)
         self.temp_decs["neck"] = random.choice(neck_items)
         self.temp_decs["back"] = random.choice(back_items)
+        self.temp_decs["hand"] = random.choice(hand_items)
+        self.temp_habitat = random.choice(habitat_items)
 
         self.preview_widget.update_skin(self.temp_skin)
         for slot, code in self.temp_decs.items():
             self.preview_widget.update_decoration(slot, code)
+        self.preview_widget.update_habitat(self.temp_habitat)
 
         self._update_slot_pills()
         self._populate_tab(self.current_tab)
 
         sound_manager.play("sparkle")
-        self.preview_widget.set_speech("🎲 赛博算力为我混搭了全新装扮！", duration=3.5)
+        self.preview_widget.set_speech("🎲 赛博算力为我混搭了全新装扮与小窝！", duration=3.5)
 
     def _clear_all_decorations(self):
         for slot in self.temp_decs:
             self.temp_decs[slot] = "none"
             self.preview_widget.update_decoration(slot, "none")
+        self.temp_habitat = "none"
+        self.preview_widget.update_habitat("none")
         self._update_slot_pills()
         self._populate_tab(self.current_tab)
         sound_manager.play("click")
-        self.preview_widget.set_speech("🚫 已卸下所有外挂装配！", duration=3.0)
+        self.preview_widget.set_speech("🚫 已卸下所有外挂装配与小窝！", duration=3.0)
 
     def reject(self):
         if hasattr(self, "preview_widget") and hasattr(self.preview_widget, "timer"):
@@ -1611,9 +2053,10 @@ class WardrobeDialog(ModernBaseDialog):
         self.model.set_skin(self.temp_skin)
         for slot, code in self.temp_decs.items():
             self.model.set_decoration(slot, code)
+        self.model.set_habitat(self.temp_habitat)
         self.model.save_to_disk()
-        sound_manager.play("sparkle")
-        self.pet_window.dialogue.say("⚡ 赛博装甲同步完毕！主人觉得帅气吗？(๑•̀ㅂ•́)و✧")
+        if self.pet_window and hasattr(self.pet_window, "dialogue"):
+            self.pet_window.dialogue.say("⚡ 赛博装甲与小窝同步完毕！主人觉得帅气吗？(๑•̀ㅂ•́)و✧")
         self.accept()
 
 class FeedingDialog(ModernBaseDialog):
@@ -1725,12 +2168,14 @@ class FeedingDialog(ModernBaseDialog):
         layout.addWidget(title)
 
         foods = [
-            ("milk", "🍼", "幼宠温热奶粉", "成长 +12 · 饱食 +20 · 体重 +0.06kg"),
-            ("cake", "🍰", "草莓鲜奶蛋糕", "成长 +18 · 饱食 +25 · 心情 +25"),
-            ("fish", "🐟", "深海极品烤鱼", "成长 +26 · 饱食 +35 · 体重 +0.12kg"),
-            ("steak", "🥩", "极品多汁厚牛排", "成长 +35 · 饱食 +45 · 体重 +0.18kg"),
-            ("elixir", "🌟", "神奇仙灵仙果", "成长 +55 · 心情 +35 · 灵力爆发"),
-            ("boba", "🧋", "珍珠温奶茶", "成长 +14 · 饱食 +18 · 心情 +22")
+            ("milk", "🍼", "幼宠温热奶粉", "成长 +12 · 饱食 +20 · 佛系大懒喵倾向 🍵"),
+            ("cake", "🍰", "草莓鲜奶蛋糕", "成长 +18 · 饱食 +25 · 心情 +25 🍰"),
+            ("cyber_chip", "⚡", "赛博能量芯片", "极客算力 +4 · 饱食 +25 · 极客黑客喵倾向 ⚡"),
+            ("hacker_coffee", "☕", "极客黑客冷萃", "极客算力 +3 · 精力 +35 · 极客黑客喵倾向 💻"),
+            ("fish", "🐟", "深海极品烤鱼", "成长 +26 · 饱食 +35 · 元气运动喵倾向 🏃"),
+            ("steak", "🥩", "极品多汁厚牛排", "成长 +35 · 饱食 +45 · 元气运动喵倾向 🥩"),
+            ("elixir", "🌟", "神奇仙灵仙果", "成长 +55 · 心情 +35 · 灵力爆发 ✨"),
+            ("boba", "🧋", "珍珠温奶茶", "成长 +14 · 饱食 +18 · 佛系大懒喵倾向 🍵")
         ]
 
         scroll = QScrollArea()
@@ -2260,12 +2705,12 @@ class StatusDialog(ModernBaseDialog):
             icon_emoji="📊",
             parent=parent,
             fixed_width=460,
-            fixed_height=560
+            fixed_height=640
         )
         self.model = model
 
         layout = self.content_layout
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # 头部等级与称号
         header = QHBoxLayout()
@@ -2308,7 +2753,7 @@ class StatusDialog(ModernBaseDialog):
         growth_box.addLayout(growth_h)
 
         growth_bar = QProgressBar()
-        growth_bar.setFixedHeight(10)
+        growth_bar.setFixedHeight(8)
         growth_bar.setTextVisible(False)
         growth_bar.setMaximum(target)
         growth_bar.setValue(min(target, curr_growth))
@@ -2316,10 +2761,10 @@ class StatusDialog(ModernBaseDialog):
             QProgressBar {
                 border: 1px solid #1E293B;
                 background-color: rgba(15, 23, 42, 0.8);
-                border-radius: 5px;
+                border-radius: 4px;
             }
             QProgressBar::chunk {
-                border-radius: 5px;
+                border-radius: 4px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
             }
         """)
@@ -2339,7 +2784,7 @@ class StatusDialog(ModernBaseDialog):
         exp_box.addLayout(exp_header)
 
         exp_bar = QProgressBar()
-        exp_bar.setFixedHeight(10)
+        exp_bar.setFixedHeight(8)
         exp_bar.setTextVisible(False)
         exp_bar.setMaximum(model.max_exp)
         exp_bar.setValue(min(model.max_exp, int(model.exp)))
@@ -2347,21 +2792,60 @@ class StatusDialog(ModernBaseDialog):
             QProgressBar {
                 border: 1px solid #1E293B;
                 background-color: rgba(15, 23, 42, 0.8);
-                border-radius: 5px;
+                border-radius: 4px;
             }
             QProgressBar::chunk {
-                border-radius: 5px;
+                border-radius: 4px;
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
             }
         """)
         exp_box.addWidget(exp_bar)
         layout.addLayout(exp_box)
 
-        # 4大属性条
+        # 4大基础体征条
         self._add_stat_bar(layout, "🍗 饱食度", int(model.hunger), "#F59E0B")
         self._add_stat_bar(layout, "💖 心情值", int(model.mood), "#EC4899")
         self._add_stat_bar(layout, "⚡ 精力值", int(model.energy), "#3B82F6")
         self._add_stat_bar(layout, "🫧 清洁度", int(model.cleanliness), "#06B6D4")
+
+        # 5. 性格树与行为塑造矩阵
+        pers_info = model.personality_info
+        pers_card = QFrame()
+        pers_card.setStyleSheet("""
+            QFrame {
+                background: rgba(15, 23, 42, 0.85);
+                border: 1.2px solid #0EA5E9;
+                border-radius: 12px;
+            }
+        """)
+        pers_layout = QVBoxLayout(pers_card)
+        pers_layout.setContentsMargins(10, 8, 10, 8)
+        pers_layout.setSpacing(4)
+
+        p_header = QHBoxLayout()
+        p_badge = QLabel(f"🧬 主导性格: {pers_info['name']}")
+        p_badge.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        p_badge.setStyleSheet(f"color: {pers_info['color']}; background: transparent; border: none;")
+        p_header.addWidget(p_badge)
+        p_header.addStretch()
+        p_coins = QLabel(f"🪙 赛博金币: {model.coins}")
+        p_coins.setStyleSheet("color: #FBBF24; font-size: 10px; font-weight: bold; background: transparent; border: none;")
+        p_header.addWidget(p_coins)
+        pers_layout.addLayout(p_header)
+
+        p_desc = QLabel(f"💡 {pers_info['desc']}\n✨ 特权: {pers_info['bonus']}")
+        p_desc.setFont(QFont("Microsoft YaHei UI", 8))
+        p_desc.setStyleSheet("color: #94A3B8; background: transparent; border: none; line-height: 1.3;")
+        p_desc.setWordWrap(True)
+        pers_layout.addWidget(p_desc)
+
+        # 3维性格倾向条 (以 50 点为满槽参考)
+        stats = model.personality_stats
+        self._add_stat_bar(pers_layout, "⚡ 极客科技度 (Tech)", min(100, int(stats.get("tech", 0) * 2)), "#0EA5E9")
+        self._add_stat_bar(pers_layout, "🏃 元气运动度 (Sport)", min(100, int(stats.get("sport", 0) * 2)), "#10B981")
+        self._add_stat_bar(pers_layout, "🍵 佛系闲适度 (Lazy)", min(100, int(stats.get("lazy", 0) * 2)), "#F59E0B")
+
+        layout.addWidget(pers_card)
 
     def _add_stat_bar(self, layout, label_text, value, color_hex):
         box = QVBoxLayout()

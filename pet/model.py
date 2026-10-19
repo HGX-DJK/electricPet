@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import random
 from pet.audio import sound_manager
 
 class PetModel:
@@ -34,13 +35,26 @@ class PetModel:
         self.weight = 1.20           # 体重 (kg)
         self.total_fed_count = 0     # 累计投喂次数
 
-        # 多部位个性化自由装扮 (4大插槽)
+        # 多部位个性化自由装扮 (5大插槽: 头、面、颈、背、手持道具)
         self.decorations = {
-            "head": "none",   # none, hat_wizard, hat_party, halo, horns, crown, chef
-            "face": "none",   # none, glasses, sunglasses, blush_hearts
+            "head": "none",   # none, crown, halo, hat_wizard, horns, hat_party, chef, band_sport
+            "face": "none",   # none, hacker_viser, sunglasses, glasses, blush_hearts
             "neck": "none",   # none, bow, scarf, bell, tie
-            "back": "none"    # none, wings, balloon
+            "back": "none",   # none, wings, balloon, cushion_zen
+            "hand": "none"    # none, keyboard, fish_wand, coffee, gamepad, dumbbell
         }
+
+        # 赛博家园与小窝场景 (none, neon_matrix, retro_arcade, summer_beach, zen_tatami)
+        self.habitat = "none"
+
+        # 性格树与行为塑造积分 (tech: 极客黑客, sport: 元气运动, lazy: 佛系大懒)
+        self.personality_stats = {"tech": 0, "sport": 0, "lazy": 0}
+
+        # 赛博扭蛋与物品图鉴
+        self.coins = 150
+        self.unlocked_items = [
+            "cat_calico", "crown", "glasses", "bow", "wings", "keyboard", "neon_matrix"
+        ]
 
         # 状态标志
         self.is_sleeping = False
@@ -64,6 +78,7 @@ class PetModel:
         self.on_level_up = None
         self.on_evolve = None
         self.on_focus_finish = None
+        self.on_personality_change = None
 
         self.load_from_disk()
 
@@ -132,6 +147,171 @@ class PetModel:
         return (stage_base + stage_prog) * self.user_scale_offset
 
     @property
+    def personality(self) -> str:
+        """主导性格判定: HACKER (极客黑客喵), ATHLETE (元气运动喵), LAZY (佛系大懒喵), BALANCED (纯萌平衡喵)"""
+        tech = self.personality_stats.get("tech", 0)
+        sport = self.personality_stats.get("sport", 0)
+        lazy = self.personality_stats.get("lazy", 0)
+
+        scores = [("HACKER", tech), ("ATHLETE", sport), ("LAZY", lazy)]
+        scores.sort(key=lambda x: x[1], reverse=True)
+        top_name, top_score = scores[0]
+        second_name, second_score = scores[1]
+
+        # 门槛设定：单项至少达到 15 点，且领先其他项至少 3 点
+        if top_score >= 15 and (top_score - second_score >= 3):
+            return top_name
+        return "BALANCED"
+
+    @property
+    def personality_info(self) -> dict:
+        """性格详细特征、加成档案与专属装备"""
+        traits = {
+            "HACKER": {
+                "name": "极客黑客喵 ⚡",
+                "badge": "⚡ 极客黑客喵",
+                "title": "赛博算力核心 · 极客黑客喵",
+                "desc": "常食能量芯片与冷萃咖啡，精通各种语言代码，警报 Bug 灵敏度 100%！",
+                "bonus": "专注模式算力效率提升 +20%，周围伴随矩阵代码流",
+                "color": "#0EA5E9",
+                "exclusive_item": "hacker_viser",
+                "exclusive_item_name": "战术全息目镜"
+            },
+            "ATHLETE": {
+                "name": "元气运动喵 🏃",
+                "badge": "🏃 元气运动喵",
+                "title": "桌面闪电飞人 · 元气运动喵",
+                "desc": "热爱追逐玩耍与敏捷翻滚，身手矫健活力四射，浑身充满热血能量！",
+                "bonus": "漫步移动速度提升 +25%，互动兴奋度翻倍",
+                "color": "#10B981",
+                "exclusive_item": "band_sport",
+                "exclusive_item_name": "热血运动发带"
+            },
+            "LAZY": {
+                "name": "佛系大懒喵 🍵",
+                "badge": "🍵 佛系大懒喵",
+                "title": "躺平禅意宗师 · 佛系大懒喵",
+                "desc": "随遇而安发呆大师，享受温暖日光与软垫小憩，万物皆空小鱼干独尊！",
+                "bonus": "睡眠精力恢复加速 +30%，更持久的心情稳定度",
+                "color": "#F59E0B",
+                "exclusive_item": "cushion_zen",
+                "exclusive_item_name": "禅意榻榻米软垫"
+            },
+            "BALANCED": {
+                "name": "纯真软萌体 🐾",
+                "badge": "🐾 纯真萌宠",
+                "title": "元气初生伙伴 · 纯真萌体",
+                "desc": "性格均衡可爱，对桌面上的一切新鲜事物保持着天真好奇与探索欲。",
+                "bonus": "均衡成长，各项属性消耗平缓",
+                "color": "#EC4899",
+                "exclusive_item": "none",
+                "exclusive_item_name": "无"
+            }
+        }
+        return traits[self.personality]
+
+    def add_personality_point(self, category: str, pts: int = 1):
+        """累积性格积分并检测性格觉醒演进"""
+        if category not in self.personality_stats:
+            self.personality_stats[category] = 0
+        old_personality = self.personality
+        self.personality_stats[category] += pts
+        new_personality = self.personality
+        if new_personality != old_personality and new_personality != "BALANCED":
+            sound_manager.play("level_up")
+            if self.on_personality_change:
+                self.on_personality_change(new_personality, self.personality_info["name"])
+        self._notify_change()
+
+    def set_habitat(self, habitat_id: str):
+        """切换赛博小窝家园主题"""
+        self.habitat = habitat_id
+        sound_manager.play("pop")
+        self._notify_change()
+
+    def draw_gacha(self, count=1):
+        """
+        赛博盲盒扭蛋抽奖
+        单抽消耗 30 金币，十连抽消耗 270 金币
+        返回: list of won items dict
+        """
+        pool = [
+            # 稀有度, 插槽类型, 物品代号, 物品名称, 图标, 权重
+            ("UR", "habitat", "neon_matrix", "暗夜霓虹极客房", "🌃", 4),
+            ("UR", "habitat", "retro_arcade", "复古像素游戏机房", "🕹️", 4),
+            ("UR", "back", "wings", "反重力光子羽翼", "🪽", 5),
+            ("UR", "head", "crown", "黄金华贵王冠", "👑", 5),
+            ("SSR", "face", "hacker_viser", "赛博战术目镜", "🥽", 10),
+            ("SSR", "head", "band_sport", "热血运动发带", "🥊", 10),
+            ("SSR", "back", "cushion_zen", "禅意榻榻米软垫", "🍵", 10),
+            ("SSR", "hand", "keyboard", "RGB机械键盘", "⌨️", 12),
+            ("SSR", "hand", "gamepad", "8-bit 复古掌机", "🎮", 12),
+            ("SSR", "habitat", "summer_beach", "夏日阳光海滩", "🏖️", 10),
+            ("SSR", "habitat", "zen_tatami", "佛系禅意蒲团室", "🌸", 10),
+            ("SR", "hand", "fish_wand", "全息光纤逗猫棒", "🪄", 18),
+            ("SR", "hand", "coffee", "极客外带咖啡", "☕", 18),
+            ("SR", "hand", "dumbbell", "能量健身哑铃", "🏋️", 18),
+            ("SR", "face", "sunglasses", "酷炫战术黑超", "🕶️", 20),
+            ("SR", "head", "hat_wizard", "魔法巫师尖帽", "🧙", 20),
+            ("R", "neck", "bow", "优雅赤红蝴蝶结", "🎀", 25),
+            ("R", "neck", "bell", "招财金小挂铃", "🔔", 25),
+            ("R", "face", "blush_hearts", "心动爱心面贴", "💖", 25)
+        ]
+
+        cost = 30 if count == 1 else 270
+        if self.coins >= cost:
+            self.coins -= cost
+        else:
+            # 金币不足时可用经验值抵扣
+            exp_cost = cost * 2
+            self.exp = max(0.0, self.exp - exp_cost)
+
+        results = []
+        total_weight = sum(item[5] for item in pool)
+
+        for i in range(count):
+            # 十连抽第 10 发保底 SSR 以上
+            if count >= 10 and i == count - 1:
+                high_pool = [x for x in pool if x[0] in ("SSR", "UR")]
+                high_weight = sum(x[5] for x in high_pool)
+                r = random.uniform(0, high_weight)
+                upto = 0
+                chosen = high_pool[0]
+                for item in high_pool:
+                    if upto + item[5] >= r:
+                        chosen = item
+                        break
+                    upto += item[5]
+            else:
+                r = random.uniform(0, total_weight)
+                upto = 0
+                chosen = pool[0]
+                for item in pool:
+                    if upto + item[5] >= r:
+                        chosen = item
+                        break
+                    upto += item[5]
+
+            rarity, slot, code, name, icon, _ = chosen
+            is_new = code not in self.unlocked_items
+            if is_new:
+                self.unlocked_items.append(code)
+
+            results.append({
+                "rarity": rarity,
+                "slot": slot,
+                "code": code,
+                "name": name,
+                "icon": icon,
+                "is_new": is_new
+            })
+
+        sound_manager.play("sparkle")
+        self.save_to_disk()
+        self._notify_change()
+        return results
+
+    @property
     def max_exp(self):
         return 50 + (self.level - 1) * 35
 
@@ -160,7 +340,8 @@ class PetModel:
         foods = {
             "milk": {
                 "name": "幼宠温热奶粉", "hunger": 20, "mood": 15, "exp": 10,
-                "growth": 12.0, "weight_add": 0.06, "desc": "温润细腻，促进幼宠骨骼发育", "sound": "chew"
+                "growth": 12.0, "weight_add": 0.06, "desc": "温润细腻，促进幼宠骨骼发育", "sound": "chew",
+                "personality": ("lazy", 2)
             },
             "cake": {
                 "name": "草莓鲜奶蛋糕", "hunger": 25, "mood": 25, "exp": 15,
@@ -168,11 +349,23 @@ class PetModel:
             },
             "fish": {
                 "name": "深海极品烤鱼", "hunger": 35, "mood": 20, "exp": 20,
-                "growth": 26.0, "weight_add": 0.12, "desc": "富含深海鱼油，毛发油亮顺滑", "sound": "chew"
+                "growth": 26.0, "weight_add": 0.12, "desc": "富含深海鱼油，毛发油亮顺滑", "sound": "chew",
+                "personality": ("sport", 2)
             },
             "steak": {
                 "name": "极品多汁厚牛排", "hunger": 45, "mood": 25, "exp": 25,
-                "growth": 35.0, "weight_add": 0.18, "desc": "肉香四溢，大块长肉肉！", "sound": "chew"
+                "growth": 35.0, "weight_add": 0.18, "desc": "肉香四溢，大块长肉肉！", "sound": "chew",
+                "personality": ("sport", 3)
+            },
+            "cyber_chip": {
+                "name": "⚡ 赛博能量芯片", "hunger": 25, "mood": 25, "exp": 25,
+                "growth": 28.0, "weight_add": 0.04, "desc": "超导量子能量芯片，注入纯净极客算力！", "sound": "sparkle",
+                "personality": ("tech", 4)
+            },
+            "hacker_coffee": {
+                "name": "☕ 极客黑客冷萃", "hunger": 15, "mood": 30, "exp": 20,
+                "growth": 15.0, "weight_add": 0.02, "desc": "零度冰滴冷萃，思维敏锐警报 Bug！", "sound": "chew",
+                "personality": ("tech", 3)
             },
             "elixir": {
                 "name": "神奇仙灵仙果", "hunger": 30, "mood": 35, "exp": 40,
@@ -180,7 +373,8 @@ class PetModel:
             },
             "boba": {
                 "name": "珍珠温奶茶", "hunger": 18, "mood": 22, "exp": 12,
-                "growth": 14.0, "weight_add": 0.07, "desc": "Q弹软糯，快乐加倍", "sound": "chew"
+                "growth": 14.0, "weight_add": 0.07, "desc": "Q弹软糯，快乐加倍", "sound": "chew",
+                "personality": ("lazy", 2)
             }
         }
 
@@ -190,6 +384,12 @@ class PetModel:
         self.growth += item["growth"]
         self.weight = round(self.weight + item["weight_add"], 2)
         self.total_fed_count += 1
+        self.coins += 5  # 每次投喂奖励 5 枚赛博金币
+
+        # 触发性格倾向积分积累
+        pers = item.get("personality")
+        if pers:
+            self.add_personality_point(pers[0], pers[1])
 
         sound_manager.play(item["sound"])
         self.add_exp(item["exp"])
@@ -245,6 +445,7 @@ class PetModel:
     def toggle_sleep(self):
         self.is_sleeping = not self.is_sleeping
         if self.is_sleeping:
+            self.add_personality_point("lazy", 2)
             sound_manager.play("snore")
         else:
             sound_manager.play("meow")
@@ -281,6 +482,10 @@ class PetModel:
         if self.is_sleeping:
             self.energy = min(100.0, self.energy + delta_seconds * 0.12)
             self.hunger = max(0.0, self.hunger - delta_seconds * 0.005)
+            self._sleep_seconds = getattr(self, "_sleep_seconds", 0.0) + delta_seconds
+            if self._sleep_seconds >= 20.0:
+                self._sleep_seconds = 0.0
+                self.add_personality_point("lazy", 1)
         else:
             self.energy = max(0.0, self.energy - delta_seconds * 0.008)
             self.hunger = max(0.0, self.hunger - delta_seconds * 0.012)
@@ -298,6 +503,8 @@ class PetModel:
                 sound_manager.play("alarm")
                 self.add_exp(50)
                 self.mood = min(100.0, self.mood + 30.0)
+                self.add_personality_point("tech", 5)
+                self.coins += 10
                 if self.on_focus_finish:
                     self.on_focus_finish()
 
@@ -351,6 +558,10 @@ class PetModel:
             "weight": self.weight,
             "total_fed_count": self.total_fed_count,
             "decorations": self.decorations,
+            "habitat": self.habitat,
+            "personality_stats": self.personality_stats,
+            "coins": self.coins,
+            "unlocked_items": self.unlocked_items,
             "user_scale_offset": self.user_scale_offset,
             "always_on_top": self.always_on_top,
             "sound_enabled": self.sound_enabled,
@@ -411,6 +622,13 @@ class PetModel:
                     self.decorations["neck"] = old_acc
                 else:
                     self.decorations["head"] = old_acc
+
+            self.habitat = data.get("habitat", "none")
+            self.personality_stats = data.get("personality_stats", {"tech": 0, "sport": 0, "lazy": 0})
+            self.coins = int(data.get("coins", 150))
+            loaded_unlocked = data.get("unlocked_items", None)
+            if loaded_unlocked and isinstance(loaded_unlocked, list):
+                self.unlocked_items = loaded_unlocked
 
             self.user_scale_offset = float(data.get("user_scale_offset", data.get("scale", 1.0)))
             self.user_scale_offset = max(0.75, min(1.35, self.user_scale_offset))

@@ -337,6 +337,36 @@ class DialogueManager:
             "工作再忙，也要记得保持微笑呀！(๑•̀ㅂ•́)و✧"
         ]
 
+        # 极客黑客喵专属语录 (喜欢吐槽代码、警报Bug、高能算力)
+        self.hacker_chats = [
+            "0 error(s), 0 warning(s)... 主人，代码一次编译通过，太帅了！⚡",
+            "检测到 CPU 算力波动，本喵已开启内核全息超频散热协议！💻",
+            "主人，屏幕上的这个 Bug 已经被我的全息战术目镜标记锁定啦！🎯",
+            "多喝温水，少用递归，小心内核堆栈溢出喵！🐾",
+            "git commit -m '今日份陪伴超额完成'，Push 成功！🚀",
+            "世界上只有 10 种人，一种是懂二进制的，一种是波可最爱的主人！✨"
+        ]
+
+        # 元气运动喵专属语录 (动作敏捷、元气满满、拉伸运动)
+        self.athlete_chats = [
+            "一二一！跟波可一起做个深蹲伸展操吧！跑步前进！🏃‍♂️",
+            "充满电啦！主人今天也是元气满满的一天，冲鸭！🔥",
+            "坐久了关节会变硬哦，快跟我一起做手指拉伸操~ 🥊",
+            "刚才在桌面上追蝴蝶，差点打破桌面最高时速记录喵！💨",
+            "生命在于运动，快乐在于吃鱼！主人跟我比个赛跑吧！🏆",
+            "燃烧我的卡路里！目标是成为桌面上最敏捷的小飞侠！✨"
+        ]
+
+        # 佛系大懒喵专属语录 (软垫躺平、慵懒惬意、万物皆空)
+        self.lazy_chats = [
+            "呼喵……今天也是适合在软垫上躺平发呆的一天呢~ 🍵",
+            "万物皆空，唯有小鱼干和美梦不可辜负……呼呼 zzz 💤",
+            "急什么嘛，宇宙那么大，先伸个舒服的懒腰再说…… (ฅ'ω'ฅ)",
+            "主人也别太卷啦，累了就靠着波可软乎乎的肚皮歇歇吧…… 🌸",
+            "今日无事，唯有清风与暖阳相伴，心如止水喵~ 🍵",
+            "世上本无事，只要躺得平……主人摸摸我继续睡啦~ ✨"
+        ]
+
         # 初始问候
         self.say(self.get_time_greeting())
 
@@ -371,6 +401,8 @@ class DialogueManager:
             badge = "🌟 成长喜讯"
         elif "【猜拳】" in text or "掷出" in text:
             badge = "🎮 趣味玩耍"
+        elif badge == "🐾 波可" and hasattr(self.model, "personality_info"):
+            badge = self.model.personality_info.get("badge", "🐾 波可")
 
         self.bubble.show_message(text, duration, badge)
         if self.pet_window:
@@ -409,9 +441,18 @@ class DialogueManager:
                 ]
                 self.say(random.choice(reminders), duration=6.5)
                 self.last_health_reminder_time = now
-            # 普通日常闲聊 (每 3-4 分钟)
-            elif (now - self.last_random_chat_time > 200) and random.random() < 0.01:
-                self.say(random.choice(self.random_chats))
+            # 普通日常闲聊 (每 3-4 分钟，优先偏向主导性格)
+            elif (now - self.last_random_chat_time > 180) and random.random() < 0.015:
+                pers = getattr(self.model, "personality", "BALANCED")
+                if pers == "HACKER" and random.random() < 0.7:
+                    msg = random.choice(self.hacker_chats)
+                elif pers == "ATHLETE" and random.random() < 0.7:
+                    msg = random.choice(self.athlete_chats)
+                elif pers == "LAZY" and random.random() < 0.7:
+                    msg = random.choice(self.lazy_chats)
+                else:
+                    msg = random.choice(self.random_chats)
+                self.say(msg)
                 self.last_random_chat_time = now
 
     def render(self, painter, pet_width, pet_height):

@@ -328,6 +328,9 @@ class PetRenderer:
         painter.save()
         painter.scale(scale_factor, scale_factor)
 
+        # 0. 赛博小窝家园 DIY 场景氛围 (全景最底层)
+        self._draw_habitat_effects(painter, 220.0, 220.0)
+
         cx = 110.0
         cy = 125.0
 
@@ -549,6 +552,9 @@ class PetRenderer:
         # 8. 头饰 (魔法帽、派对帽、光环、王冠)
         self._draw_head_decorations(painter, spin_info)
 
+        # 8.2 手持道具 (RGB机械键盘、全息逗猫棒、极客咖啡、复古掌机、能量哑铃)
+        self._draw_hand_decorations(painter, spin_info)
+
         # 8.5 3D 星尘环绕粒子 (前景层，位于身体前方，形成真实空间景深穿插)
         if is_spin:
             self._draw_spin_stardust_ring(painter, spin_angle, in_front=True)
@@ -585,6 +591,108 @@ class PetRenderer:
         # 12. 高负载流汗软萌水滴
         if getattr(self, "is_sweating", False):
             self._draw_sweat_drop(painter, cx, cy)
+
+        painter.restore()
+
+    def _draw_habitat_effects(self, painter: QPainter, width, height):
+        """赛博小窝家园 DIY 背景环境特效图层 (最底层)"""
+        habitat = getattr(self.model, "habitat", "none")
+        if not habitat or habitat == "none":
+            return
+
+        painter.save()
+        if habitat == "neon_matrix":
+            # 暗夜霓虹极客房：天青与翠绿流光二进制代码雨 + 深空全息透视网格
+            grid_pen = QPen(QColor(14, 165, 233, 40), 1.2)
+            painter.setPen(grid_pen)
+            for gx in range(10, int(width), 25):
+                painter.drawLine(int(gx), int(height * 0.95), int(width * 0.5 + (gx - width * 0.5) * 0.25), int(height * 0.65))
+            for gy in [0.65, 0.72, 0.81, 0.92]:
+                painter.drawLine(15, int(height * gy), int(width - 15), int(height * gy))
+
+            # 5 列自上而下缓缓滑落的二进制代码雨 (0101)
+            painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            cols = [22, 60, 105, 160, 198]
+            t = self.anim_time * 28.0
+            chars = ["0", "1", "1", "0", "1", "0", "1", "0"]
+            for ci, cx in enumerate(cols):
+                base_y = int((t + ci * 43) % (height * 0.85))
+                for ri in range(4):
+                    cy = (base_y - ri * 14) % int(height * 0.85)
+                    alpha = max(10, 140 - ri * 35)
+                    painter.setPen(QColor(56, 189, 248, alpha) if ri > 0 else QColor(52, 211, 153, 200))
+                    ch = chars[(ci * 3 + ri + int(self.anim_time * 2)) % len(chars)]
+                    painter.drawText(cx, int(cy + 20), ch)
+
+        elif habitat == "retro_arcade":
+            # 复古像素游戏机房：Synthwave 霓虹洋红栅格 + 8-bit 浮空星辰
+            grid_pen = QPen(QColor(217, 70, 239, 45), 1.2)
+            painter.setPen(grid_pen)
+            for gx in range(10, int(width), 25):
+                painter.drawLine(int(gx), int(height * 0.96), int(width * 0.5 + (gx - width * 0.5) * 0.3), int(height * 0.66))
+            for gy in [0.66, 0.74, 0.83, 0.93]:
+                painter.drawLine(15, int(height * gy), int(width - 15), int(height * gy))
+
+            stars = [(30, 42), (75, 28), (150, 36), (190, 58), (48, 90), (175, 95)]
+            for si, (sx, sy) in enumerate(stars):
+                pulse = (math.sin(self.anim_time * 4.5 + si * 1.7) + 1.0) * 0.5
+                star_alpha = int(40 + pulse * 140)
+                painter.setBrush(QBrush(QColor(244, 114, 182, star_alpha)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRect(QRectF(sx - 1, sy - 4, 3, 9))
+                painter.drawRect(QRectF(sx - 4, sy - 1, 9, 3))
+
+        elif habitat == "summer_beach":
+            # 夏日阳光海滩：温暖落日余晖斜光束 + 漂浮金光微尘
+            sun_grad = QRadialGradient(width * 0.82, height * 0.18, 90)
+            sun_grad.setColorAt(0.0, QColor(253, 224, 71, 55))
+            sun_grad.setColorAt(0.6, QColor(251, 146, 60, 25))
+            sun_grad.setColorAt(1.0, QColor(251, 146, 60, 0))
+            painter.setBrush(QBrush(sun_grad))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(width * 0.45, 0, width * 0.75, height * 0.6))
+
+            beam = QPolygonF([
+                QPointF(width * 0.75, 0),
+                QPointF(width * 0.95, 0),
+                QPointF(width * 0.45, height),
+                QPointF(width * 0.15, height)
+            ])
+            painter.setBrush(QBrush(QColor(255, 255, 255, 18)))
+            painter.drawPolygon(beam)
+
+            for di in range(6):
+                dx = (di * 37 + math.sin(self.anim_time * 1.8 + di) * 14) % width
+                dy = (di * 41 + math.cos(self.anim_time * 2.2 + di) * 12 + height * 0.2) % (height * 0.75)
+                mote_alpha = int(70 + math.sin(self.anim_time * 3.0 + di) * 45)
+                painter.setBrush(QBrush(QColor(254, 240, 138, mote_alpha)))
+                painter.drawEllipse(QRectF(dx, dy, 3.5, 3.5))
+
+        elif habitat == "zen_tatami":
+            # 佛系禅意蒲团室：静谧抹茶清竹微光 + 优雅徐徐飘落的樱花花瓣
+            tatami_grad = QLinearGradient(0, height * 0.82, 0, height)
+            tatami_grad.setColorAt(0.0, QColor(101, 163, 13, 0))
+            tatami_grad.setColorAt(1.0, QColor(101, 163, 13, 26))
+            painter.setBrush(QBrush(tatami_grad))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(QRectF(0, height * 0.82, width, height * 0.18))
+
+            for pi in range(7):
+                px = (pi * 32 + math.sin(self.anim_time * 1.6 + pi * 1.9) * 26) % width
+                py = (self.anim_time * 18.0 + pi * 36) % height
+                prot = (self.anim_time * 25.0 + pi * 50) % 360
+                p_alpha = int(120 + math.sin(self.anim_time * 2.0 + pi) * 40)
+
+                painter.save()
+                painter.translate(px, py)
+                painter.rotate(prot)
+                petal = QPainterPath()
+                petal.moveTo(0, -5)
+                petal.cubicTo(4, -3, 5, 4, 0, 6)
+                petal.cubicTo(-5, 4, -4, -3, 0, -5)
+                painter.setBrush(QBrush(QColor(244, 114, 182, p_alpha)))
+                painter.drawPath(petal)
+                painter.restore()
 
         painter.restore()
 
@@ -751,6 +859,37 @@ class PetRenderer:
             painter.setBrush(QBrush(QColor("#FF4D6D")))
             painter.setPen(QPen(QColor("#C9184A"), 1.5))
             painter.drawPath(heart)
+            painter.restore()
+
+        elif back_item == "cushion_zen" or (back_item == "none" and getattr(self.model, "personality", "") == "LAZY"):
+            # 佛系大懒喵专属：禅意榻榻米软垫/蒲团 (置于身下地面)
+            painter.save()
+            cushion_rect = QRectF(-48, 36, 96, 26)
+            cushion_grad = QRadialGradient(0, 48, 48)
+            cushion_grad.setColorAt(0.0, QColor("#FDE68A"))
+            cushion_grad.setColorAt(0.7, QColor("#F59E0B"))
+            cushion_grad.setColorAt(1.0, QColor("#B45309"))
+            painter.setBrush(QBrush(cushion_grad))
+            painter.setPen(QPen(QColor("#78350F"), 2.2))
+            painter.drawEllipse(cushion_rect)
+
+            # 软垫内圈编织缝线
+            painter.setPen(QPen(QColor("#D97706"), 1.5, Qt.PenStyle.DashLine))
+            painter.drawEllipse(QRectF(-40, 40, 80, 18))
+
+            # 蒲团边角飘落的两片娇嫩粉樱花瓣
+            for sx, sy, rot in [(-34, 46, -20), (32, 48, 25)]:
+                painter.save()
+                painter.translate(sx, sy)
+                painter.rotate(rot)
+                petal = QPainterPath()
+                petal.moveTo(0, -4)
+                petal.cubicTo(4, -2, 4, 3, 0, 5)
+                petal.cubicTo(-4, 3, -4, -2, 0, -4)
+                painter.setBrush(QBrush(QColor("#FBCFE8")))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawPath(petal)
+                painter.restore()
             painter.restore()
 
     # ================= 猫咪皮肤绘制 (3D 立体手办质感) =================
@@ -2372,7 +2511,7 @@ class PetRenderer:
     # ================= 多插槽装扮渲染 =================
     def _draw_head_decorations(self, painter: QPainter, spin_info=None):
         head = self.model.decorations.get("head", "none")
-        if head == "none":
+        if head == "none" and getattr(self.model, "personality", "") != "ATHLETE":
             return
 
         is_spin = bool(spin_info and spin_info.get("is_spin", False))
@@ -2428,7 +2567,7 @@ class PetRenderer:
             painter.save()
             halo_y = -68 + math.sin(self.anim_time * 3.0) * 3.0
             painter.setPen(QPen(QColor("#F59E0B"), 4))
-            painter.setBrush(QBrush(QColor(255, 240, 150, 70)))
+            painter.setBrush(QBrush(QColor(255, 255, 255, 70)))
             painter.drawEllipse(QRectF(-32, halo_y, 64, 16))
             painter.restore()
 
@@ -2485,11 +2624,51 @@ class PetRenderer:
             painter.drawEllipse(QRectF(2, -35, 30, 30))
             painter.restore()
 
+        elif head == "band_sport" or (head == "none" and getattr(self.model, "personality", "") == "ATHLETE"):
+            # 元气运动喵专属：热血运动发带 (额前绑带 + 飘逸绑带尾巴 + 烈焰金星徽章)
+            painter.save()
+            painter.translate(0, -32)
+            # 主系带 (弧形紧贴头部额顶)
+            band_path = QPainterPath()
+            band_path.moveTo(-36, -3)
+            band_path.cubicTo(-18, 5, 18, 5, 36, -3)
+            band_path.lineTo(34, 4)
+            band_path.cubicTo(18, 11, -18, 11, -34, 4)
+            band_path.closeSubpath()
+            painter.setBrush(QBrush(QColor("#EF4444")))
+            painter.setPen(QPen(QColor("#991B1B"), 1.8))
+            painter.drawPath(band_path)
+
+            # 白色元气运动条纹
+            stripe = QPainterPath()
+            stripe.moveTo(-30, 0)
+            stripe.cubicTo(-15, 6, 15, 6, 30, 0)
+            painter.setPen(QPen(QColor("#FFFFFF"), 2.0))
+            painter.drawPath(stripe)
+
+            # 右侧飘动的两条系带尾巴
+            tail_wave = math.sin(self.anim_time * 8.0) * 4.0
+            tail_path = QPainterPath()
+            tail_path.moveTo(34, 2)
+            tail_path.cubicTo(45, 6 + tail_wave, 52, 16 + tail_wave * 1.5, 48, 26 + tail_wave)
+            tail_path.lineTo(44, 24 + tail_wave)
+            tail_path.cubicTo(46, 15 + tail_wave * 1.2, 40, 8 + tail_wave, 33, 4)
+            tail_path.closeSubpath()
+            painter.setBrush(QBrush(QColor("#DC2626")))
+            painter.setPen(QPen(QColor("#991B1B"), 1.5))
+            painter.drawPath(tail_path)
+
+            # 额头正中心闪耀运动徽章
+            painter.setBrush(QBrush(QColor("#FBBF24")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(-4, 2, 8, 8))
+            painter.restore()
+
         painter.restore()
 
     def _draw_face_decorations(self, painter: QPainter, spin_info=None):
         face = self.model.decorations.get("face", "none")
-        if face == "none" and not self.model.is_studying:
+        if face == "none" and not self.model.is_studying and getattr(self.model, "personality", "") != "HACKER":
             return
 
         is_spin = bool(spin_info and spin_info.get("is_spin", False))
@@ -2525,6 +2704,30 @@ class PetRenderer:
             painter.setPen(QPen(QColor(255, 255, 255, 180), 2))
             painter.drawLine(-28, -14, -18, -4)
             painter.drawLine(12, -14, 22, -4)
+            painter.restore()
+
+        elif face == "hacker_viser" or (face == "none" and getattr(self.model, "personality", "") == "HACKER"):
+            # 极客黑客喵专属：赛博全息发光战术目镜 (右眼 HUD 扫描目镜与战术数据流)
+            painter.save()
+            viser_rect = QRectF(5, -20, 30, 22)
+            painter.setBrush(QBrush(QColor(14, 165, 233, 95)))
+            painter.setPen(QPen(QColor("#38BDF8"), 2.2))
+            painter.drawRoundedRect(viser_rect, 4, 4)
+
+            # 耳侧高科技固定臂
+            painter.setPen(QPen(QColor("#0284C7"), 2.5))
+            painter.drawLine(35, -9, 46, -14)
+
+            # 目镜内部战术十字准星与刻度
+            painter.setPen(QPen(QColor("#34D399"), 1.2))
+            painter.drawLine(16, -9, 24, -9)
+            painter.drawLine(20, -13, 20, -5)
+
+            # 目镜右上角动态扫描闪烁绿点
+            if int(self.anim_time * 4) % 2 == 0:
+                painter.setBrush(QBrush(QColor("#10B981")))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QRectF(28, -17, 4, 4))
             painter.restore()
 
         elif face == "blush_hearts":
@@ -2647,6 +2850,152 @@ class PetRenderer:
             painter.drawPolygon(QPolygonF([QPointF(0, 0), QPointF(14, -8), QPointF(14, 8)]))
             painter.setBrush(QBrush(QColor("#DC2626")))
             painter.drawEllipse(QRectF(-4, -4, 8, 8))
+            painter.restore()
+
+        painter.restore()
+
+    def _draw_hand_decorations(self, painter: QPainter, spin_info=None):
+        hand = self.model.decorations.get("hand", "none")
+        if hand == "none":
+            return
+
+        is_spin = bool(spin_info and spin_info.get("is_spin", False))
+        if is_spin and not spin_info.get("is_front", True):
+            return
+
+        painter.save()
+        if is_spin:
+            face_offset_x = spin_info.get("face_offset_x", 0.0) * 0.6
+            painter.translate(face_offset_x, 0)
+
+        if hand == "keyboard":
+            # 赛博 RGB 机械键盘 (双爪捧在胸前，微型按键彩虹发光)
+            key_y = 36 + math.sin(self.anim_time * 14.0) * 1.5
+            painter.save()
+            painter.translate(0, key_y)
+
+            painter.setBrush(QBrush(QColor("#0F172A")))
+            painter.setPen(QPen(QColor("#38BDF8"), 1.8))
+            painter.drawRoundedRect(QRectF(-25, 0, 50, 17), 3, 3)
+
+            kb_grad = QLinearGradient(-22, 0, 22, 0)
+            kb_grad.setColorAt(0.0, QColor("#06B6D4"))
+            kb_grad.setColorAt(0.5, QColor("#EC4899"))
+            kb_grad.setColorAt(1.0, QColor("#FBBF24"))
+            painter.setPen(QPen(kb_grad, 1.2))
+            painter.drawLine(-22, 14, 22, 14)
+
+            key_cols = [QColor("#38BDF8"), QColor("#34D399"), QColor("#F472B6"), QColor("#FBBF24"), QColor("#A78BFA")]
+            for r in range(2):
+                ky = 3 + r * 5
+                for c in range(5):
+                    kx = -20 + c * 8
+                    col = key_cols[(c + r + int(self.anim_time * 6)) % len(key_cols)]
+                    painter.setBrush(QBrush(col))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawRect(QRectF(kx, ky, 6, 4))
+            painter.restore()
+
+        elif hand == "fish_wand":
+            # 全息光纤逗猫棒 (由右爪握持，前端摆动着全息激光小鱼)
+            sway = math.sin(self.anim_time * 6.0) * 7.0
+            painter.save()
+            painter.setPen(QPen(QColor("#0284C7"), 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(18, 44, 45, 12)
+
+            tip_x = 45
+            tip_y = 12
+            fish_x = 42 + sway
+            fish_y = 30 + abs(sway * 0.3)
+            painter.setPen(QPen(QColor("#38BDF8"), 1.2, Qt.PenStyle.DashLine))
+            painter.drawLine(tip_x, tip_y, int(fish_x), int(fish_y))
+
+            painter.save()
+            painter.translate(fish_x, fish_y)
+            painter.rotate(sway * 1.8)
+            fish_path = QPainterPath()
+            fish_path.moveTo(-8, 0)
+            fish_path.cubicTo(-4, -5, 2, -5, 6, 0)
+            fish_path.cubicTo(2, 5, -4, 5, -8, 0)
+            fish_path.lineTo(-12, -4)
+            fish_path.lineTo(-12, 4)
+            fish_path.closeSubpath()
+            painter.setBrush(QBrush(QColor(56, 189, 248, 220)))
+            painter.setPen(QPen(QColor("#00F0FF"), 1.2))
+            painter.drawPath(fish_path)
+            painter.restore()
+            painter.restore()
+
+        elif hand == "coffee":
+            # 极客外带纸杯咖啡 (杯身带天青芯片印花，杯口冒出两缕优雅半透明微风蒸汽)
+            painter.save()
+            painter.translate(14, 30)
+
+            cup_path = QPainterPath()
+            cup_path.moveTo(-8, 2)
+            cup_path.lineTo(8, 2)
+            cup_path.lineTo(6, 22)
+            cup_path.lineTo(-6, 22)
+            cup_path.closeSubpath()
+            painter.setBrush(QBrush(QColor("#1E293B")))
+            painter.setPen(QPen(QColor("#0F172A"), 1.5))
+            painter.drawPath(cup_path)
+
+            painter.setBrush(QBrush(QColor("#F8FAFC")))
+            painter.setPen(QPen(QColor("#CBD5E1"), 1.2))
+            painter.drawRoundedRect(QRectF(-9, -2, 18, 5), 2, 2)
+
+            painter.setPen(QPen(QColor("#38BDF8"), 1.2))
+            painter.drawRect(QRectF(-3, 8, 6, 6))
+            painter.drawLine(0, 6, 0, 8)
+            painter.drawLine(0, 14, 0, 16)
+
+            steam_phase = self.anim_time * 5.0
+            for si, sx in enumerate([-3, 3]):
+                sy = -5 - (steam_phase + si * 4) % 14
+                s_alpha = max(0, int(180 * (1.0 - (-5 - sy) / 14.0)))
+                swiggle = math.sin(steam_phase + si * 2) * 2.5
+                painter.setPen(QPen(QColor(255, 255, 255, s_alpha), 1.2))
+                painter.drawLine(int(sx + swiggle), int(sy), int(sx + swiggle * 1.4), int(sy - 4))
+            painter.restore()
+
+        elif hand == "gamepad":
+            # 8-bit 复古荧光绿掌机 (薄荷绿外壳，十字键与微型亮屏)
+            painter.save()
+            painter.translate(0, 42)
+            painter.setBrush(QBrush(QColor("#10B981")))
+            painter.setPen(QPen(QColor("#047857"), 1.8))
+            painter.drawRoundedRect(QRectF(-20, -10, 40, 20), 4, 4)
+
+            painter.setBrush(QBrush(QColor("#064E3B")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRect(QRectF(-9, -7, 18, 14))
+
+            painter.setPen(QPen(QColor("#34D399"), 1.2))
+            painter.drawLine(-6, 0, -2, -3)
+            painter.drawLine(-2, -3, 2, 2)
+            painter.drawLine(2, 2, 6, -1)
+
+            painter.setBrush(QBrush(QColor("#1F2937")))
+            painter.drawRect(QRectF(-16, -4, 4, 8))
+            painter.drawRect(QRectF(-18, -2, 8, 4))
+
+            painter.setBrush(QBrush(QColor("#EF4444")))
+            painter.drawEllipse(QRectF(11, -3, 3.5, 3.5))
+            painter.setBrush(QBrush(QColor("#3B82F6")))
+            painter.drawEllipse(QRectF(14, 0, 3.5, 3.5))
+            painter.restore()
+
+        elif hand == "dumbbell":
+            # 能量健身哑铃 (黑红质感健身器械)
+            painter.save()
+            painter.translate(0, 46)
+            painter.setPen(QPen(QColor("#94A3B8"), 3.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawLine(-24, 0, 24, 0)
+            for dx in [-26, 21]:
+                painter.setBrush(QBrush(QColor("#1F2937")))
+                painter.setPen(QPen(QColor("#EF4444"), 1.5))
+                painter.drawRoundedRect(QRectF(dx, -8, 6, 16), 2, 2)
             painter.restore()
 
         painter.restore()

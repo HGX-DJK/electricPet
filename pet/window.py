@@ -638,6 +638,8 @@ class PetWindow(QWidget):
 
             elif self.state in ("WALK_LEFT", "WALK_RIGHT"):
                 speed = 70.0  # 活泼的漫步速度 (像素/秒)
+                if getattr(self.model, "personality", "") == "ATHLETE":
+                    speed *= 1.25  # 元气运动喵敏捷提速 25%！
                 step = speed * dt
                 reached = False
 
@@ -657,6 +659,7 @@ class PetWindow(QWidget):
                 if reached or walk_elapsed > 4.8:
                     self.state = "IDLE"
                     self.step_accum = 0.0
+                    self.model.add_personality_point("sport", 1)
                     self.next_action_time = now + random.uniform(2.5, 5.5)
                     self.move(int(new_x), int(target_ground_y))
                 else:
@@ -692,6 +695,7 @@ class PetWindow(QWidget):
                 if hw["cpu"] >= 85 and not getattr(self, "is_boss_hidden", False) and not self.model.is_sleeping:
                     if hasattr(self, "renderer"):
                         self.renderer.is_sweating = True
+                    self.model.add_personality_point("tech", 1)
                     if now - getattr(self, "_last_cpu_warn_time", 0.0) > 120.0:  # 2 分钟防重复打扰
                         self._last_cpu_warn_time = now
                         self.dialogue.say(f"🔥 哎呀主人！CPU算力跑满啦 ({hw['cpu']}%)，波可热得直冒汗，快注意给电脑通风散热呀~ 💦", duration=5.5)
@@ -848,6 +852,9 @@ class PetWindow(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             if self.is_dragging:
                 self.is_dragging = False
+                # 拖拽互动 / 快速抛掷累积运动活力点数
+                sport_pts = 2 if abs(getattr(self, "drag_vx", 0.0)) > 180 else 1
+                self.model.add_personality_point("sport", sport_pts)
 
                 # 限制在屏幕可见工作区内
                 screen = QApplication.screenAt(self.geometry().center())
@@ -984,7 +991,9 @@ class PetWindow(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            # 双击宠物互动：随机触发才艺绝活（含抓老鼠、玩毛线、纸箱藏猫猫等）
+            # 双击宠物互动：累积活力性格点数并奖励金币
+            self.model.add_personality_point("sport", 1)
+            self.model.coins += 1
             self.model.pet_head()
             self.renderer.trigger_pet()
             choice = random.choice([
