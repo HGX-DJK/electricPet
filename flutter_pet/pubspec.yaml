@@ -10,6 +10,7 @@ dependencies:
   audioplayers: ^6.8.1
   flutter:
     sdk: flutter
+  sensors_plus: ^7.1.1
   shared_preferences: ^2.2.2
 
 dev_dependencies:

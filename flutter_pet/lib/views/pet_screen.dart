@@ -7,13 +7,15 @@ import '../models/memo_model.dart';
 import '../renderers/pet_painter.dart';
 import 'backpack_drawer.dart';
 import 'dialogs/feeding_dialog.dart';
-import 'dialogs/wardrobe_dialog.dart';
 import 'dialogs/action_dialog.dart';
 import 'dialogs/memory_album_dialog.dart';
 import 'memo_screen.dart';
 import '../services/overlay_service.dart';
 import '../services/sound_service.dart';
 import '../services/solar_service.dart';
+import '../services/sensor_service.dart';
+import '../services/haptic_service.dart';
+import 'dialogs/gacha_dialog.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -151,6 +153,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   bool _isAirplaneEars = false;
   Timer? _airplaneEarsTimer;
   bool _isBlep = false;
+  Timer? _blepTimer;
   String? _winkEye;
   Timer? _winkTimer;
   bool _isSlowBlink = false; // 慢眨眼“猫咪之吻”
@@ -214,9 +217,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   String _currentDialogue = '喵呜~ 戳戳我或者摸摸我的小脑瓜吧！(ฅ\'ω\'ฅ)';
   bool _showDialogue = true;
 
+  // 手机端专属硬件感知与多指手势 (陀螺仪重力倾角与双指缩放)
+  double _userScale = 1.0;
+  double _baseScale = 1.0;
+  double _tiltX = 0.0;
+
   // 画布级无遮挡换装模式 (免弹窗、零遮挡、实时全景预览)
   bool _isWardrobeMode = false;
-  int _wardrobeTab = 0; // 0: 猫咪品种, 1: 头部帽子, 2: 颈部配饰
+  int _wardrobeTab = 0; // 0: 猫咪品种, 1: 头部, 2: 面部, 3: 颈部, 4: 背部, 5: 手持, 6: 小窝
 
   // 画布级无遮挡专属绝活模式 (免弹窗、零遮挡、实时全景表演点播)
   bool _isActionMode = false;
@@ -259,6 +267,35 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    _userScale = widget.petModel.userScale;
+
+    // 手机专属硬件感知：陀螺仪/加速度计倾角与晃动检测
+    SensorService.startListening();
+    SensorService.onTilt = (tilt) {
+      if (!mounted) return;
+      setState(() {
+        _tiltX = tilt;
+      });
+      // 待机时受倾角微小滑步走动
+      if (_state == 'IDLE' && !_isDragging && !_isLaserMode && !_isWardrobeMode && !widget.petModel.isSleeping) {
+        if (tilt.abs() > 0.45) {
+          final moveStep = tilt * 1.8;
+          _petX = (_petX + moveStep).clamp(45.0, _lastScreenSize.width - 45.0);
+          _facingLeft = (tilt < 0);
+        }
+      }
+    };
+    SensorService.onShake = () {
+      if (!mounted) return;
+      if (_state != 'DIZZY') {
+        HapticService.heavy();
+        _playAction('DIZZY');
+        _spawnParticles(Offset(_petX, _petY - 35), emoji: '💫', count: 4);
+        _spawnParticles(Offset(_petX, _petY - 45), emoji: '⭐', count: 4);
+        _showDialogueBubble('哎呀呀~ 手机晃得波可晕乎乎啦，眼冒金星啦！(◎_◎;)', duration: const Duration(seconds: 4));
+      }
+    };
 
     // 呼吸律动主循环
     _idleAnimController = AnimationController(
@@ -587,6 +624,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _comboResetTimer?.cancel();
     _tailPuffTimer?.cancel();
     _airplaneEarsTimer?.cancel();
+    _blepTimer?.cancel();
     _winkTimer?.cancel();
     _actionTimer?.cancel();
     _idleActionTimer?.cancel();
@@ -604,6 +642,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _drinkTimer?.cancel();
     _sprintTimer?.cancel();
     _bunnyKickTimer?.cancel();
+    SensorService.stopListening();
     SoundService.dispose();
     super.dispose();
   }
@@ -1035,7 +1074,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 随机微表情：呆萌吐小舌头 (Blep)
     if (!_isBlep && math.Random().nextDouble() < 0.14) {
-      setState(() => _isBlep = true);
+      _triggerBlep();
     }
 
     if (_showDialogue) return;
@@ -2391,7 +2430,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           if (purrTick++ >= 9 || !_isPurring) {
             t.cancel();
           } else {
-            HapticFeedback.selectionClick();
+            HapticService.purrHaptic();
             _spawnParticles(Offset(_petX + (purrTick.isEven ? -18 : 18), _petY - 24), emoji: '🫧', count: 1);
           }
         });
@@ -2521,7 +2560,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _triggerBlep({Duration duration = const Duration(milliseconds: 2200)}) {
     if (!mounted) return;
     setState(() => _isBlep = true);
-    Timer(duration, () {
+    _blepTimer?.cancel();
+    _blepTimer = Timer(duration, () {
       if (mounted) setState(() => _isBlep = false);
     });
   }
@@ -2644,7 +2684,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final circadian = _getCircadianTheme();
     final gradientColors = circadian['colors'] as List<Color>;
     final isNight = circadian['isNight'] as bool;
-    final ambientIcon = circadian['icon'] as String;
 
     // 维度二：毛线球位于前侧宽敞开阔地板上
     if (!_yarnInitialized && screenSize.width > 0) {
@@ -2895,37 +2934,55 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   onDoubleTap: _onPetDoubleTap,
                   onLongPressStart: (_) => _startPeekABoo(),
                   onLongPressEnd: (_) => _finishPeekABoo(),
-                  onPanStart: (details) {
-                    setState(() {
-                      _isDragging = true;
-                      _stopRoaming();
-                      _isChasingYarn = false;
-                      _isYarnFlying = false;
-                      _state = 'DANGLING';
-                      _strokeDistance = 0.0;
-                      _dragDirectionReversals = 0;
-                      _lastDragDirection = 0.0;
-                      _lastDragTime = DateTime.now();
-                    });
+                  onScaleStart: (details) {
+                    _baseScale = _userScale;
+                    if (details.pointerCount == 1) {
+                      setState(() {
+                        _isDragging = true;
+                        _stopRoaming();
+                        _isChasingYarn = false;
+                        _isYarnFlying = false;
+                        _state = 'DANGLING';
+                        _strokeDistance = 0.0;
+                        _dragDirectionReversals = 0;
+                        _lastDragDirection = 0.0;
+                        _lastDragTime = DateTime.now();
+                      });
+                    }
                   },
-                  onPanUpdate: (details) {
+                  onScaleUpdate: (details) {
+                    // 双指捏合无级缩放 (0.75x ~ 1.45x)
+                    if (details.pointerCount >= 2) {
+                      final newScale = (_baseScale * details.scale).clamp(0.75, 1.45);
+                      if ((newScale - _userScale).abs() > 0.015) {
+                        setState(() {
+                          _userScale = newScale;
+                        });
+                        if (widget.petModel.enableHaptics) {
+                          HapticFeedback.selectionClick();
+                        }
+                      }
+                      return;
+                    }
+
+                    // 单指拖拽与抚摸
                     final now = DateTime.now();
                     final dt = now.difference(_lastDragTime).inMilliseconds;
                     _lastDragTime = now;
 
                     setState(() {
-                      _petX += details.delta.dx;
-                      _petY += details.delta.dy;
+                      _petX += details.focalPointDelta.dx;
+                      _petY += details.focalPointDelta.dy;
 
                       // 限制萌宠不出屏幕
                       _petX = _petX.clamp(35.0, screenSize.width - 35.0);
                       _petY = _petY.clamp(minSafeY, maxSafeY);
 
-                      _facingLeft = (details.delta.dx < -0.8);
-                      _touchPos = details.localPosition;
+                      _facingLeft = (details.focalPointDelta.dx < -0.8);
+                      _touchPos = details.localFocalPoint;
 
-                      // 维度三：高频剧烈左右晃动眩晕检测
-                      final curDx = details.delta.dx;
+                      // 高频剧烈左右晃动眩晕检测
+                      final curDx = details.focalPointDelta.dx;
                       if (curDx.abs() > 4.5 && dt < 80) {
                         final dir = curDx > 0 ? 1.0 : -1.0;
                         if (_lastDragDirection != 0.0 && dir != _lastDragDirection) {
@@ -2934,7 +2991,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             _state = 'DIZZY';
                             _dragDirectionReversals = 0;
                             if (widget.petModel.enableHaptics) {
-                              HapticFeedback.heavyImpact();
+                              HapticService.heavy();
                             }
                             _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 4);
                             _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
@@ -2948,8 +3005,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         _lastDragDirection = dir;
                       }
 
-                      // 拖拽移动与抚摸交互解耦：搬动宠物时不误触发贴贴屏幕膨胀态
-                      final delta = details.delta.distance;
+                      // 拖拽移动与抚摸交互解耦
+                      final delta = details.focalPointDelta.distance;
                       if (delta > 2.0 && delta < 12.0) {
                         _strokeDistance += delta;
                         if (_strokeDistance > 60.0) {
@@ -2964,7 +3021,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       }
                     });
                   },
-                  onPanEnd: (details) {
+                  onScaleEnd: (details) {
+                    _baseScale = _userScale;
+                    widget.petModel.setUserScale(_userScale);
+                    widget.petModel.saveToDisk();
+
                     setState(() {
                       _isDragging = false;
                       _touchPos = null;
@@ -2990,7 +3051,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         return;
                       }
 
-                      // 拖拽释放平稳平滑着陆，回归自然待机状态 (方向一/四：肉垫减震轻弹 Cushioned Landing + 触地微扬尘)
+                      // 拖拽释放平稳平滑着陆，回归自然待机状态
                       if (_state != 'DIZZY') {
                         _state = 'IDLE';
                         _squishController.forward(from: 0.0);
@@ -3030,6 +3091,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                               isSlowBlink: _isSlowBlink,
                               winkEye: _winkEye,
                               isNight: isNight,
+                              userScale: _userScale,
+                              tiltX: _tiltX,
                             ),
                           ),
                         ),
@@ -3686,8 +3749,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final cardBg = isNight ? const Color(0xFF262054) : const Color(0xFFF8FAFC);
 
     final currentSkin = widget.petModel.currentSkin;
-    final currentHead = widget.petModel.decorations['head'] ?? 'none';
-    final currentNeck = widget.petModel.decorations['neck'] ?? 'none';
 
     // 8 大名贵猫咪品种
     final skins = PetModel.availableSkins.values
@@ -3697,6 +3758,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 头部帽子库
     final headDecos = const [
       {'id': 'none', 'name': '无帽子', 'icon': '🚫'},
+      {'id': 'band_sport', 'name': '运动发带', 'icon': '🏃'},
       {'id': 'gold_crown_sparkle', 'name': '星辉皇冠', 'icon': '✨', 'minStage': '4'},
       {'id': 'crown', 'name': '璀璨金冠', 'icon': '👑'},
       {'id': 'wizard_hat', 'name': '魔法巫师帽', 'icon': '🧙‍♂️'},
@@ -3704,14 +3766,44 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       {'id': 'sailor_cap', 'name': '蔚蓝水手帽', 'icon': '⚓'},
     ];
 
-    // 颈部配饰库
+    final faceDecos = const [
+      {'id': 'none', 'name': '无面饰', 'icon': '🚫'},
+      {'id': 'glasses_black', 'name': '黑框平光镜', 'icon': '🤓'},
+      {'id': 'sunglasses_cool', 'name': '飞行员墨镜', 'icon': '😎'},
+      {'id': 'hacker_viser', 'name': '战术全息目镜', 'icon': '🕶️'},
+    ];
+
     final neckDecos = const [
       {'id': 'none', 'name': '无配饰', 'icon': '🚫'},
       {'id': 'royal_cape', 'name': '皇家披风', 'icon': '🦸‍♂️', 'minStage': '3'},
       {'id': 'bell', 'name': '经典金铃铛', 'icon': '🔔'},
       {'id': 'ribbon', 'name': '俏皮蝴蝶结', 'icon': '🎀'},
-      {'id': 'bowtie', 'name': '英伦绅士领结', 'icon': '🤵'},
+      {'id': 'bowtie', 'name': '绅士领结', 'icon': '🤵'},
       {'id': 'scarf', 'name': '暖冬红围巾', 'icon': '🧣'},
+    ];
+
+    final backDecos = const [
+      {'id': 'none', 'name': '无背饰', 'icon': '🚫'},
+      {'id': 'cape_cyber', 'name': '赛博霓虹披风', 'icon': '🦸‍♂️'},
+      {'id': 'wings_angel', 'name': '圣洁天使羽翼', 'icon': '🪽'},
+      {'id': 'shell_turtle', 'name': '萌趣龟壳', 'icon': '🐢'},
+    ];
+
+    final handDecos = const [
+      {'id': 'none', 'name': '空着小爪', 'icon': '🚫'},
+      {'id': 'keyboard_rgb', 'name': 'RGB机械键盘', 'icon': '⌨️'},
+      {'id': 'teaser_laser', 'name': '全息逗猫棒', 'icon': '🪄'},
+      {'id': 'coffee_cyber', 'name': '极客冷萃杯', 'icon': '☕'},
+      {'id': 'gamepad_retro', 'name': '8-bit复古掌机', 'icon': '🕹️'},
+      {'id': 'dumbbell_power', 'name': '赛博能量哑铃', 'icon': '🏋️'},
+    ];
+
+    final habitatDecos = const [
+      {'id': 'default', 'name': '极简空间', 'icon': '⚪'},
+      {'id': 'neon_matrix', 'name': '霓虹极客房', 'icon': '💻'},
+      {'id': 'retro_arcade', 'name': '像素电玩厅', 'icon': '🕹️'},
+      {'id': 'summer_beach', 'name': '夏日海滩', 'icon': '🏖️'},
+      {'id': 'zen_tatami', 'name': '禅意蒲团室', 'icon': '🍵'},
     ];
 
     // 当前选中的形态标签摘要
@@ -3720,11 +3812,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       final tags = _getBreedSummary(currentSkin.id);
       currentSummary = '🐱 当前品种：${currentSkin.name} ($tags)';
     } else if (_wardrobeTab == 1) {
+      final currentHead = widget.petModel.decorations['head'] ?? 'none';
       final item = headDecos.firstWhere((h) => h['id'] == currentHead, orElse: () => headDecos.first);
-      currentSummary = '🎩 头部帽子：${item['name']}';
-    } else {
+      currentSummary = '🎩 头部装扮：${item['name']}';
+    } else if (_wardrobeTab == 2) {
+      final currentFace = widget.petModel.decorations['face'] ?? 'none';
+      final item = faceDecos.firstWhere((f) => f['id'] == currentFace, orElse: () => faceDecos.first);
+      currentSummary = '👓 面部目镜：${item['name']}';
+    } else if (_wardrobeTab == 3) {
+      final currentNeck = widget.petModel.decorations['neck'] ?? 'none';
       final item = neckDecos.firstWhere((n) => n['id'] == currentNeck, orElse: () => neckDecos.first);
       currentSummary = '🎀 颈部挂件：${item['name']}';
+    } else if (_wardrobeTab == 4) {
+      final currentBack = widget.petModel.decorations['back'] ?? 'none';
+      final item = backDecos.firstWhere((b) => b['id'] == currentBack, orElse: () => backDecos.first);
+      currentSummary = '🦸‍♂️ 背部装扮：${item['name']}';
+    } else if (_wardrobeTab == 5) {
+      final currentHand = widget.petModel.decorations['hand'] ?? 'none';
+      final item = handDecos.firstWhere((h) => h['id'] == currentHand, orElse: () => handDecos.first);
+      currentSummary = '🪄 前爪手持：${item['name']}';
+    } else {
+      final currentHab = widget.petModel.habitat;
+      final item = habitatDecos.firstWhere((h) => h['id'] == currentHab, orElse: () => habitatDecos.first);
+      currentSummary = '🏠 赛博小窝：${item['name']}';
     }
 
     return Positioned(
@@ -3752,16 +3862,69 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 顶层栏：分类选项卡 + 完成退出按钮
+            // 顶层栏：分类滑动胶囊 + 盲盒入口 + 完成退出
             Row(
               children: [
-                _buildDockTabPill(0, '🐱 品种', isNight),
+                Expanded(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    child: Row(
+                      children: [
+                        _buildDockTabPill(0, '🐱 品种', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(1, '🎩 头部', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(2, '👓 面部', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(3, '🎀 颈部', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(4, '🦸‍♂️ 背部', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(5, '🪄 手持', isNight),
+                        const SizedBox(width: 5),
+                        _buildDockTabPill(6, '🏠 小窝', isNight),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 6),
-                _buildDockTabPill(1, '🎩 帽子', isNight),
-                const SizedBox(width: 6),
-                _buildDockTabPill(2, '🎀 挂件', isNight),
-                const Spacer(),
-                // 完成退出换装按钮 (零阻碍，一键退出换装模式)
+
+                // 🔮 赛博盲盒快捷入口
+                GestureDetector(
+                  onTap: () {
+                    HapticService.light();
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => GachaDialog(
+                        model: widget.petModel,
+                        onUpdated: () => setState(() {}),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('🔮', style: TextStyle(fontSize: 12)),
+                        SizedBox(width: 2),
+                        Text('盲盒', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+
+                // 完成退出换装按钮
                 GestureDetector(
                   onTap: () {
                     if (widget.petModel.enableHaptics) {
@@ -3772,29 +3935,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     });
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
                         colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
                       ),
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withOpacity(0.35),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.check_rounded, color: Colors.white, size: 14),
-                        SizedBox(width: 3),
+                        SizedBox(width: 2),
                         Text(
                           '完成',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -3807,7 +3963,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             ),
             const SizedBox(height: 7),
 
-            // 状态指示摘要条 (紧凑指示，不遮挡上方小猫)
+            // 状态指示摘要条
             Text(
               currentSummary,
               maxLines: 1,
@@ -3820,7 +3976,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             ),
             const SizedBox(height: 8),
 
-            // 水平滑动卡片展示列表 (高度仅 72px，全屏萌宠完全无阻挡)
+            // 水平滑动卡片展示列表
             SizedBox(
               height: 72,
               child: _wardrobeTab == 0
@@ -3917,34 +4073,23 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         );
                       },
                     )
-                  : (_wardrobeTab == 1
+                  : (_wardrobeTab == 6
                       ? ListView.builder(
                           scrollDirection: Axis.horizontal,
                           physics: const BouncingScrollPhysics(),
-                          itemCount: headDecos.length,
+                          itemCount: habitatDecos.length,
                           itemBuilder: (context, index) {
-                            final item = headDecos[index];
+                            final item = habitatDecos[index];
                             final id = item['id']!;
-                            final isSelected = (currentHead == id);
-                            final minStageStr = item['minStage'];
-                            final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
-                            final currentStage = (widget.petModel.intimacyBondInfo['stage'] as int?) ?? 1;
-                            final isLocked = minStage > currentStage;
+                            final isSelected = (widget.petModel.habitat == id);
 
                             return GestureDetector(
                               onTap: () {
-                                if (isLocked) {
-                                  if (widget.petModel.enableHaptics) HapticFeedback.heavyImpact();
-                                  _showDialogueBubble('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖');
-                                  return;
-                                }
-                                if (widget.petModel.enableHaptics) {
-                                  HapticFeedback.lightImpact();
-                                }
+                                if (widget.petModel.enableHaptics) HapticService.light();
                                 setState(() {
-                                  widget.petModel.setDecoration('head', id);
+                                  widget.petModel.setHabitat(id);
                                 });
-                                _spawnParticles(Offset(_petX, _petY - 20), emoji: '🎩', count: 3);
+                                _spawnParticles(Offset(_petX, _petY - 20), emoji: item['icon']!, count: 3);
                               },
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 180),
@@ -3962,32 +4107,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                         : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
                                     width: isSelected ? 2.2 : 1.0,
                                   ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFFA855F7).withOpacity(0.35),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ]
-                                      : null,
                                 ),
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    if (isLocked)
-                                      Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          Opacity(
-                                            opacity: 0.35,
-                                            child: Text(item['icon']!, style: const TextStyle(fontSize: 18)),
-                                          ),
-                                          const Icon(Icons.lock_rounded, size: 14, color: Color(0xFFF59E0B)),
-                                        ],
-                                      )
-                                    else
-                                      Text(item['icon']!, style: const TextStyle(fontSize: 20)),
+                                    Text(item['icon']!, style: const TextStyle(fontSize: 20)),
                                     const SizedBox(height: 2),
                                     Text(
                                       item['name']!,
@@ -3996,127 +4120,110 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                       style: TextStyle(
                                         fontSize: 9.5,
                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                        color: isLocked
-                                            ? const Color(0xFF94A3B8)
-                                            : (isSelected
-                                                ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
-                                                : titleColor),
+                                        color: isSelected
+                                            ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                            : titleColor,
                                       ),
                                     ),
-                                    if (isLocked)
-                                      Text(
-                                        '阶$minStage解锁',
-                                        style: const TextStyle(
-                                          fontSize: 7.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFFD97706),
-                                        ),
-                                      ),
-
                                   ],
                                 ),
                               ),
                             );
                           },
                         )
-                      : ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          physics: const BouncingScrollPhysics(),
-                          itemCount: neckDecos.length,
-                          itemBuilder: (context, index) {
-                            final item = neckDecos[index];
-                            final id = item['id']!;
-                            final isSelected = (currentNeck == id);
-                            final minStageStr = item['minStage'];
-                            final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
-                            final currentStage = (widget.petModel.intimacyBondInfo['stage'] as int?) ?? 1;
-                            final isLocked = minStage > currentStage;
+                      : Builder(
+                          builder: (context) {
+                            final slotMap = {
+                              1: ('head', headDecos),
+                              2: ('face', faceDecos),
+                              3: ('neck', neckDecos),
+                              4: ('back', backDecos),
+                              5: ('hand', handDecos),
+                            };
+                            final tuple = slotMap[_wardrobeTab] ?? ('head', headDecos);
+                            final slot = tuple.$1;
+                            final list = tuple.$2;
+                            final current = widget.petModel.decorations[slot] ?? 'none';
 
-                            return GestureDetector(
-                              onTap: () {
-                                if (isLocked) {
-                                  if (widget.petModel.enableHaptics) HapticFeedback.heavyImpact();
-                                  _showDialogueBubble('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖');
-                                  return;
-                                }
-                                if (widget.petModel.enableHaptics) {
-                                  HapticFeedback.lightImpact();
-                                }
-                                setState(() {
-                                  widget.petModel.setDecoration('neck', id);
-                                });
-                                _spawnParticles(Offset(_petX, _petY - 20), emoji: '🎀', count: 3);
-                              },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                width: 72,
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
-                                      : cardBg,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(0xFFA855F7)
-                                        : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
-                                    width: isSelected ? 2.2 : 1.0,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: const Color(0xFFA855F7).withOpacity(0.35),
-                                            blurRadius: 6,
-                                            offset: const Offset(0, 2),
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (isLocked)
-                                      Stack(
-                                        alignment: Alignment.center,
-                                        children: [
-                                          Opacity(
-                                            opacity: 0.35,
-                                            child: Text(item['icon']!, style: const TextStyle(fontSize: 18)),
-                                          ),
-                                          const Icon(Icons.lock_rounded, size: 14, color: Color(0xFFF59E0B)),
-                                        ],
-                                      )
-                                    else
-                                      Text(item['icon']!, style: const TextStyle(fontSize: 20)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      item['name']!,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                        color: isLocked
-                                            ? const Color(0xFF94A3B8)
-                                            : (isSelected
-                                                ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
-                                                : titleColor),
+                            return ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: list.length,
+                              itemBuilder: (context, index) {
+                                final item = list[index];
+                                final id = item['id']!;
+                                final isSelected = (current == id);
+                                final minStageStr = item['minStage'];
+                                final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
+                                final currentStage = (widget.petModel.intimacyBondInfo['stage'] as int?) ?? 1;
+                                final isLocked = minStage > currentStage;
+
+                                return GestureDetector(
+                                  onTap: () {
+                                    if (isLocked) {
+                                      if (widget.petModel.enableHaptics) HapticService.heavy();
+                                      _showDialogueBubble('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖');
+                                      return;
+                                    }
+                                    if (widget.petModel.enableHaptics) HapticService.light();
+                                    setState(() {
+                                      widget.petModel.setDecoration(slot, id);
+                                    });
+                                    _spawnParticles(Offset(_petX, _petY - 20), emoji: item['icon']!, count: 3);
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    width: 72,
+                                    margin: const EdgeInsets.only(right: 8),
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                          : cardBg,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? const Color(0xFFA855F7)
+                                            : (isNight ? const Color(0xFF4338CA).withOpacity(0.4) : const Color(0xFFE2E8F0)),
+                                        width: isSelected ? 2.2 : 1.0,
                                       ),
                                     ),
-                                    if (isLocked)
-                                      Text(
-                                        '阶$minStage解锁',
-                                        style: const TextStyle(
-                                          fontSize: 7.5,
-                                          fontWeight: FontWeight.bold,
-                                          color: Color(0xFFD97706),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        if (isLocked)
+                                          Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              Opacity(
+                                                opacity: 0.35,
+                                                child: Text(item['icon']!, style: const TextStyle(fontSize: 18)),
+                                              ),
+                                              const Icon(Icons.lock_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                            ],
+                                          )
+                                        else
+                                          Text(item['icon']!, style: const TextStyle(fontSize: 20)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          item['name']!,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                            color: isLocked
+                                                ? const Color(0xFF94A3B8)
+                                                : (isSelected
+                                                    ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                                    : titleColor),
+                                          ),
                                         ),
-                                      ),
-
-                                  ],
-                                ),
-                              ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
                         )),

@@ -1,8 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
+import 'gacha_dialog.dart';
 
-/// 萌宠魔法衣橱换装面板 (支持 8 大纯种猫咪品种切换、头部帽子、颈部配饰三 Tab 架构)
+/// 萌宠魔法衣橱换装面板 (支持 8 大纯种猫咪品种切换、头部、面部、颈部、背部、手持、小窝 7 Tab 架构)
 class WardrobeDialog extends StatefulWidget {
   final PetModel model;
   final bool isNight;
@@ -20,9 +22,10 @@ class WardrobeDialog extends StatefulWidget {
 class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // 头部帽子装饰库
+  // 1. 头部帽子装饰库
   static const List<Map<String, String>> _headDecos = [
     {'id': 'none', 'name': '无帽子', 'icon': '🚫', 'desc': '保持自然清爽原生小脑瓜'},
+    {'id': 'band_sport', 'name': '元气运动发带', 'icon': '🏃', 'desc': '运动喵神装：红白运动双条纹，中央缀金色闪电徽章'},
     {'id': 'gold_crown_sparkle', 'name': '璀璨星辉皇冠', 'icon': '✨', 'desc': '羁绊4阶专属：五峰纯金大王冠，环绕耀目星尘', 'minStage': '4'},
     {'id': 'crown', 'name': '璀璨金冠', 'icon': '👑', 'desc': '华丽三峰黄金皇冠，镶嵌红绿蓝三色宝石'},
     {'id': 'wizard_hat', 'name': '魔法巫师帽', 'icon': '🧙‍♂️', 'desc': '深邃星空尖顶巫师帽，缀有灵动小金星'},
@@ -30,7 +33,15 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     {'id': 'sailor_cap', 'name': '蔚蓝水手帽', 'icon': '⚓', 'desc': '帅气挺括水手无檐帽，海军蓝条纹与金徽章'},
   ];
 
-  // 颈部配饰挂件库
+  // 2. 面部眼镜装饰库
+  static const List<Map<String, String>> _faceDecos = [
+    {'id': 'none', 'name': '无面饰', 'icon': '🚫', 'desc': '摘下面饰，露出清秀灵动大眼睛'},
+    {'id': 'glasses_black', 'name': '经典黑框平光镜', 'icon': '🤓', 'desc': '极客文艺黑框眼镜，散发学者睿智气质'},
+    {'id': 'sunglasses_cool', 'name': '炫酷飞行员墨镜', 'icon': '😎', 'desc': '金边黑超渐变反光镜片，气场全开'},
+    {'id': 'hacker_viser', 'name': '赛博战术全息目镜', 'icon': '🕶️', 'desc': '黑客喵专属神装：全息数据扫描线与绿光HUD准星'},
+  ];
+
+  // 3. 颈部配饰挂件库
   static const List<Map<String, String>> _neckDecos = [
     {'id': 'none', 'name': '无配饰', 'icon': '🚫', 'desc': '摘下颈部挂件，舒适自在'},
     {'id': 'royal_cape', 'name': '皇家丝绒披风', 'icon': '🦸‍♂️', 'desc': '羁绊3阶专属：高贵深紫红丝绒小斗篷，缀纯金流光包边', 'minStage': '3'},
@@ -40,10 +51,37 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     {'id': 'scarf', 'name': '暖冬红围巾', 'icon': '🧣', 'desc': '冬日暖绒绯红长围巾配纯白流苏'},
   ];
 
+  // 4. 背部装扮库
+  static const List<Map<String, String>> _backDecos = [
+    {'id': 'none', 'name': '无背饰', 'icon': '🚫', 'desc': '收起背饰，自在伸展小身躯'},
+    {'id': 'cape_cyber', 'name': '赛博霓虹披风', 'icon': '🦸‍♂️', 'desc': '暗曜战术织物，流淌天青与粉紫数字电路光纹'},
+    {'id': 'wings_angel', 'name': '圣洁天使羽翼', 'icon': '🪽', 'desc': '纯白发光羽翼，微风轻拂轻盈振翅'},
+    {'id': 'shell_turtle', 'name': '萌趣硬壳龟包', 'icon': '🐢', 'desc': '六边形天然翠绿小龟壳，呆萌可爱'},
+  ];
+
+  // 5. 前爪手持道具库
+  static const List<Map<String, String>> _handDecos = [
+    {'id': 'none', 'name': '空着小爪', 'icon': '🚫', 'desc': '空手放松，双爪撑地'},
+    {'id': 'keyboard_rgb', 'name': 'RGB 机械键盘', 'icon': '⌨️', 'desc': '黑客喵专属神器：动态彩虹走马灯背光机械键帽'},
+    {'id': 'teaser_laser', 'name': '全息激光逗猫棒', 'icon': '🪄', 'desc': '高科技逗猫棒，竿头射出全息粒子星辉'},
+    {'id': 'coffee_cyber', 'name': '极客黑客冷萃杯', 'icon': '☕', 'desc': '赛博天青隔热杯套，升腾数字化二进制冷气'},
+    {'id': 'gamepad_retro', 'name': '8-bit 复古掌机', 'icon': '🕹️', 'desc': '经典复古掌上游戏机，荧光绿像素液晶屏'},
+    {'id': 'dumbbell_power', 'name': '赛博能量哑铃', 'icon': '🏋️', 'desc': '运动喵专属力量训练器，两端环绕充能天青光环'},
+  ];
+
+  // 6. 赛博小窝场景库
+  static const List<Map<String, String>> _habitatDecos = [
+    {'id': 'default', 'name': '原初极简空间', 'icon': '⚪', 'desc': '纯粹清爽，专注观察波可的真实动态'},
+    {'id': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '💻', 'desc': '绿/青 Matrix 数字代码雨，透视全息地面网格'},
+    {'id': 'retro_arcade', 'name': '复古像素电玩厅', 'icon': '🕹️', 'desc': 'Synthwave 8-bit 星辉与粉紫扫描线脉冲'},
+    {'id': 'summer_beach', 'name': '夏日海滩暖阳', 'icon': '🏖️', 'desc': '温柔夕阳金晕，轻缓起伏的碧波浪花'},
+    {'id': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🍵', 'desc': '厚实蔺草蒲团软垫，微风摇曳飘舞的粉嫩樱花'},
+  ];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -64,7 +102,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     final borderColor = isNight ? const Color(0xFF4338CA) : const Color(0xFFE2E8F0);
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.64,
+      height: MediaQuery.of(context).size.height * 0.72,
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -93,7 +131,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
           ),
           const SizedBox(height: 12),
 
-          // 标题与关闭按钮
+          // 标题与快捷功能按键 (盲盒扭蛋、随机混搭、关闭)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -107,27 +145,115 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   ),
                 ],
               ),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
+              Row(
+                children: [
+                  // 🎲 随机混搭穿戴
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      final rand = math.Random();
+                      setState(() {
+                        final heads = _headDecos.map((e) => e['id']!).toList();
+                        final faces = _faceDecos.map((e) => e['id']!).toList();
+                        final necks = _neckDecos.map((e) => e['id']!).toList();
+                        final backs = _backDecos.map((e) => e['id']!).toList();
+                        final hands = _handDecos.map((e) => e['id']!).toList();
+                        model.setDecoration('head', heads[rand.nextInt(heads.length)]);
+                        model.setDecoration('face', faces[rand.nextInt(faces.length)]);
+                        model.setDecoration('neck', necks[rand.nextInt(necks.length)]);
+                        model.setDecoration('back', backs[rand.nextInt(backs.length)]);
+                        model.setDecoration('hand', hands[rand.nextInt(hands.length)]);
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('🎲 灵感迸发！已随机换上一套全新混搭神装~ ✨'),
+                          duration: Duration(seconds: 1),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🎲', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: 3),
+                          Text('混搭', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: subColor)),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: Icon(Icons.close, size: 18, color: subColor),
-                ),
+
+                  // 🔮 赛博能量盲盒入口
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => GachaDialog(
+                          model: widget.model,
+                          onUpdated: () => setState(() {}),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                            blurRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('🔮', style: TextStyle(fontSize: 12)),
+                          SizedBox(width: 3),
+                          Text('盲盒', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 关闭按钮
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.close, size: 18, color: subColor),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
           const SizedBox(height: 2),
           Text(
-            '即时变身与换装，轻触上方波可即可实时更新 🐾',
+            '5大插槽神装混搭与赛博小窝，轻触即可即时生效 🐾',
             style: TextStyle(fontSize: 11.5, color: subColor),
           ),
           const SizedBox(height: 12),
 
-          // 三分类 Tab 栏
+          // 7 大分类可滑动 Tab 栏
           Container(
             height: 38,
             decoration: BoxDecoration(
@@ -136,6 +262,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             ),
             child: TabBar(
               controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
               indicatorSize: TabBarIndicatorSize.tab,
               dividerColor: Colors.transparent,
               indicator: BoxDecoration(
@@ -151,12 +279,16 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               ),
               labelColor: Colors.white,
               unselectedLabelColor: subColor,
-              labelStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
-              unselectedLabelStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.normal),
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
               tabs: const [
-                Tab(text: '🐱 猫咪品种'),
-                Tab(text: '🎩 头部帽子'),
-                Tab(text: '🎀 颈部挂件'),
+                Tab(text: '🐱 品种'),
+                Tab(text: '🎩 头部'),
+                Tab(text: '👓 面部'),
+                Tab(text: '🎀 颈部'),
+                Tab(text: '🦸‍♂️ 背部'),
+                Tab(text: '🪄 手持'),
+                Tab(text: '🏠 小窝'),
               ],
             ),
           ),
@@ -168,8 +300,12 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               controller: _tabController,
               children: [
                 _buildBreedTab(model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildHeadDecoTab(model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildNeckDecoTab(model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildDecoTab('head', _headDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildDecoTab('face', _faceDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildDecoTab('neck', _neckDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildDecoTab('back', _backDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildDecoTab('hand', _handDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                _buildHabitatTab(model, isNight, cardBg, borderColor, titleColor, subColor),
               ],
             ),
           ),
@@ -442,8 +578,10 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     );
   }
 
-  /// 2. 头部帽子 Tab
-  Widget _buildHeadDecoTab(
+  /// 通用部位装扮选择 Tab (头部、面部、颈部、背部、手持)
+  Widget _buildDecoTab(
+    String slot,
+    List<Map<String, String>> decos,
     PetModel model,
     bool isNight,
     Color cardBg,
@@ -451,15 +589,15 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     Color titleColor,
     Color subColor,
   ) {
-    final currentHead = model.decorations['head'] ?? 'none';
+    final currentVal = model.decorations[slot] ?? 'none';
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      itemCount: _headDecos.length,
+      itemCount: decos.length,
       itemBuilder: (context, index) {
-        final item = _headDecos[index];
+        final item = decos[index];
         final id = item['id']!;
-        final isSelected = (currentHead == id);
+        final isSelected = (currentVal == id);
         final minStageStr = item['minStage'];
         final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
         final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
@@ -481,7 +619,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             }
             HapticFeedback.lightImpact();
             setState(() {
-              model.setDecoration('head', id);
+              model.setDecoration(slot, id);
             });
           },
           child: AnimatedContainer(
@@ -569,8 +707,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     );
   }
 
-  /// 3. 颈部配饰 Tab
-  Widget _buildNeckDecoTab(
+  /// 7. 赛博小窝场景 Tab
+  Widget _buildHabitatTab(
     PetModel model,
     bool isNight,
     Color cardBg,
@@ -578,37 +716,21 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     Color titleColor,
     Color subColor,
   ) {
-    final currentNeck = model.decorations['neck'] ?? 'none';
+    final currentHabitat = model.habitat;
 
     return ListView.builder(
       physics: const BouncingScrollPhysics(),
-      itemCount: _neckDecos.length,
+      itemCount: _habitatDecos.length,
       itemBuilder: (context, index) {
-        final item = _neckDecos[index];
+        final item = _habitatDecos[index];
         final id = item['id']!;
-        final isSelected = (currentNeck == id);
-        final minStageStr = item['minStage'];
-        final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
-        final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
-        final isLocked = minStage > currentStage;
+        final isSelected = (currentHabitat == id);
 
         return GestureDetector(
           onTap: () {
-            if (isLocked) {
-              HapticFeedback.heavyImpact();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖'),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: const Color(0xFF8B5CF6),
-                ),
-              );
-              return;
-            }
             HapticFeedback.lightImpact();
             setState(() {
-              model.setDecoration('neck', id);
+              model.setHabitat(id);
             });
           },
           child: AnimatedContainer(
@@ -665,26 +787,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ],
                   ),
                 ),
-                if (isLocked)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFF59E0B)),
-                        const SizedBox(width: 2),
-                        Text(
-                          '阶$minStage解锁',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
-                        ),
-                      ],
-                    ),
-                  )
-                else if (isSelected)
+                if (isSelected)
                   const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
                 else
                   Icon(Icons.radio_button_unchecked, color: subColor.withOpacity(0.5), size: 18),

@@ -141,21 +141,35 @@ class FeedingDialog extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
-          // 美食佳肴列表 (可连续投喂，上方猫咪实时品尝)
+          // 美食佳肴列表 (可连续投喂，上方猫咪实时品尝并塑造独特性格)
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 260),
+            constraints: const BoxConstraints(maxHeight: 310),
             child: GridView.builder(
               shrinkWrap: true,
               physics: const BouncingScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 2.1,
+                childAspectRatio: 2.05,
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
               ),
               itemCount: PetModel.foodMenu.length,
               itemBuilder: (context, index) {
                 final food = PetModel.foodMenu[index];
+                final pType = food['personality'] as String?;
+                String pBadge = '';
+                Color pColor = const Color(0xFFD97706);
+                if (pType == 'HACKER') {
+                  pBadge = ' · 极客+1';
+                  pColor = const Color(0xFF0EA5E9);
+                } else if (pType == 'ATHLETE') {
+                  pBadge = ' · 运动+1';
+                  pColor = const Color(0xFFEF4444);
+                } else if (pType == 'LAZY') {
+                  pBadge = ' · 佛系+1';
+                  pColor = const Color(0xFF10B981);
+                }
+
                 return GestureDetector(
                   onTap: () {
                     HapticFeedback.lightImpact();
@@ -201,8 +215,8 @@ class FeedingDialog extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '+${(food['hunger'] as double).toInt()}饱腹 +${(food['exp'] as double).toInt()}经验',
-                                style: const TextStyle(fontSize: 9.5, color: Color(0xFFD97706), fontWeight: FontWeight.w500),
+                                '+${(food['hunger'] as double).toInt()}饱腹 +${(food['exp'] as double).toInt()}经验$pBadge',
+                                style: TextStyle(fontSize: 9.2, color: pColor, fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),

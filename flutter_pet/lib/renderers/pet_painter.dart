@@ -20,6 +20,8 @@ class PetPainter extends CustomPainter {
   final bool isBlep;         // 呆萌吐小舌头 (露粉嫩小舌尖)
   final String? winkEye;     // 'LEFT' | 'RIGHT' 俏皮单眼眨眼放电
   final bool isSlowBlink;    // 慢眨眼“猫咪之吻” (表达极致信任与爱意)
+  final double userScale;    // 双指捏合无级缩放 (0.75x ~ 1.45x)
+  final double tiltX;        // 手机加速度计/陀螺仪倾角 (-1.0 ~ 1.0)
 
   PetPainter({
     required this.model,
@@ -37,6 +39,8 @@ class PetPainter extends CustomPainter {
     this.isBlep = false,
     this.winkEye,
     this.isSlowBlink = false,
+    this.userScale = 1.0,
+    this.tiltX = 0.0,
   });
 
   /// 3D 光影自适应色彩提亮：模拟朝光面高光与次表面散射
@@ -56,6 +60,9 @@ class PetPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final skin = model.currentSkin;
 
+    // 0. 绘制家园小窝场景 (Habitat: 代码雨 / 像素电玩 / 夏日海滩 / 榻榻米樱花)
+    _drawHabitatEffects(canvas, size, center);
+
     // 1. 贴边探头模式特殊绘制
     if (state == 'PEEK_LEFT' || state == 'PEEK_RIGHT') {
       _drawEdgePeek(canvas, size, center, skin);
@@ -68,6 +75,13 @@ class PetPainter extends CustomPainter {
       _drawCardboardBoxMode(canvas, size, center, skin);
       canvas.restore();
       return;
+    }
+
+    // 双指捏合无级缩放 (以宠物中心为锚点)
+    if (userScale != 1.0) {
+      canvas.translate(center.dx, center.dy);
+      canvas.scale(userScale, userScale);
+      canvas.translate(-center.dx, -center.dy);
     }
 
     // 3. 水平镜像翻转 (朝向控制)
@@ -197,6 +211,14 @@ class PetPainter extends CustomPainter {
       bodySwayX = math.sin(animTime * 7.0) * 3.5;
     }
 
+    // 手机重力/陀螺仪倾角动态融入待机与巡视重心
+    if (state == 'IDLE' || state == 'WALK' || state == 'LOOK_AROUND') {
+      bodySwayX += (tiltX * 8.0);
+    }
+
+    // 禅意蒲团软垫 (佛系大懒喵或榻榻米房专属地毯软垫)
+    _drawZenCushion(canvas, center);
+
     // 独立地面阴影：绘制在脚底地板上，随跳跃高度柔和缩放与淡化，绝不随纸片翻折在半空中飘
     _drawGroundedShadow(canvas, center, (state == 'HAPPY_SPIN') ? breathY : 0.0);
 
@@ -211,8 +233,8 @@ class PetPainter extends CustomPainter {
       _drawTail(canvas, skin);
     }
 
-    // 绘制背部披风后摆 (挂在后背向两侧舒展，正面时在身体后层，绝不遮挡胸腹与猫爪)
-    _drawBackCape(canvas, isBackView: isSpinBackView);
+    // 绘制背部披风后摆与背部配饰 (挂在后背向两侧舒展，正面时在身体后层，绝不遮挡胸腹与猫爪)
+    _drawBackDecorations(canvas, isBackView: isSpinBackView);
 
     // 绘制身体与背部花纹 (背身时呈现圆滚滚后背与背脊毛色)
     _drawBody(canvas, skin, isBackView: isSpinBackView);
@@ -222,6 +244,11 @@ class PetPainter extends CustomPainter {
 
     // 绘制前爪 (背身时两只后爪在身体后侧支撑)
     _drawPaws(canvas, skin, isBackView: isSpinBackView);
+
+    // 绘制前爪手持道具 (RGB机械键盘、全息逗猫棒、极客冷萃、像素掌机、能量哑铃)
+    if (!isSpinBackView) {
+      _drawHandDecorations(canvas);
+    }
 
     // 背身时尾巴在身体前层欢快甩动
     if (isSpinBackView) {
@@ -868,6 +895,9 @@ class PetPainter extends CustomPainter {
     // 胡须
     _drawWhiskers(canvas, skin, faceCenter);
 
+    // 面部配饰 (黑框眼镜、酷炫墨镜、极客全息战术目镜)
+    _drawFaceDecorations(canvas, faceCenter);
+
     // 头部帽子配饰 (随头部呼吸与歪头动态联动)
     _drawHeadDecorations(canvas, headCenter);
 
@@ -1312,12 +1342,12 @@ class PetPainter extends CustomPainter {
       gazeX = dx;
       gazeY = dy;
     } else if (state == 'IDLE') {
-      // 待机眼神流转：四处好奇瞄看，宛如真实萌宠在看世界
-      gazeX = math.sin(animTime * 0.85) * 2.8;
+      // 待机眼神流转：四处好奇瞄看，手机倾斜时随重力感应偏转
+      gazeX = (math.sin(animTime * 0.85) * 2.8 + tiltX * 2.5).clamp(-4.5, 4.5);
       gazeY = (math.cos(animTime * 0.45) * 1.4).clamp(-1.2, 1.8);
     } else if (state == 'LOOK_AROUND') {
       // 四处巡视眼神移动
-      gazeX = math.sin(animTime * 2.5) * 4.5;
+      gazeX = (math.sin(animTime * 2.5) * 4.5 + tiltX * 2.0).clamp(-5.0, 5.0);
     } else if (state == 'CHASE_BUTTERFLY') {
       // 抬头盯蝴蝶
       gazeX = math.sin(animTime * 3.2) * 3.0;
@@ -2241,54 +2271,192 @@ class PetPainter extends CustomPainter {
     }
   }
 
-  /// 绘制背部披风后摆 (挂在后背，正面视角下垂于身体后侧向两翼自然舒展，绝不遮挡肚子和爪爪)
-  void _drawBackCape(Canvas canvas, {bool isBackView = false}) {
+  /// 绘制背部配饰 (挂在后背向两侧舒展，正面时在身体后层，绝不遮挡胸腹与猫爪)
+  void _drawBackDecorations(Canvas canvas, {bool isBackView = false}) {
     final neckDeco = model.decorations['neck'];
-    if (neckDeco != 'royal_cape') return;
-    if (isBackView) return; // 背面视角在 _drawDecorations 中绘制覆盖在背上的披风主体
+    final backDeco = model.decorations['back'];
 
-    final capePaint = Paint()
-      ..color = const Color(0xFF581C87)
-      ..style = PaintingStyle.fill;
-    final goldTrim = Paint()
-      ..color = const Color(0xFFF59E0B)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4;
+    // 1. 皇家丝绒披风后摆
+    if (neckDeco == 'royal_cape' && !isBackView) {
+      final capePaint = Paint()
+        ..color = const Color(0xFF581C87)
+        ..style = PaintingStyle.fill;
+      final goldTrim = Paint()
+        ..color = const Color(0xFFF59E0B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4;
 
-    // 自然微风拂动飘逸波动
-    final wave = math.sin(animTime * 3.2) * 3.5;
-    final wave2 = math.cos(animTime * 3.2) * 2.0;
+      final wave = math.sin(animTime * 3.2) * 3.5;
+      final wave2 = math.cos(animTime * 3.2) * 2.0;
 
-    // 披风后摆：从后肩向后背两侧舒展，宽于猫咪身体轮廓
-    final capePath = Path()
-      ..moveTo(-22, 22)
-      ..cubicTo(-46 + wave, 44, -44 + wave, 62, -34 + wave, 72)
-      ..quadraticBezierTo(0, 78 + wave2, 34 + wave, 72)
-      ..cubicTo(44 + wave, 62, 46 + wave, 44, 22, 22)
-      ..close();
+      final capePath = Path()
+        ..moveTo(-22, 22)
+        ..cubicTo(-46 + wave, 44, -44 + wave, 62, -34 + wave, 72)
+        ..quadraticBezierTo(0, 78 + wave2, 34 + wave, 72)
+        ..cubicTo(44 + wave, 62, 46 + wave, 44, 22, 22)
+        ..close();
 
-    canvas.drawPath(capePath, capePaint);
-    canvas.drawPath(capePath, goldTrim);
+      canvas.drawPath(capePath, capePaint);
+      canvas.drawPath(capePath, goldTrim);
 
-    // 披风内衬深紫丝绒阴影细节
-    final innerFold = Paint()
-      ..color = const Color(0xFF3B0764).withOpacity(0.4)
-      ..style = PaintingStyle.fill;
-    final innerPath = Path()
-      ..moveTo(-18, 26)
-      ..quadraticBezierTo(-34 + wave, 52, -26 + wave, 70)
-      ..quadraticBezierTo(0, 74 + wave2, 26 + wave, 70)
-      ..quadraticBezierTo(34 + wave, 52, 18, 26)
-      ..close();
-    canvas.drawPath(innerPath, innerFold);
+      final innerFold = Paint()
+        ..color = const Color(0xFF3B0764).withOpacity(0.4)
+        ..style = PaintingStyle.fill;
+      final innerPath = Path()
+        ..moveTo(-18, 26)
+        ..quadraticBezierTo(-34 + wave, 52, -26 + wave, 70)
+        ..quadraticBezierTo(0, 74 + wave2, 26 + wave, 70)
+        ..quadraticBezierTo(34 + wave, 52, 18, 26)
+        ..close();
+      canvas.drawPath(innerPath, innerFold);
+    }
+
+    if (backDeco == null || backDeco == 'none') return;
+
+    if (backDeco == 'cape_cyber') {
+      // 🦸‍♂️ 赛博霓虹披风 (Cyberpunk Neon Cape)
+      final wave = math.sin(animTime * 3.8) * 4.0;
+      final wave2 = math.cos(animTime * 3.8) * 2.5;
+
+      final cyberPaint = Paint()
+        ..color = const Color(0xFF0F172A)
+        ..style = PaintingStyle.fill;
+      final neonCyanTrim = Paint()
+        ..color = const Color(0xFF00F0FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.2;
+
+      final cyberPath = Path()
+        ..moveTo(-22, 20)
+        ..cubicTo(-48 + wave, 44, -46 + wave, 64, -36 + wave, 74)
+        ..quadraticBezierTo(0, 80 + wave2, 36 + wave, 74)
+        ..cubicTo(46 + wave, 64, 48 + wave, 44, 22, 20)
+        ..close();
+
+      canvas.drawPath(cyberPath, cyberPaint);
+      canvas.drawPath(cyberPath, neonCyanTrim);
+
+      // 电路线路光纹与粉紫光斑
+      final circuitPaint = Paint()
+        ..color = const Color(0xFFEC4899)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4;
+      canvas.drawLine(Offset(-16 + wave * 0.5, 34), Offset(-24 + wave, 60), circuitPaint);
+      canvas.drawLine(Offset(16 + wave * 0.5, 34), Offset(24 + wave, 60), circuitPaint);
+      canvas.drawCircle(Offset(-24 + wave, 60), 2.2, Paint()..color = const Color(0xFF00F0FF));
+      canvas.drawCircle(Offset(24 + wave, 60), 2.2, Paint()..color = const Color(0xFF00F0FF));
+
+    } else if (backDeco == 'wings_angel') {
+      // 🪽 天使羽翼 (Radiant Angel Wings)
+      final flap = math.sin(animTime * 4.0) * 0.12;
+      final wingPaint = Paint()
+        ..color = Colors.white.withOpacity(0.92)
+        ..style = PaintingStyle.fill;
+      final wingBorder = Paint()
+        ..color = const Color(0xFFFDE68A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8;
+
+      // 左翼
+      canvas.save();
+      canvas.translate(-20, 32);
+      canvas.rotate(-0.35 + flap);
+      final leftWing = Path()
+        ..moveTo(0, 0)
+        ..cubicTo(-26, -18, -48, -12, -56, 12)
+        ..cubicTo(-46, 26, -24, 22, 0, 8)
+        ..close();
+      canvas.drawPath(leftWing, wingPaint);
+      canvas.drawPath(leftWing, wingBorder);
+      canvas.restore();
+
+      // 右翼
+      canvas.save();
+      canvas.translate(20, 32);
+      canvas.rotate(0.35 - flap);
+      final rightWing = Path()
+        ..moveTo(0, 0)
+        ..cubicTo(26, -18, 48, -12, 56, 12)
+        ..cubicTo(46, 26, 24, 22, 0, 8)
+        ..close();
+      canvas.drawPath(rightWing, wingPaint);
+      canvas.drawPath(rightWing, wingBorder);
+      canvas.restore();
+
+    } else if (backDeco == 'shell_turtle') {
+      // 🐢 萌趣龟壳 (Cute Turtle Shell)
+      final shellCenter = const Offset(0, 42);
+      final shellRect = Rect.fromCenter(center: shellCenter, width: 62, height: 46);
+      canvas.drawOval(shellRect, Paint()..color = const Color(0xFF15803D));
+      canvas.drawOval(
+        shellRect,
+        Paint()
+          ..color = const Color(0xFF166534)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0,
+      );
+
+      // 龟壳六边形斑块
+      final platePaint = Paint()
+        ..color = const Color(0xFF4ADE80)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(shellCenter, 9.0, platePaint);
+      for (final ox in [-16.0, 16.0]) {
+        canvas.drawCircle(Offset(shellCenter.dx + ox, shellCenter.dy), 7.0, platePaint);
+      }
+    }
   }
 
   /// 绘制头部帽子配饰
   void _drawHeadDecorations(Canvas canvas, Offset headCenter) {
-    final headDeco = model.decorations['head'];
+    var headDeco = model.decorations['head'];
+    // 觉醒特性：元气运动喵未佩戴头饰时，自动觉醒佩戴运动发带
+    if ((headDeco == null || headDeco == 'none') && model.personality == 'ATHLETE') {
+      headDeco = 'band_sport';
+    }
     if (headDeco == null || headDeco == 'none') return;
 
-    if (headDeco == 'gold_crown_sparkle') {
+    if (headDeco == 'band_sport') {
+      // 🏃 元气运动发带 (Athletic Headband)
+      final bandCenter = Offset(headCenter.dx, headCenter.dy - 26);
+      final bandRect = Rect.fromCenter(center: bandCenter, width: 64, height: 13);
+
+      // 发带主体活力橙红
+      final bandPaint = Paint()..color = const Color(0xFFEF4444);
+      canvas.drawRRect(RRect.fromRectAndRadius(bandRect, const Radius.circular(5)), bandPaint);
+
+      // 上下双白运动纹
+      final stripePaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6;
+      canvas.drawLine(Offset(bandCenter.dx - 28, bandCenter.dy - 3), Offset(bandCenter.dx + 28, bandCenter.dy - 3), stripePaint);
+      canvas.drawLine(Offset(bandCenter.dx - 28, bandCenter.dy + 3), Offset(bandCenter.dx + 28, bandCenter.dy + 3), stripePaint);
+
+      // 中央金色极速闪电 ⚡
+      final boltPaint = Paint()..color = const Color(0xFFFBBF24);
+      final boltPath = Path()
+        ..moveTo(bandCenter.dx + 1, bandCenter.dy - 5)
+        ..lineTo(bandCenter.dx - 4, bandCenter.dy)
+        ..lineTo(bandCenter.dx - 1, bandCenter.dy)
+        ..lineTo(bandCenter.dx - 2, bandCenter.dy + 5)
+        ..lineTo(bandCenter.dx + 4, bandCenter.dy - 1)
+        ..lineTo(bandCenter.dx + 1, bandCenter.dy - 1)
+        ..close();
+      canvas.drawPath(boltPath, boltPaint);
+
+      // 左侧发带系带随风飘扬
+      final flutter = math.sin(animTime * 6.0) * 2.5;
+      final knotPaint = Paint()..color = const Color(0xFFDC2626);
+      canvas.drawCircle(Offset(bandCenter.dx - 29, bandCenter.dy), 3.2, knotPaint);
+      final ribbonTail = Path()
+        ..moveTo(bandCenter.dx - 29, bandCenter.dy)
+        ..quadraticBezierTo(bandCenter.dx - 36, bandCenter.dy + 4 + flutter, bandCenter.dx - 40, bandCenter.dy + 12 + flutter)
+        ..lineTo(bandCenter.dx - 36, bandCenter.dy + 12 + flutter)
+        ..close();
+      canvas.drawPath(ribbonTail, knotPaint);
+
+    } else if (headDeco == 'gold_crown_sparkle') {
       // 👑 专属·璀璨星辉皇冠 (羁绊4阶专属装扮：五峰纯金大王冠 + 红蓝星钻 + 环绕微光星尘)
       final crownCenter = Offset(headCenter.dx, headCenter.dy - 48);
       final goldPaint = Paint()..color = const Color(0xFFFBBF24);
@@ -2365,7 +2533,7 @@ class PetPainter extends CustomPainter {
       // 帽檐
       canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 56, height: 14), hatPaint);
 
-      // 尖帽身 (向右微曲，生动灵秀)
+      // 尖帽身
       final cone = Path()
         ..moveTo(baseCenter.dx - 18, baseCenter.dy - 2)
         ..cubicTo(
@@ -2381,14 +2549,11 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(cone, hatPaint);
 
-      // 金色帽围缎带
       final ribbonPaint = Paint()
         ..color = const Color(0xFFF59E0B)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.5;
       canvas.drawLine(Offset(baseCenter.dx - 17, baseCenter.dy - 3), Offset(baseCenter.dx + 17, baseCenter.dy - 3), ribbonPaint);
-
-      // 尖端小星徽
       canvas.drawCircle(Offset(baseCenter.dx + 22, baseCenter.dy - 58), 3.2, hatGold);
     } else if (headDeco == 'straw_hat') {
       // 👒 田园草帽
@@ -2399,11 +2564,9 @@ class PetPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5;
 
-      // 宽帽檐
       canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 62, height: 16), strawColor);
       canvas.drawOval(Rect.fromCenter(center: baseCenter, width: 62, height: 16), strawDark);
 
-      // 帽顶半球
       final dome = Path()
         ..moveTo(baseCenter.dx - 18, baseCenter.dy)
         ..cubicTo(
@@ -2415,7 +2578,6 @@ class PetPainter extends CustomPainter {
       canvas.drawPath(dome, strawColor);
       canvas.drawPath(dome, strawDark);
 
-      // 红色系带
       final ribbon = Paint()..color = const Color(0xFFEF4444);
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -2424,14 +2586,12 @@ class PetPainter extends CustomPainter {
         ),
         ribbon,
       );
-      // 飘动缎带小尾巴
       canvas.drawLine(Offset(baseCenter.dx + 18, baseCenter.dy), Offset(baseCenter.dx + 26, baseCenter.dy + 12), ribbon..style = PaintingStyle.stroke..strokeWidth = 2.5);
     } else if (headDeco == 'sailor_cap') {
       // ⚓ 蔚蓝水手帽
       final baseCenter = Offset(headCenter.dx, headCenter.dy - 44);
       final capPaint = Paint()..color = const Color(0xFFF8FAFC);
 
-      // 帽子主体 (向上略微外扩的水手无檐帽)
       final bodyPath = Path()
         ..moveTo(baseCenter.dx - 22, baseCenter.dy)
         ..lineTo(baseCenter.dx - 26, baseCenter.dy - 20)
@@ -2440,16 +2600,357 @@ class PetPainter extends CustomPainter {
         ..close();
       canvas.drawPath(bodyPath, capPaint);
 
-      // 蓝色包边条纹
       final navyBand = Paint()
         ..color = const Color(0xFF1E3A8A)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 4.0;
       canvas.drawLine(Offset(baseCenter.dx - 22, baseCenter.dy), Offset(baseCenter.dx + 22, baseCenter.dy), navyBand);
 
-      // 帽子中心金黄小徽章
       final goldBadge = Paint()..color = const Color(0xFFEAB308);
       canvas.drawCircle(Offset(baseCenter.dx, baseCenter.dy - 12), 3.0, goldBadge);
+    }
+  }
+
+  /// 绘制面部配饰 (黑框眼镜、酷炫墨镜、战术全息目镜)
+  void _drawFaceDecorations(Canvas canvas, Offset faceCenter) {
+    var faceDeco = model.decorations['face'];
+    // 觉醒特性：极客黑客喵未佩戴面饰时，自动觉醒战术全息目镜
+    if ((faceDeco == null || faceDeco == 'none') && model.personality == 'HACKER') {
+      faceDeco = 'hacker_viser';
+    }
+    if (faceDeco == null || faceDeco == 'none') return;
+
+    if (faceDeco == 'glasses_black') {
+      // 🤓 经典黑框智能平光镜
+      final framePaint = Paint()
+        ..color = const Color(0xFF0F172A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4;
+      final bridgePaint = Paint()
+        ..color = const Color(0xFF0F172A)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      final leftFrame = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(faceCenter.dx - 22, faceCenter.dy - 2), width: 24, height: 18),
+        const Radius.circular(5),
+      );
+      final rightFrame = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(faceCenter.dx + 22, faceCenter.dy - 2), width: 24, height: 18),
+        const Radius.circular(5),
+      );
+      canvas.drawRRect(leftFrame, framePaint);
+      canvas.drawRRect(rightFrame, framePaint);
+
+      canvas.drawLine(Offset(faceCenter.dx - 10, faceCenter.dy - 2), Offset(faceCenter.dx + 10, faceCenter.dy - 2), bridgePaint);
+      canvas.drawLine(Offset(faceCenter.dx - 34, faceCenter.dy - 2), Offset(faceCenter.dx - 42, faceCenter.dy - 4), bridgePaint);
+      canvas.drawLine(Offset(faceCenter.dx + 34, faceCenter.dy - 2), Offset(faceCenter.dx + 42, faceCenter.dy - 4), bridgePaint);
+
+      final glintPaint = Paint()
+        ..color = Colors.white.withOpacity(0.4)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+      canvas.drawLine(Offset(faceCenter.dx - 28, faceCenter.dy - 8), Offset(faceCenter.dx - 24, faceCenter.dy - 4), glintPaint);
+      canvas.drawLine(Offset(faceCenter.dx + 16, faceCenter.dy - 8), Offset(faceCenter.dx + 20, faceCenter.dy - 4), glintPaint);
+
+    } else if (faceDeco == 'sunglasses_cool') {
+      // 😎 炫酷飞行员墨镜
+      final shadePaint = Paint()
+        ..color = const Color(0xEE0F172A)
+        ..style = PaintingStyle.fill;
+      final goldRim = Paint()
+        ..color = const Color(0xFFFBBF24)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+
+      final leftLens = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(faceCenter.dx - 22, faceCenter.dy - 2), width: 26, height: 20),
+        const Radius.circular(7),
+      );
+      final rightLens = RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(faceCenter.dx + 22, faceCenter.dy - 2), width: 26, height: 20),
+        const Radius.circular(7),
+      );
+
+      canvas.drawRRect(leftLens, shadePaint);
+      canvas.drawRRect(leftLens, goldRim);
+      canvas.drawRRect(rightLens, shadePaint);
+      canvas.drawRRect(rightLens, goldRim);
+
+      canvas.drawLine(Offset(faceCenter.dx - 18, faceCenter.dy - 10), Offset(faceCenter.dx + 18, faceCenter.dy - 10), goldRim);
+      canvas.drawLine(Offset(faceCenter.dx - 9, faceCenter.dy - 2), Offset(faceCenter.dx + 9, faceCenter.dy - 2), goldRim);
+
+      final sheenPaint = Paint()
+        ..color = const Color(0x6638BDF8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawLine(Offset(faceCenter.dx - 30, faceCenter.dy + 4), Offset(faceCenter.dx - 16, faceCenter.dy - 8), sheenPaint);
+      canvas.drawLine(Offset(faceCenter.dx + 14, faceCenter.dy + 4), Offset(faceCenter.dx + 28, faceCenter.dy - 8), sheenPaint);
+
+    } else if (faceDeco == 'hacker_viser') {
+      // 🕶️ 赛博黑客全息战术目镜 (HUD Visor)
+      final visorRect = Rect.fromCenter(center: Offset(faceCenter.dx, faceCenter.dy - 2), width: 78, height: 22);
+      final visorRRect = RRect.fromRectAndRadius(visorRect, const Radius.circular(6));
+
+      final visorBg = Paint()
+        ..shader = const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xDD0EA5E9), Color(0xAA0284C7), Color(0xDD06B6D4)],
+        ).createShader(visorRect);
+      canvas.drawRRect(visorRRect, visorBg);
+
+      final visorBorder = Paint()
+        ..color = const Color(0xFF00F0FF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawRRect(visorRRect, visorBorder);
+
+      final scanY = visorRect.top + ((animTime * 28.0) % visorRect.height);
+      final scanPaint = Paint()
+        ..color = Colors.white.withOpacity(0.7)
+        ..strokeWidth = 1.2;
+      canvas.drawLine(Offset(visorRect.left + 4, scanY), Offset(visorRect.right - 4, scanY), scanPaint);
+
+      final hudPaint = Paint()
+        ..color = const Color(0xFF22C55E)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4;
+      final targetCenter = Offset(faceCenter.dx + 22, faceCenter.dy - 2);
+      canvas.drawCircle(targetCenter, 4.0, hudPaint);
+      canvas.drawLine(Offset(targetCenter.dx - 6, targetCenter.dy), Offset(targetCenter.dx + 6, targetCenter.dy), hudPaint);
+      canvas.drawCircle(Offset(visorRect.left + 5, faceCenter.dy - 2), 2.0, Paint()..color = const Color(0xFF22C55E));
+      canvas.drawRect(Rect.fromLTWH(visorRect.right - 4, visorRect.top + 5, 5, 12), Paint()..color = const Color(0xFF0F172A));
+    }
+  }
+
+  /// 绘制前爪手持道具
+  void _drawHandDecorations(Canvas canvas) {
+    final handDeco = model.decorations['hand'];
+    if (handDeco == null || handDeco == 'none') return;
+
+    if (handDeco == 'keyboard_rgb') {
+      // ⌨️ 极客 RGB 机械键盘 (捧在胸前，轻微敲击微颤)
+      final typeBounce = math.sin(animTime * 14.0) * 1.0;
+      final kbCenter = Offset(0, 52 + typeBounce);
+      final kbRect = Rect.fromCenter(center: kbCenter, width: 56, height: 22);
+
+      final casePaint = Paint()..color = const Color(0xFF1E293B);
+      final caseBorder = Paint()
+        ..color = const Color(0xFF475569)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5;
+      canvas.drawRRect(RRect.fromRectAndRadius(kbRect, const Radius.circular(4)), casePaint);
+      canvas.drawRRect(RRect.fromRectAndRadius(kbRect, const Radius.circular(4)), caseBorder);
+
+      final colors = [
+        const Color(0xFFEF4444),
+        const Color(0xFFF59E0B),
+        const Color(0xFF10B981),
+        const Color(0xFF06B6D4),
+        const Color(0xFF3B82F6),
+        const Color(0xFF8B5CF6),
+      ];
+      const colW = 7.0;
+      for (int row = 0; row < 2; row++) {
+        for (int col = 0; col < 6; col++) {
+          final colorIdx = (col + row + (animTime * 4.0).toInt()) % colors.length;
+          final keyPaint = Paint()..color = colors[colorIdx];
+          final kx = kbCenter.dx - 20 + col * colW;
+          final ky = kbCenter.dy - 6 + row * 8.0;
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(Rect.fromLTWH(kx, ky, 5.5, 6), const Radius.circular(1.5)),
+            keyPaint,
+          );
+        }
+      }
+    } else if (handDeco == 'teaser_laser') {
+      // 🪄 全息逗猫棒
+      final stickAngle = -0.65 + math.sin(animTime * 4.0) * 0.15;
+      const stickStart = Offset(18, 48);
+      final stickEnd = Offset(
+        stickStart.dx + math.cos(stickAngle) * 44,
+        stickStart.dy + math.sin(stickAngle) * 44,
+      );
+
+      final stickPaint = Paint()
+        ..color = const Color(0xFF38BDF8)
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(stickStart, stickEnd, stickPaint);
+
+      final sparkPaint = Paint()..color = const Color(0xFFEC4899);
+      canvas.drawCircle(stickEnd, 5.0, sparkPaint);
+      canvas.drawCircle(stickEnd, 2.5, Paint()..color = Colors.white);
+      for (int i = 0; i < 3; i++) {
+        final a = animTime * 5.0 + i * 2.1;
+        canvas.drawCircle(
+          Offset(stickEnd.dx + math.cos(a) * 8.0, stickEnd.dy + math.sin(a) * 8.0),
+          1.8,
+          Paint()..color = const Color(0xFFF472B6).withOpacity(0.8),
+        );
+      }
+    } else if (handDeco == 'coffee_cyber') {
+      // ☕ 极客黑客冷萃杯
+      const mugCenter = Offset(-18, 50);
+      final mugRect = Rect.fromCenter(center: mugCenter, width: 18, height: 24);
+      canvas.drawRRect(RRect.fromRectAndRadius(mugRect, const Radius.circular(3)), Paint()..color = const Color(0xFF0F172A));
+      canvas.drawRect(Rect.fromLTWH(mugRect.left, mugCenter.dy - 3, mugRect.width, 7), Paint()..color = const Color(0xFF0EA5E9));
+      canvas.drawLine(Offset(mugRect.left, mugRect.top), Offset(mugRect.right, mugRect.top), Paint()..color = const Color(0xFF64748B)..strokeWidth = 2);
+      final steamY = math.sin(animTime * 3.5) * 3.0;
+      canvas.drawCircle(Offset(mugCenter.dx - 2, mugRect.top - 6 + steamY), 1.8, Paint()..color = const Color(0x8838BDF8));
+      canvas.drawCircle(Offset(mugCenter.dx + 3, mugRect.top - 11 + steamY), 2.2, Paint()..color = const Color(0x6638BDF8));
+    } else if (handDeco == 'gamepad_retro') {
+      // 🕹️ 8-bit 复古像素掌机
+      final padCenter = const Offset(0, 52);
+      final padRect = Rect.fromCenter(center: padCenter, width: 38, height: 26);
+      canvas.drawRRect(RRect.fromRectAndRadius(padRect, const Radius.circular(5)), Paint()..color = const Color(0xFFE2E8F0));
+      canvas.drawRRect(RRect.fromRectAndRadius(padRect, const Radius.circular(5)), Paint()..color = const Color(0xFF94A3B8)..style = PaintingStyle.stroke..strokeWidth = 1.5);
+      final screenRect = Rect.fromCenter(center: Offset(padCenter.dx, padCenter.dy - 3), width: 22, height: 13);
+      canvas.drawRect(screenRect, Paint()..color = const Color(0xFF86EFAC));
+      canvas.drawRect(Rect.fromLTWH(screenRect.left + 5, screenRect.top + 4, 3, 3), Paint()..color = const Color(0xFF15803D));
+      canvas.drawCircle(Offset(padCenter.dx - 10, padCenter.dy + 6), 2.5, Paint()..color = const Color(0xFF334155));
+      canvas.drawCircle(Offset(padCenter.dx + 9, padCenter.dy + 6), 2.2, Paint()..color = const Color(0xFFEF4444));
+    } else if (handDeco == 'dumbbell_power') {
+      // 🏋️ 能量哑铃
+      final dbCenter = const Offset(0, 54);
+      canvas.drawLine(Offset(dbCenter.dx - 18, dbCenter.dy), Offset(dbCenter.dx + 18, dbCenter.dy), Paint()..color = const Color(0xFF94A3B8)..strokeWidth = 4.0..strokeCap = StrokeCap.round);
+      final ringPaint = Paint()..color = const Color(0xFF0EA5E9);
+      final glowPaint = Paint()..color = const Color(0xFF38BDF8).withOpacity(0.5);
+      for (final side in [-1, 1]) {
+        final cx = dbCenter.dx + side * 16.0;
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, dbCenter.dy), width: 8, height: 22), const Radius.circular(3)), ringPaint);
+        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, dbCenter.dy), width: 10, height: 24), const Radius.circular(4)), glowPaint);
+      }
+    }
+  }
+
+  /// 绘制禅意蒲团软垫 (佛系大懒喵或榻榻米房专属)
+  void _drawZenCushion(Canvas canvas, Offset center) {
+    final isZenNeeded = model.personality == 'LAZY' || model.habitat == 'zen_tatami';
+    if (!isZenNeeded) return;
+
+    final cushionCenter = Offset(center.dx, center.dy + 66);
+    final cushionRect = Rect.fromCenter(center: cushionCenter, width: 130, height: 32);
+
+    final matPaint = Paint()..color = const Color(0xFFFDE68A);
+    final borderPaint = Paint()
+      ..color = const Color(0xFFD97706)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4;
+
+    canvas.drawOval(cushionRect, matPaint);
+    canvas.drawOval(cushionRect, borderPaint);
+
+    final weavePaint = Paint()
+      ..color = const Color(0xFFB45309).withOpacity(0.3)
+      ..strokeWidth = 1.0;
+    for (double x = cushionRect.left + 16; x < cushionRect.right - 16; x += 12) {
+      canvas.drawLine(Offset(x, cushionCenter.dy - 8), Offset(x, cushionCenter.dy + 8), weavePaint);
+    }
+    canvas.drawCircle(cushionCenter, 4.0, Paint()..color = const Color(0xFFDC2626));
+    canvas.drawLine(Offset(cushionRect.right - 4, cushionCenter.dy), Offset(cushionRect.right + 12, cushionCenter.dy + 8), Paint()..color = const Color(0xFFDC2626)..strokeWidth = 2.0);
+  }
+
+  /// 绘制家园小窝场景特效 (Habitat Effects)
+  void _drawHabitatEffects(Canvas canvas, Size size, Offset center) {
+    final habitat = model.habitat;
+    if (habitat == 'default') return;
+
+    if (habitat == 'neon_matrix') {
+      // 💻 暗夜霓虹极客房：赛博矩阵代码雨与全息地面
+      const streamCount = 8;
+      for (int i = 0; i < streamCount; i++) {
+        final x = (size.width / (streamCount + 1)) * (i + 1);
+        final speed = 40.0 + (i * 12.0);
+        final yHead = ((animTime * speed) + (i * 35.0)) % (size.height + 60) - 30;
+
+        final streamPath = Path()
+          ..moveTo(x, yHead - 45)
+          ..lineTo(x, yHead);
+        final trailPaint = Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0x000EA5E9), Color(0x6600F0FF)],
+          ).createShader(Rect.fromLTWH(x - 2, yHead - 45, 4, 45))
+          ..strokeWidth = 2.0;
+        canvas.drawPath(streamPath, trailPaint);
+        canvas.drawCircle(Offset(x, yHead), 2.2, Paint()..color = const Color(0xFF38BDF8));
+      }
+
+      final gridPaint = Paint()
+        ..color = const Color(0x1800F0FF)
+        ..strokeWidth = 1.2;
+      final groundY = center.dy + 72;
+      for (double gy = groundY; gy < size.height; gy += 14) {
+        canvas.drawLine(Offset(0, gy), Offset(size.width, gy), gridPaint);
+      }
+      for (double gx = 0; gx < size.width; gx += 32) {
+        canvas.drawLine(Offset(gx, groundY), Offset(center.dx + (gx - center.dx) * 1.5, size.height), gridPaint);
+      }
+
+    } else if (habitat == 'retro_arcade') {
+      // 🕹️ 复古像素游戏机房：Synthwave 霓虹脉冲与 8-bit 星星
+      const starCount = 6;
+      for (int i = 0; i < starCount; i++) {
+        final sx = (size.width * 0.15) + (i * (size.width * 0.7 / starCount));
+        final sy = 30.0 + math.sin(animTime * 2.5 + i) * 14.0;
+        final starSize = 3.5 + math.sin(animTime * 4.0 + i) * 1.5;
+
+        final starPaint = Paint()..color = (i % 2 == 0) ? const Color(0xFFF472B6) : const Color(0xFF38BDF8);
+        canvas.drawRect(Rect.fromCenter(center: Offset(sx, sy), width: starSize, height: starSize * 2.5), starPaint);
+        canvas.drawRect(Rect.fromCenter(center: Offset(sx, sy), width: starSize * 2.5, height: starSize), starPaint);
+      }
+
+      final scanY = (animTime * 35.0) % size.height;
+      canvas.drawLine(
+        Offset(0, scanY),
+        Offset(size.width, scanY),
+        Paint()..color = const Color(0x15EC4899)..strokeWidth = 3.0,
+      );
+
+    } else if (habitat == 'summer_beach') {
+      // 🏖️ 夏日海滩：暖阳金晕、动态舒缓海浪
+      final sunCenter = Offset(center.dx, center.dy - 40);
+      final sunGlow = Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0x22FBBF24), Color(0x00F59E0B)],
+        ).createShader(Rect.fromCircle(center: sunCenter, radius: 90));
+      canvas.drawCircle(sunCenter, 90, sunGlow);
+
+      final wavePaint = Paint()
+        ..color = const Color(0x2838BDF8)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      final wavePath = Path();
+      final waveY = center.dy + 62;
+      wavePath.moveTo(0, waveY);
+      for (double x = 0; x <= size.width; x += 15) {
+        final y = waveY + math.sin(animTime * 2.5 + x * 0.04) * 4.5;
+        wavePath.lineTo(x, y);
+      }
+      canvas.drawPath(wavePath, wavePaint);
+
+    } else if (habitat == 'zen_tatami') {
+      // 🍵 佛系禅意蒲团室：柔和暖光与樱花花瓣
+      final lanternGlow = Paint()
+        ..shader = const RadialGradient(
+          colors: [Color(0x18F59E0B), Color(0x00D97706)],
+        ).createShader(Rect.fromCircle(center: center, radius: 100));
+      canvas.drawCircle(center, 100, lanternGlow);
+
+      for (int i = 0; i < 5; i++) {
+        final px = (size.width * 0.1) + ((animTime * 22.0 + i * 50.0) % (size.width * 0.85));
+        final py = 20.0 + ((animTime * 18.0 + i * 40.0) % (size.height * 0.75));
+        final petalRot = animTime * 1.5 + i;
+
+        canvas.save();
+        canvas.translate(px, py);
+        canvas.rotate(petalRot);
+        canvas.drawOval(const Rect.fromLTWH(-4, -2, 8, 4), Paint()..color = const Color(0xAAF472B6));
+        canvas.restore();
+      }
     }
   }
 

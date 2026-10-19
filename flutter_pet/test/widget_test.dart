@@ -319,22 +319,22 @@ void main() {
     await tester.tap(find.text('魔法换装'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    // 切换到帽子 Tab
-    await tester.tap(find.text('🎩 帽子'));
+    // 切换到头部 Tab
+    await tester.tap(find.text('🎩 头部'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('星辉皇冠'), findsOneWidget);
-    expect(find.text('阶4解锁'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_rounded), findsWidgets);
 
     // 点击锁定的星辉皇冠，触发友好提示
     await tester.tap(find.text('星辉皇冠'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('需达到第 4 阶解锁'), findsWidgets);
 
-    // 切换到挂件 Tab
-    await tester.tap(find.text('🎀 挂件'));
+    // 切换到颈部 Tab
+    await tester.tap(find.text('🎀 颈部'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('皇家披风'), findsOneWidget);
-    expect(find.text('阶3解锁'), findsOneWidget);
+    expect(find.byIcon(Icons.lock_rounded), findsWidgets);
 
     // 点击完成按钮退出换装
     await tester.tap(find.text('完成'));

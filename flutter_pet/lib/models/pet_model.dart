@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -132,14 +133,16 @@ class PetModel extends ChangeNotifier {
   };
 
   static const List<Map<String, dynamic>> foodMenu = [
-    {'id': 'dried_fish', 'name': '香脆小鱼干', 'icon': '🐟', 'hunger': 18.0, 'mood': 10.0, 'exp': 15.0},
-    {'id': 'canned_tuna', 'name': '特级金枪鱼罐头', 'icon': '🥫', 'hunger': 35.0, 'mood': 25.0, 'exp': 30.0},
-    {'id': 'freeze_dried_salmon', 'name': '冻干三文鱼块', 'icon': '🍣', 'hunger': 28.0, 'mood': 20.0, 'exp': 25.0},
-    {'id': 'milk', 'name': '香浓舒化羊奶', 'icon': '🥛', 'hunger': 12.0, 'mood': 15.0, 'exp': 10.0},
-    {'id': 'cat_pudding', 'name': '焦糖猫布丁', 'icon': '🍮', 'hunger': 15.0, 'mood': 22.0, 'exp': 18.0},
-    {'id': 'cat_grass', 'name': '有机猫草沙拉', 'icon': '🌿', 'hunger': 8.0, 'mood': 12.0, 'exp': 12.0},
-    {'id': 'strawberry_cake', 'name': '草莓千层蛋糕', 'icon': '🍰', 'hunger': 22.0, 'mood': 28.0, 'exp': 26.0},
-    {'id': 'golden_feast', 'name': '奢华猫咪满汉全席', 'icon': '🍱', 'hunger': 60.0, 'mood': 50.0, 'exp': 80.0},
+    {'id': 'dried_fish', 'name': '香脆小鱼干', 'icon': '🐟', 'hunger': 18.0, 'mood': 10.0, 'exp': 15.0, 'personality': ['sport', 2]},
+    {'id': 'canned_tuna', 'name': '特级金枪鱼罐头', 'icon': '🥫', 'hunger': 35.0, 'mood': 25.0, 'exp': 30.0, 'personality': ['sport', 3]},
+    {'id': 'freeze_dried_salmon', 'name': '冻干三文鱼块', 'icon': '🍣', 'hunger': 28.0, 'mood': 20.0, 'exp': 25.0, 'personality': ['sport', 2]},
+    {'id': 'cyber_chip', 'name': '赛博能量芯片', 'icon': '⚡', 'hunger': 25.0, 'mood': 20.0, 'exp': 35.0, 'personality': ['tech', 4]},
+    {'id': 'hacker_coffee', 'name': '极客黑客冷萃', 'icon': '☕', 'hunger': 15.0, 'mood': 30.0, 'exp': 30.0, 'personality': ['tech', 3]},
+    {'id': 'milk', 'name': '香浓舒化羊奶', 'icon': '🥛', 'hunger': 12.0, 'mood': 15.0, 'exp': 10.0, 'personality': ['lazy', 3]},
+    {'id': 'cat_pudding', 'name': '焦糖猫布丁', 'icon': '🍮', 'hunger': 15.0, 'mood': 22.0, 'exp': 18.0, 'personality': ['lazy', 2]},
+    {'id': 'cat_grass', 'name': '有机猫草沙拉', 'icon': '🌿', 'hunger': 8.0, 'mood': 12.0, 'exp': 12.0, 'personality': ['sport', 1]},
+    {'id': 'strawberry_cake', 'name': '草莓千层蛋糕', 'icon': '🍰', 'hunger': 22.0, 'mood': 28.0, 'exp': 26.0, 'personality': ['lazy', 2]},
+    {'id': 'golden_feast', 'name': '奢华猫咪满汉全席', 'icon': '🍱', 'hunger': 60.0, 'mood': 50.0, 'exp': 80.0, 'personality': ['sport', 4]},
   ];
 
   String name = '波可 (Poko)';
@@ -160,14 +163,204 @@ class PetModel extends ChangeNotifier {
   bool enableSound = true;
   bool enableHaptics = true;
   bool enableFootprints = true;
+  double userScale = 1.0;
+
+  Map<String, int> personalityStats = {
+    'tech': 0,
+    'sport': 0,
+    'lazy': 0,
+  };
+
+  String habitat = 'none'; // 'none', 'neon_matrix', 'retro_arcade', 'summer_beach', 'zen_tatami'
+  int coins = 200;
+  List<String> unlockedItems = [
+    'none', 'bell', 'ribbon', 'cat_calico', 'cat_ragdoll'
+  ];
 
   Map<String, String> decorations = {
     'head': 'none',
+    'face': 'none',
     'neck': 'bell',
+    'back': 'none',
+    'hand': 'none',
   };
 
   PetModel() {
     loadFromDisk();
+  }
+
+  /// 主导性格判定: HACKER (极客黑客喵), ATHLETE (元气运动喵), LAZY (佛系大懒喵), BALANCED (纯真萌体)
+  String get personality {
+    final tech = personalityStats['tech'] ?? 0;
+    final sport = personalityStats['sport'] ?? 0;
+    final lazy = personalityStats['lazy'] ?? 0;
+
+    final scores = [
+      MapEntry('HACKER', tech),
+      MapEntry('ATHLETE', sport),
+      MapEntry('LAZY', lazy),
+    ];
+    scores.sort((a, b) => b.value.compareTo(a.value));
+    final top = scores[0];
+    final second = scores[1];
+
+    if (top.value >= 15 && (top.value - second.value >= 3)) {
+      return top.key;
+    }
+    return 'BALANCED';
+  }
+
+  /// 性格专属档案与特权
+  Map<String, dynamic> get personalityInfo {
+    switch (personality) {
+      case 'HACKER':
+        return {
+          'id': 'HACKER',
+          'name': '极客黑客喵 ⚡',
+          'badge': '⚡ 极客黑客喵',
+          'title': '赛博算力核心 · 极客黑客喵',
+          'desc': '常食能量芯片与黑客冷萃，精通各种语言代码，警报 Bug 灵敏度 100%！',
+          'bonus': '专注模式算力效率提升 +20%，周围伴随矩阵代码流',
+          'color': 0xFF0EA5E9,
+          'exclusiveItem': 'hacker_viser',
+          'exclusiveItemName': '战术全息目镜',
+        };
+      case 'ATHLETE':
+        return {
+          'id': 'ATHLETE',
+          'name': '元气运动喵 🏃',
+          'badge': '🏃 元气运动喵',
+          'title': '桌面闪电飞人 · 元气运动喵',
+          'desc': '热爱追逐玩耍与敏捷翻滚，身手矫健活力四射，浑身充满热血能量！',
+          'bonus': '漫步移动速度提升 +25%，互动兴奋度翻倍',
+          'color': 0xFF10B981,
+          'exclusiveItem': 'band_sport',
+          'exclusiveItemName': '热血运动发带',
+        };
+      case 'LAZY':
+        return {
+          'id': 'LAZY',
+          'name': '佛系大懒喵 🍵',
+          'badge': '🍵 佛系大懒喵',
+          'title': '躺平禅意宗师 · 佛系大懒喵',
+          'desc': '随遇而安发呆大师，享受温暖日光与软垫小憩，万物皆空小鱼干独尊！',
+          'bonus': '睡眠精力恢复加速 +30%，更持久的心情稳定度',
+          'color': 0xFFF59E0B,
+          'exclusiveItem': 'cushion_zen',
+          'exclusiveItemName': '禅意榻榻米软垫',
+        };
+      case 'BALANCED':
+      default:
+        return {
+          'id': 'BALANCED',
+          'name': '纯真软萌体 🐾',
+          'badge': '🐾 纯真萌宠',
+          'title': '元气初生伙伴 · 纯真萌体',
+          'desc': '性格均衡可爱，对桌面上的一切新鲜事物保持着天真好奇与探索欲。',
+          'bonus': '均衡成长，各项属性消耗平缓',
+          'color': 0xFFEC4899,
+          'exclusiveItem': 'none',
+          'exclusiveItemName': '无',
+        };
+    }
+  }
+
+  void addPersonalityPoint(String category, int pts) {
+    if (pts <= 0) return;
+    personalityStats[category] = (personalityStats[category] ?? 0) + pts;
+    notifyListeners();
+    saveToDisk();
+  }
+
+  void setHabitat(String newHabitat) {
+    habitat = newHabitat;
+    notifyListeners();
+    saveToDisk();
+  }
+
+  /// 赛博盲盒抽卡系统 (单抽 / 十连保底 SSR/UR)
+  List<Map<String, dynamic>> drawGacha(int count) {
+    final pool = [
+      {'rarity': 'UR', 'slot': 'habitat', 'code': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '🌃', 'weight': 4},
+      {'rarity': 'UR', 'slot': 'habitat', 'code': 'retro_arcade', 'name': '复古像素游戏机房', 'icon': '🕹️', 'weight': 4},
+      {'rarity': 'UR', 'slot': 'back', 'code': 'wings', 'name': '反重力光子羽翼', 'icon': '🪽', 'weight': 5},
+      {'rarity': 'UR', 'slot': 'head', 'code': 'crown', 'name': '黄金华贵王冠', 'icon': '👑', 'weight': 5},
+      {'rarity': 'SSR', 'slot': 'face', 'code': 'hacker_viser', 'name': '赛博战术目镜', 'icon': '🥽', 'weight': 10},
+      {'rarity': 'SSR', 'slot': 'head', 'code': 'band_sport', 'name': '热血运动发带', 'icon': '🥊', 'weight': 10},
+      {'rarity': 'SSR', 'slot': 'back', 'code': 'cushion_zen', 'name': '禅意榻榻米软垫', 'icon': '🍵', 'weight': 10},
+      {'rarity': 'SSR', 'slot': 'hand', 'code': 'keyboard', 'name': 'RGB机械键盘', 'icon': '⌨️', 'weight': 12},
+      {'rarity': 'SSR', 'slot': 'hand', 'code': 'gamepad', 'name': '8-bit 复古掌机', 'icon': '🎮', 'weight': 12},
+      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'summer_beach', 'name': '夏日阳光海滩', 'icon': '🏖️', 'weight': 10},
+      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🌸', 'weight': 10},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'fish_wand', 'name': '全息光纤逗猫棒', 'icon': '🪄', 'weight': 18},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'coffee', 'name': '极客外带咖啡', 'icon': '☕', 'weight': 18},
+      {'rarity': 'SR', 'slot': 'hand', 'code': 'dumbbell', 'name': '能量健身哑铃', 'icon': '🏋️', 'weight': 18},
+      {'rarity': 'SR', 'slot': 'face', 'code': 'sunglasses', 'name': '酷炫战术黑超', 'icon': '🕶️', 'weight': 20},
+      {'rarity': 'SR', 'slot': 'head', 'code': 'wizard_hat', 'name': '魔法巫师尖帽', 'icon': '🧙', 'weight': 20},
+      {'rarity': 'R', 'slot': 'neck', 'code': 'bow', 'name': '优雅赤红蝴蝶结', 'icon': '🎀', 'weight': 25},
+      {'rarity': 'R', 'slot': 'neck', 'code': 'bell', 'name': '招财金小挂铃', 'icon': '🔔', 'weight': 25},
+      {'rarity': 'R', 'slot': 'face', 'code': 'blush_hearts', 'name': '心动爱心面贴', 'icon': '💖', 'weight': 25},
+    ];
+
+    final cost = count == 1 ? 30 : 270;
+    if (coins >= cost) {
+      coins -= cost;
+    } else {
+      final expCost = (cost * 2).toDouble();
+      exp = math.max(0.0, exp - expCost);
+    }
+
+    final totalWeight = pool.fold<int>(0, (sum, item) => sum + (item['weight'] as int));
+    final random = math.Random();
+    final results = <Map<String, dynamic>>[];
+
+    for (int i = 0; i < count; i++) {
+      Map<String, dynamic> chosen;
+      if (count >= 10 && i == count - 1) {
+        final highPool = pool.where((x) => x['rarity'] == 'SSR' || x['rarity'] == 'UR').toList();
+        final highWeight = highPool.fold<int>(0, (sum, x) => sum + (x['weight'] as int));
+        int r = random.nextInt(highWeight);
+        int upto = 0;
+        chosen = highPool.first;
+        for (final item in highPool) {
+          if (upto + (item['weight'] as int) > r) {
+            chosen = item;
+            break;
+          }
+          upto += item['weight'] as int;
+        }
+      } else {
+        int r = random.nextInt(totalWeight);
+        int upto = 0;
+        chosen = pool.first;
+        for (final item in pool) {
+          if (upto + (item['weight'] as int) > r) {
+            chosen = item;
+            break;
+          }
+          upto += item['weight'] as int;
+        }
+      }
+
+      final code = chosen['code'] as String;
+      final isNew = !unlockedItems.contains(code);
+      if (isNew) {
+        unlockedItems.add(code);
+      }
+
+      results.add({
+        'rarity': chosen['rarity'],
+        'slot': chosen['slot'],
+        'code': code,
+        'name': chosen['name'],
+        'icon': chosen['icon'],
+        'isNew': isNew,
+      });
+    }
+
+    notifyListeners();
+    saveToDisk();
+    return results;
   }
 
   SkinConfig get currentSkin => availableSkins[skinId] ?? availableSkins['cat_calico']!;
@@ -264,6 +457,12 @@ class PetModel extends ChangeNotifier {
     totalFedCount += 1;
     weight += 0.02;
     addExp(food['exp'] as double);
+
+    final pers = food['personality'] as List<dynamic>?;
+    if (pers != null && pers.length == 2) {
+      addPersonalityPoint(pers[0] as String, pers[1] as int);
+    }
+
     notifyListeners();
     saveToDisk();
     return true;
@@ -274,6 +473,7 @@ class PetModel extends ChangeNotifier {
     mood = (mood + 4.5).clamp(0.0, 100.0);
     intimacy += 3;
     addExp(4.0);
+    addPersonalityPoint('sport', 1);
     notifyListeners();
     saveToDisk();
   }
@@ -292,6 +492,7 @@ class PetModel extends ChangeNotifier {
     isSleeping = !isSleeping;
     if (isSleeping) {
       isStudying = false;
+      addPersonalityPoint('lazy', 2);
     }
     notifyListeners();
     saveToDisk();
@@ -312,6 +513,9 @@ class PetModel extends ChangeNotifier {
     isStudying = !isStudying;
     if (isStudying) {
       isSleeping = false;
+    } else {
+      addPersonalityPoint('tech', 4);
+      coins += 10;
     }
     notifyListeners();
     saveToDisk();
@@ -341,6 +545,7 @@ class PetModel extends ChangeNotifier {
       exp -= maxExpForLevel;
       level += 1;
       intimacy += 25;
+      coins += 20; // 升级奖励 20 赛博金币
     }
     notifyListeners();
     saveToDisk();
@@ -358,6 +563,12 @@ class PetModel extends ChangeNotifier {
       energy = (energy - dt * 0.25).clamp(0.0, 100.0);
     }
     notifyListeners();
+  }
+
+  void setUserScale(double scale) {
+    userScale = scale.clamp(0.75, 1.45);
+    notifyListeners();
+    saveToDisk();
   }
 
   void toggleFootprints() {
@@ -382,9 +593,14 @@ class PetModel extends ChangeNotifier {
         'weight': weight,
         'totalFedCount': totalFedCount,
         'decorations': decorations,
+        'personalityStats': personalityStats,
+        'habitat': habitat,
+        'coins': coins,
+        'unlockedItems': unlockedItems,
         'enableSound': enableSound,
         'enableHaptics': enableHaptics,
         'enableFootprints': enableFootprints,
+        'userScale': userScale,
       };
       await prefs.setString('poko_pet_data', jsonEncode(data));
     } catch (_) {}
@@ -408,11 +624,25 @@ class PetModel extends ChangeNotifier {
         weight = (data['weight'] as num?)?.toDouble() ?? weight;
         totalFedCount = data['totalFedCount'] ?? totalFedCount;
         if (data['decorations'] != null) {
-          decorations = Map<String, String>.from(data['decorations']);
+          final loaded = Map<String, String>.from(data['decorations']);
+          decorations['head'] = loaded['head'] ?? 'none';
+          decorations['face'] = loaded['face'] ?? 'none';
+          decorations['neck'] = loaded['neck'] ?? 'bell';
+          decorations['back'] = loaded['back'] ?? 'none';
+          decorations['hand'] = loaded['hand'] ?? 'none';
+        }
+        if (data['personalityStats'] != null) {
+          personalityStats = Map<String, int>.from(data['personalityStats']);
+        }
+        habitat = data['habitat'] ?? habitat;
+        coins = data['coins'] ?? coins;
+        if (data['unlockedItems'] != null) {
+          unlockedItems = List<String>.from(data['unlockedItems']);
         }
         enableSound = data['enableSound'] ?? enableSound;
         enableHaptics = data['enableHaptics'] ?? enableHaptics;
         enableFootprints = data['enableFootprints'] ?? enableFootprints;
+        userScale = (data['userScale'] as num?)?.toDouble() ?? userScale;
         notifyListeners();
       }
     } catch (_) {}
