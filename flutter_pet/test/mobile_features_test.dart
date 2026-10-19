@@ -1,6 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_pet/main.dart';
 import 'package:flutter_pet/models/pet_model.dart';
 import 'package:flutter_pet/services/sensor_service.dart';
 import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
@@ -144,6 +146,63 @@ void main() {
         pet.setHabitat(h);
         expect(pet.habitat, equals(h));
       }
+    });
+
+    testWidgets('Home 5-Pill Floating Dock and Wardrobe Two-Tier Zero-Scroll Interaction Test', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.5;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(const DesktopElectricPetApp());
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // 1. 验证底部常态五灵动悬浮胶囊全部就绪 (1-Tap 直达，零层级深度)
+      expect(find.text('奇妙背包'), findsOneWidget);
+      expect(find.text('魔法换装'), findsOneWidget);
+      expect(find.text('小窝场景'), findsOneWidget);
+      expect(find.text('星愿盲盒'), findsOneWidget);
+      expect(find.text('专属绝活'), findsOneWidget);
+
+      // 2. 点击「小窝场景」：直达小窝全景模式，无需在换装坞内滑动查找
+      await tester.tap(find.text('小窝场景'));
+      await tester.pump(const Duration(milliseconds: 250));
+      expect(find.byKey(const ValueKey('live_wardrobe_dock')), findsOneWidget);
+      expect(find.text('小窝全景'), findsOneWidget);
+      expect(find.text('夏日海滩'), findsOneWidget);
+
+      // 3. 在换装坞顶层一键无缝切至「猫咪装扮」
+      await tester.tap(find.text('猫咪装扮'));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      // 4. 验证猫咪 6 大装扮插槽同屏全览，背部与手持 100% 同屏呈现，彻底消灭横向滑动
+      expect(find.text('🐱 品种'), findsOneWidget);
+      expect(find.text('🎩 头部'), findsOneWidget);
+      expect(find.text('👓 面部'), findsOneWidget);
+      expect(find.text('🎀 颈部'), findsOneWidget);
+      expect(find.text('🦸‍♂️ 背部'), findsOneWidget);
+      expect(find.text('🪄 手持'), findsOneWidget);
+
+      // 切换至背部
+      await tester.tap(find.text('🦸‍♂️ 背部'));
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('赛博霓虹披风'), findsOneWidget);
+
+      // 5. 点击换装坞右上角「盲盒」快捷入口
+      await tester.tap(find.text('盲盒'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(GachaDialog), findsOneWidget);
+
+      // 6. 收起盲盒与换装坞
+      Navigator.of(tester.element(find.byType(GachaDialog))).pop();
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byType(GachaDialog), findsNothing);
+
+      await tester.tap(find.text('完成'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('bottom_floating_bar')), findsOneWidget);
     });
   });
 }

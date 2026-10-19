@@ -203,52 +203,62 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFFEDD5), Color(0xFFFDE68A)],
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFEDD5), Color(0xFFFDE68A)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      alignment: Alignment.center,
+                      child: const Text('✨', style: TextStyle(fontSize: 18)),
                     ),
-                    alignment: Alignment.center,
-                    child: const Text('✨', style: TextStyle(fontSize: 20)),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '奇迹星愿扭蛋机',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isNight ? Colors.white : const Color(0xFF1E293B),
-                          letterSpacing: 0.3,
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '奇迹星愿扭蛋机',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isNight ? Colors.white : const Color(0xFF1E293B),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 1),
+                          const Text(
+                            'DREAM CAPSULE POD',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFFF7A55),
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 1),
-                      const Text(
-                        'DREAM CAPSULE POD · 灵动心愿',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFFF7A55),
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 6),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   // 能量币余额胶囊
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
                     decoration: BoxDecoration(
                       color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
                       borderRadius: BorderRadius.circular(16),
@@ -260,12 +270,12 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('🪙', style: TextStyle(fontSize: 13)),
-                        const SizedBox(width: 5),
+                        const Text('🪙', style: TextStyle(fontSize: 12)),
+                        const SizedBox(width: 4),
                         Text(
                           '${model.coins}',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
                           ),
@@ -273,21 +283,21 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   GestureDetector(
                     onTap: () {
                       SoundService.playClick();
                       Navigator.of(context).pop();
                     },
                     child: Container(
-                      padding: const EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
                         color: isNight ? const Color(0xFF2E2452) : const Color(0xFFF1F5F9),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
                         Icons.close_rounded,
-                        size: 18,
+                        size: 17,
                         color: isNight ? Colors.white70 : const Color(0xFF64748B),
                       ),
                     ),
@@ -438,14 +448,18 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('✨', style: TextStyle(fontSize: 16)),
-              SizedBox(width: 8),
-              Text(
-                '十连抽享 9 折且 100% 保底 SSR / UR 绝品神装！',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF9A3412),
+              Text('✨', style: TextStyle(fontSize: 14)),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '十连抽享 9 折且 100% 保底 SSR / UR 绝品神装！',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF9A3412),
+                  ),
                 ),
               ),
             ],
