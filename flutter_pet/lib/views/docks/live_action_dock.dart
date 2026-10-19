@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../services/haptic_service.dart';
+import '../../widgets/bouncy_touch_feedback.dart';
 
 /// 画布级无遮挡专属绝活滑轨点播台 (彻底消灭阻塞弹窗，全屏无暗色遮罩，零多余操作)
 class LiveActionDock extends StatelessWidget {
@@ -41,7 +43,20 @@ class LiveActionDock extends StatelessWidget {
       bottom: 12,
       left: 12,
       right: 12,
-      child: Container(
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        builder: (context, animVal, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - animVal) * 20.0),
+            child: Opacity(
+              opacity: animVal.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         decoration: BoxDecoration(
           color: bgColor,
@@ -161,8 +176,12 @@ class LiveActionDock extends StatelessWidget {
                   final act = actions[index];
                   final isCurrent = (currentState == act['id']);
 
-                  return GestureDetector(
-                    onTap: () => onActionSelected(act['id']!),
+                  return BouncyTouchFeedback(
+                    scaleDown: 0.94,
+                    onTap: () {
+                      HapticService.light();
+                      onActionSelected(act['id']!);
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
                       width: 78,
@@ -230,6 +249,7 @@ class LiveActionDock extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

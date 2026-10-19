@@ -2923,7 +2923,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 Positioned.fill(
                   child: IgnorePointer(
                     child: CustomPaint(
-                      painter: FootprintPainter(_footprints),
+                      painter: FootprintPainter(
+                        _footprints,
+                        habitat: widget.petModel.habitat,
+                      ),
                     ),
                   ),
                 ),
@@ -3708,16 +3711,27 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   },
                 ),
 
-              // 7. 独立发光微动扭蛋机悬浮球 (Cyber Gacha FAB) - 常态下悬浮于右侧上方，开箱仪式感拉满
-              if (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode)
-                Positioned(
-                  right: 18,
-                  bottom: 74,
-                  child: CyberGachaFab(
-                    isNight: isNight,
-                    onTap: _openGachaBottomSheet,
+              // 7. 独立发光微动扭蛋机悬浮球 (Cyber Gacha FAB) - 常态下悬浮于右侧上方，开箱仪式感拉满，支持微缩渐隐优雅过渡
+              Positioned(
+                right: 18,
+                bottom: 74,
+                child: AnimatedScale(
+                  scale: (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode) ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutBack,
+                  child: AnimatedOpacity(
+                    opacity: (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode) ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 180),
+                    child: IgnorePointer(
+                      ignoring: _isWardrobeMode || _isActionMode || _showFoodTray || _isLaserMode,
+                      child: CyberGachaFab(
+                        isNight: isNight,
+                        onTap: _openGachaBottomSheet,
+                      ),
+                    ),
                   ),
                 ),
+              ),
             ],
           ),
         ),

@@ -15,11 +15,12 @@ class Footprint {
   });
 }
 
-/// 地板治愈微光小猫爪印渲染器 (温润木质压痕 + 4 个萌态真实猫脚趾印 + 呼吸感微光淡隐)
+/// 地板治愈微光小猫爪印渲染器 (根据 5 大家园主题智能呈现：温润原木/赛博青蓝荧光/电玩洋红/夏日金沙/禅意草编)
 class FootprintPainter extends CustomPainter {
   final List<Footprint> footprints;
+  final String habitat;
 
-  FootprintPainter(this.footprints);
+  FootprintPainter(this.footprints, {this.habitat = 'default'});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -29,14 +30,51 @@ class FootprintPainter extends CustomPainter {
       canvas.translate(fp.position.dx, fp.position.dy);
       canvas.rotate(fp.angle);
 
-      // 1. 底层：木地板温润受力微压痕 (温和琥珀暖棕，柔和融入地板，告别假印油感)
+      Color indentColor;
+      Color glowColor;
+      double indentAlphaMult;
+      double glowAlphaMult;
+
+      switch (habitat) {
+        case 'neon_matrix':
+          indentColor = const Color(0xFF0284C7);
+          glowColor = const Color(0xFF00F0FF);
+          indentAlphaMult = 0.35;
+          glowAlphaMult = 0.45;
+          break;
+        case 'retro_arcade':
+          indentColor = const Color(0xFF7E22CE);
+          glowColor = const Color(0xFFEC4899);
+          indentAlphaMult = 0.35;
+          glowAlphaMult = 0.40;
+          break;
+        case 'summer_beach':
+          indentColor = const Color(0xFFB45309);
+          glowColor = const Color(0xFF38BDF8);
+          indentAlphaMult = 0.30;
+          glowAlphaMult = 0.30;
+          break;
+        case 'zen_tatami':
+          indentColor = const Color(0xFF065F46);
+          glowColor = const Color(0xFF34D399);
+          indentAlphaMult = 0.28;
+          glowAlphaMult = 0.22;
+          break;
+        case 'default':
+        default:
+          indentColor = const Color(0xFF78350F);
+          glowColor = const Color(0xFFF472B6);
+          indentAlphaMult = 0.26;
+          glowAlphaMult = 0.20;
+          break;
+      }
+
       final woodIndentPaint = Paint()
-        ..color = const Color(0xFF78350F).withValues(alpha: (fp.opacity * 0.26).clamp(0.0, 1.0))
+        ..color = indentColor.withValues(alpha: (fp.opacity * indentAlphaMult).clamp(0.0, 1.0))
         ..style = PaintingStyle.fill;
 
-      // 2. 表层：猫咪体温留下的极淡粉嫩微光 (轻盈半透，温润治愈)
       final glowBlushPaint = Paint()
-        ..color = const Color(0xFFF472B6).withValues(alpha: (fp.opacity * 0.20).clamp(0.0, 1.0))
+        ..color = glowColor.withValues(alpha: (fp.opacity * glowAlphaMult).clamp(0.0, 1.0))
         ..style = PaintingStyle.fill;
 
       // 掌心三瓣主肉垫 (真实猫咪肉垫底弧向上凹陷三叶造型)

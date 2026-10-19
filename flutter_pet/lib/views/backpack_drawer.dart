@@ -35,20 +35,20 @@ class PokoBackpackDrawer extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: isNight
-            ? const Color(0xFF161334).withOpacity(0.96)
-            : Colors.white.withOpacity(0.98),
+            ? const Color(0xFF161334).withValues(alpha: 0.96)
+            : Colors.white.withValues(alpha: 0.98),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         border: Border.all(
           color: isNight
-              ? const Color(0xFF4338CA).withOpacity(0.5)
+              ? const Color(0xFF4338CA).withValues(alpha: 0.5)
               : const Color(0xFFE2E8F0),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: isNight
-                ? const Color(0xFF09071A).withOpacity(0.7)
-                : const Color(0xFF6366F1).withOpacity(0.12),
+                ? const Color(0xFF09071A).withValues(alpha: 0.7)
+                : const Color(0xFF6366F1).withValues(alpha: 0.12),
             blurRadius: 28,
             offset: const Offset(0, -6),
           ),
@@ -68,7 +68,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 height: 4.5,
                 decoration: BoxDecoration(
                   color: isNight
-                      ? const Color(0xFF475569).withOpacity(0.8)
+                      ? const Color(0xFF475569).withValues(alpha: 0.8)
                       : const Color(0xFFCBD5E1),
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -76,7 +76,7 @@ class PokoBackpackDrawer extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            // 2. 标题栏与实时健康状态小胶囊
+            // 2. 标题栏与实时健康状态小胶囊 + 资产看板
             Row(
               children: [
                 Container(
@@ -90,54 +90,90 @@ class PokoBackpackDrawer extends StatelessWidget {
                   child: const Text('🎒', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(width: 9),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '波可的奇妙背包',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isNight ? Colors.white : const Color(0xFF1E293B),
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF10B981).withOpacity(isNight ? 0.25 : 0.12),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: const Color(0xFF10B981).withOpacity(0.4),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '波可的奇妙背包',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isNight ? Colors.white : const Color(0xFF1E293B),
+                                letterSpacing: 0.3,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          child: Text(
-                            model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.25 : 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Text(
+                              model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '日常照料、逗猫玩具与生活贴心工具',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: isNight
-                            ? const Color(0xFF94A3B8)
-                            : const Color(0xFF64748B),
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 1),
+                      Text(
+                        '日常照料、逗猫玩具与生活贴心工具',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: isNight
+                              ? const Color(0xFF94A3B8)
+                              : const Color(0xFF64748B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 6),
+                // 3. 实时能量币资产看板胶囊
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🪙', style: TextStyle(fontSize: 12)),
+                      const SizedBox(width: 3.5),
+                      Text(
+                        '${model.coins}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
                   child: Container(
@@ -315,15 +351,15 @@ class _BackpackCardState extends State<_BackpackCard> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: widget.isNight
-                  ? widget.accentColor.withOpacity(0.35)
+                  ? widget.accentColor.withValues(alpha: 0.35)
                   : const Color(0xFFE2E8F0),
               width: 1.2,
             ),
             boxShadow: [
               BoxShadow(
                 color: widget.isNight
-                    ? Colors.black.withOpacity(0.2)
-                    : Colors.black.withOpacity(0.02),
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.02),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -335,7 +371,7 @@ class _BackpackCardState extends State<_BackpackCard> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: widget.accentColor.withOpacity(widget.isNight ? 0.22 : 0.12),
+                  color: widget.accentColor.withValues(alpha: widget.isNight ? 0.22 : 0.12),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 alignment: Alignment.center,
@@ -368,7 +404,7 @@ class _BackpackCardState extends State<_BackpackCard> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: (widget.badgeColor ?? widget.accentColor).withOpacity(widget.isNight ? 0.25 : 0.12),
+                              color: (widget.badgeColor ?? widget.accentColor).withValues(alpha: widget.isNight ? 0.25 : 0.12),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(

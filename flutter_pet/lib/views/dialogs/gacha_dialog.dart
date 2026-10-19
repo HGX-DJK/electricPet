@@ -11,6 +11,7 @@ class GachaItem {
   final String icon;
   final String desc;
   final bool isNew;
+  final int refundCoins;
 
   const GachaItem({
     required this.rarity,
@@ -20,6 +21,7 @@ class GachaItem {
     required this.icon,
     this.desc = '',
     this.isNew = false,
+    this.refundCoins = 0,
   });
 
   String get slotName {
@@ -43,6 +45,7 @@ class GachaItem {
       icon: map['icon'] as String? ?? '🎁',
       desc: map['desc'] as String? ?? '专属配件与萌宠增益',
       isNew: map['isNew'] as bool? ?? false,
+      refundCoins: (map['refundCoins'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -123,6 +126,13 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
       }
 
       if (mounted) {
+        int totalRefund = 0;
+        for (final item in results) {
+          totalRefund += item.refundCoins;
+        }
+        if (totalRefund > 0) {
+          widget.model.coins += totalRefund;
+        }
         setState(() {
           _isPulling = false;
           _recentResults = results;
@@ -263,7 +273,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                       color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: const Color(0xFFF59E0B).withOpacity(0.5),
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
                         width: 1.0,
                       ),
                     ),
@@ -314,7 +324,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               decoration: BoxDecoration(
                 color: const Color(0xFFECFDF5),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4)),
+                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
@@ -371,8 +381,8 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               gradient: RadialGradient(
                 colors: [
                   const Color(0xFFFFEDD5),
-                  const Color(0xFFFED7AA).withOpacity(0.6),
-                  const Color(0xFFFDE68A).withOpacity(0.2),
+                  const Color(0xFFFED7AA).withValues(alpha: 0.6),
+                  const Color(0xFFFDE68A).withValues(alpha: 0.2),
                   Colors.transparent,
                 ],
               ),
@@ -390,7 +400,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7A55).withOpacity(0.4),
+                      color: const Color(0xFFFF7A55).withValues(alpha: 0.4),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
@@ -405,7 +415,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.88),
+                          color: Colors.white.withValues(alpha: 0.88),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Text(
@@ -436,10 +446,10 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               colors: [Color(0xFFFFF7ED), Color(0xFFFEF3C7)],
             ),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.45), width: 1.1),
+            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45), width: 1.1),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFF59E0B).withOpacity(0.1),
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -518,7 +528,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                 decoration: BoxDecoration(
                   color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFF7ED),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFF7A55).withOpacity(0.4)),
+                  border: Border.all(color: const Color(0xFFFF7A55).withValues(alpha: 0.4)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -557,135 +567,205 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               final isEquipped = isHabitat
                   ? widget.model.habitat == item.id
                   : widget.model.decorations[item.slot] == item.id;
+              final isHighRarity = item.rarity == 'UR' || item.rarity == 'SSR';
 
-              return Container(
-                decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF281F47) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: rarityColor.withOpacity(0.65),
-                    width: 1.4,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: rarityColor.withOpacity(0.16),
-                      blurRadius: 10,
-                      offset: const Offset(0, 3),
+              return TweenAnimationBuilder<double>(
+                key: ValueKey('${item.id}_${index}_reveal'),
+                duration: Duration(milliseconds: 180 + (index * 35).clamp(0, 350)),
+                curve: Curves.easeOutBack,
+                tween: Tween<double>(begin: 0.0, end: 1.0),
+                builder: (context, animVal, child) {
+                  return Transform.scale(
+                    scale: 0.85 + 0.15 * animVal,
+                    child: Opacity(
+                      opacity: animVal.clamp(0.0, 1.0),
+                      child: child,
                     ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(9),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // 图标与品质徽章
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: rarityColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(item.icon, style: const TextStyle(fontSize: 20)),
+                  );
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isNight ? const Color(0xFF281F47) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: rarityColor.withValues(alpha: isHighRarity ? 0.85 : 0.65),
+                      width: isHighRarity ? 1.8 : 1.4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: rarityColor.withValues(alpha: isHighRarity ? 0.32 : 0.16),
+                        blurRadius: isHighRarity ? 14 : 10,
+                        offset: const Offset(0, 3),
+                      ),
+                      if (isHighRarity)
+                        BoxShadow(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
+                          blurRadius: 6,
+                          offset: const Offset(0, 1),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: rarityColor.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: rarityColor.withOpacity(0.8), width: 0.9),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(9),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // 图标与品质/回收徽章
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: rarityColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(item.icon, style: const TextStyle(fontSize: 20)),
                           ),
-                          child: Text(
-                            _getRarityLabel(item.rarity),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (item.refundCoins > 0)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.5),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    '♻️+15🪙',
+                                    style: TextStyle(
+                                      fontSize: 8.0,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF059669),
+                                    ),
+                                  ),
+                                )
+                              else if (item.isNew)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFFEF4444), Color(0xFFF59E0B)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'NEW',
+                                    style: TextStyle(
+                                      fontSize: 7.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: rarityColor.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: rarityColor.withValues(alpha: 0.8),
+                                    width: 0.9,
+                                  ),
+                                ),
+                                child: Text(
+                                  _getRarityLabel(item.rarity),
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: rarityColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+
+                      // 名称与技能增益描述
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isNight ? Colors.white : const Color(0xFF1E293B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            item.desc.isNotEmpty ? item.desc : item.slotName,
                             style: TextStyle(
                               fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: rarityColor,
+                              height: 1.2,
+                              fontWeight: FontWeight.w500,
+                              color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+
+                      // 一键穿戴 / 布置小窝按钮
+                      SizedBox(
+                        width: double.infinity,
+                        height: 26,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isEquipped
+                                ? (isNight ? const Color(0xFF3B2E5C) : const Color(0xFFE2E8F0))
+                                : rarityColor,
+                            padding: EdgeInsets.zero,
+                            elevation: isEquipped ? 0 : 2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: isEquipped
+                              ? null
+                              : () {
+                                  if (isHabitat) {
+                                    widget.model.setHabitat(item.id);
+                                  } else {
+                                    widget.model.setDecoration(item.slot, item.id);
+                                  }
+                                  HapticService.medium();
+                                  SoundService.playPop();
+                                  setState(() {
+                                    _lastEquippedMessage = isHabitat
+                                        ? '小窝场景已切换为【${item.name}】！'
+                                        : '已为波可穿戴【${item.name}】！';
+                                  });
+                                  widget.onUpdated();
+                                },
+                          child: Text(
+                            isEquipped
+                                ? (isHabitat ? '已布置' : '已穿戴')
+                                : (isHabitat ? '布置小窝 🏠' : '一键穿戴 ✨'),
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              color: isEquipped
+                                  ? (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
+                                  : Colors.white,
                             ),
                           ),
                         ),
-                      ],
-                    ),
-
-                    // 名称与技能增益描述
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.name,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isNight ? Colors.white : const Color(0xFF1E293B),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          item.desc.isNotEmpty ? item.desc : item.slotName,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            height: 1.2,
-                            fontWeight: FontWeight.w500,
-                            color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-
-                    // 一键穿戴 / 布置小窝按钮
-                    SizedBox(
-                      width: double.infinity,
-                      height: 26,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isEquipped
-                              ? (isNight ? const Color(0xFF3B2E5C) : const Color(0xFFE2E8F0))
-                              : rarityColor,
-                          padding: EdgeInsets.zero,
-                          elevation: isEquipped ? 0 : 2,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                        onPressed: isEquipped
-                            ? null
-                            : () {
-                                if (isHabitat) {
-                                  widget.model.setHabitat(item.id);
-                                } else {
-                                  widget.model.setDecoration(item.slot, item.id);
-                                }
-                                HapticService.medium();
-                                SoundService.playPop();
-                                setState(() {
-                                  _lastEquippedMessage = isHabitat
-                                      ? '小窝场景已切换为【${item.name}】！'
-                                      : '已为波可穿戴【${item.name}】！';
-                                });
-                                widget.onUpdated();
-                              },
-                        child: Text(
-                          isEquipped
-                              ? (isHabitat ? '已布置' : '已穿戴')
-                              : (isHabitat ? '布置小窝 🏠' : '一键穿戴 ✨'),
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.bold,
-                            color: isEquipped
-                                ? (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
-                                : Colors.white,
-                          ),
-                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             },
@@ -743,7 +823,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF7A55).withOpacity(0.35),
+                  color: const Color(0xFFFF7A55).withValues(alpha: 0.35),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),

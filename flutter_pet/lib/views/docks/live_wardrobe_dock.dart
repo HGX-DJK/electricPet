@@ -156,7 +156,20 @@ class LiveWardrobeDock extends StatelessWidget {
       bottom: 12,
       left: 12,
       right: 12,
-      child: Container(
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        builder: (context, animVal, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - animVal) * 20.0),
+            child: Opacity(
+              opacity: animVal.clamp(0.0, 1.0),
+              child: child,
+            ),
+          );
+        },
+        child: Container(
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         decoration: BoxDecoration(
           color: bgColor,
@@ -673,8 +686,9 @@ class LiveWardrobeDock extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildZeroScrollTabPill(int index, String label, bool isNight) {
     final isSelected = (wardrobeTab == index);

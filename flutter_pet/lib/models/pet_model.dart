@@ -345,6 +345,7 @@ class PetModel extends ChangeNotifier {
 
       final code = chosen['code'] as String;
       final isNew = !unlockedItems.contains(code);
+      final refundCoins = isNew ? 0 : 15;
       if (isNew) {
         unlockedItems.add(code);
       }
@@ -357,6 +358,7 @@ class PetModel extends ChangeNotifier {
         'icon': chosen['icon'],
         'desc': chosen['desc'] ?? '专属装扮与成长加成',
         'isNew': isNew,
+        'refundCoins': refundCoins,
       });
     }
 

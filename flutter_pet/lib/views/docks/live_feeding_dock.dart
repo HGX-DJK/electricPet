@@ -28,42 +28,87 @@ class LiveFeedingDock extends StatelessWidget {
       bottom: 14,
       left: 16,
       right: 16,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        decoration: BoxDecoration(
-          color: isNight
-              ? const Color(0xFF161334).withValues(alpha: 0.96)
-              : Colors.white.withValues(alpha: 0.98),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: isNight ? const Color(0xFFFB7185).withValues(alpha: 0.45) : const Color(0xFFFDA4AF),
-            width: 1.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFF43F5E).withValues(alpha: isNight ? 0.28 : 0.12),
-              blurRadius: 18,
-              offset: const Offset(0, 6),
+      child: TweenAnimationBuilder<double>(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        tween: Tween<double>(begin: 0.0, end: 1.0),
+        builder: (context, animVal, child) {
+          return Transform.translate(
+            offset: Offset(0, (1.0 - animVal) * 20.0),
+            child: Opacity(
+              opacity: animVal.clamp(0.0, 1.0),
+              child: child,
             ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 顶栏：标题说明 + 提示 + 完成关闭按钮
-            Row(
-              children: [
-                const Text('🥣', style: TextStyle(fontSize: 16)),
-                const SizedBox(width: 6),
-                Text(
-                  '美味投喂 · 轻触或向上拖拽给波可',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: isNight ? Colors.white : const Color(0xFF9F1239),
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          decoration: BoxDecoration(
+            color: isNight
+                ? const Color(0xFF161334).withValues(alpha: 0.96)
+                : Colors.white.withValues(alpha: 0.98),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: isNight ? const Color(0xFFFB7185).withValues(alpha: 0.45) : const Color(0xFFFDA4AF),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF43F5E).withValues(alpha: isNight ? 0.28 : 0.12),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 顶栏：标题说明 + 提示 + 完成关闭按钮
+              Row(
+                children: [
+                  const Text('🥣', style: TextStyle(fontSize: 16)),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '美味投喂 · 轻触或向上拖拽给波可',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isNight ? Colors.white : const Color(0xFF9F1239),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 5),
+                  // 拖拽手势轻提示胶囊
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF43F5E).withValues(alpha: isNight ? 0.28 : 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_upward_rounded, size: 9.5, color: Color(0xFFE11D48)),
+                        SizedBox(width: 1.5),
+                        Text(
+                          '可上滑',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFE11D48),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 const Spacer(),
                 GestureDetector(
                   onTap: onClose,
@@ -210,6 +255,7 @@ class LiveFeedingDock extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
