@@ -151,72 +151,301 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
 
   void _openSettingsDialog() {
     final keyController = TextEditingController(text: _ai.apiKey);
+    final customUrlController = TextEditingController(text: _ai.customUrl);
+    String selectedProvider = _ai.provider;
+    bool isTesting = false;
+    String? testResult;
+    bool? testSuccess;
+
     showDialog(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          backgroundColor: widget.isNight ? const Color(0xFF1E1B4B) : Colors.white,
-          title: Row(
-            children: [
-              const Text('⚙️', style: TextStyle(fontSize: 20)),
-              const SizedBox(width: 8),
-              Text(
-                'MiniMax AI 配置',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: widget.isNight ? Colors.white : const Color(0xFF1E293B),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final isNight = widget.isNight;
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: isNight ? const Color(0xFF1E1B4B) : Colors.white,
+              titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              title: Row(
+                children: [
+                  const Text('⚙️', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI 大模型与语音配置',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.bold,
+                      color: isNight ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '选择大模型服务商并填入对应的 API Key。配置后即可体验大语言模型深度对话与专属萌系小奶音朗读！',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                        height: 1.45,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // 服务商选择
+                    Text(
+                      '模型服务商：',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: isNight ? Colors.white70 : const Color(0xFF334155),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setDialogState(() {
+                                selectedProvider = 'minimax';
+                                testResult = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: selectedProvider == 'minimax'
+                                    ? const Color(0xFF6366F1)
+                                    : (isNight ? const Color(0xFF2E2A60) : const Color(0xFFF1F5F9)),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'MiniMax\n(海螺·小奶音)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedProvider == 'minimax'
+                                      ? Colors.white
+                                      : (isNight ? Colors.white70 : const Color(0xFF475569)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setDialogState(() {
+                                selectedProvider = 'deepseek';
+                                testResult = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: selectedProvider == 'deepseek'
+                                    ? const Color(0xFF0284C7)
+                                    : (isNight ? const Color(0xFF2E2A60) : const Color(0xFFF1F5F9)),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'DeepSeek\n(超高智商)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedProvider == 'deepseek'
+                                      ? Colors.white
+                                      : (isNight ? Colors.white70 : const Color(0xFF475569)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              setDialogState(() {
+                                selectedProvider = 'openai';
+                                testResult = null;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                color: selectedProvider == 'openai'
+                                    ? const Color(0xFF10B981)
+                                    : (isNight ? const Color(0xFF2E2A60) : const Color(0xFFF1F5F9)),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                'OpenAI\n(通用兼容)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: selectedProvider == 'openai'
+                                      ? Colors.white
+                                      : (isNight ? Colors.white70 : const Color(0xFF475569)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // API Key 输入框
+                    TextField(
+                      controller: keyController,
+                      obscureText: false,
+                      style: TextStyle(color: isNight ? Colors.white : Colors.black, fontSize: 12.5),
+                      decoration: InputDecoration(
+                        labelText: selectedProvider == 'minimax'
+                            ? 'MiniMax API Key'
+                            : (selectedProvider == 'deepseek' ? 'DeepSeek API Key' : 'OpenAI API Key'),
+                        hintText: selectedProvider == 'minimax'
+                            ? 'sk-cp--... 或 ey...'
+                            : (selectedProvider == 'deepseek' ? 'sk-... (platform.deepseek.com)' : 'sk-...'),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                    ),
+
+                    if (selectedProvider == 'openai') ...[
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: customUrlController,
+                        style: TextStyle(color: isNight ? Colors.white : Colors.black, fontSize: 12),
+                        decoration: InputDecoration(
+                          labelText: '自定义接口地址 (可选)',
+                          hintText: '默认 https://api.openai.com/v1/chat/completions',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // 测试连接按钮与反馈
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: isTesting
+                              ? null
+                              : () async {
+                                  setDialogState(() {
+                                    isTesting = true;
+                                    testResult = null;
+                                  });
+                                  final res = await _ai.testConnection(
+                                    apiKey: keyController.text,
+                                    provider: selectedProvider,
+                                    customUrl: customUrlController.text,
+                                  );
+                                  setDialogState(() {
+                                    isTesting = false;
+                                    testSuccess = res['success'] == true;
+                                    testResult = res['message'] as String?;
+                                  });
+                                },
+                          icon: isTesting
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('🧪', style: TextStyle(fontSize: 14)),
+                          label: Text(isTesting ? '正在测试...' : '测试连接'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            selectedProvider == 'minimax'
+                                ? '💡 原生支持高保真小奶音朗读'
+                                : '💡 对话走 ' + selectedProvider + '，语音自动共享小奶音',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (testResult != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: (testSuccess == true)
+                              ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                              : const Color(0xFFEF4444).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: (testSuccess == true) ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          testResult!,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: (testSuccess == true)
+                                ? (isNight ? const Color(0xFF6EE7B7) : const Color(0xFF047857))
+                                : (isNight ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C)),
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '输入 MiniMax API Key 即可激活大模型智能陪伴与高保真小奶音 T2A 语音合成。若不填，将自动使用本地智能引擎！',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: widget.isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
-                  height: 1.45,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('取消'),
                 ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: keyController,
-                obscureText: true,
-                style: TextStyle(color: widget.isNight ? Colors.white : Colors.black, fontSize: 13),
-                decoration: InputDecoration(
-                  labelText: 'MiniMax API Key',
-                  hintText: 'ey...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ElevatedButton(
+                  onPressed: () async {
+                    await _ai.updateConfig(
+                      apiKey: keyController.text,
+                      provider: selectedProvider,
+                      customUrl: customUrlController.text,
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    setState(() {});
+                    HapticService.light();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('保存并激活'),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('取消'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                await _ai.updateConfig(apiKey: keyController.text);
-                if (ctx.mounted) Navigator.pop(ctx);
-                setState(() {});
-                HapticService.light();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6366F1),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('保存'),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
@@ -304,15 +533,21 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                             height: 6.5,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: _ai.hasApiKey ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                              color: (_ai.lastError != null)
+                                  ? const Color(0xFFEF4444)
+                                  : (_ai.hasApiKey ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
                             ),
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            _ai.hasApiKey ? 'MiniMax 神经语音就绪' : '智能陪伴模式 (点击设置 Key)',
+                            (_ai.lastError != null)
+                                ? '云端连接异常 (点击 ⚙️ 排查)'
+                                : (_ai.hasApiKey ? ' 就绪' : '智能陪伴模式 (点击 ⚙️ 设置)'),
                             style: TextStyle(
                               fontSize: 10,
-                              color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7E22CE),
+                              color: (_ai.lastError != null)
+                                  ? const Color(0xFFEF4444)
+                                  : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7E22CE)),
                               fontWeight: FontWeight.w500,
                             ),
                           ),

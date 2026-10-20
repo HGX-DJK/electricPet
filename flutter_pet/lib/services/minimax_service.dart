@@ -5,21 +5,24 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'sound_service.dart';
 
-/// MiniMax AI 交互响应数据包
+/// AI 交互响应数据包
 class MinimaxResponse {
   final String text;           // 显示与朗读纯文本 (已清洗指令标签)
   final String? action;        // 解析提取的游戏联动指令 (FEED, SLEEP, SPIN, YARN, PET, BATH)
   final Uint8List? audioBytes; // MiniMax T2A 合成的语音字节 (MP3)
-  final bool isSimulated;      // 是否为本地拟真智能模式 (无 Key 降级)
+  final bool isSimulated;      // 是否为本地拟真智能模式 (无 Key 或请求异常时降级)
+  final String? errorHint;     // 详细错误说明 (供 UI 与排错使用)
 
   const MinimaxResponse({
     required this.text,
     this.action,
     this.audioBytes,
     this.isSimulated = false,
+    this.errorHint,
   });
 }
 
@@ -36,9 +39,12 @@ class ChatMessage {
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
-/// MiniMax AI 驱动的波可语音与情感陪伴大脑
+/// AI 大模型与神经语音驱动的波可智能陪伴大脑 (支持 MiniMax / DeepSeek / OpenAI 通用兼容接口)
 class MinimaxService {
   static const String prefApiKey = 'poko_minimax_api_key';
+  static const String prefProvider = 'poko_ai_provider';
+  static const String prefCustomUrl = 'poko_ai_custom_url';
+  static const String prefCustomModel = 'poko_ai_custom_model';
   static const String prefVoiceId = 'poko_minimax_voice_id';
   static const String prefPitch = 'poko_minimax_pitch';
   static const String prefSpeed = 'poko_minimax_speed';
@@ -48,20 +54,39 @@ class MinimaxService {
   MinimaxService._internal();
 
   String _apiKey = '';
+  String _provider = 'minimax'; // 'minimax', 'deepseek', 'openai'
+  String _customUrl = '';
+  String _customModel = '';
+  String? _lastError;
   String _voiceId = AiConfig.defaultVoiceId; // 甜美女性音 / 萌系奶音
-  int _pitch = AiConfig.defaultPitch;                     // 略微升调呈现幼态甜萌音 (范围 -12 ~ 12)
-  double _speed = AiConfig.defaultSpeed;               // 稍快的轻快语速
+  int _pitch = AiConfig.defaultPitch;       // 升调呈现幼态甜萌音 (范围 -12 ~ 12)
+  double _speed = AiConfig.defaultSpeed;   // 稍快的轻快语速
   bool _isInitialized = false;
 
   final List<ChatMessage> _chatHistory = [];
   AudioPlayer? _voicePlayer;
 
   String get apiKey => _apiKey;
+  String get provider => _provider;
+  String get customUrl => _customUrl;
+  String get customModel => _customModel;
+  String? get lastError => _lastError;
   String get voiceId => _voiceId;
   int get pitch => _pitch;
   double get speed => _speed;
   bool get hasApiKey => _apiKey.trim().isNotEmpty;
   List<ChatMessage> get chatHistory => List.unmodifiable(_chatHistory);
+
+  String get providerDisplayName {
+    switch (_provider) {
+      case 'deepseek':
+        return 'DeepSeek 智脑';
+      case 'openai':
+        return 'OpenAI 智脑';
+      default:
+        return 'MiniMax 神经语音';
+    }
+  }
 
   AudioPlayer get voicePlayer {
     _voicePlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
@@ -73,6 +98,10 @@ class MinimaxService {
     if (_isInitialized) return;
     try {
       final prefs = await SharedPreferences.getInstance();
+      _provider = prefs.getString(prefProvider) ?? 'minimax';
+      _customUrl = prefs.getString(prefCustomUrl) ?? '';
+      _customModel = prefs.getString(prefCustomModel) ?? '';
+
       final savedKey = prefs.getString(prefApiKey);
       if (savedKey != null && savedKey.trim().isNotEmpty) {
         _apiKey = savedKey.trim();
@@ -92,6 +121,9 @@ class MinimaxService {
   /// 保存配置
   Future<void> updateConfig({
     String? apiKey,
+    String? provider,
+    String? customUrl,
+    String? customModel,
     String? voiceId,
     int? pitch,
     double? speed,
@@ -100,6 +132,18 @@ class MinimaxService {
     if (apiKey != null) {
       _apiKey = apiKey.trim();
       await prefs.setString(prefApiKey, _apiKey);
+    }
+    if (provider != null) {
+      _provider = provider;
+      await prefs.setString(prefProvider, _provider);
+    }
+    if (customUrl != null) {
+      _customUrl = customUrl.trim();
+      await prefs.setString(prefCustomUrl, _customUrl);
+    }
+    if (customModel != null) {
+      _customModel = customModel.trim();
+      await prefs.setString(prefCustomModel, _customModel);
     }
     if (voiceId != null) {
       _voiceId = voiceId;
@@ -113,6 +157,7 @@ class MinimaxService {
       _speed = speed;
       await prefs.setDouble(prefSpeed, _speed);
     }
+    _lastError = null;
   }
 
   /// 清空对话历史
@@ -120,7 +165,7 @@ class MinimaxService {
     _chatHistory.clear();
   }
 
-  /// 核心对话交互：输入用户语音/文本，流经 MiniMax 大模型并自动调用 T2A 语音合成
+  /// 核心对话交互：输入用户语音/文本，流经大模型并自动调用 T2A 语音合成与动作解析
   Future<MinimaxResponse> chatWithPoko(String userText) async {
     await init();
     final trimmedText = userText.trim();
@@ -137,27 +182,28 @@ class MinimaxService {
       _chatHistory.removeRange(0, _chatHistory.length - 12);
     }
 
-    // 若未配置 API Key 或请求失败，无缝回退至本地智能情感引擎，保障 100% 顺畅交互
+    // 若未配置 API Key，无缝回退至本地智能情感引擎
     if (!hasApiKey) {
       return _generateLocalCompanionResponse(trimmedText);
     }
 
     try {
-      // 1. 请求 MiniMax Chat Completion 大模型
-      final llmResult = await _callMiniMaxLLM(trimmedText);
+      // 1. 请求大模型 (支持 MiniMax / DeepSeek / OpenAI 通用兼容)
+      final llmResult = await _callLLM(trimmedText);
       final rawReply = llmResult['reply'] ?? '';
       final action = llmResult['action'];
 
       // 清洗标签后的纯文本
       final cleanText = _cleanActionTags(rawReply);
       _chatHistory.add(ChatMessage(role: 'assistant', content: cleanText));
+      _lastError = null;
 
-      // 2. 请求 MiniMax T2A 语音合成
+      // 2. 请求 MiniMax T2A 语音合成 (即使文本由 DeepSeek/OpenAI 生成，也可借用 MiniMax 朗读小奶音)
       Uint8List? audioBytes;
       try {
         audioBytes = await synthesizeVoice(cleanText);
       } catch (e) {
-        // T2A 异常时不阻断对话，仅降级为音效
+        debugPrint('T2A voice synthesis warning: $e');
       }
 
       return MinimaxResponse(
@@ -167,21 +213,37 @@ class MinimaxService {
         isSimulated: false,
       );
     } catch (e) {
-      // 网络或调用异常时优雅降级
-      return _generateLocalCompanionResponse(trimmedText);
+      _lastError = e.toString().replaceAll('Exception: ', '');
+      debugPrint('AI Chat Error: $_lastError');
+      return _generateLocalCompanionResponse(trimmedText, errorReason: _lastError);
     }
   }
 
-  /// 调用 MiniMax Chat Completion API (abab6.5s-chat / MiniMax-Text-01)
-  Future<Map<String, dynamic>> _callMiniMaxLLM(String message) async {
+  /// 兼任旧代码/单测的 _callMiniMaxLLM 接口
+  Future<Map<String, dynamic>> _callMiniMaxLLM(String message) => _callLLM(message);
+
+  /// 统一调用大模型 Chat Completion API (支持 MiniMax / DeepSeek / OpenAI 兼容接口)
+  Future<Map<String, dynamic>> _callLLM(String message) async {
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 8);
+    client.connectionTimeout = const Duration(seconds: 15);
 
     try {
-      final uri = Uri.parse('https://api.minimax.chat/v1/text/chatcompletion_v2');
+      final Uri uri;
+      final String model;
+      if (_provider == 'deepseek') {
+        uri = Uri.parse('https://api.deepseek.com/chat/completions');
+        model = 'deepseek-chat';
+      } else if (_provider == 'openai') {
+        uri = Uri.parse(_customUrl.isNotEmpty ? _customUrl : 'https://api.openai.com/v1/chat/completions');
+        model = _customModel.isNotEmpty ? _customModel : 'gpt-4o-mini';
+      } else {
+        uri = Uri.parse('https://api.minimax.chat/v1/text/chatcompletion_v2');
+        model = 'abab6.5s-chat';
+      }
+
       final request = await client.postUrl(uri);
       request.headers.set('Authorization', 'Bearer $_apiKey');
-      request.headers.set('Content-Type', 'application/json');
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
 
       const systemPrompt = '''
 你是生活在主人手机与桌面里的赛博机械电子小猫“波可 (Poko)”。
@@ -193,7 +255,7 @@ class MinimaxService {
 5. 【动作指令联动系统】：若根据对话内容主人或你应当触发对应动作，必须且只能在回复最末尾附带以下一个动作标签：
    - [ACTION:FEED] : 投喂食物、小鱼干、零食、饿了
    - [ACTION:SLEEP] : 睡觉、晚安、好困、打盹、熄灯
-   - [ACTION:SPIN] : 开心庆祝、跳舞、旋转、转圈圈
+   - [ACTION:SPIN] : 开心庆祝、跳舞、旋转、转圈圈、追尾巴
    - [ACTION:YARN] : 玩毛线球、逗猫棒、抓老鼠、玩耍
    - [ACTION:PET] : 顺毛、摸摸头、蹭蹭贴贴、求抱抱
    - [ACTION:BATH] : 洗澡、洗香香、清洁爪子
@@ -211,24 +273,36 @@ class MinimaxService {
       messages.add({'role': 'user', 'content': message});
 
       final payload = jsonEncode({
-        'model': 'abab6.5s-chat',
+        'model': model,
         'messages': messages,
         'temperature': 0.75,
-        'max_tokens': 120,
+        'max_tokens': 150,
       });
 
-      request.write(payload);
+      request.add(utf8.encode(payload));
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
 
       if (response.statusCode != 200) {
-        throw Exception('MiniMax Chat API error: ${response.statusCode}');
+        String errDetail = 'HTTP ${response.statusCode}';
+        try {
+          final errJson = jsonDecode(body);
+          if (errJson is Map && errJson['base_resp'] != null) {
+            errDetail += ' (${errJson['base_resp']['status_msg']})';
+          } else if (errJson is Map && errJson['error'] != null) {
+            errDetail += ' (${errJson['error']['message'] ?? errJson['error']})';
+          }
+        } catch (_) {}
+        if (response.statusCode == 401) {
+          errDetail += ' - 密钥鉴权失败，请检查是否填写了正确的对应平台 API Key！';
+        }
+        throw Exception(errDetail);
       }
 
       final jsonMap = jsonDecode(body) as Map<String, dynamic>;
       final choices = jsonMap['choices'] as List<dynamic>?;
       if (choices == null || choices.isEmpty) {
-        throw Exception('No choices in MiniMax response');
+        throw Exception('大模型响应未包含有效生成文本 (No choices)');
       }
 
       final rawReply = choices[0]['message']['content'] as String? ?? '喵呜~';
@@ -243,22 +317,104 @@ class MinimaxService {
     }
   }
 
-  /// 调用 MiniMax T2A 语音合成 API (`speech-01-turbo`)
-  Future<Uint8List?> synthesizeVoice(String textToSpeak) async {
-    if (!hasApiKey || textToSpeak.trim().isEmpty) return null;
+  /// 一键测试大模型连通性与 API Key 有效性
+  Future<Map<String, dynamic>> testConnection({
+    String? apiKey,
+    String? provider,
+    String? customUrl,
+    String? customModel,
+  }) async {
+    final keyToTest = (apiKey ?? _apiKey).trim();
+    final provToTest = provider ?? _provider;
+    if (keyToTest.isEmpty) {
+      return {'success': false, 'message': 'API Key 不能为空，请先填入密钥'};
+    }
 
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 8);
 
     try {
+      final Uri uri;
+      final String model;
+      if (provToTest == 'deepseek') {
+        uri = Uri.parse('https://api.deepseek.com/chat/completions');
+        model = 'deepseek-chat';
+      } else if (provToTest == 'openai') {
+        final urlStr = (customUrl ?? _customUrl).trim();
+        uri = Uri.parse(urlStr.isNotEmpty ? urlStr : 'https://api.openai.com/v1/chat/completions');
+        model = (customModel ?? _customModel).trim().isNotEmpty ? (customModel ?? _customModel).trim() : 'gpt-4o-mini';
+      } else {
+        uri = Uri.parse('https://api.minimax.chat/v1/text/chatcompletion_v2');
+        model = 'abab6.5s-chat';
+      }
+
+      final request = await client.postUrl(uri);
+      request.headers.set('Authorization', 'Bearer $keyToTest');
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+
+      final payload = jsonEncode({
+        'model': model,
+        'messages': [
+          {'role': 'user', 'content': 'hi'}
+        ],
+        'max_tokens': 10,
+      });
+
+      request.add(utf8.encode(payload));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': '连接成功！大模型服务已就绪！'};
+      } else {
+        String errDetail = 'HTTP ${response.statusCode}';
+        try {
+          final errJson = jsonDecode(body);
+          if (errJson is Map && errJson['base_resp'] != null) {
+            errDetail += ' (${errJson['base_resp']['status_msg']})';
+          } else if (errJson is Map && errJson['error'] != null) {
+            errDetail += ' (${errJson['error']['message'] ?? errJson['error']})';
+          }
+        } catch (_) {}
+        if (response.statusCode == 401) {
+          errDetail += ' - 密钥鉴权失败，请检查是否填写了对应平台的正确 Key！';
+        }
+        return {'success': false, 'message': errDetail};
+      }
+    } catch (e) {
+      return {'success': false, 'message': '网络连接失败: ${e.toString().replaceAll("Exception: ", "")}'};
+    } finally {
+      client.close();
+    }
+  }
+
+  /// 调用 MiniMax T2A 语音合成 API (`speech-01-turbo`)
+  Future<Uint8List?> synthesizeVoice(String textToSpeak) async {
+    // 语音合成支持：若当前为 MiniMax 则用 _apiKey；若为其他模型且配置了内置 MiniMax Key，则借用 MiniMax 合成小奶音！
+    final voiceKey = (_provider == 'minimax' && hasApiKey)
+        ? _apiKey
+        : (AiConfig.hasBuiltinKey ? AiConfig.defaultMinimaxApiKey.trim() : null);
+
+    if (voiceKey == null || voiceKey.isEmpty || textToSpeak.trim().isEmpty) return null;
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
+
+    try {
       final uri = Uri.parse('https://api.minimax.chat/v1/t2a_v2');
       final request = await client.postUrl(uri);
-      request.headers.set('Authorization', 'Bearer $_apiKey');
-      request.headers.set('Content-Type', 'application/json');
+      request.headers.set('Authorization', 'Bearer $voiceKey');
+      request.headers.set('Content-Type', 'application/json; charset=utf-8');
+
+      // 清洗特殊格式字符，方便语音合成朗读
+      final cleanSpeech = textToSpeak
+          .replaceAll(RegExp(r'[\*#>`_~]'), '')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
       final payload = jsonEncode({
         'model': 'speech-01-turbo',
-        'text': textToSpeak,
+        'text': cleanSpeech,
         'stream': false,
         'voice_setting': {
           'voice_id': _voiceId,
@@ -274,11 +430,12 @@ class MinimaxService {
         },
       });
 
-      request.write(payload);
+      request.add(utf8.encode(payload));
       final response = await request.close();
       final body = await response.transform(utf8.decoder).join();
 
       if (response.statusCode != 200) {
+        debugPrint('T2A error status: ${response.statusCode}, body: $body');
         return null;
       }
 
@@ -290,7 +447,8 @@ class MinimaxService {
         return _hexToBytes(hexAudio);
       }
       return null;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('T2A exception: $e');
       return null;
     } finally {
       client.close();
@@ -302,9 +460,12 @@ class MinimaxService {
     if (audioBytes != null && audioBytes.isNotEmpty) {
       try {
         await voicePlayer.stop();
+        await voicePlayer.setVolume(1.0);
         await voicePlayer.play(BytesSource(audioBytes));
         return;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Audio playback error: $e');
+      }
     }
     // 回退到温润小猫叫声
     SoundService.playMeow(tone: MeowTone.sweet);
@@ -332,21 +493,30 @@ class MinimaxService {
     return text.replaceAll(RegExp(r'\[ACTION:[A-Z_]+\]'), '').trim();
   }
 
-  /// 本地智能拟真陪伴引擎 (无 Key / 离线时无感知兜底)
-  MinimaxResponse _generateLocalCompanionResponse(String input) {
+  /// 本地智能拟真陪伴引擎 (无 Key / 离线 / 网络异常时无感知兜底)
+  MinimaxResponse _generateLocalCompanionResponse(String input, {String? errorReason}) {
     final lower = input.toLowerCase();
     String reply;
     String? action;
 
-    if (lower.contains('吃') || lower.contains('饿') || lower.contains('鱼') || lower.contains('罐头') || lower.contains('蛋糕') || lower.contains('饭')) {
+    if (errorReason != null && errorReason.isNotEmpty) {
+      final friendlyErr = errorReason.contains('401')
+          ? 'API Key 鉴权失败，请检查 Key 是否匹配所选服务商'
+          : (errorReason.contains('SocketException') || errorReason.contains('Permission denied')
+              ? '手机网络连接受阻，请检查网络权限'
+              : (errorReason.contains('Timeout') || errorReason.contains('timed out')
+                  ? '请求超时，请检查网络状况'
+                  : errorReason));
+      reply = '喵呜~ 刚才连不上云端大脑呢（$friendlyErr）。波可先用本地小脑袋陪你，可以点右上角 ⚙️ 测试或更换 Key 噢！🐾';
+    } else if (lower.contains('饿') || lower.contains('吃') || lower.contains('鱼') || lower.contains('饭') || lower.contains('肉')) {
       final list = [
-        '闻到香喷喷的味道啦！波可的小肚子正咕噜咕噜叫呢，嗷呜一口全吃光光~ 🐟✨',
-        '开饭咯！最喜欢香酥小鱼干啦，吧唧吧唧嚼得超满足！谢谢主人投喂~ 罐头也超棒！🥫💕',
-        '有小鱼干吃的小猫是世界上最幸福的猫！小胡须开心得直抖动~ 😋🐾',
+        '喵呜！闻到喷香小鱼干的味道啦，波可两只眼睛都亮晶晶的，嗷呜一大口超满足！🐟✨',
+        '好耶有大餐吃咯！香酥小鱼干嘎嘣脆，肚肚吃得圆滚滚的，给主人踩背报答你~ 🐾💖',
+        '吸溜吸溜~ 这是世界上最好吃的小零食！吃饱饱的波可精力充沛，随时听候主人差遣！😋✨',
       ];
       reply = list[math.Random().nextInt(list.length)];
       action = 'FEED';
-    } else if (lower.contains('睡') || lower.contains('困') || lower.contains('晚安') || lower.contains('眯')) {
+    } else if (lower.contains('睡') || lower.contains('困') || lower.contains('晚安') || lower.contains('闭眼')) {
       final list = [
         '呼啊~ 伸个大大的懒腰，波可的小眼皮直打架啦… 主人晚安，做个甜甜的梦哦~ 🐾🌙',
         '钻进软乎乎的云朵软垫里啦，把小尾巴揣好，呼噜呼噜… 主人明天见~ 💤✨',
@@ -362,11 +532,11 @@ class MinimaxService {
       ];
       reply = list[math.Random().nextInt(list.length)];
       action = 'YARN';
-    } else if (lower.contains('转') || lower.contains('跳') || lower.contains('舞') || lower.contains('开心') || lower.contains('棒')) {
+    } else if (lower.contains('转') || lower.contains('跳') || lower.contains('舞') || lower.contains('回旋') || lower.contains('尾巴')) {
       final list = [
-        '看波可给你表演 360 度赛博快乐大回旋！旋转跳跃，快乐转圈圈~ 🌀✨',
-        '嘿嘿！被主人夸奖啦，元气值瞬间暴涨 100%！给主人跳一个开心小碎步~ 🐾💖',
-        '转呀转，快乐加倍！有波可陪着的每一刻都要闪闪发光哦！💃✨',
+        '看波可给你表演原地疯狂追尾大回旋！旋转跳跃，小爪急促飞扑~ 🌀🐾',
+        '嘿嘿！小尾巴别跑，看爪！追着尾巴转圈圈，开心到原地起飞~ 🌀✨',
+        '原地超级大漂移！今天一定要咬到自己的毛茸茸小尾巴尖！💃🎉',
       ];
       reply = list[math.Random().nextInt(list.length)];
       action = 'SPIN';
@@ -395,9 +565,10 @@ class MinimaxService {
       action = 'PET';
     } else {
       final list = [
-        '咪呜？波可歪着小脑袋认真听着呢！只要主人说话，波可的一双小耳朵就竖得直直的~ 🐱✨',
-        '喵呜~ 收到主人的神秘信号！波可的心情值蹭蹭上涨，新的一天也要元气满满哦！🐾💖',
+        '喵呜~ 收到主人的神秘信号！波可的心情值蹭蹭上涨，今天也要元气满满哦！🐾💖',
         '今天空气甜甜的，阳光也很暖，有主人陪伴在身边的每一天都是大晴天~ ☀️🌸',
+        '咪呜？波可歪着小脑袋认真听着呢！只要主人说话，波可的一双小耳朵就竖得直直的~ 🐱✨',
+        '蹭蹭主人手心~ 呼噜呼噜，波可是全世界最黏你的赛博小猫！随时呼唤我哦~ 💕🐾',
       ];
       reply = list[math.Random().nextInt(list.length)];
     }
@@ -407,6 +578,7 @@ class MinimaxService {
       text: reply,
       action: action,
       isSimulated: true,
+      errorHint: errorReason,
     );
   }
 }
