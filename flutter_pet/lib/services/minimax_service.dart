@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,11 +30,13 @@ class ChatMessage {
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
+  final Uint8List? audioBytes;
 
   ChatMessage({
     required this.role,
     required this.content,
     DateTime? timestamp,
+    this.audioBytes,
   }) : timestamp = timestamp ?? DateTime.now();
 }
 
@@ -195,7 +196,6 @@ class MinimaxService {
 
       // 清洗标签后的纯文本
       final cleanText = _cleanActionTags(rawReply);
-      _chatHistory.add(ChatMessage(role: 'assistant', content: cleanText));
       _lastError = null;
 
       // 2. 请求 MiniMax T2A 语音合成 (即使文本由 DeepSeek/OpenAI 生成，也可借用 MiniMax 朗读小奶音)
@@ -205,6 +205,12 @@ class MinimaxService {
       } catch (e) {
         debugPrint('T2A voice synthesis warning: $e');
       }
+
+      _chatHistory.add(ChatMessage(
+        role: 'assistant',
+        content: cleanText,
+        audioBytes: audioBytes,
+      ));
 
       return MinimaxResponse(
         text: cleanText,
@@ -218,9 +224,6 @@ class MinimaxService {
       return _generateLocalCompanionResponse(trimmedText, errorReason: _lastError);
     }
   }
-
-  /// 兼任旧代码/单测的 _callMiniMaxLLM 接口
-  Future<Map<String, dynamic>> _callMiniMaxLLM(String message) => _callLLM(message);
 
   /// 统一调用大模型 Chat Completion API (支持 MiniMax / DeepSeek / OpenAI 兼容接口)
   Future<Map<String, dynamic>> _callLLM(String message) async {
@@ -455,20 +458,48 @@ class MinimaxService {
     }
   }
 
-  /// 播放合成的语音音频；若无合成数据则播放原生软萌喵音
+  /// 播放合成的语音音频；优先写入系统临时文件通过底层原生文件描述符播放 (彻底避免 Android MediaPlayer BytesSource 错误 -38)，若失败回退 BytesSource
   Future<void> playVoiceResponse(Uint8List? audioBytes) async {
     if (audioBytes != null && audioBytes.isNotEmpty) {
       try {
+        final tempDir = Directory.systemTemp;
+        final tempFile = File('${tempDir.path}/poko_voice_${DateTime.now().millisecondsSinceEpoch}.mp3');
+        await tempFile.writeAsBytes(audioBytes, flush: true);
         await voicePlayer.stop();
         await voicePlayer.setVolume(1.0);
-        await voicePlayer.play(BytesSource(audioBytes));
+        await voicePlayer.play(DeviceFileSource(tempFile.path));
         return;
       } catch (e) {
-        debugPrint('Audio playback error: $e');
+        debugPrint('DeviceFileSource playback failed, falling back to BytesSource: $e');
+        try {
+          await voicePlayer.stop();
+          await voicePlayer.setVolume(1.0);
+          await voicePlayer.play(BytesSource(audioBytes));
+          return;
+        } catch (e2) {
+          debugPrint('BytesSource playback failed: $e2');
+        }
       }
     }
     // 回退到温润小猫叫声
     SoundService.playMeow(tone: MeowTone.sweet);
+  }
+
+  /// 一键试听小奶音并验证扬声器声音输出
+  Future<Map<String, dynamic>> testVoiceOutput() async {
+    await init();
+    try {
+      final sample = await synthesizeVoice('喵呜~ 主人你好，我是波可！大模型小奶音朗读一切正常啦！🐾');
+      if (sample != null && sample.isNotEmpty) {
+        await playVoiceResponse(sample);
+        return {'success': true, 'message': '语音朗读成功！请确保手机媒体音量已开启。'};
+      } else {
+        SoundService.playMeow(tone: MeowTone.sweet);
+        return {'success': false, 'message': '未获取到 MiniMax 合成音频，请检查密钥与网络。'};
+      }
+    } catch (e) {
+      return {'success': false, 'message': '试听失败: $e'};
+    }
   }
 
   /// Hex 字符串极速转 Uint8List

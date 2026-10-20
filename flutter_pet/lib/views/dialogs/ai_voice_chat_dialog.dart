@@ -122,31 +122,147 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   }
 
   void _toggleListening() {
-    if (_isListening) {
-      _listeningTimer?.cancel();
-      _waveAnimController.stop();
-      setState(() => _isListening = false);
-    } else {
-      HapticService.medium();
-      SoundService.playPop();
-      _waveAnimController.repeat(reverse: true);
-      setState(() => _isListening = true);
+    _showVoiceSpeechSheet();
+  }
 
-      // 模拟 2.2 秒自然语音倾诉捕获后自动提交 (支持后续外接 speech_to_text 实时流)
-      _listeningTimer?.cancel();
-      _listeningTimer = Timer(const Duration(milliseconds: 2400), () {
-        if (!mounted || !_isListening) return;
-        final mockPool = [
-          '波可，今天写代码好累啊，求摸摸头~',
-          '波可，给你准备了香酥小鱼干，快来吃呀！',
-          '波可，要睡觉啦，我们互道晚安好不好？',
-          '波可，来表演一个超级无敌大回旋跳舞吧！',
-          '波可，毛线球准备好啦，出来玩耍咯！',
-        ];
-        final picked = mockPool[DateTime.now().millisecond % mockPool.length];
-        _sendMessage(picked);
-      });
-    }
+  void _showVoiceSpeechSheet() {
+    HapticService.medium();
+    SoundService.playPop();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final isNight = widget.isNight;
+        return Container(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF1E1B4B) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            boxShadow: const [
+              BoxShadow(color: Color(0x33000000), blurRadius: 20, offset: Offset(0, -4)),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('🎙️', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '快捷倾诉与心声互动',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isNight ? Colors.white : const Color(0xFF1E293B),
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isNight ? const Color(0xFF2E2A60) : const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Text('💡', style: TextStyle(fontSize: 14)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '如需自由语音对话，请点击【切换打字】，使用手机键盘上的麦克风🎙️即可精准语音转文字！',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6B21A8),
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '选择你想对波可说的心声：',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: isNight ? Colors.white70 : const Color(0xFF475569),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _speechChip(ctx, '🐟 波可，给你准备了香酥小鱼干，快来吃呀！'),
+                  _speechChip(ctx, '🌙 波可，今天好累呀，互道晚安睡觉觉好不好？'),
+                  _speechChip(ctx, '🌀 波可，来表演一个超级无敌大回旋跳舞吧！'),
+                  _speechChip(ctx, '🧶 波可，毛线球准备好啦，出来玩耍咯！'),
+                  _speechChip(ctx, '🐾 波可，写代码好累啊，求摸摸头安慰一下~'),
+                  _speechChip(ctx, '🐱 波可，讲个猫猫悄悄话哄我开心好不好？'),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    setState(() => _showKeyboardInput = true);
+                  },
+                  icon: const Icon(Icons.keyboard_alt_rounded, size: 18),
+                  label: const Text('切换至打字输入 (自由提问与语音转字)'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF6366F1),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _speechChip(BuildContext ctx, String text) {
+    final isNight = widget.isNight;
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(ctx);
+        _sendMessage(text);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isNight ? const Color(0xFF282352) : const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isNight ? const Color(0xFF4338CA) : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: isNight ? Colors.white : const Color(0xFF1E293B),
+          ),
+        ),
+      ),
+    );
   }
 
   void _openSettingsDialog() {
@@ -154,6 +270,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     final customUrlController = TextEditingController(text: _ai.customUrl);
     String selectedProvider = _ai.provider;
     bool isTesting = false;
+    bool isTestingVoice = false;
     String? testResult;
     bool? testSuccess;
 
@@ -341,8 +458,11 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
 
                     const SizedBox(height: 12),
 
-                    // 测试连接按钮与反馈
-                    Row(
+                    // 测试连接与试听语音按钮
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         OutlinedButton.icon(
                           onPressed: isTesting
@@ -370,25 +490,51 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Text('🧪', style: TextStyle(fontSize: 14)),
-                          label: Text(isTesting ? '正在测试...' : '测试连接'),
+                          label: Text(isTesting ? '正在测试...' : '测试大模型连接'),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            selectedProvider == 'minimax'
-                                ? '💡 原生支持高保真小奶音朗读'
-                                : '💡 对话走 ' + selectedProvider + '，语音自动共享小奶音',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
-                            ),
+                        OutlinedButton.icon(
+                          onPressed: isTestingVoice
+                              ? null
+                              : () async {
+                                  setDialogState(() {
+                                    isTestingVoice = true;
+                                    testResult = null;
+                                  });
+                                  final res = await _ai.testVoiceOutput();
+                                  setDialogState(() {
+                                    isTestingVoice = false;
+                                    testSuccess = res['success'] == true;
+                                    testResult = res['message'] as String?;
+                                  });
+                                },
+                          icon: isTestingVoice
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('🔊', style: TextStyle(fontSize: 14)),
+                          label: Text(isTestingVoice ? '正在发声...' : '试听小奶音'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      selectedProvider == 'minimax'
+                          ? '💡 MiniMax 原生支持大模型深度思考与高保真萌宠小奶音朗读'
+                          : '💡 对话走 $selectedProvider，语音自动共享 MiniMax 小奶音',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                      ),
                     ),
 
                     if (testResult != null) ...[
@@ -652,15 +798,64 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                     ),
                                   ],
                                 ),
-                                child: Text(
-                                  msg.content,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    height: 1.4,
-                                    color: isUser
-                                        ? Colors.white
-                                        : (isNight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      msg.content,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        height: 1.4,
+                                        color: isUser
+                                            ? Colors.white
+                                            : (isNight ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B)),
+                                      ),
+                                    ),
+                                    if (!isUser) ...[
+                                      const SizedBox(height: 6),
+                                      GestureDetector(
+                                        onTap: () async {
+                                          HapticService.light();
+                                          if (msg.audioBytes != null && msg.audioBytes!.isNotEmpty) {
+                                            await _ai.playVoiceResponse(msg.audioBytes);
+                                          } else {
+                                            final audio = await _ai.synthesizeVoice(msg.content);
+                                            if (audio != null) {
+                                              await _ai.playVoiceResponse(audio);
+                                            } else {
+                                              SoundService.playMeow(tone: MeowTone.sweet);
+                                            }
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                                          decoration: BoxDecoration(
+                                            color: isNight ? const Color(0xFF2E2A60) : const Color(0xFFF3E8FF),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: isNight ? const Color(0xFF4C4482) : const Color(0xFFE9D5FF),
+                                              width: 0.8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Text('🔊', style: TextStyle(fontSize: 11)),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '重播小奶音',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7C3AED),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ),
@@ -761,105 +956,231 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                 ),
               ),
             ),
-            child: _showKeyboardInput
-                ? Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 模式快速切换导航与提示
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
                     children: [
-                      IconButton(
-                        icon: const Text('🎙️', style: TextStyle(fontSize: 20)),
-                        onPressed: () => setState(() => _showKeyboardInput = false),
-                        tooltip: '切换至按住语音',
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: _textController,
-                          textInputAction: TextInputAction.send,
-                          onSubmitted: _sendMessage,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isNight ? Colors.white : Colors.black,
+                      GestureDetector(
+                        onTap: () => setState(() => _showKeyboardInput = true),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                          decoration: BoxDecoration(
+                            color: _showKeyboardInput
+                                ? const Color(0xFF6366F1)
+                                : (isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9)),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          decoration: InputDecoration(
-                            hintText: '对波可说点什么吧...',
-                            hintStyle: TextStyle(
-                              color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
-                            ),
-                            filled: true,
-                            fillColor: isNight ? const Color(0xFF282352) : const Color(0xFFF8FAFC),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        icon: const Icon(Icons.send_rounded, color: Color(0xFF6366F1), size: 22),
-                        onPressed: () => _sendMessage(_textController.text),
-                      ),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.keyboard_alt_rounded, color: Color(0xFF8B5CF6), size: 22),
-                        onPressed: () => setState(() => _showKeyboardInput = true),
-                        tooltip: '切换文字输入',
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _toggleListening,
-                          child: Container(
-                            height: 44,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: _isListening
-                                    ? [const Color(0xFFEF4444), const Color(0xFFDC2626)]
-                                    : [const Color(0xFFA855F7), const Color(0xFF6366F1)],
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('⌨️', style: TextStyle(fontSize: 12)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '键盘打字',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: _showKeyboardInput
+                                      ? Colors.white
+                                      : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF475569)),
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(22),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (_isListening ? const Color(0xFFEF4444) : const Color(0xFF6366F1))
-                                      .withValues(alpha: 0.35),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(_isListening ? '🛑' : '🎙️', style: const TextStyle(fontSize: 18)),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _isListening ? '正在倾听... (轻触发送)' : '轻触对波可说话',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            ],
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 清空记录按钮
-                      IconButton(
-                        icon: const Text('🧹', style: TextStyle(fontSize: 16)),
-                        onPressed: () {
-                          _ai.clearHistory();
-                          setState(() {});
-                          HapticService.light();
-                        },
-                        tooltip: '清空记忆',
+                      GestureDetector(
+                        onTap: () => setState(() => _showKeyboardInput = false),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                          decoration: BoxDecoration(
+                            color: !_showKeyboardInput
+                                ? const Color(0xFF8B5CF6)
+                                : (isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9)),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('🎙️', style: TextStyle(fontSize: 12)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '快捷倾诉',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: !_showKeyboardInput
+                                      ? Colors.white
+                                      : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF475569)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '💡 手机输入法自带麦克风可精准语音打字',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isNight ? const Color(0xFF818CF8) : const Color(0xFF7C3AED),
+                        ),
                       ),
                     ],
                   ),
+                ),
+                _showKeyboardInput
+                    ? Row(
+                        children: [
+                          InkWell(
+                            onTap: () => setState(() => _showKeyboardInput = false),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('🎙️', style: TextStyle(fontSize: 14)),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '语音',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: TextField(
+                              controller: _textController,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: _sendMessage,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isNight ? Colors.white : Colors.black,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: '对波可说点什么吧...（输入法麦克风可语音打字）',
+                                hintStyle: TextStyle(
+                                  fontSize: 12,
+                                  color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                  borderSide: BorderSide.none,
+                                ),
+                                filled: true,
+                                fillColor: isNight ? const Color(0xFF282352) : const Color(0xFFF8FAFC),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            icon: const Icon(Icons.send_rounded, color: Color(0xFF6366F1), size: 22),
+                            onPressed: () => _sendMessage(_textController.text),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          InkWell(
+                            onTap: () => setState(() => _showKeyboardInput = true),
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.keyboard_alt_rounded,
+                                    color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '打字',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: _toggleListening,
+                              child: Container(
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFA855F7), Color(0xFF6366F1)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(22),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text('🎙️', style: TextStyle(fontSize: 18)),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      '轻触对波可说话',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // 清空记录按钮
+                          IconButton(
+                            icon: const Text('🧹', style: TextStyle(fontSize: 16)),
+                            onPressed: () {
+                              _ai.clearHistory();
+                              setState(() {});
+                              HapticService.light();
+                            },
+                            tooltip: '清空记忆',
+                          ),
+                        ],
+                      ),
+              ],
+            ),
           ),
         ],
       ),
