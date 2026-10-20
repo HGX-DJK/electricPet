@@ -83,20 +83,30 @@ class LiveWardrobeDock extends StatelessWidget {
 
   static String getBreedSummary(String skinId) {
     switch (skinId) {
+      case 'cat_golden_shaded':
+        return '富贵金渐层 · 绿宝石大眼 · 包子发腮';
+      case 'cat_silver_shaded':
+        return '仙气银霜 · 薄荷绿大眼 · 软萌白胖';
       case 'cat_ragdoll':
-        return '八字开脸 · 蓬松羽尾 · 仙气胸毛';
-      case 'cat_siamese':
-        return '高耸尖耳 · 楔形V脸 · 细鞭尾';
+        return '蓝双开脸 · 宝石海蓝眸 · 仙气领圈';
+      case 'cat_tuxedo':
+        return '黑白燕尾服 · 四蹄踏雪 · 琥珀明眸';
+      case 'cat_maine_coon':
+        return '猞猁耳尖羽 · 霸气狮鬃领 · 狐尾丛林';
+      case 'cat_sakura_peach':
+        return '蜜桃粉晶 · 樱花肉垫 · 梦幻仙境';
       case 'cat_british_blue':
         return '包子脸发腮 · 矮胖躯干 · 水獭尾';
       case 'cat_orange':
         return '大橘肚腩 · 虎斑环纹尾 · 肥肉爪';
       case 'cat_persian_white':
-        return '鸳鸯异瞳 · 飘逸鬃毛 · 纯白羽尾';
+        return '金银双眸异瞳 · 飘逸鬃毛 · 纯白羽尾';
       case 'cat_calico':
-        return '阴阳双色耳 · 锦鲤花斑 · 招财吉猫';
+        return '日系甜心 · 柔杏软灰斑 · 招财吉猫';
       case 'cat_american_tabby':
         return '虎斑M纹 · 大理石回旋 · 斑纹尾';
+      case 'cat_siamese':
+        return '焦糖拿铁脸 · 电光天青眸 · 灵动敏捷';
       case 'cat_black':
         return '曜石流线 · 踏雪寻梅白爪 · 金瞳';
       default:

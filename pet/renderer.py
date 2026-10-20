@@ -896,6 +896,48 @@ class PetRenderer:
     def _draw_cat(self, painter: QPainter, state, skin_id, spin_info=None):
         # 3D 渲染多级光源配色表
         colors = {
+            "cat_golden_shaded": {
+                "body_hl": "#FFF8E1", "body_light": "#FFE082", "body_mid": "#FFB300", "body_dark": "#F57C00", "body_shadow": "#B75300",
+                "outline": "#5D4037", "ear_l_t": "#FFE082", "ear_l_b": "#F57C00", "ear_r_t": "#FFE082", "ear_r_b": "#F57C00",
+                "spot_t": QColor(62, 39, 35, 120), "spot_b": QColor(38, 24, 21, 150),
+                "tail_l": "#FFA000", "tail_d": "#4E342E", "paw_t": "#FFF8E1", "paw_b": "#FFD54F",
+                "inner_ear_t": "#FFAB91", "inner_ear_b": "#E64A19"
+            },
+            "cat_silver_shaded": {
+                "body_hl": "#FFFFFF", "body_light": "#F8FAFC", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
+                "outline": "#1E293B", "ear_l_t": "#F8FAFC", "ear_l_b": "#94A3B8", "ear_r_t": "#F8FAFC", "ear_r_b": "#94A3B8",
+                "spot_t": QColor(71, 85, 105, 100), "spot_b": QColor(30, 41, 59, 130),
+                "tail_l": "#E2E8F0", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
+                "inner_ear_t": "#FBCFE8", "inner_ear_b": "#F43F5E"
+            },
+            "cat_ragdoll": {
+                "body_hl": "#FFFFFF", "body_light": "#FDFCFF", "body_mid": "#F5F3FF", "body_dark": "#EDE9FE", "body_shadow": "#DDD6FE",
+                "outline": "#5B21B6", "ear_l_t": "#94A3B8", "ear_l_b": "#64748B", "ear_r_t": "#94A3B8", "ear_r_b": "#64748B",
+                "spot_t": QColor(148, 163, 184, 180), "spot_b": QColor(100, 116, 139, 210),
+                "tail_l": "#94A3B8", "tail_d": "#475569", "paw_t": "#FFFFFF", "paw_b": "#FAF5FF",
+                "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
+            },
+            "cat_tuxedo": {
+                "body_hl": "#64748B", "body_light": "#334155", "body_mid": "#1E293B", "body_dark": "#0F172A", "body_shadow": "#020617",
+                "outline": "#020617", "ear_l_t": "#334155", "ear_l_b": "#0F172A", "ear_r_t": "#334155", "ear_r_b": "#0F172A",
+                "spot_t": None, "spot_b": None,
+                "tail_l": "#334155", "tail_d": "#0F172A", "paw_t": "#FFFFFF", "paw_b": "#F8FAFC",
+                "inner_ear_t": "#F472B6", "inner_ear_b": "#9D174D"
+            },
+            "cat_maine_coon": {
+                "body_hl": "#D7CCC8", "body_light": "#BCAAA4", "body_mid": "#8D6E63", "body_dark": "#6D4C41", "body_shadow": "#3E2723",
+                "outline": "#271814", "ear_l_t": "#8D6E63", "ear_l_b": "#4E342E", "ear_r_t": "#8D6E63", "ear_r_b": "#4E342E",
+                "spot_t": QColor(46, 27, 22, 180), "spot_b": QColor(30, 16, 13, 220),
+                "tail_l": "#8D6E63", "tail_d": "#3E2723", "paw_t": "#EFEBE9", "paw_b": "#BCAAA4",
+                "inner_ear_t": "#FFCCBC", "inner_ear_b": "#D84315"
+            },
+            "cat_sakura_peach": {
+                "body_hl": "#FFFFFF", "body_light": "#FFF1F2", "body_mid": "#FFE4E6", "body_dark": "#FECDD3", "body_shadow": "#FDA4AF",
+                "outline": "#F43F5E", "ear_l_t": "#FFE4E6", "ear_l_b": "#FB7185", "ear_r_t": "#FFE4E6", "ear_r_b": "#FB7185",
+                "spot_t": QColor(251, 113, 133, 140), "spot_b": QColor(244, 63, 94, 160),
+                "tail_l": "#FDA4AF", "tail_d": "#F43F5E", "paw_t": "#FFFFFF", "paw_b": "#FFE4E6",
+                "inner_ear_t": "#FECDD3", "inner_ear_b": "#E11D48"
+            },
             "cat_calico": {
                 "body_hl": "#FFFFFF", "body_light": "#FFFDF9", "body_mid": "#FFEAD8", "body_dark": "#F5D5BE", "body_shadow": "#E2B998",
                 "outline": "#7D6456", "ear_l_t": "#FFFBF7", "ear_l_b": "#E2C4B0", "ear_r_t": "#FFD1A4", "ear_r_b": "#E0853D",
@@ -1120,13 +1162,39 @@ class PetRenderer:
             painter.setBrush(QBrush(QColor(255, 255, 255, 210)))
             painter.drawEllipse(QRectF(bx - 2, by - 4, 3.5, 3.5))
 
-        # 灵动弧线胡须
+        # 7.1 鼓鼓饱满的包子嘴八字胡垫 (Puffy Whisker Pads)
+        pad_brush = QBrush(QColor(255, 255, 255, 48))
+        painter.setBrush(pad_brush)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(-18, 2, 17, 13))
+        painter.drawEllipse(QRectF(1, 2, 17, 13))
+
+        # 灵动弧线胡须与微毛囊点
         whisk_col = QColor(palette["outline"]).lighter(120)
-        painter.setPen(QPen(whisk_col, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        w_l1 = QPainterPath(); w_l1.moveTo(-42, 2); w_l1.cubicTo(-50, 1, -58, -1, -64, -3); painter.drawPath(w_l1)
-        w_l2 = QPainterPath(); w_l2.moveTo(-42, 7); w_l2.cubicTo(-50, 8, -58, 11, -62, 13); painter.drawPath(w_l2)
-        w_r1 = QPainterPath(); w_r1.moveTo(42, 2); w_r1.cubicTo(50, 1, 58, -1, 64, -3); painter.drawPath(w_r1)
-        w_r2 = QPainterPath(); w_r2.moveTo(42, 7); w_r2.cubicTo(50, 8, 58, 11, 62, 13); painter.drawPath(w_r2)
+        dot_col = QColor(whisk_col).darker(120)
+        dot_col.setAlpha(75)
+        painter.setBrush(QBrush(dot_col))
+        for dx, dy in [(-12, 6), (-7, 5), (-11, 9), (-6, 9), (12, 6), (7, 5), (11, 9), (6, 9)]:
+            painter.drawEllipse(QRectF(dx - 0.7, dy - 0.7, 1.4, 1.4))
+
+        # 7.2 眉上灵动感知触须 (Superciliary Vibrissae - 猫咪灵魂微触须)
+        brow_pen = QPen(whisk_col, 1.15, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        painter.setPen(brow_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        b_l1 = QPainterPath(); b_l1.moveTo(-19, -15); b_l1.cubicTo(-24, -22, -28, -26, -33, -29); painter.drawPath(b_l1)
+        b_l2 = QPainterPath(); b_l2.moveTo(-16, -16); b_l2.cubicTo(-19, -24, -22, -28, -26, -33); painter.drawPath(b_l2)
+        b_r1 = QPainterPath(); b_r1.moveTo(19, -15); b_r1.cubicTo(24, -22, 28, -26, 33, -29); painter.drawPath(b_r1)
+        b_r2 = QPainterPath(); b_r2.moveTo(16, -16); b_r2.cubicTo(19, -24, 22, -28, 26, -33); painter.drawPath(b_r2)
+
+        # 7.3 灵动自然重力悬链下垂胡须 (3 根每侧)
+        whisk_pen = QPen(whisk_col, 1.8, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        painter.setPen(whisk_pen)
+        w_l1 = QPainterPath(); w_l1.moveTo(-18, 5); w_l1.cubicTo(-35, 1, -48, 2, -60, 5); painter.drawPath(w_l1)
+        w_l2 = QPainterPath(); w_l2.moveTo(-19, 8); w_l2.cubicTo(-36, 8, -48, 12, -62, 16); painter.drawPath(w_l2)
+        w_l3 = QPainterPath(); w_l3.moveTo(-18, 11); w_l3.cubicTo(-34, 15, -45, 21, -56, 25); painter.drawPath(w_l3)
+        w_r1 = QPainterPath(); w_r1.moveTo(18, 5); w_r1.cubicTo(35, 1, 48, 2, 60, 5); painter.drawPath(w_r1)
+        w_r2 = QPainterPath(); w_r2.moveTo(19, 8); w_r2.cubicTo(36, 8, 48, 12, 62, 16); painter.drawPath(w_r2)
+        w_r3 = QPainterPath(); w_r3.moveTo(18, 11); w_r3.cubicTo(34, 15, 45, 21, 56, 25); painter.drawPath(w_r3)
 
         # 眼睛与嘴巴 (支持异色瞳与全部动作面容)
         self._draw_cat_face(painter, state, skin_id)
@@ -1336,13 +1404,31 @@ class PetRenderer:
             draw_single_paw(11, 38 - leg_offset, 25, 17, 18, 44 - leg_offset, 11, 8)
 
     def _draw_cat_face(self, painter: QPainter, state, skin_id):
-        # 异色瞳处理 (白猫: 蓝瞳+翠绿瞳; 黑猫: 闪亮金瞳)
+        # 异色与宝石瞳处理 (金渐层: 祖母绿; 银渐层: 薄荷碧玉; 布偶: 蓝宝石; 警长: 琥珀金; 缅因: 琥珀金; 樱花: 玫瑰晶; 白猫: 冰蓝+翠绿; 黑猫: 金瞳)
         eye_l_col = QColor("#3D2923")
         eye_r_col = QColor("#3D2923")
 
         if skin_id == "cat_white":
             eye_l_col = QColor("#38BDF8")  # 冰蓝
             eye_r_col = QColor("#10B981")  # 翡翠绿
+        elif skin_id == "cat_golden_shaded":
+            eye_l_col = QColor("#059669")  # 祖母绿宝石眸
+            eye_r_col = QColor("#059669")
+        elif skin_id == "cat_silver_shaded":
+            eye_l_col = QColor("#0D9488")  # 薄荷碧玉眸
+            eye_r_col = QColor("#0D9488")
+        elif skin_id == "cat_ragdoll":
+            eye_l_col = QColor("#2563EB")  # 蓝宝石星眸
+            eye_r_col = QColor("#2563EB")
+        elif skin_id == "cat_tuxedo":
+            eye_l_col = QColor("#F59E0B")  # 琥珀明金
+            eye_r_col = QColor("#F59E0B")
+        elif skin_id == "cat_maine_coon":
+            eye_l_col = QColor("#D97706")  # 森林野性琥珀眸
+            eye_r_col = QColor("#D97706")
+        elif skin_id == "cat_sakura_peach":
+            eye_l_col = QColor("#EC4899")  # 玫瑰粉晶眸
+            eye_r_col = QColor("#EC4899")
         elif skin_id == "cat_black":
             eye_l_col = QColor("#FBBF24")  # 闪耀明金
             eye_r_col = QColor("#FBBF24")
@@ -2491,16 +2577,49 @@ class PetRenderer:
                 star_path.closeSubpath()
                 painter.drawPath(star_path)
 
+            # 上眼睑投射深邃环境阴影 (Upper Eyelid Ambient Occlusion Shadow)
+            lid_shadow = QLinearGradient(ex, -15, ex, -7)
+            lid_shadow.setColorAt(0.0, QColor(0, 0, 0, 90))
+            lid_shadow.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(QBrush(lid_shadow))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawChord(QRectF(ex - eye_w / 2.0, -15, eye_w, eye_h * 0.48), 0, 180 * 16)
+
+            # 下眼睑湿润水光反射弧 (Lower Eyelid Wet Tear Film Meniscus)
+            tear_pen = QPen(QColor(255, 255, 255, 160), 0.95, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(tear_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            tear_path = QPainterPath()
+            tear_path.moveTo(ex - eye_w * 0.36, 5.0)
+            tear_path.quadTo(ex, 7.2, ex + eye_w * 0.36, 5.0)
+            painter.drawPath(tear_path)
+
     def _draw_standard_mouth(self, painter: QPainter):
-        is_dark_skin = getattr(self.model, "skin_id", "") in ("cat_black", "dog_black")
+        is_dark_skin = getattr(self.model, "skin_id", "") in ("cat_black", "cat_tuxedo", "dog_black")
         nose_col = QColor("#E8A0A0") if is_dark_skin else QColor("#FFA5A5")
         mouth_col = QColor("#9B8E85") if is_dark_skin else QColor("#543D37")
 
+        # 立体微心形鼻头与湿润反光
         painter.setBrush(QBrush(nose_col))
         painter.setPen(Qt.PenStyle.NoPen)
-        nose = QPolygonF([QPointF(-3, 2), QPointF(3, 2), QPointF(0, 5)])
+        nose = QPolygonF([QPointF(-3.2, 1.8), QPointF(3.2, 1.8), QPointF(0, 5.2)])
         painter.drawPolygon(nose)
 
+        # 湿润鼻头高光
+        painter.setBrush(QBrush(QColor(255, 255, 255, 190)))
+        painter.drawEllipse(QRectF(-1.6, 2.2, 1.8, 1.1))
+
+        # 真实双侧微弯小鼻孔 (Nares / Nostrils)
+        nostril_col = QColor("#881337") if not is_dark_skin else QColor("#3E2723")
+        painter.setPen(QPen(nostril_col, 0.9, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(-1.8, 3.2), QPointF(-0.8, 4.2))
+        painter.drawLine(QPointF(1.8, 3.2), QPointF(0.8, 4.2))
+
+        # 人中垂直中缝 (Philtrum Groove)
+        painter.setPen(QPen(mouth_col, 1.3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(0, 5.2), QPointF(0, 7.0))
+
+        # 治愈三瓣猫嘴
         painter.setPen(QPen(mouth_col, 2.2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         mouth = QPainterPath()
         mouth.moveTo(-9, 7)
