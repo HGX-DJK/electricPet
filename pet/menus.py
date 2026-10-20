@@ -2739,7 +2739,7 @@ class StatusDialog(ModernBaseDialog):
         name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
         name_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
         stage_info = model.stage_info
-        title_lbl = QLabel(f"{stage_info['name']} · 亲密度: {model.intimacy} 点 · 体重: {model.weight}kg")
+        title_lbl = QLabel(f"{stage_info['name']} · 陪伴第 {model.total_days} 天 · 亲密度: {model.intimacy} 点 · 体重: {model.weight}kg")
         title_lbl.setStyleSheet("color: #38BDF8; font-weight: 500; font-size: 11px;")
         title_info.addWidget(name_lbl)
         title_info.addWidget(title_lbl)
@@ -2953,6 +2953,10 @@ class SettingsDialog(ModernBaseDialog):
         self.cb_autostart.setChecked(model.auto_start)
         layout.addWidget(self.cb_autostart)
 
+        self.cb_click_through = QCheckBox("启用鼠标穿透 (免打扰模式，点击直接穿透至下层窗口)")
+        self.cb_click_through.setChecked(getattr(pet_window, "click_through", False))
+        layout.addWidget(self.cb_click_through)
+
         layout.addStretch()
 
         # 底部保存应用
@@ -2998,6 +3002,10 @@ class SettingsDialog(ModernBaseDialog):
         auto_start = self.cb_autostart.isChecked()
         self._set_windows_autostart(auto_start)
         self.model.auto_start = auto_start
+
+        new_ct = self.cb_click_through.isChecked()
+        if self.pet_window and getattr(self.pet_window, "click_through", False) != new_ct:
+            self.pet_window.set_click_through(new_ct)
 
         self.model.save_to_disk()
         self.accept()

@@ -328,7 +328,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _yarnVx *= 0.95;
           _yarnVy = (_yarnVy + 0.42) * 0.96;
 
-          final minX = 24.0;
+          const minX = 24.0;
           final maxX = _lastScreenSize.width > 100 ? (_lastScreenSize.width - 24.0) : 340.0;
           final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
           final minY = floorTop + 20.0;
@@ -1145,7 +1145,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         ),
                         const Spacer(),
                         Text(
-                          '亲密值: ${widget.petModel.intimacy}',
+                          '📅 陪伴第 ${widget.petModel.totalDays} 天 · 亲密值: ${widget.petModel.intimacy}',
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
                         ),
                       ],
@@ -1991,7 +1991,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
-    final plantCenterX = 24.0 + 24.0;
+    const plantCenterX = 24.0 + 24.0;
     final plantCenterY = floorTop + 16.0 + 26.0;
 
     // 若猫咪距离猫草较远，迈着小碎步跑过去互动
@@ -2392,7 +2392,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('罐头？！是开饭敲罐头的声音！！小猫全速飞奔而来啦——！！🥫💨', duration: const Duration(seconds: 4));
 
     // 全速冲刺位移至餐盘前方
-    final targetX = 85.0;
+    const targetX = 85.0;
     final targetY = nestY + 85.0;
     final startX = _petX;
     final startY = _petY;

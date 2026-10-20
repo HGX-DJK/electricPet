@@ -214,6 +214,15 @@ class PetModel extends ChangeNotifier {
   int intimacy = 100;
   double weight = 3.6;
   int totalFedCount = 0;
+  int birthTime = 0; // 初生时间戳 (毫秒)
+
+  /// 真实陪伴天数 (根据初生时间戳动态计算)
+  int get totalDays {
+    if (birthTime <= 0) return 1;
+    final diffMs = DateTime.now().millisecondsSinceEpoch - birthTime;
+    if (diffMs <= 0) return 1;
+    return math.max(1, (diffMs / 86400000).floor() + 1);
+  }
 
   bool isSleeping = false;
   bool isStudying = false;
@@ -249,6 +258,7 @@ class PetModel extends ChangeNotifier {
   late final Future<void> isReady;
 
   PetModel() {
+    birthTime = DateTime.now().millisecondsSinceEpoch;
     isReady = loadFromDisk();
   }
 
@@ -668,6 +678,7 @@ class PetModel extends ChangeNotifier {
       'intimacy': intimacy,
       'weight': weight,
       'totalFedCount': totalFedCount,
+      'birthTime': birthTime > 0 ? birthTime : DateTime.now().millisecondsSinceEpoch,
       'decorations': Map<String, String>.from(decorations),
       'personalityStats': Map<String, int>.from(personalityStats),
       'habitat': habitat,
@@ -692,6 +703,12 @@ class PetModel extends ChangeNotifier {
     intimacy = data['intimacy'] ?? intimacy;
     weight = (data['weight'] as num?)?.toDouble() ?? weight;
     totalFedCount = data['totalFedCount'] ?? totalFedCount;
+    final rawBirth = (data['birthTime'] ?? data['birth_time']) as num?;
+    if (rawBirth != null && rawBirth.toInt() > 0) {
+      birthTime = rawBirth.toInt();
+    } else if (birthTime <= 0) {
+      birthTime = DateTime.now().millisecondsSinceEpoch;
+    }
     if (data['decorations'] != null) {
       final loaded = Map<String, String>.from(data['decorations']);
       decorations['head'] = loaded['head'] ?? 'none';

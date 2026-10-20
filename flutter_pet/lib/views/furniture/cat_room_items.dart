@@ -585,7 +585,7 @@ class CatRugBed extends StatelessWidget {
                 width: rugWidth * 0.92,
                 height: rugHeight * 0.44,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.all(Radius.elliptical(rugWidth * 0.92 / 2, rugHeight * 0.44 / 2)),
+                  borderRadius: const BorderRadius.all(Radius.elliptical(rugWidth * 0.92 / 2, rugHeight * 0.44 / 2)),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: isNight ? 0.25 : 0.05),
@@ -600,7 +600,7 @@ class CatRugBed extends StatelessWidget {
               width: rugWidth,
               height: rugHeight,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.all(Radius.elliptical(rugWidth / 2, rugHeight / 2)),
+                borderRadius: const BorderRadius.all(Radius.elliptical(rugWidth / 2, rugHeight / 2)),
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,

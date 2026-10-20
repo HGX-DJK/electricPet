@@ -84,8 +84,9 @@ class PetWindow(QWidget):
         # 初始化窗口特性
         self._setup_window_properties()
 
-        # 绑定进化蜕变回调
+        # 绑定进化蜕变与每日里程碑回调
         self.model.on_evolve = self._on_evolution_triggered
+        self.model.on_daily_milestone = self._on_daily_milestone_triggered
 
         # 60 FPS 物理与渲染动画定时器 (~16.6ms)
         self.anim_timer = QTimer(self)
@@ -134,7 +135,10 @@ class PetWindow(QWidget):
             import ctypes
             hwnd = int(self.winId())
             self._boss_hwnd = hwnd
-            ctypes.windll.user32.RegisterHotKey(hwnd, self.HOTKEY_BOSS_ID, 0x0001 | 0x4000, 0x50)
+            res = ctypes.windll.user32.RegisterHotKey(hwnd, self.HOTKEY_BOSS_ID, 0x0001 | 0x4000, 0x50)
+            self.hotkey_registered = (res != 0)
+            if not self.hotkey_registered:
+                print("[PetWindow] Alt+P hotkey conflict with another application. Boss mode can still be toggled via tray icon.")
             app = QApplication.instance()
             if app and not getattr(self, "_boss_filter_installed", False):
                 self._boss_filter = GlobalBossKeyFilter(self)
@@ -295,6 +299,15 @@ class PetWindow(QWidget):
         self.renderer.trigger_evolution()
         self.check_resize_for_growth()
         self.dialogue.say(f"🌟 奇迹蜕变！波可成长进阶到【{stage_name}】啦！体型变大、神采奕奕~ (✧ω✧)", duration=7.0)
+
+    def _on_daily_milestone_triggered(self, day: int):
+        """陪伴跨日成长里程碑庆祝"""
+        self.play_action("HAPPY_SPIN", duration=4.5)
+        if hasattr(self, "dialogue"):
+            self.dialogue.say(
+                f"🎉 陪伴主人的第 {day} 天开始啦！\n已自动领取每日陪伴津贴 (+30 经验, +20 金币)！新的一天也要元气满满哦~ 🐾❤️",
+                duration=6.5
+            )
 
 
     def get_head_rel_y(self) -> float:

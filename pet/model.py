@@ -79,6 +79,7 @@ class PetModel:
         self.on_evolve = None
         self.on_focus_finish = None
         self.on_personality_change = None
+        self.on_daily_milestone = None
 
         self.load_from_disk()
 
@@ -478,6 +479,17 @@ class PetModel:
     def tick(self, delta_seconds):
         if delta_seconds <= 0:
             return
+
+        # 每日跨天陪伴里程碑自动检测与签到奖励
+        current_days = max(1, int((time.time() - self.birth_time) / 86400) + 1)
+        if current_days > self.total_days:
+            self.total_days = current_days
+            self.add_exp(30.0)
+            self.coins += 20
+            sound_manager.play("level_up")
+            if self.on_daily_milestone:
+                self.on_daily_milestone(self.total_days)
+            self.save_to_disk()
 
         if self.is_sleeping:
             self.energy = min(100.0, self.energy + delta_seconds * 0.12)

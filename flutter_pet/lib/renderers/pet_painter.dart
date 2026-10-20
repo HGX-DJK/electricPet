@@ -1725,7 +1725,7 @@ class PetPainter extends CustomPainter {
 
     // 1. 鼓鼓饱满的双侧胡须肉垫 (Puffy Muzzle Whisker Pads / 包子嘴)
     final padHighlight = Colors.white.withValues(alpha: 0.18);
-    final padShadow = const Color(0x16000000);
+    const padShadow = Color(0x16000000);
 
     // 左胡须垫
     final leftPadCenter = Offset(noseCenter.dx - 8.5, noseCenter.dy + 4.5);
@@ -2596,9 +2596,9 @@ class PetPainter extends CustomPainter {
     if (backDeco == 'shell_turtle') {
       if (isBackView) {
         // 🐢 背面视角：完整 3D 浮雕六边形翡翠乌龟壳背包
-        final shellCenter = const Offset(0, 38);
-        final shellW = 98.0;
-        final shellH = 80.0;
+        const shellCenter = Offset(0, 38);
+        const shellW = 98.0;
+        const shellH = 80.0;
 
         // 1. 软萌龟爪与小尾巴 (Tiny cute flippers & tail)
         final limbPaint = Paint()..color = const Color(0xFF22C55E);
@@ -2866,7 +2866,7 @@ class PetPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
-      ).createShader(Rect.fromLTRB(-66, 18, 66, 84));
+      ).createShader(const Rect.fromLTRB(-66, 18, 66, 84));
       canvas.drawPath(capePath, Paint()..shader = velvetGradient);
 
       // 纯金双层麦穗流苏滚边 (Gold Bullion Fringe & Trim)
@@ -2935,7 +2935,7 @@ class PetPainter extends CustomPainter {
         end: Alignment.bottomCenter,
         colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF312E81)],
         stops: [0.0, 0.55, 1.0],
-      ).createShader(Rect.fromLTRB(-70, 16, 70, 88));
+      ).createShader(const Rect.fromLTRB(-70, 16, 70, 88));
       canvas.drawPath(outerCapePath, Paint()..shader = capeGradient);
 
       // --- 第 3 层：立体面料流线光泽折痕 (Volumetric Fabric Highlights) ---
@@ -3033,9 +3033,9 @@ class PetPainter extends CustomPainter {
     } else if (backDeco == 'shell_turtle') {
       // 🐢 萌趣龟壳背包：身后饱满隆起的翡翠小龟壳 (左右各露出 16dp，两翼圆润饱满，无论正面或侧身均极其醒目)
       if (!isBackView) {
-        final shellCenter = const Offset(0, 36);
-        final shellW = 126.0;
-        final shellH = 88.0;
+        const shellCenter = Offset(0, 36);
+        const shellW = 126.0;
+        const shellH = 88.0;
 
         // 1. 龟壳底层环境阴影 (Soft Ambient Occlusion)
         canvas.drawOval(
@@ -3502,7 +3502,7 @@ class PetPainter extends CustomPainter {
       canvas.drawCircle(Offset(mugCenter.dx + 3, mugRect.top - 11 + steamY), 2.2, Paint()..color = const Color(0x6638BDF8));
     } else if (handDeco == 'gamepad_retro') {
       // 🕹️ 8-bit 复古像素掌机
-      final padCenter = const Offset(0, 52);
+      const padCenter = Offset(0, 52);
       final padRect = Rect.fromCenter(center: padCenter, width: 38, height: 26);
       canvas.drawRRect(RRect.fromRectAndRadius(padRect, const Radius.circular(5)), Paint()..color = const Color(0xFFE2E8F0));
       canvas.drawRRect(RRect.fromRectAndRadius(padRect, const Radius.circular(5)), Paint()..color = const Color(0xFF94A3B8)..style = PaintingStyle.stroke..strokeWidth = 1.5);
@@ -3513,7 +3513,7 @@ class PetPainter extends CustomPainter {
       canvas.drawCircle(Offset(padCenter.dx + 9, padCenter.dy + 6), 2.2, Paint()..color = const Color(0xFFEF4444));
     } else if (handDeco == 'dumbbell_power') {
       // 🏋️ 能量哑铃
-      final dbCenter = const Offset(0, 54);
+      const dbCenter = Offset(0, 54);
       canvas.drawLine(Offset(dbCenter.dx - 18, dbCenter.dy), Offset(dbCenter.dx + 18, dbCenter.dy), Paint()..color = const Color(0xFF94A3B8)..strokeWidth = 4.0..strokeCap = StrokeCap.round);
       final ringPaint = Paint()..color = const Color(0xFF0EA5E9);
       final glowPaint = Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5);
@@ -3720,11 +3720,11 @@ class PetPainter extends CustomPainter {
 
       // 3. 毛线球 3D 球体渐变
       final ballRect = Rect.fromCircle(center: ballCenter, radius: ballRadius);
-      final sphereShader = RadialGradient(
-        center: const Alignment(-0.35, -0.35),
+      final sphereShader = const RadialGradient(
+        center: Alignment(-0.35, -0.35),
         radius: 0.95,
-        colors: const [Color(0xFFFFE4E6), Color(0xFFFB7185), Color(0xFFBE123C)],
-        stops: const [0.0, 0.55, 1.0],
+        colors: [Color(0xFFFFE4E6), Color(0xFFFB7185), Color(0xFFBE123C)],
+        stops: [0.0, 0.55, 1.0],
       ).createShader(ballRect);
       canvas.drawCircle(ballCenter, ballRadius, Paint()..shader = sphereShader);
 

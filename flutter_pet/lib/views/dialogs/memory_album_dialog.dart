@@ -222,7 +222,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('已陪伴', '${widget.model.level * 2 + 1} 天', '📅'),
+                _buildStatItem('已陪伴', '${widget.model.totalDays} 天', '📅'),
                 Container(width: 1, height: 24, color: const Color(0xFFFDBA74)),
                 _buildStatItem('当前品种', widget.model.currentSkin.name, '🐾'),
                 Container(width: 1, height: 24, color: const Color(0xFFFDBA74)),

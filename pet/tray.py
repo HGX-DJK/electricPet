@@ -242,7 +242,7 @@ class PetTrayIcon(QSystemTrayIcon):
             hw_line = ""
 
         self.setToolTip(
-            f"🐾 {self.model.name} (Lv.{self.model.level} · {stage_name})\n"
+            f"🐾 {self.model.name} (Lv.{self.model.level} · 陪伴第{self.model.total_days}天 · {stage_name})\n"
             f"🍗 饱食: {int(self.model.hunger)}%  💖 心情: {int(self.model.mood)}%  ⚡ 精力: {int(self.model.energy)}%"
             f"{hw_line}"
         )
