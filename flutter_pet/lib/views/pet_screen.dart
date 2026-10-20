@@ -47,7 +47,7 @@ class _Particle {
     required this.position,
     required this.text,
     this.color,
-    this.fontSize = 22,
+    this.fontSize = 13,
   });
 }
 
@@ -245,8 +245,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (_state != 'DIZZY') {
         HapticService.heavy();
         _playAction('DIZZY');
-        _spawnParticles(Offset(_petX, _petY - 35), emoji: '💫', count: 4);
-        _spawnParticles(Offset(_petX, _petY - 45), emoji: '⭐', count: 4);
+        _spawnParticles(Offset(_petX, _petY - 35), emoji: '💫', count: 1);
+        _spawnParticles(Offset(_petX, _petY - 45), emoji: '⭐', count: 1);
         _showDialogueBubble('哎呀呀~ 手机晃得波可晕乎乎啦，眼冒金星啦！(◎_◎;)', duration: const Duration(seconds: 4));
       }
     };
@@ -1351,16 +1351,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
-  /// 释放粒子特效 (爱心、星星、爪印)
-  void _spawnParticles(Offset pos, {String? emoji, int count = 3}) {
-    final emojis = [emoji ?? '❤️', '✨', '🐾', '💕'];
+  /// 释放轻柔微光特效粒子 (温润微光、柔和心芒，避免大串杂乱 emoji 喷射)
+  void _spawnParticles(Offset pos, {String? emoji, int count = 1}) {
+    final emojis = [emoji ?? '✨', '💕', '🐾'];
     final rnd = math.Random();
     for (int i = 0; i < count; i++) {
-      final offsetX = (rnd.nextDouble() - 0.5) * 60;
-      final offsetY = (rnd.nextDouble() - 0.5) * 30;
+      final offsetX = (rnd.nextDouble() - 0.5) * 20;
+      final offsetY = (rnd.nextDouble() - 0.5) * 16;
       _particles.add(_Particle(
         position: Offset(pos.dx + offsetX, pos.dy + offsetY),
         text: emojis[rnd.nextInt(emojis.length)],
+        fontSize: 13,
       ));
     }
   }
@@ -1392,7 +1393,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       HapticFeedback.mediumImpact();
     }
     _squishController.forward(from: 0.0);
-    _spawnParticles(Offset(_petX, _petY - 30), count: 4);
+    _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 1);
 
     widget.petModel.petHead();
 
@@ -1429,7 +1430,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       HapticFeedback.heavyImpact();
     }
     _playAction('HAPPY_SPIN');
-    _spawnParticles(Offset(_petX, _petY - 40), emoji: '⭐', count: 6);
+    _spawnParticles(Offset(_petX, _petY - 40), emoji: '⭐', count: 1);
   }
 
   void _playAction(String actionId) {
@@ -1502,7 +1503,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     final msg = actionLines[actionId] ?? '波可展现了独家才艺！✨';
     _showDialogueBubble(msg, duration: const Duration(seconds: 5));
-    _spawnParticles(Offset(_petX, _petY - 40), emoji: actionEmojis[actionId], count: 5);
+    _spawnParticles(Offset(_petX, _petY - 40), emoji: actionEmojis[actionId], count: 1);
 
     _actionTimer?.cancel();
     _actionTimer = Timer(const Duration(milliseconds: 5200), () {
@@ -2294,8 +2295,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _state = 'HIGH_FIVE';
       _facingLeft = touchPos.dx < _petX;
     });
-    _spawnParticles(touchPos, emoji: '🐾', count: 3);
-    _spawnParticles(touchPos, emoji: '✨', count: 3);
+    _spawnParticles(touchPos, emoji: '✨', count: 1);
     _spawnTextParticle(Offset(touchPos.dx - 35, touchPos.dy - 40), '默契击掌 🐾💖', const Color(0xFFF43F5E));
     widget.petModel.addIntimacy(3);
     _triggerWink();
@@ -2320,7 +2320,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     setState(() {
       _state = 'ROLL_ON_BACK';
     });
-    _spawnParticles(Offset(_petX, _petY - 20), emoji: '💕', count: 4);
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '💕', count: 1);
     _spawnTextParticle(Offset(_petX - 35, _petY - 50), '袒露软肚皮 💕', const Color(0xFFF43F5E));
     widget.petModel.addIntimacy(2);
     _showDialogueBubble('呀啊~ 被挠到痒痒肉啦！翻个身把软乎乎的小肚皮露给主人摸~ (ฅ>ω<*ฅ)💕', duration: const Duration(seconds: 4));
@@ -2343,8 +2343,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     setState(() {
       _state = 'BUNNY_KICKS';
     });
-    _spawnParticles(Offset(_petX, _petY - 15), emoji: '💖', count: 3);
-    _spawnParticles(Offset(_petX + 25, _petY + 20), emoji: '🐾', count: 2);
+    _spawnParticles(Offset(_petX, _petY - 15), emoji: '💖', count: 1);
     _spawnTextParticle(Offset(_petX - 35, _petY - 55), '兔子蹬腿 🐾🚴', const Color(0xFFEC4899));
     widget.petModel.addIntimacy(3);
     _showDialogueBubble('咕噜噜噜~ 别挠肚皮啦，小爪爪在空中踩单车停不下来啦！🐾🚴💕', duration: const Duration(seconds: 4));
@@ -2637,9 +2636,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     final tailParticleX = _petX + (_facingLeft ? -45.0 : 45.0);
-    _spawnParticles(Offset(tailParticleX, _petY + 10), emoji: '⚡', count: 2);
-    _spawnParticles(Offset(tailParticleX, _petY), emoji: '💢', count: 3);
-    _spawnParticles(Offset(tailParticleX, _petY - 15), emoji: '💨', count: 2);
+    _spawnParticles(Offset(tailParticleX, _petY), emoji: '💨', count: 1);
 
     final tailQuotes = [
       '喵呜？！谁在偷抓波可的尾巴！尾巴是敏感禁区喵~ 😾💢',
@@ -2677,7 +2674,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
     });
     widget.petModel.petHead();
-    _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 5);
+    _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 1);
     _showDialogueBubble(customDialogue ?? '咕噜咕噜... 下巴挠得好舒服，要融化在主人手心啦~ (˘ω˘)💕', duration: const Duration(seconds: 4));
   }
 
@@ -2712,7 +2709,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       SoundService.playPop();
       if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
       setState(() => _isBlep = false);
-      _spawnParticles(Offset(_petX, _petY - 20), emoji: '👅', count: 3);
+      _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 1);
       _spawnTextParticle(Offset(_petX - 35, _petY - 45), '收回小舌头~ (ฅ^ω^ฅ)', const Color(0xFFF43F5E));
       _showDialogueBubble('呀！被主人戳到小舌头啦，哧溜缩回来！👅✨');
       return;
@@ -2728,7 +2725,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _tiltTimer = Timer(const Duration(milliseconds: 260), () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
-      _spawnParticles(Offset(_petX, _petY - 25), emoji: '🤧', count: 3);
+      _spawnParticles(Offset(_petX, _petY - 25), emoji: '✨', count: 1);
       _showDialogueBubble('阿嚏！(>﹏<) 戳到波可敏感的小鼻尖啦~ 🐾', duration: const Duration(seconds: 4));
       return;
     }
@@ -2755,7 +2752,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _earTwitchTimer = Timer(const Duration(milliseconds: 900), () {
         if (mounted) setState(() => _twitchEar = null);
       });
-      _spawnParticles(Offset(_petX - 35, _petY - 50), emoji: '👂', count: 2);
+      _spawnParticles(Offset(_petX - 35, _petY - 50), emoji: '✨', count: 1);
       _showDialogueBubble('左耳朵机灵抖抖~ 听到主人的心声啦！👂✨');
       return;
     }
@@ -2776,7 +2773,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _earTwitchTimer = Timer(const Duration(milliseconds: 900), () {
         if (mounted) setState(() => _twitchEar = null);
       });
-      _spawnParticles(Offset(_petX + 35, _petY - 50), emoji: '👂', count: 2);
+      _spawnParticles(Offset(_petX + 35, _petY - 50), emoji: '✨', count: 1);
       _showDialogueBubble('右耳朵抖一抖~ 喵呜！右侧雷达收到！👂🐾');
       return;
     }
@@ -2795,7 +2792,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _tiltTimer = Timer(const Duration(milliseconds: 280), () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
-      _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 3);
+      _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 1);
       _showDialogueBubble('唔姆~ 脸颊肉肉要被主人捏圆啦！(ฅ\'ω\'ฅ)', duration: const Duration(seconds: 4));
       return;
     }
@@ -2835,7 +2832,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     setState(() => _isSlowBlink = true);
     SoundService.playMeow(tone: MeowTone.soft);
     if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
-    _spawnParticles(Offset(_petX, _petY - 35), emoji: '💖', count: 3);
+    _spawnParticles(Offset(_petX, _petY - 35), emoji: '💖', count: 1);
     _spawnTextParticle(Offset(_petX - 35, _petY - 60), '猫咪之吻 🐾💕', const Color(0xFFF43F5E));
     widget.petModel.addIntimacy(3);
     _showDialogueBubble('波可正在对主人慢眨眼哦~ 在小猫的世界里，这是表达最深爱意与信任的‘猫咪之吻’呢！(˘ω˘)💕', duration: const Duration(seconds: 4));
@@ -2984,7 +2981,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     SoundService.playPop();
 
     // 敲击地板处泛起微光小波纹与爪印
-    _spawnParticles(targetPos, emoji: '🐾', count: 2);
+    _spawnParticles(targetPos, emoji: '🐾', count: 1);
     _spawnTextParticle(Offset(targetPos.dx - 22, targetPos.dy - 24), '哒哒！✨', const Color(0xFF6366F1));
 
     // 唤起波可敏捷小跑靠近指尖落点
@@ -3462,7 +3459,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             if (widget.petModel.enableHaptics) {
                               HapticService.heavy();
                             }
-                            _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 4);
+                            _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 1);
                             _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
                             Timer(const Duration(milliseconds: 3500), () {
                               if (mounted && _state == 'DIZZY') {
@@ -3858,29 +3855,38 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 ),
               ],
 
-              // 4. 浮空特效粒子层 (心心、星星浮动)
+              // 4. 浮空特效粒子层 (温润微光、柔和心芒与文字飘升)
               for (final p in _particles)
                 Positioned(
                   key: p.id,
-                  left: p.position.dx - 12,
-                  top: p.position.dy - 12,
+                  left: p.position.dx - (p.fontSize / 2),
+                  top: p.position.dy - (p.fontSize / 2),
                   child: IgnorePointer(
                     child: Opacity(
-                      opacity: (1.0 - p.progress).clamp(0.0, 1.0),
+                      opacity: (1.0 - math.pow(p.progress, 1.2)).clamp(0.0, 1.0),
                       child: Transform.scale(
-                        scale: 0.8 + p.progress * 0.5,
+                        scale: p.progress < 0.25
+                            ? (0.7 + p.progress * 1.4)
+                            : (1.05 - (p.progress - 0.25) * 0.25),
                         child: Text(
                           p.text,
                           style: TextStyle(
                             fontSize: p.fontSize,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                             color: p.color,
-                            shadows: [
-                              Shadow(
-                                color: Colors.white.withOpacity(0.9),
-                                blurRadius: 4,
-                              ),
-                            ],
+                            shadows: p.color != null
+                                ? [
+                                    Shadow(
+                                      color: Colors.white.withOpacity(0.85),
+                                      blurRadius: 3,
+                                    ),
+                                  ]
+                                : [
+                                    Shadow(
+                                      color: const Color(0xFFF472B6).withOpacity(0.35),
+                                      blurRadius: 4,
+                                    ),
+                                  ],
                           ),
                         ),
                       ),
