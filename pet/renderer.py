@@ -188,7 +188,7 @@ class PetRenderer:
 
         # 动态瞳孔放大评估 (光标靠近 < 85px、抚摸陶醉、纸箱藏匿、贴边偷看、抓老鼠/毛线时放大瞳孔)
         if (self.petting_timer > 0 or 
-            current_state in ("CARDBOARD_BOX", "PEEK_LEFT", "PEEK_RIGHT", "CATCH_MOUSE", "PLAY_YARN", "TILT_HEAD", "CHASE_BUTTERFLY") or
+            current_state in ("CARDBOARD_BOX", "PEEK_LEFT", "PEEK_RIGHT", "CATCH_MOUSE", "PLAY_YARN", "TILT_HEAD", "CHASE_BUTTERFLY", "HAPPY_SPIN") or
             getattr(self, "cursor_dist", 999.0) < 85.0):
             self.target_pupil_dilation = 1.0
         elif getattr(self, "cursor_dist", 999.0) < 140.0:
@@ -342,14 +342,18 @@ class PetRenderer:
         squash_y = 1.0
         tilt_angle = 0.0
 
-        # 3D 旋转动力学解算
+        # 2.5D 真实猫咪追尾大回旋动力学解算 (Chasing Own Tail Vortex)
         is_spin = (state == "HAPPY_SPIN")
-        spin_angle = (self.anim_time * 7.5) % (2.0 * math.pi) if is_spin else 0.0
+        spin_angle = (self.anim_time * 6.5) % (2.0 * math.pi) if is_spin else 0.0
         cos_a = math.cos(spin_angle) if is_spin else 1.0
         sin_a = math.sin(spin_angle) if is_spin else 0.0
-        is_front = (cos_a >= 0.0) if is_spin else True
+        # 处于后半圆弧度时呈现追击背影，处于前半圆时呈现追击正面
+        is_front = (sin_a >= -0.2) if is_spin else True
 
-        # 3D 旋转时的立体厚度因子：侧面投影保持 75% 饱满厚度，绝不塌缩为 0 厚度纸片！
+        # 地面 2.5D 透视环形追击圆周位移 (沿地面椭圆急促狂奔)
+        spin_orbit_x = 18.0 * cos_a if is_spin else 0.0
+
+        # 3D 旋转时的立体厚度因子
         spin_body_scale_x = math.sqrt(cos_a * cos_a + (0.75 * sin_a) ** 2) if is_spin else 1.0
 
         spin_info = {
@@ -359,8 +363,9 @@ class PetRenderer:
             "sin_a": sin_a,
             "is_front": is_front,
             "scale_x": spin_body_scale_x,
-            "face_offset_x": 32.0 * sin_a,
-            "belly_offset_x": 24.0 * sin_a
+            "orbit_x": spin_orbit_x,
+            "face_offset_x": 16.0 * cos_a,
+            "belly_offset_x": 10.0 * cos_a
         }
 
         if state == "FALLING":
@@ -395,10 +400,10 @@ class PetRenderer:
         elif state == "TILT_HEAD":
             tilt_angle = 18.0
         elif state == "HAPPY_SPIN":
-            breath_offset = -30.0 * abs(math.sin(self.anim_time * 5.5))
-            squash_x = spin_body_scale_x
-            squash_y = 1.0 + (1.0 - spin_body_scale_x) * 0.08
-            tilt_angle = sin_a * 4.0
+            breath_offset = 8.0 * sin_a
+            squash_x = 1.04 + abs(math.sin(spin_angle * 2.0)) * 0.05
+            squash_y = 0.96 - abs(math.sin(spin_angle * 2.0)) * 0.04
+            tilt_angle = cos_a * 10.5
         elif state == "DOZE_OFF":
             tilt_angle = max(0.0, math.sin(self.anim_time * 2.2) * 18.0)
             breath_offset = 4.0
@@ -485,10 +490,9 @@ class PetRenderer:
             ambient_alpha = 14
             contact_alpha = 0  # 彻底脱离地面，无紧贴接触阴影！
         elif is_spin:
-            jump_ratio = min(1.0, abs(breath_offset) / 32.0)
-            shadow_w = 92.0 * (1.0 - jump_ratio * 0.15)
-            ambient_alpha = int(48 * (1.0 - jump_ratio * 0.35))
-            contact_alpha = int(80 * (1.0 - jump_ratio * 0.7))
+            shadow_w = 94.0 * abs(squash_x)
+            ambient_alpha = 48
+            contact_alpha = 75
         else:
             shadow_w = 96 * abs(squash_x)
             ambient_alpha = 48
@@ -499,8 +503,10 @@ class PetRenderer:
         elif stage == "ULTIMATE":
             shadow_w *= 1.15
 
+        shadow_cx = spin_orbit_x if is_spin else 0.0
+
         # 漫反射羽化大阴影 (羽化环境落影)
-        shadow_rect = QRectF(-shadow_w / 2.0, 44 - breath_offset * 0.3, shadow_w, 20)
+        shadow_rect = QRectF(shadow_cx - shadow_w / 2.0, 44 - (0.0 if is_spin else breath_offset * 0.3), shadow_w, 20)
         shadow_grad = QRadialGradient(shadow_rect.center(), shadow_w / 2.0)
         shadow_grad.setColorAt(0.0, QColor(0, 0, 0, ambient_alpha))
         shadow_grad.setColorAt(0.55, QColor(0, 0, 0, int(ambient_alpha * 0.42)))
@@ -512,7 +518,7 @@ class PetRenderer:
         # 紧贴足底重力接触阴影 (Contact Shadow, 仅在触地时生效)
         if contact_alpha > 0:
             contact_w = shadow_w * 0.72
-            contact_rect = QRectF(-contact_w / 2.0, 47 - breath_offset * 0.2, contact_w, 9)
+            contact_rect = QRectF(shadow_cx - contact_w / 2.0, 47 - (0.0 if is_spin else breath_offset * 0.2), contact_w, 9)
             contact_grad = QRadialGradient(contact_rect.center(), contact_w / 2.0)
             contact_grad.setColorAt(0.0, QColor(0, 0, 0, contact_alpha))
             contact_grad.setColorAt(0.65, QColor(0, 0, 0, int(contact_alpha * 0.3)))
@@ -522,9 +528,9 @@ class PetRenderer:
 
         # 3.5 3D 星尘环绕粒子 (背景层，位于身体后方)
         if is_spin:
-            self._draw_spin_stardust_ring(painter, spin_angle, in_front=False)
+            self._draw_spin_stardust_ring(painter, spin_angle, in_front=False, center_x=spin_orbit_x)
 
-        painter.translate(0, breath_offset)
+        painter.translate(spin_orbit_x, breath_offset)
         if tilt_angle != 0.0:
             painter.rotate(tilt_angle)
         painter.scale(squash_x, squash_y)
@@ -557,7 +563,7 @@ class PetRenderer:
 
         # 8.5 3D 星尘环绕粒子 (前景层，位于身体前方，形成真实空间景深穿插)
         if is_spin:
-            self._draw_spin_stardust_ring(painter, spin_angle, in_front=True)
+            self._draw_spin_stardust_ring(painter, spin_angle, in_front=True, center_x=spin_orbit_x)
 
         # 9. 动作专属覆盖物 (听歌耳机、追逐蝴蝶、眩晕星星)
         if state == "HEAD_BOB_MUSIC":
@@ -755,7 +761,7 @@ class PetRenderer:
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(-aura_rad, -aura_rad - 10, aura_rad * 2, aura_rad * 2))
 
-    def _draw_spin_stardust_ring(self, painter: QPainter, spin_angle, in_front: bool):
+    def _draw_spin_stardust_ring(self, painter: QPainter, spin_angle, in_front: bool, center_x: float = 0.0):
         """3D 环绕星尘粒子系统：正面穿插角色前方，背面穿插角色后方，提供真实立体景深"""
         num_stars = 7
         radius_x = 66.0
@@ -772,7 +778,7 @@ class PetRenderer:
             if is_fg != in_front:
                 continue
 
-            px = radius_x * cos_p
+            px = center_x + radius_x * cos_p
             py = center_y + radius_y * sin_p
 
             depth_norm = (sin_p + 1.0) / 2.0
@@ -982,25 +988,44 @@ class PetRenderer:
 
         # 1. 立体圆润尾巴
         if state != "CARDBOARD_BOX":
-            if state == "SIT_WAG_TAIL":
-                tail_angle = math.sin(self.anim_time * 9.0) * 28.0
+            if state == "HAPPY_SPIN":
+                # 追尾巴：尾巴向前环抱卷曲到身侧，尾尖在面颊与小爪爪侧前方疯狂摇晃撩拨！
+                tail_wag = math.sin(self.anim_time * 16.0) * 14.0
+                painter.save()
+                painter.translate(22, 22)
+                painter.rotate(-45.0 + tail_wag * 0.5)
+                tail_path = QPainterPath()
+                tail_path.moveTo(0, 0)
+                tail_path.cubicTo(26, -10, 28, -42, 6 + tail_wag * 0.4, -48)
+                tail_path.cubicTo(-4 + tail_wag * 0.4, -50, -8, -32, 0, -12)
+                tail_path.closeSubpath()
+                tail_grad = QLinearGradient(0, 0, 15, -45)
+                tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
+                tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
+                painter.setBrush(QBrush(tail_grad))
+                painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+                painter.drawPath(tail_path)
+                painter.restore()
             else:
-                tail_angle = math.sin(self.anim_time * 4.0) * 18.0
-            tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
-            painter.save()
-            painter.translate(tail_x, 25)
-            painter.rotate(tail_angle)
-            tail_path = QPainterPath()
-            tail_path.moveTo(0, 0)
-            tail_path.cubicTo(24, 10, 32, -26, 20, -36)
-            tail_path.cubicTo(12, -40, 4, -20, 0, -10)
-            tail_grad = QLinearGradient(0, 0, 25, -30)
-            tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
-            tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
-            painter.setBrush(QBrush(tail_grad))
-            painter.setPen(QPen(QColor(palette["outline"]), 3.2))
-            painter.drawPath(tail_path)
-            painter.restore()
+                if state == "SIT_WAG_TAIL":
+                    tail_angle = math.sin(self.anim_time * 9.0) * 28.0
+                else:
+                    tail_angle = math.sin(self.anim_time * 4.0) * 18.0
+                tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
+                painter.save()
+                painter.translate(tail_x, 25)
+                painter.rotate(tail_angle)
+                tail_path = QPainterPath()
+                tail_path.moveTo(0, 0)
+                tail_path.cubicTo(24, 10, 32, -26, 20, -36)
+                tail_path.cubicTo(12, -40, 4, -20, 0, -10)
+                tail_grad = QLinearGradient(0, 0, 25, -30)
+                tail_grad.setColorAt(0.0, QColor(palette["tail_l"]))
+                tail_grad.setColorAt(1.0, QColor(palette["tail_d"]))
+                painter.setBrush(QBrush(tail_grad))
+                painter.setPen(QPen(QColor(palette["outline"]), 3.2))
+                painter.drawPath(tail_path)
+                painter.restore()
 
         # 2. 立体双耳 (外耳圆润柔和轮廓 + 内耳凹陷立体阴影 + 耳内萌绒毛，带 3D 轨道视差 + 偶发机敏抖耳)
         ear_twitch = math.sin(self.anim_time * 6.0) * 2.5 if state == "IDLE" else 0.0
@@ -1392,6 +1417,13 @@ class PetRenderer:
             bat_r = math.cos(self.anim_time * 9.0) * 8.0
             draw_single_paw(-36, 38 + bat_l, 25, 17, -29, 44 + bat_l, 11, 8)
             draw_single_paw(12, 38 + bat_r, 25, 17, 19, 44 + bat_r, 11, 8)
+        elif state == "HAPPY_SPIN":
+            # 追尾巴：双前爪交替向前猛扑追逐尾尖，急促小碎步欢快踩地
+            swat_cycle = self.anim_time * 18.0
+            swat_l = math.sin(swat_cycle) * 7.0
+            swat_r = math.cos(swat_cycle) * 7.0
+            draw_single_paw(-36 + swat_l * 0.4, 38 + swat_l, 25, 17, -29 + swat_l * 0.4, 44 + swat_l, 11, 8)
+            draw_single_paw(11 - swat_r * 0.4, 38 + swat_r, 25, 17, 18 - swat_r * 0.4, 44 + swat_r, 11, 8)
         elif state in ("DRAGGING", "FALLING"):
             # 被拎起悬空或自由落体：小肉垫爪爪在空中紧张又可爱地交替快速乱蹬
             kick_l = math.sin(self.anim_time * 22.0) * 11.0
@@ -1468,22 +1500,40 @@ class PetRenderer:
 
         # 1. 3D 卷尾巴
         if state != "CARDBOARD_BOX":
-            tail_wag = math.sin(self.anim_time * 8.0) * 12.0
-            tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
-            painter.save()
-            painter.translate(tail_x, 20)
-            painter.rotate(tail_wag)
-            tail_path = QPainterPath()
-            tail_path.moveTo(0, 0)
-            tail_path.cubicTo(25, 5, 35, -20, 20, -30)
-            tail_path.cubicTo(10, -35, 5, -15, 0, -5)
-            tail_grad = QLinearGradient(0, 0, 25, -25)
-            tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
-            tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
-            painter.setBrush(QBrush(tail_grad))
-            painter.setPen(QPen(QColor(pal["outline"]), 3))
-            painter.drawPath(tail_path)
-            painter.restore()
+            if state == "HAPPY_SPIN":
+                tail_wag = math.sin(self.anim_time * 16.0) * 14.0
+                painter.save()
+                painter.translate(22, 18)
+                painter.rotate(-45.0 + tail_wag * 0.5)
+                tail_path = QPainterPath()
+                tail_path.moveTo(0, 0)
+                tail_path.cubicTo(26, -8, 28, -38, 6 + tail_wag * 0.4, -42)
+                tail_path.cubicTo(-4 + tail_wag * 0.4, -44, -8, -28, 0, -10)
+                tail_path.closeSubpath()
+                tail_grad = QLinearGradient(0, 0, 15, -40)
+                tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
+                tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
+                painter.setBrush(QBrush(tail_grad))
+                painter.setPen(QPen(QColor(pal["outline"]), 3))
+                painter.drawPath(tail_path)
+                painter.restore()
+            else:
+                tail_wag = math.sin(self.anim_time * 8.0) * 12.0
+                tail_x = 35 - sin_a * 15.0 if is_spin_front else 35
+                painter.save()
+                painter.translate(tail_x, 20)
+                painter.rotate(tail_wag)
+                tail_path = QPainterPath()
+                tail_path.moveTo(0, 0)
+                tail_path.cubicTo(25, 5, 35, -20, 20, -30)
+                tail_path.cubicTo(10, -35, 5, -15, 0, -5)
+                tail_grad = QLinearGradient(0, 0, 25, -25)
+                tail_grad.setColorAt(0.0, QColor(pal["tail_l"]))
+                tail_grad.setColorAt(1.0, QColor(pal["tail_d"]))
+                painter.setBrush(QBrush(tail_grad))
+                painter.setPen(QPen(QColor(pal["outline"]), 3))
+                painter.drawPath(tail_path)
+                painter.restore()
 
         # 2. 立体双耳 (带 3D 轨道视差偏移)
         ear_shift = sin_a * 14.0 if is_spin_front else 0.0
@@ -2006,7 +2056,11 @@ class PetRenderer:
             self._draw_playful_face(painter, eye_l_col, eye_r_col)
             return
 
-        if self.petting_timer > 0 or self.eating_timer > 0 or state in ("HAPPY_SPIN", "SIT_WAG_TAIL"):
+        if state == "HAPPY_SPIN":
+            self._draw_tail_chase_face(painter, eye_l_col, eye_r_col)
+            return
+
+        if self.petting_timer > 0 or self.eating_timer > 0 or state == "SIT_WAG_TAIL":
             self._draw_happy_face(painter)
             return
 
@@ -2476,6 +2530,38 @@ class PetRenderer:
         eye_right.cubicTo(14, 2, 22, 2, 28, -6)
         painter.drawPath(eye_right)
         painter.drawArc(QRectF(-5, 8, 10, 8), 0, -180 * 16)
+
+    def _draw_tail_chase_face(self, painter: QPainter, col_l, col_r):
+        """追尾大回旋专注面部：双目圆睁紧盯身前狂摆的尾尖，兴奋开怀吐舌哈气"""
+        gaze_ox = 4.2 + math.sin(self.anim_time * 14.0) * 1.2
+        gaze_oy = 2.8
+        for ex, col in [(-18, col_l), (18, col_r)]:
+            # 晶亮大眼眸
+            painter.setBrush(QBrush(col))
+            painter.setPen(QPen(QColor("#150A06"), 1.8))
+            painter.drawEllipse(QRectF(ex - 8, -13, 16, 20))
+            # 兴奋超大散瞳 (锁定猎物猎手模式)
+            painter.setBrush(QBrush(QColor("#070B14")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(ex - 6 + gaze_ox * 0.45, -10 + gaze_oy * 0.4, 12.5, 15.0))
+            # 双重璀璨高光
+            painter.setBrush(QBrush(QColor(255, 255, 255, 250)))
+            painter.drawEllipse(QRectF(ex - 4 + gaze_ox * 0.55, -9 + gaze_oy * 0.5, 5.5, 6.5))
+            painter.drawEllipse(QRectF(ex + 1 + gaze_ox * 0.55, -1 + gaze_oy * 0.5, 3.0, 3.0))
+
+        # 兴奋张开小嘴吐出粉嫩舌头哈气
+        mouth = QPainterPath()
+        mouth.moveTo(-8, 7)
+        mouth.cubicTo(-5, 17, 5, 17, 8, 7)
+        mouth.closeSubpath()
+        painter.setBrush(QBrush(QColor("#451A03")))
+        painter.setPen(QPen(QColor("#543D37"), 2.0))
+        painter.drawPath(mouth)
+
+        tongue = QRectF(-4.5, 10, 9, 6.5)
+        painter.setBrush(QBrush(QColor("#FB7185")))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(tongue)
 
     def _draw_happy_face(self, painter: QPainter):
         painter.setPen(QPen(QColor("#543D37"), 3.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))

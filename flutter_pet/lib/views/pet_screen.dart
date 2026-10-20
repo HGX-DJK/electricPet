@@ -1472,7 +1472,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       'SIT_WAG_TAIL': '乖乖端坐，蓬松大尾巴兴奋晃来晃去~ 🐈💕',
       'HEAD_BOB_MUSIC': '戴上潮流大耳机！动次打次跟着节拍摇头晃脑~ 🎵🎧',
       'CHASE_BUTTERFLY': '哇！彩光小蝴蝶飞来啦~ 灵巧一扑！🦋✨',
-      'HAPPY_SPIN': '开心到飞起！旋转跳跃转圈圈~ 💫(✧ω✧)',
+      'HAPPY_SPIN': '看波可原地大漂移！疯狂追自己的小尾巴转圈圈~ 💫(✧ω✧)🐾',
       'CAT_STRETCH': '哈欠~~~ 伸个大大的猫式懒腰，小屁股翘高高，浑身舒展开啦！🥱✨',
       'HIGH_FIVE': '啪嗒！小爪爪和主人击掌啦~ 专属默契+100！(ฅ^ω^ฅ)🐾💕',
       'ROLL_ON_BACK': '呀啊~ 被挠到痒痒肉啦！翻个身把软乎乎的小肚皮露给主人摸~ (ฅ>ω<*ฅ)💕',

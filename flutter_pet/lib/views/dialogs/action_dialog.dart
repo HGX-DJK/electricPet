@@ -20,7 +20,7 @@ class ActionDialog extends StatelessWidget {
     {'id': 'SIT_WAG_TAIL', 'name': '端坐摇尾巴', 'icon': '🐈', 'desc': '乖乖蹲坐，蓬松尾巴轻轻晃动'},
     {'id': 'HEAD_BOB_MUSIC', 'name': '听歌点头', 'icon': '🎵', 'desc': '戴着耳机跟着动感音乐晃头'},
     {'id': 'CHASE_BUTTERFLY', 'name': '扑捉蝴蝶', 'icon': '🦋', 'desc': '追逐彩光小蝴蝶灵巧起跳'},
-    {'id': 'HAPPY_SPIN', 'name': '欢喜转圈', 'icon': '💫', 'desc': '满心欢喜，兴奋地原地打转'},
+    {'id': 'HAPPY_SPIN', 'name': '追尾转圈', 'icon': '💫', 'desc': '兴奋地原地追逐自己的尾巴狂转圈圈'},
     {'id': 'CAT_STRETCH', 'name': '猫式伸展', 'icon': '🧘', 'desc': '翘起屁股双前爪贴地，正宗猫瑜伽'},
     {'id': 'HIGH_FIVE', 'name': '击掌对拳', 'icon': '✋', 'desc': '探出毛茸茸前爪，与主人默契击掌'},
     {'id': 'ROLL_ON_BACK', 'name': '翻肚皮蹬腿', 'icon': '🐰', 'desc': '四脚朝天露软肚皮，欢快蹬蹬腿'},

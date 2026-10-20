@@ -118,31 +118,28 @@ class PetPainter extends CustomPainter {
       // 投喂进食欢快咀嚼微动
       breathY = math.sin(animTime * 14.0) * 2.5;
     } else if (state == 'HAPPY_SPIN') {
-      // 3D 饱满旋空回旋跳 (彻底告别纸片式左右压扁翻折)
-      final spinPhase = (animTime * 7.5) % (2 * math.pi);
-      final cosVal = math.cos(spinPhase);
-      final sinVal = math.sin(spinPhase);
+      // 🐱 真实猫咪原地追尾巴大回旋 (Chasing Own Tail Vortex!)
+      // 真实猫咪追尾巴是身体弓曲呈圆环，在地面小步急促奔跑狂转，脑袋向内盯住尾尖，尾巴甩在身前撩拨
+      final chasePhase = (animTime * 6.5) % (2 * math.pi);
+      final cosVal = math.cos(chasePhase);
+      final sinVal = math.sin(chasePhase);
 
-      // 判定是否处于背对视线区间 (cos < 0 时为背影)
-      isSpinBackView = (cosVal < 0);
+      // 地面 2.5D 透视环形追击圆周运动 (沿地面椭圆急促狂奔)
+      const orbitRadiusX = 18.0;
+      const orbitRadiusY = 8.0;
+      bodySwayX = cosVal * orbitRadiusX;
+      breathY = sinVal * orbitRadiusY;
 
-      // 3D 圆润视宽：基于椭圆柱面投影，最窄 profile 仍保有 68% 饱满侧脸厚度，绝不塌陷为 0 像素直线！
-      scaleX = math.sqrt(cosVal * cosVal + 0.46 * sinVal * sinVal);
+      // 处于后半圆弧度时呈现追击背影，处于前半圆时呈现追击正面
+      isSpinBackView = (sinVal < -0.2);
 
-      // 雀跃跳跃高度抛物线：凌空跃起最高达 26px
-      final jumpProgress = math.sin(spinPhase).abs();
-      breathY = -jumpProgress * 26.0;
+      // 追尾弓身月牙形变与离心力侧倾 (漂移压弯体态)
+      spinTiltAngle = cosVal * 0.18;
+      scaleX = 1.04 + math.sin(chasePhase * 2.0).abs() * 0.05;
+      scaleY = 0.96 - math.sin(chasePhase * 2.0).abs() * 0.04;
 
-      // 腾空与着陆的弹性形变 (Squash & Stretch)
-      scaleY = 1.0 + (jumpProgress - 0.45) * 0.16;
-
-      // 旋转动态倾角 (俏皮侧倾 7 度)
-      spinTiltAngle = sinVal * 0.12;
-
-      // 五官立体曲面滑动偏移 (呈现球形头部转动的立体视差)
-      spinFeatureShiftX = sinVal * (isSpinBackView ? -15.0 : 15.0);
-
-      bodySwayX = sinVal * 3.5;
+      // 头部向内侧拧转盯尾巴
+      spinFeatureShiftX = cosVal * 12.0;
     } else if (state == 'STRETCH_YAWN') {
       // 伸懒腰：身体纵向拉长，重心下沉
       scaleX = 1.18;
@@ -320,7 +317,7 @@ class PetPainter extends CustomPainter {
       // 全速冲刺时尾巴向后舒展
       tailWag = -26.0 + math.sin(animTime * 24.0) * 6.0;
     } else if (state == 'HAPPY_SPIN') {
-      tailWag = math.sin(animTime * 12.0) * 25.0;
+      tailWag = math.sin(animTime * 14.0) * 10.0;
     } else if (state == 'KNEADING_BISCUITS') {
       // 踩奶时尾尖微翘并惬意小幅颤动
       tailWag = 14.0 + math.sin(animTime * 6.5) * 8.0;
@@ -361,7 +358,11 @@ class PetPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     final path = Path();
-    if (state == 'STRETCH_YAWN') {
+    if (state == 'HAPPY_SPIN') {
+      // 🐱 追尾巴：尾巴向前环抱卷曲到身侧，尾尖在面颊与小爪爪前方疯狂摇晃诱惑！
+      path.moveTo(25, 42);
+      path.cubicTo(50 + tailWag * 0.3, 16, 26 + tailWag, -18, -6 + tailWag * 0.7, -6);
+    } else if (state == 'STRETCH_YAWN') {
       // 伸懒腰时尾巴向上翘直
       path.moveTo(25, 45);
       path.cubicTo(45, 10, 48, -35, 40 + tailWag, -65);
@@ -440,11 +441,13 @@ class PetPainter extends CustomPainter {
       ..color = tipCol
       ..style = PaintingStyle.fill;
 
-    final tipOffset = (state == 'STRETCH_YAWN' || state == 'CAT_STRETCH')
-        ? Offset(38 + tailWag, -70)
-        : ((state == 'DANGLING' || state == 'DRAGGING')
-            ? Offset(26 + tailWag, 28)
-            : Offset(52 + tailWag, -25));
+    final tipOffset = (state == 'HAPPY_SPIN')
+        ? Offset(-6 + tailWag * 0.7, -6)
+        : ((state == 'STRETCH_YAWN' || state == 'CAT_STRETCH')
+            ? Offset(38 + tailWag, -70)
+            : ((state == 'DANGLING' || state == 'DRAGGING')
+                ? Offset(26 + tailWag, 28)
+                : Offset(52 + tailWag, -25)));
     final double tipRadius = isLonghair ? 12.0 : (isOtter ? 9.5 : (isSleek ? 4.5 : 7.0));
     canvas.drawCircle(tipOffset, tipRadius, tipPaint);
   }
@@ -719,6 +722,10 @@ class PetPainter extends CustomPainter {
       final yarnHeadTilt = math.sin(animTime * 7.0) * 0.08;
       canvas.rotate(yarnHeadTilt);
       headCenter = Offset(math.sin(animTime * 7.0) * 1.5, -15);
+    } else if (state == 'HAPPY_SPIN') {
+      // 🐱 追尾巴：小脑瓜聚精会神向内下倾，眼神紧锁侧前方的尾巴尖！
+      headCenter = const Offset(-6, -14);
+      canvas.rotate(-0.18);
     }
 
     // 耳朵绘制：每 5.5 秒自然机敏抖耳，摸头时高频微颤，触摸单耳独立高频弹颤
@@ -1455,7 +1462,6 @@ class PetPainter extends CustomPainter {
         state == 'WASH_FACE' ||
         state == 'STRETCH_YAWN' ||
         state == 'CAT_STRETCH' ||
-        state == 'HAPPY_SPIN' ||
         state == 'SIT_WAG_TAIL' ||
         state == 'KNEADING_BISCUITS' ||
         state == 'ROLL_ON_BACK' ||
@@ -1493,6 +1499,10 @@ class PetPainter extends CustomPainter {
       final dy = (touchPos!.dy / 18.0).clamp(-3.5, 3.5);
       gazeX = dx;
       gazeY = dy;
+    } else if (state == 'HAPPY_SPIN') {
+      // 🐱 追尾巴：眼神死死锁定身侧前方疯狂摇晃挑逗的尾尖！
+      gazeX = 3.8 + math.sin(animTime * 14.0) * 1.0;
+      gazeY = 2.8;
     } else if (state == 'IDLE') {
       // 待机眼神流转：四处好奇瞄看，手机倾斜时随重力感应偏转
       gazeX = (math.sin(animTime * 0.85) * 2.8 + tiltX * 2.5).clamp(-4.5, 4.5);
@@ -1524,7 +1534,8 @@ class PetPainter extends CustomPainter {
         touchPos != null ||
         petProgress > 0 ||
         state == 'CATCH_MOUSE' ||
-        state == 'PLAY_YARN';
+        state == 'PLAY_YARN' ||
+        state == 'HAPPY_SPIN';
 
     for (final eye in eyeList) {
       final eyeCenter = eye.$1;
@@ -1854,6 +1865,15 @@ class PetPainter extends CustomPainter {
         ..moveTo(noseCenter.dx - 8, noseCenter.dy + 5)
         ..quadraticBezierTo(noseCenter.dx, noseCenter.dy + 12, noseCenter.dx + 8, noseCenter.dy + 5);
       canvas.drawPath(p, happyMouth);
+      return;
+    }
+
+    if (state == 'HAPPY_SPIN') {
+      // 🐱 追尾巴：兴奋开心地张开小圆嘴，吐出粉嫩小舌头快速喘气
+      final happyMouth = Paint()..color = const Color(0xFF451A03);
+      canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx, noseCenter.dy + 7), width: 9, height: 7.5), happyMouth);
+      final tongue = Paint()..color = const Color(0xFFFB7185);
+      canvas.drawOval(Rect.fromCenter(center: Offset(noseCenter.dx + 0.4, noseCenter.dy + 8.5), width: 6.5, height: 5.0), tongue);
       return;
     }
 
@@ -2193,6 +2213,30 @@ class PetPainter extends CustomPainter {
     } else {
       pawW = 22.0;
       pawH = 16.0;
+    }
+
+    if (state == 'HAPPY_SPIN') {
+      // 🐱 追尾巴：双前爪交替向前猛扑拨抓尾尖，小爪爪急促踩地狂奔！
+      final swatCycle = animTime * 18.0;
+      final swat1 = math.sin(swatCycle) * 6.5;
+      final swat2 = math.cos(swatCycle) * 6.5;
+      _drawPlumpSegmentedPaw(
+        canvas,
+        Offset(-20 + swat1 * 0.5, 52 + swat1),
+        pawW,
+        pawH,
+        Color(skin.primaryColor),
+        hasWhiteSock: hasWhiteSock,
+      );
+      _drawPlumpSegmentedPaw(
+        canvas,
+        Offset(20 - swat2 * 0.5, 52 + swat2),
+        pawW,
+        pawH,
+        Color(skin.primaryColor),
+        hasWhiteSock: hasWhiteSock,
+      );
+      return;
     }
 
     if (state == 'HIGH_FIVE') {
