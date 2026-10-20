@@ -4,7 +4,7 @@ class AiConfig {
   /// MiniMax 官方 API 密钥 (API Key)
   /// 获取途径: https://platform.minimaxi.com/ -> 账户管理 -> 接口密钥
   /// 将您的真实 Key（形如 eyJhbGciOi...）填入此处引号中即可内置激活！
-  static const String defaultMinimaxApiKey = '';
+  static const String defaultMinimaxApiKey = 'sk-cp--z0tZzUFDt_oWtwHIYIPT_H8cFOOLJHboaE4bGTFIjRnkSbDGhtTTsUXr2brB1XneU18EM5246EtrMCRqxAJNwmqg56JadcCr_vKZchZ6ULPNZZtcokydLM';
 
   /// MiniMax 默认音色 (MiniMax T2A Voice ID)
   /// 推荐音色选项：
