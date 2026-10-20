@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../../services/haptic_service.dart';
 import '../../services/minimax_service.dart';
 import '../../services/sound_service.dart';
@@ -8,11 +9,13 @@ import '../../services/sound_service.dart';
 // 波可与主人的 MiniMax AI 语音伴侣交互界面
 class AiVoiceChatDialog extends StatefulWidget {
   final bool isNight;
+  final bool autoStartListening;
   final Function(String action, String dialogue) onActionTriggered;
 
   const AiVoiceChatDialog({
     super.key,
     required this.isNight,
+    this.autoStartListening = false,
     required this.onActionTriggered,
   });
 
@@ -20,6 +23,7 @@ class AiVoiceChatDialog extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required bool isNight,
+    bool autoStartListening = false,
     required Function(String action, String dialogue) onActionTriggered,
   }) {
     return showModalBottomSheet(
@@ -28,6 +32,7 @@ class AiVoiceChatDialog extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => AiVoiceChatDialog(
         isNight: isNight,
+        autoStartListening: autoStartListening,
         onActionTriggered: onActionTriggered,
       ),
     );
@@ -41,9 +46,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final MinimaxService _ai = MinimaxService.instance;
+  final stt.SpeechToText _speech = stt.SpeechToText();
 
   bool _isLoading = false;
-  bool _isListening = false;
+  bool _speechEnabled = false;
+  bool _isRealListening = false;
+  String _liveSpokenWords = '';
+  double _soundLevel = 0.0;
   bool _showKeyboardInput = false;
   Timer? _listeningTimer;
   late final AnimationController _waveAnimController;
@@ -66,12 +75,57 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      final available = await _speech.initialize(
+        onError: (err) {
+          debugPrint('STT error: ${err.errorMsg}');
+          if (mounted) {
+            setState(() {
+              _isRealListening = false;
+              _waveAnimController.stop();
+            });
+          }
+        },
+        onStatus: (status) {
+          debugPrint('STT status: $status');
+          if (status == 'done' || status == 'notListening') {
+            if (mounted && _isRealListening) {
+              _stopListeningAndSend();
+            }
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _speechEnabled = available;
+        });
+        if (widget.autoStartListening && available && !_isRealListening) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _startListening();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('STT initialize failed: $e');
+      if (mounted) {
+        setState(() {
+          _speechEnabled = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
     _waveAnimController.dispose();
     _listeningTimer?.cancel();
+    try {
+      _speech.stop();
+    } catch (_) {}
     _textController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -97,7 +151,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     _waveAnimController.repeat(reverse: true);
     setState(() {
       _isLoading = true;
-      _isListening = false;
+      _isRealListening = false;
     });
     _scrollToBottom();
     HapticService.selection();
@@ -121,8 +175,96 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     }
   }
 
-  void _toggleListening() {
-    _showVoiceSpeechSheet();
+  Future<void> _toggleListening() async {
+    if (_isRealListening) {
+      await _stopListeningAndSend();
+    } else {
+      await _startListening();
+    }
+  }
+
+  Future<void> _startListening() async {
+    HapticService.medium();
+    SoundService.playPop();
+
+    if (!_speechEnabled) {
+      await _initSpeech();
+    }
+
+    if (!_speechEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎙️ 麦克风录音权限未开启或系统未安装语音引擎，已开启打字对话（输入法自带麦克风可语音打字）！'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        _showVoiceSpeechSheet();
+      }
+      return;
+    }
+
+    _liveSpokenWords = '';
+    _soundLevel = 0.0;
+    setState(() {
+      _isRealListening = true;
+    });
+    _waveAnimController.repeat(reverse: true);
+
+    try {
+      await _speech.listen(
+        onResult: (result) {
+          if (mounted) {
+            setState(() {
+              _liveSpokenWords = result.recognizedWords;
+            });
+            if (result.finalResult && _liveSpokenWords.trim().isNotEmpty) {
+              _stopListeningAndSend();
+            }
+          }
+        },
+        onSoundLevelChange: (level) {
+          if (mounted) {
+            setState(() {
+              _soundLevel = level;
+            });
+          }
+        },
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.confirmation,
+          cancelOnError: true,
+          partialResults: true,
+          autoPunctuation: true,
+        ),
+      );
+    } catch (e) {
+      debugPrint('STT listen error: $e');
+      if (mounted) {
+        setState(() {
+          _isRealListening = false;
+        });
+        _waveAnimController.stop();
+      }
+    }
+  }
+
+  Future<void> _stopListeningAndSend() async {
+    if (!_isRealListening && _liveSpokenWords.trim().isEmpty) return;
+    try {
+      await _speech.stop();
+    } catch (_) {}
+
+    _waveAnimController.stop();
+    final toSend = _liveSpokenWords.trim();
+    setState(() {
+      _isRealListening = false;
+      _liveSpokenWords = '';
+    });
+
+    if (toSend.isNotEmpty) {
+      HapticService.light();
+      await _sendMessage(toSend);
+    }
   }
 
   void _showVoiceSpeechSheet() {
@@ -868,7 +1010,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           ),
 
           // 3. AI 思考中 / 声波动画指示条
-          if (_isLoading || _isListening)
+          if (_isLoading || _isRealListening)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -880,13 +1022,14 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(5, (i) {
-                          final height = 6.0 + 12.0 * math.sin((_waveAnimController.value * math.pi) + (i * 0.6)).abs();
+                          final dynamicLevel = _isRealListening ? math.max(_soundLevel * 1.5, 0.0) : 0.0;
+                          final height = 6.0 + (12.0 + dynamicLevel * 10.0) * math.sin((_waveAnimController.value * math.pi) + (i * 0.6)).abs();
                           return Container(
                             margin: const EdgeInsets.symmetric(horizontal: 2),
                             width: 3.5,
-                            height: height,
+                            height: height.clamp(4.0, 26.0),
                             decoration: BoxDecoration(
-                              color: _isListening ? const Color(0xFFEF4444) : const Color(0xFFA855F7),
+                              color: _isRealListening ? const Color(0xFFEF4444) : const Color(0xFFA855F7),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           );
@@ -895,12 +1038,18 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     },
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    _isListening ? '正在倾听主人的心声... 🎙️' : '波可正在用猫猫脑瓜认真思考中... ✨',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                  Flexible(
+                    child: Text(
+                      _isRealListening
+                          ? (_liveSpokenWords.isEmpty ? '正在倾听主人的声音... 🎙️' : '识别中: "$_liveSpokenWords"')
+                          : '波可正在用猫猫脑瓜认真思考中... ✨',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: _isRealListening ? const Color(0xFFEF4444) : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1)),
+                      ),
                     ),
                   ),
                 ],
@@ -1135,30 +1284,38 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                               child: Container(
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFA855F7), Color(0xFF6366F1)],
+                                  gradient: LinearGradient(
+                                    colors: _isRealListening
+                                        ? const [Color(0xFFEF4444), Color(0xFFDC2626)]
+                                        : const [Color(0xFFA855F7), Color(0xFF6366F1)],
                                   ),
                                   borderRadius: BorderRadius.circular(22),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: const Color(0xFF6366F1).withValues(alpha: 0.35),
+                                      color: (_isRealListening ? const Color(0xFFEF4444) : const Color(0xFF6366F1)).withValues(alpha: 0.35),
                                       blurRadius: 10,
                                       offset: const Offset(0, 3),
                                     ),
                                   ],
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text('🎙️', style: TextStyle(fontSize: 18)),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      '轻触对波可说话',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.5,
+                                    Text(_isRealListening ? '🛑' : '🎙️', style: const TextStyle(fontSize: 18)),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        _isRealListening
+                                            ? (_liveSpokenWords.isEmpty ? '正在聆听... (点击发送)' : '点击发送: "$_liveSpokenWords"')
+                                            : '轻触对波可说话',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -1167,6 +1324,34 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                             ),
                           ),
                           const SizedBox(width: 6),
+                          // 快捷心声卡片入口
+                          InkWell(
+                            onTap: _showVoiceSpeechSheet,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('💡', style: TextStyle(fontSize: 14)),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '心声',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
                           // 清空记录按钮
                           IconButton(
                             icon: const Text('🧹', style: TextStyle(fontSize: 16)),

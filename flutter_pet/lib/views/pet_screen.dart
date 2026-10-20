@@ -1758,8 +1758,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     );
   }
 
-  /// 打开 MiniMax AI 语音陪伴小电台
-  void _openAiVoiceChatDialog() {
+  /// 打开 MiniMax AI 语音陪伴小电台 (默认呼起麦克风即刻倾诉)
+  void _openAiVoiceChatDialog({bool autoListen = true}) {
     _idleSeconds = 0;
     _isRoaming = false;
     _targetWalkX = null;
@@ -1770,6 +1770,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     AiVoiceChatDialog.show(
       context,
       isNight: _windowWeather == 3,
+      autoStartListening: autoListen,
       onActionTriggered: (action, dialogue) {
         _handleAiVoiceAction(action, dialogue);
       },
