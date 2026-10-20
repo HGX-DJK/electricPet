@@ -176,6 +176,7 @@ class SpeechBubbleWidget(QWidget):
         if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
             self._current_anim.stop()
             self._current_anim = None
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self.text_lbl.setText(text)
 
         # 仅针对特殊系统提示显示小标签，普通闲聊或默认波可标签保持极简气泡外观
@@ -209,21 +210,36 @@ class SpeechBubbleWidget(QWidget):
 
     def dismiss(self):
         self.hide_timer.stop()
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._do_fade_out()
 
     def _do_fade_out(self):
         if not self.isVisible():
             return
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
+            self._current_anim.stop()
+            self._current_anim = None
         anim = QPropertyAnimation(self, b"windowOpacity", self)
         anim.setDuration(220)
         anim.setStartValue(self.windowOpacity())
         anim.setEndValue(0.0)
         anim.setEasingCurve(QEasingCurve.Type.InCubic)
-        anim.finished.connect(self.hide)
+        def _on_finished():
+            self.hide()
+            self._current_anim = None
+        anim.finished.connect(_on_finished)
         anim.start()
         self._current_anim = anim
 
+    def hideEvent(self, event):
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        super().hideEvent(event)
+
     def mousePressEvent(self, event):
+        if self.windowOpacity() < 0.2:
+            event.ignore()
+            return
         # 点击气泡任意位置快速关闭并伴随清脆音效
         sound_manager.play("pop")
         self.dismiss()
@@ -310,7 +326,10 @@ class SpeechBubbleWidget(QWidget):
         local_tail_x = pet_center_x - target_x - card_offset_x
 
         self.card.set_tail_mode(tail_mode, local_tail_x)
-        self.move(int(target_x), int(target_y))
+        target_pos_x = int(target_x)
+        target_pos_y = int(target_y)
+        if self.x() != target_pos_x or self.y() != target_pos_y:
+            self.move(target_pos_x, target_pos_y)
 
 class DialogueManager:
     """

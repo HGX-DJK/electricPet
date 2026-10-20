@@ -334,39 +334,45 @@ class PetWindow(QWidget):
 
     # ================= 60 FPS 核心帧循环 =================
     def _on_animation_tick(self):
-        now = time.time()
-        dt = min(0.05, now - self.last_tick_time)
-        self.last_tick_time = now
+        try:
+            now = time.time()
+            dt = min(0.05, now - self.last_tick_time)
+            self.last_tick_time = now
 
-        # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪与空间距离 (驱动动态瞳孔放大)
-        cursor_pos = QCursor.pos()
-        pet_center_x = self.get_center_screen_x()
-        pet_center_y = self.get_head_screen_y() + 25.0 * (self.width() / 220.0)
-        dx = cursor_pos.x() - pet_center_x
-        dy = cursor_pos.y() - pet_center_y
-        dist_px = math.hypot(dx, dy)
-        if self.facing_left:
-            dx = -dx
-        gaze_x = max(-1.0, min(1.0, dx / 220.0))
-        gaze_y = max(-1.0, min(1.0, dy / 180.0))
-        self.renderer.set_cursor_gaze(gaze_x, gaze_y, dist_px)
+            # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪与空间距离 (驱动动态瞳孔放大)
+            cursor_pos = QCursor.pos()
+            pet_center_x = self.get_center_screen_x()
+            pet_center_y = self.get_head_screen_y() + 25.0 * (self.width() / 220.0)
+            dx = cursor_pos.x() - pet_center_x
+            dy = cursor_pos.y() - pet_center_y
+            dist_px = math.hypot(dx, dy)
+            if self.facing_left:
+                dx = -dx
+            gaze_x = max(-1.0, min(1.0, dx / 220.0))
+            gaze_y = max(-1.0, min(1.0, dy / 180.0))
+            self.renderer.set_cursor_gaze(gaze_x, gaze_y, dist_px)
 
-        # 更新渲染器与粒子
-        self.renderer.update_animation(dt, self.state)
-        # 更新气泡提醒
-        self.dialogue.update(dt)
+            # 更新渲染器与粒子
+            self.renderer.update_animation(dt, self.state)
+            # 更新气泡提醒
+            self.dialogue.update(dt)
 
-        # 物理与AI移动处理
-        self._update_physics_and_ai(dt)
+            # 物理与AI移动处理
+            self._update_physics_and_ai(dt)
 
-        # 动态吸附同步伴侣岛与对话气泡位置
-        if hasattr(self, "dock") and self.dock.is_dock_visible:
-            self.dock.sync_position()
-        if hasattr(self, "dialogue") and self.dialogue.is_visible:
-            self.dialogue.sync_position()
+            # 动态吸附同步伴侣岛与对话气泡位置 (内置坐标变更防抖)
+            if hasattr(self, "dock") and self.dock.is_dock_visible:
+                self.dock.sync_position()
+            if hasattr(self, "dialogue") and self.dialogue.is_visible:
+                self.dialogue.sync_position()
 
-        # 触发重绘
-        self.update()
+            # 触发重绘
+            self.update()
+        except Exception as e:
+            now = time.time()
+            if now - getattr(self, "_last_tick_err_time", 0.0) > 5.0:
+                self._last_tick_err_time = now
+                print(f"[PetWindow] Animation tick warning: {e}")
 
     def play_action(self, action_name, custom_msg=None, duration=None, show_dialogue=True):
         """播放特定多样化动作动画与对应专属音效、台词气泡"""
@@ -676,34 +682,40 @@ class PetWindow(QWidget):
 
     def _on_status_tick(self):
         """每秒更新一次宠物数值与自适应能耗调节，并进行硬件全息状态轮询"""
-        self.model.tick(1.0)
-        # 自适应能耗调节：休眠中降低帧率至 30 FPS 节约系统开销，醒来恢复 60 FPS
-        if self.model.is_sleeping:
-            if self.anim_timer.interval() != 33:
-                self.anim_timer.setInterval(33)
-        else:
-            if self.anim_timer.interval() != 16:
-                self.anim_timer.setInterval(16)
+        try:
+            self.model.tick(1.0)
+            # 自适应能耗调节：休眠中降低帧率至 30 FPS 节约系统开销，醒来恢复 60 FPS
+            if self.model.is_sleeping:
+                if self.anim_timer.interval() != 33:
+                    self.anim_timer.setInterval(33)
+            else:
+                if self.anim_timer.interval() != 16:
+                    self.anim_timer.setInterval(16)
 
-        # 硬件性能感知与高负载流汗彩蛋 (每 15 秒轮询一次)
-        now = time.time()
-        if now - getattr(self, "_last_hw_check_time", 0.0) >= 15.0:
-            self._last_hw_check_time = now
-            try:
-                from pet.system_monitor import get_system_stats
-                hw = get_system_stats()
-                if hw["cpu"] >= 85 and not getattr(self, "is_boss_hidden", False) and not self.model.is_sleeping:
-                    if hasattr(self, "renderer"):
-                        self.renderer.is_sweating = True
-                    self.model.add_personality_point("tech", 1)
-                    if now - getattr(self, "_last_cpu_warn_time", 0.0) > 120.0:  # 2 分钟防重复打扰
-                        self._last_cpu_warn_time = now
-                        self.dialogue.say(f"🔥 哎呀主人！CPU算力跑满啦 ({hw['cpu']}%)，波可热得直冒汗，快注意给电脑通风散热呀~ 💦", duration=5.5)
-                else:
-                    if hasattr(self, "renderer"):
-                        self.renderer.is_sweating = False
-            except Exception:
-                pass
+            # 硬件性能感知与高负载流汗彩蛋 (每 15 秒轮询一次)
+            now = time.time()
+            if now - getattr(self, "_last_hw_check_time", 0.0) >= 15.0:
+                self._last_hw_check_time = now
+                try:
+                    from pet.system_monitor import get_system_stats
+                    hw = get_system_stats()
+                    if hw["cpu"] >= 85 and not getattr(self, "is_boss_hidden", False) and not self.model.is_sleeping:
+                        if hasattr(self, "renderer"):
+                            self.renderer.is_sweating = True
+                        self.model.add_personality_point("tech", 1)
+                        if now - getattr(self, "_last_cpu_warn_time", 0.0) > 120.0:  # 2 分钟防重复打扰
+                            self._last_cpu_warn_time = now
+                            self.dialogue.say(f"🔥 哎呀主人！CPU算力跑满啦 ({hw['cpu']}%)，波可热得直冒汗，快注意给电脑通风散热呀~ 💦", duration=5.5)
+                    else:
+                        if hasattr(self, "renderer"):
+                            self.renderer.is_sweating = False
+                except Exception:
+                    pass
+        except Exception as e:
+            now = time.time()
+            if now - getattr(self, "_last_status_err_time", 0.0) > 5.0:
+                self._last_status_err_time = now
+                print(f"[PetWindow] Status tick warning: {e}")
 
     # ================= 鼠标与交互事件 =================
     def enterEvent(self, event):
@@ -721,9 +733,13 @@ class PetWindow(QWidget):
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """鼠标移出宠物，延迟平滑收起伴侣岛"""
-        if hasattr(self, "dock"):
-            self.dock.schedule_hide(1800)
+        """鼠标移出宠物，延迟平滑收起伴侣岛 (若光标移入快捷岛，绝不误触发隐藏)"""
+        if hasattr(self, "dock") and self.dock.isVisible():
+            cursor_pos = QCursor.pos()
+            if self.dock.frameGeometry().contains(cursor_pos):
+                super().leaveEvent(event)
+                return
+            self.dock.schedule_hide(2000)
         super().leaveEvent(event)
 
     def moveEvent(self, event):

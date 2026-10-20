@@ -174,18 +174,19 @@ class PetCompanionDock(QWidget):
         self.adjustSize()
 
     def show_dock(self):
-        """平滑浮现快捷岛"""
-        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
-            self._current_anim.stop()
-            self._current_anim = None
+        """平滑浮现快捷岛 (智能衔接当前透明度，告别重置归零闪烁)"""
         self.hide_timer.stop()
         self.update_sleep_icon()
         self.update_focus_state()
         self.sync_position()
 
-        if not self.isVisible() or self.windowOpacity() < 0.9:
-            self.show()
+        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
+            self._current_anim.stop()
+            self._current_anim = None
+
+        if not self.isVisible():
             self.setWindowOpacity(0.0)
+            self.show()
             anim = QPropertyAnimation(self, b"windowOpacity", self)
             anim.setDuration(160)
             anim.setStartValue(0.0)
@@ -193,6 +194,15 @@ class PetCompanionDock(QWidget):
             anim.setEasingCurve(QEasingCurve.Type.OutCubic)
             anim.start()
             self._current_anim = anim
+        elif self.windowOpacity() < 1.0:
+            anim = QPropertyAnimation(self, b"windowOpacity", self)
+            anim.setDuration(120)
+            anim.setStartValue(self.windowOpacity())
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.start()
+            self._current_anim = anim
+
         self.raise_()
         self.is_dock_visible = True
         if hasattr(self.pet_window, "dialogue") and self.pet_window.dialogue.is_visible:
@@ -205,14 +215,30 @@ class PetCompanionDock(QWidget):
     def cancel_hide(self):
         self.hide_timer.stop()
 
+    def _is_cursor_hovering(self) -> bool:
+        """检查鼠标是否仍悬停在伴侣岛或宠物窗口的几何区域内"""
+        pos = QCursor.pos()
+        if self.isVisible() and self.frameGeometry().contains(pos):
+            return True
+        if hasattr(self, "pet_window") and self.pet_window.isVisible():
+            if self.pet_window.frameGeometry().contains(pos):
+                return True
+        return False
+
     def enterEvent(self, event):
         """鼠标滑入快捷岛：取消隐藏计时，持续保持操作面板展开"""
         self.cancel_hide()
+        if self.windowOpacity() < 1.0:
+            self.show_dock()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        """鼠标滑出快捷岛：平滑延时收起"""
-        self.schedule_hide(1600)
+        """鼠标滑出快捷岛：平滑延时收起（带宠物重叠区智能识别）"""
+        pos = QCursor.pos()
+        if hasattr(self, "pet_window") and self.pet_window.isVisible() and self.pet_window.frameGeometry().contains(pos):
+            self.schedule_hide(2200)
+        else:
+            self.schedule_hide(1600)
         super().leaveEvent(event)
 
     def keyPressEvent(self, event):
@@ -225,7 +251,17 @@ class PetCompanionDock(QWidget):
 
     def _do_fade_out(self):
         if not self.isVisible():
+            self.is_dock_visible = False
             return
+        # 若鼠标依然停留在伴侣岛或宠物身上，绝不收回，取消并重新延时
+        if self._is_cursor_hovering():
+            self.schedule_hide(2000)
+            return
+
+        if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
+            self._current_anim.stop()
+            self._current_anim = None
+
         anim = QPropertyAnimation(self, b"windowOpacity", self)
         anim.setDuration(200)
         anim.setStartValue(self.windowOpacity())
@@ -236,13 +272,18 @@ class PetCompanionDock(QWidget):
         self._current_anim = anim
 
     def _on_fade_finished(self):
+        # 即使动画完成，若鼠标在最后几毫秒重新移入，立即恢复
+        if self._is_cursor_hovering():
+            self.show_dock()
+            return
         self.hide()
         self.is_dock_visible = False
+        self._current_anim = None
         if hasattr(self.pet_window, "dialogue") and self.pet_window.dialogue.is_visible:
             self.pet_window.dialogue.sync_position()
 
     def sync_position(self):
-        """智能随宠物吸附并防止越过屏幕边缘，紧密贴合头顶"""
+        """智能随宠物吸附并防止越过屏幕边缘，紧密贴合头顶 (仅坐标发生变化时调用 move，杜绝打断鼠标点击)"""
         pet_x = self.pet_window.x()
         pet_y = self.pet_window.y()
         pet_w = self.pet_window.width()
@@ -273,7 +314,10 @@ class PetCompanionDock(QWidget):
             target_y = pet_foot_y + 4
             target_y = min(target_y, avail.bottom() - dock_h - 6)
 
-        self.move(int(target_x), int(target_y))
+        target_pos_x = int(target_x)
+        target_pos_y = int(target_y)
+        if self.x() != target_pos_x or self.y() != target_pos_y:
+            self.move(target_pos_x, target_pos_y)
 
     def update_sleep_icon(self):
         if self.model.is_sleeping:
@@ -299,18 +343,22 @@ class PetCompanionDock(QWidget):
     # ================= 按钮交互逻辑 =================
     def _on_feed(self):
         self.hide()
+        self.is_dock_visible = False
         QTimer.singleShot(30, lambda: FeedingDialog(self.model, self.pet_window).exec())
 
     def _on_wardrobe(self):
         self.hide()
+        self.is_dock_visible = False
         QTimer.singleShot(30, lambda: WardrobeDialog(self.model, self.pet_window).exec())
 
     def _on_talent(self):
         self.hide()
+        self.is_dock_visible = False
         QTimer.singleShot(30, lambda: ActionShowDialog(self.model, self.pet_window).exec())
 
     def _on_play(self):
         self.hide()
+        self.is_dock_visible = False
         QTimer.singleShot(30, lambda: PlayDialog(self.model, self.pet_window).exec())
 
     def _on_bath(self):
@@ -332,8 +380,10 @@ class PetCompanionDock(QWidget):
 
     def _on_focus(self):
         self.hide()
+        self.is_dock_visible = False
         QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
 
     def _on_more(self):
         self.hide()
+        self.is_dock_visible = False
         self.pet_window._open_quick_menu()

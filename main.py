@@ -18,22 +18,47 @@ def set_windows_app_id():
         pass
 
 def setup_crash_logger():
-    """未捕获异常崩溃日志记录"""
+    """未捕获异常崩溃日志记录（带智能限流防抖与文件大小限制，彻底杜绝定时器高频死循环写盘卡死）"""
     import traceback
     import time
+    
+    last_log_time = 0.0
+    suppressed_count = 0
+    MAX_LOG_SIZE = 2 * 1024 * 1024  # 单文件最大 2MB
+
     def handle_exception(exc_type, exc_value, exc_traceback):
+        nonlocal last_log_time, suppressed_count
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
+
+        now = time.time()
+        # 3秒内高频重复异常智能限流防抖，严禁阻塞 GUI 事件循环
+        if now - last_log_time < 3.0:
+            suppressed_count += 1
+            return
+
         log_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "ElectricPet")
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, "crash.log")
         try:
+            # 限制日志文件大小，超限截断滚动，保护磁盘健康
+            if os.path.exists(log_file) and os.path.getsize(log_file) > MAX_LOG_SIZE:
+                with open(log_file, "w", encoding="utf-8") as f:
+                    f.write(f"--- Log file truncated at {time.ctime()} due to size limit ---\n")
+
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(f"\n--- Crash at {time.ctime()} ---\n")
-                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
+                if suppressed_count > 0:
+                    f.write(f"[Throttled]: Previous similar error repeated {suppressed_count} times in the last interval.\n")
+                    suppressed_count = 0
+                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                f.writelines(lines)
+                f.flush()
         except Exception:
             pass
+        last_log_time = now
+
     sys.excepthook = handle_exception
 
 def main():
