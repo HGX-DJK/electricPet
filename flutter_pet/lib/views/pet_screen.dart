@@ -33,6 +33,7 @@ import 'docks/live_feeding_dock.dart';
 import 'docks/cyber_gacha_fab.dart';
 import '../services/backup_service.dart';
 import 'dialogs/heritage_backup_dialog.dart';
+import 'dialogs/ai_voice_chat_dialog.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -1755,6 +1756,63 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       barrierColor: Colors.black.withValues(alpha: 0.35),
       builder: (ctx) => sheet,
     );
+  }
+
+  /// 打开 MiniMax AI 语音陪伴小电台
+  void _openAiVoiceChatDialog() {
+    _idleSeconds = 0;
+    _isRoaming = false;
+    _targetWalkX = null;
+    SoundService.playPop();
+    _vibrate('light');
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '🎙️', count: 4);
+
+    AiVoiceChatDialog.show(
+      context,
+      isNight: _windowWeather == 3,
+      onActionTriggered: (action, dialogue) {
+        _handleAiVoiceAction(action, dialogue);
+      },
+    );
+  }
+
+  /// 执行 MiniMax AI 返回的拟真动作意图
+  void _handleAiVoiceAction(String action, String dialogue) {
+    _showDialogueBubble(dialogue, duration: const Duration(seconds: 5));
+    switch (action.toUpperCase()) {
+      case 'FEED':
+        _playAction('EAT_FISH');
+        widget.petModel.feed('dried_fish');
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 5);
+        break;
+      case 'SLEEP':
+        if (!widget.petModel.isSleeping) {
+          _isRoaming = false;
+          _targetWalkX = null;
+          widget.petModel.toggleSleep();
+          SoundService.startPurr();
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '💤', count: 5);
+        }
+        break;
+      case 'SPIN':
+        _playAction('HAPPY_SPIN');
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '🌀', count: 6);
+        break;
+      case 'YARN':
+        _teasePlay();
+        break;
+      case 'PET':
+        _playAction('WASH_FACE');
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '💖', count: 5);
+        break;
+      case 'BATH':
+        widget.petModel.wash();
+        _playAction('WASH_FACE');
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '🫧', count: 6);
+        break;
+      default:
+        break;
+    }
   }
 
   /// 打开波可的奇妙背包上拉抽屉
@@ -4132,6 +4190,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 3);
                     _showDialogueBubble('专属绝活点播台已就绪！点选下方任意绝活，看波可大展身手~ 🎭✨', duration: const Duration(seconds: 4));
                   },
+                  onVoiceChatTap: _openAiVoiceChatDialog,
                 ),
 
               // 7. 独立发光微动扭蛋机悬浮球 (Cyber Gacha FAB) - 常态下悬浮于右侧上方，开箱仪式感拉满，支持微缩渐隐优雅过渡

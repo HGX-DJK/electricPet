@@ -7,6 +7,7 @@ class BottomFloatingBar extends StatelessWidget {
   final VoidCallback onBackpackTap;
   final VoidCallback onWardrobeTap;
   final VoidCallback onActionTap;
+  final VoidCallback? onVoiceChatTap;
   final VoidCallback? onHabitatTap;
   final VoidCallback? onGachaTap;
 
@@ -16,6 +17,7 @@ class BottomFloatingBar extends StatelessWidget {
     required this.onBackpackTap,
     required this.onWardrobeTap,
     required this.onActionTap,
+    this.onVoiceChatTap,
     this.onHabitatTap,
     this.onGachaTap,
   });
@@ -192,6 +194,51 @@ class BottomFloatingBar extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onVoiceChatTap != null) ...[
+                const SizedBox(width: 8),
+                BouncyTouchFeedback(
+                  scaleDown: 0.93,
+                  onTap: onVoiceChatTap!,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
+                    decoration: BoxDecoration(
+                      color: isNight
+                          ? const Color(0xFF1E153D).withValues(alpha: 0.92)
+                          : const Color(0xFFEFF6FF).withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: isNight
+                            ? const Color(0xFF818CF8).withValues(alpha: 0.6)
+                            : const Color(0xFFBFDBFE),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.20),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('🎙️', style: TextStyle(fontSize: 14)),
+                        const SizedBox(width: 5),
+                        Text(
+                          'AI语聊',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: isNight ? const Color(0xFFC7D2FE) : const Color(0xFF2563EB),
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -11,6 +11,8 @@ import 'package:flutter_pet/services/backup_service.dart';
 import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
 import 'package:flutter_pet/views/dialogs/heritage_backup_dialog.dart';
 import 'package:flutter_pet/views/backpack_drawer.dart';
+import 'package:flutter_pet/services/minimax_service.dart';
+import 'package:flutter_pet/views/dialogs/ai_voice_chat_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -458,6 +460,80 @@ void main() {
       await tester.tap(find.text('导入口令恢复'), warnIfMissed: false);
       await tester.pump();
       expect(didPaste, isTrue);
+    });
+
+    test('MiniMax AI Service Configuration and Local Companion Engine Test', () async {
+      final ai = MinimaxService();
+      await ai.init();
+
+      // 测试配置持久化
+      await ai.updateConfig(
+        apiKey: 'test_minimax_key',
+        voiceId: 'child_female',
+        pitch: 3,
+        speed: 1.15,
+      );
+
+      expect(ai.apiKey, equals('test_minimax_key'));
+      expect(ai.voiceId, equals('child_female'));
+      expect(ai.pitch, equals(3));
+      expect(ai.speed, equals(1.15));
+      expect(ai.hasApiKey, isTrue);
+
+      // 清除 Key 测试本地智能伴侣仿真引擎与意图识别
+      await ai.updateConfig(apiKey: '');
+      expect(ai.hasApiKey, isFalse);
+
+      final feedResp = await ai.chatWithPoko('波可，快来吃香酥小鱼干和罐头！');
+      expect(feedResp.isSimulated, isTrue);
+      expect(feedResp.action, equals('FEED'));
+      expect(feedResp.text, isNotEmpty);
+
+      final sleepResp = await ai.chatWithPoko('波可，好困呀晚安去睡觉觉吧');
+      expect(sleepResp.action, equals('SLEEP'));
+
+      final yarnResp = await ai.chatWithPoko('波可，陪我玩毛线球');
+      expect(yarnResp.action, equals('YARN'));
+
+      final spinResp = await ai.chatWithPoko('波可，跳个舞转圈圈');
+      expect(spinResp.action, equals('SPIN'));
+
+      expect(ai.chatHistory.length, greaterThanOrEqualTo(4));
+      ai.clearHistory();
+      expect(ai.chatHistory, isEmpty);
+    });
+
+    testWidgets('AiVoiceChatDialog Interactive Modal Test', (WidgetTester tester) async {
+      String? triggeredAction;
+      String? triggeredDialogue;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AiVoiceChatDialog(
+              isNight: false,
+              onActionTriggered: (action, dialogue) {
+                triggeredAction = action;
+                triggeredDialogue = dialogue;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('波可的 AI 语音小电台'), findsOneWidget);
+      expect(find.text('轻触对波可说话'), findsOneWidget);
+      expect(find.text('🐟 投喂小鱼干'), findsOneWidget);
+
+      // 点击快速灵感话题
+      await tester.tap(find.text('🐟 投喂小鱼干'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(triggeredAction, equals('FEED'));
+      expect(triggeredDialogue, isNotNull);
     });
   });
 }
