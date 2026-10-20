@@ -28,6 +28,8 @@ import 'docks/live_wardrobe_dock.dart';
 import 'docks/live_action_dock.dart';
 import 'docks/live_feeding_dock.dart';
 import 'docks/cyber_gacha_fab.dart';
+import '../services/backup_service.dart';
+import 'dialogs/heritage_backup_dialog.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -538,6 +540,45 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 启动初始对话 (根据当前真实时段问候)
     final circadian = _getCircadianTheme();
     _showDialogueBubble(circadian['greeting'] as String);
+
+    // 方案 B：首启/重装后历史档案自动感知与一键继承探测
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkHeritageBackupOnLaunch();
+    });
+  }
+
+  /// 首次安装/沙盒为空时探测公共存储中的历史档案并呼出继承弹窗
+  Future<void> _checkHeritageBackupOnLaunch() async {
+    if (!mounted) return;
+    if (widget.petModel.isFreshInstall) {
+      final backup = await BackupService.checkHistoricalBackup();
+      if (backup != null && mounted) {
+        showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => HeritageBackupDialog(
+            backupData: backup,
+            onInherit: () async {
+              final ok = await BackupService.restoreFromHistoricalBackup(
+                backup,
+                widget.petModel,
+                memo: widget.memoModel,
+              );
+              if (ok && mounted) {
+                _playAction('HAPPY_SPIN');
+                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 6);
+                _showDialogueBubble('🎉 哇！成功找回了波可的全部记忆与装扮，欢迎回家主人~ ✨', duration: const Duration(seconds: 5));
+              }
+            },
+            onDecline: () {
+              if (mounted) {
+                _showDialogueBubble('🐾 好的，新旅程开启！波可会一直陪着您~', duration: const Duration(seconds: 4));
+              }
+            },
+          ),
+        );
+      }
+    }
   }
 
   void _onModelUpdated() {

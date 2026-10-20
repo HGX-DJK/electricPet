@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/backup_service.dart';
 
 /// 宠物外观皮肤/品种配置
 class SkinConfig {
@@ -184,6 +185,9 @@ class PetModel extends ChangeNotifier {
     'back': 'none',
     'hand': 'none',
   };
+
+  /// 首次启动/重装后初生状态标记 (用于触发首启历史档案检测)
+  bool isFreshInstall = false;
 
   PetModel() {
     loadFromDisk();
@@ -581,32 +585,78 @@ class PetModel extends ChangeNotifier {
     saveToDisk();
   }
 
+  Map<String, dynamic> toDataMap() {
+    return {
+      'name': name,
+      'skinId': skinId,
+      'hunger': hunger,
+      'mood': mood,
+      'energy': energy,
+      'cleanliness': cleanliness,
+      'level': level,
+      'exp': exp,
+      'intimacy': intimacy,
+      'weight': weight,
+      'totalFedCount': totalFedCount,
+      'decorations': Map<String, String>.from(decorations),
+      'personalityStats': Map<String, int>.from(personalityStats),
+      'habitat': habitat,
+      'coins': coins,
+      'unlockedItems': List<String>.from(unlockedItems),
+      'enableSound': enableSound,
+      'enableHaptics': enableHaptics,
+      'enableFootprints': enableFootprints,
+      'userScale': userScale,
+    };
+  }
+
+  void applyDataMap(Map<String, dynamic> data) {
+    name = data['name'] ?? name;
+    skinId = data['skinId'] ?? skinId;
+    hunger = (data['hunger'] as num?)?.toDouble() ?? hunger;
+    mood = (data['mood'] as num?)?.toDouble() ?? mood;
+    energy = (data['energy'] as num?)?.toDouble() ?? energy;
+    cleanliness = (data['cleanliness'] as num?)?.toDouble() ?? cleanliness;
+    level = data['level'] ?? level;
+    exp = (data['exp'] as num?)?.toDouble() ?? exp;
+    intimacy = data['intimacy'] ?? intimacy;
+    weight = (data['weight'] as num?)?.toDouble() ?? weight;
+    totalFedCount = data['totalFedCount'] ?? totalFedCount;
+    if (data['decorations'] != null) {
+      final loaded = Map<String, String>.from(data['decorations']);
+      decorations['head'] = loaded['head'] ?? 'none';
+      decorations['face'] = loaded['face'] ?? 'none';
+      decorations['neck'] = loaded['neck'] ?? 'bell';
+      decorations['back'] = loaded['back'] ?? 'none';
+      decorations['hand'] = loaded['hand'] ?? 'none';
+    }
+    if (data['personalityStats'] != null) {
+      personalityStats = Map<String, int>.from(data['personalityStats']);
+    }
+    habitat = data['habitat'] ?? habitat;
+    coins = data['coins'] ?? coins;
+    if (data['unlockedItems'] != null) {
+      unlockedItems = List<String>.from(data['unlockedItems']);
+    }
+    enableSound = data['enableSound'] ?? enableSound;
+    enableHaptics = data['enableHaptics'] ?? enableHaptics;
+    enableFootprints = data['enableFootprints'] ?? enableFootprints;
+    userScale = (data['userScale'] as num?)?.toDouble() ?? userScale;
+  }
+
+  void restoreFromData(Map<String, dynamic> data) {
+    applyDataMap(data);
+    isFreshInstall = false;
+    notifyListeners();
+  }
+
   Future<void> saveToDisk() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = {
-        'name': name,
-        'skinId': skinId,
-        'hunger': hunger,
-        'mood': mood,
-        'energy': energy,
-        'cleanliness': cleanliness,
-        'level': level,
-        'exp': exp,
-        'intimacy': intimacy,
-        'weight': weight,
-        'totalFedCount': totalFedCount,
-        'decorations': decorations,
-        'personalityStats': personalityStats,
-        'habitat': habitat,
-        'coins': coins,
-        'unlockedItems': unlockedItems,
-        'enableSound': enableSound,
-        'enableHaptics': enableHaptics,
-        'enableFootprints': enableFootprints,
-        'userScale': userScale,
-      };
+      final data = toDataMap();
       await prefs.setString('poko_pet_data', jsonEncode(data));
+      // 方案 B：静默双写到外部公用目录 (防卸载丢失)
+      await BackupService.writeSilentBackup(data);
     } catch (_) {}
   }
 
@@ -616,39 +666,14 @@ class PetModel extends ChangeNotifier {
       final raw = prefs.getString('poko_pet_data');
       if (raw != null) {
         final data = jsonDecode(raw) as Map<String, dynamic>;
-        name = data['name'] ?? name;
-        skinId = data['skinId'] ?? skinId;
-        hunger = (data['hunger'] as num?)?.toDouble() ?? hunger;
-        mood = (data['mood'] as num?)?.toDouble() ?? mood;
-        energy = (data['energy'] as num?)?.toDouble() ?? energy;
-        cleanliness = (data['cleanliness'] as num?)?.toDouble() ?? cleanliness;
-        level = data['level'] ?? level;
-        exp = (data['exp'] as num?)?.toDouble() ?? exp;
-        intimacy = data['intimacy'] ?? intimacy;
-        weight = (data['weight'] as num?)?.toDouble() ?? weight;
-        totalFedCount = data['totalFedCount'] ?? totalFedCount;
-        if (data['decorations'] != null) {
-          final loaded = Map<String, String>.from(data['decorations']);
-          decorations['head'] = loaded['head'] ?? 'none';
-          decorations['face'] = loaded['face'] ?? 'none';
-          decorations['neck'] = loaded['neck'] ?? 'bell';
-          decorations['back'] = loaded['back'] ?? 'none';
-          decorations['hand'] = loaded['hand'] ?? 'none';
-        }
-        if (data['personalityStats'] != null) {
-          personalityStats = Map<String, int>.from(data['personalityStats']);
-        }
-        habitat = data['habitat'] ?? habitat;
-        coins = data['coins'] ?? coins;
-        if (data['unlockedItems'] != null) {
-          unlockedItems = List<String>.from(data['unlockedItems']);
-        }
-        enableSound = data['enableSound'] ?? enableSound;
-        enableHaptics = data['enableHaptics'] ?? enableHaptics;
-        enableFootprints = data['enableFootprints'] ?? enableFootprints;
-        userScale = (data['userScale'] as num?)?.toDouble() ?? userScale;
+        applyDataMap(data);
+        isFreshInstall = false;
         notifyListeners();
+      } else {
+        isFreshInstall = true;
       }
-    } catch (_) {}
+    } catch (_) {
+      isFreshInstall = true;
+    }
   }
 }

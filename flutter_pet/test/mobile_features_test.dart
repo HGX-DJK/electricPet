@@ -5,8 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_pet/main.dart';
 import 'package:flutter_pet/models/pet_model.dart';
 import 'package:flutter_pet/services/sensor_service.dart';
-import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
+import 'dart:io';
 import 'package:flutter_pet/renderers/pet_painter.dart';
+import 'package:flutter_pet/services/backup_service.dart';
+import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
+import 'package:flutter_pet/views/dialogs/heritage_backup_dialog.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -271,6 +274,122 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.byType(CustomPaint), findsWidgets);
     });
+
+    test('BackupService Public Storage I/O, Save-Code Encryption & Restoration Test', () async {
+      final tempDir = Directory.systemTemp.createTempSync('poko_test_backup_');
+      BackupService.customBackupDir = tempDir.path;
+
+      try {
+        final pet = PetModel();
+        pet.level = 8;
+        pet.coins = 450;
+        pet.name = '赛博波可';
+        pet.setDecoration('back', 'shell_turtle');
+
+        // 测试静默双写备份
+        await pet.saveToDisk();
+
+        final backupFile = File('${tempDir.path}/poko_backup.json');
+        expect(backupFile.existsSync(), isTrue);
+
+        // 测试历史备份检测
+        final historical = await BackupService.checkHistoricalBackup();
+        expect(historical, isNotNull);
+        final petData = historical!['pet'] as Map<String, dynamic>;
+        expect(petData['level'], equals(8));
+        expect(petData['coins'], equals(450));
+        expect(petData['name'], equals('赛博波可'));
+
+        // 测试存档码加密导出与解密导入
+        final saveCode = BackupService.exportSaveCode(petData);
+        expect(saveCode, startsWith('POKO#v2#'));
+
+        final importedData = BackupService.importSaveCode(saveCode);
+        expect(importedData, isNotNull);
+        expect(importedData!['level'], equals(8));
+        expect(importedData['name'], equals('赛博波可'));
+
+        // 测试一键恢复至新模型
+        final newPet = PetModel();
+        expect(newPet.level, equals(1));
+        final restored = await BackupService.restoreFromHistoricalBackup(historical, newPet);
+        expect(restored, isTrue);
+        expect(newPet.level, equals(8));
+        expect(newPet.coins, equals(450));
+        expect(newPet.name, equals('赛博波可'));
+        expect(newPet.decorations['back'], equals('shell_turtle'));
+      } finally {
+        BackupService.customBackupDir = null;
+        tempDir.deleteSync(recursive: true);
+      }
+    });
+
+    testWidgets('Heritage Backup Auto-Detection and Inheritance Widget Test', (WidgetTester tester) async {
+      final mockBackup = {
+        'version': 2,
+        'format': 'POKO_PUBLIC_BACKUP',
+        'savedAt': '2026-10-20T08:30:00Z',
+        'pet': {
+          'name': '波可大师',
+          'skinId': 'cat_ragdoll',
+          'level': 15,
+          'coins': 520,
+          'intimacy': 160,
+          'unlockedItems': ['none', 'bell', 'ribbon', 'cat_calico', 'shell_turtle', 'cape_cyber'],
+          'decorations': {'head': 'none', 'face': 'none', 'neck': 'bell', 'back': 'shell_turtle', 'hand': 'none'},
+        },
+      };
+
+      bool didInherit = false;
+      bool didDecline = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => HeritageBackupDialog(
+                      backupData: mockBackup,
+                      onInherit: () {
+                        didInherit = true;
+                      },
+                      onDecline: () {
+                        didDecline = true;
+                      },
+                    ),
+                  );
+                },
+                child: const Text('Show Dialog'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 打开弹窗
+      await tester.tap(find.text('Show Dialog'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.byKey(const ValueKey('heritage_backup_dialog')), findsOneWidget);
+      expect(find.text('🎉 发现历史波可档案！'), findsOneWidget);
+      expect(find.text('波可大师'), findsOneWidget);
+      expect(find.text('Lv. 15'), findsOneWidget);
+      expect(find.text('520'), findsOneWidget);
+      expect(find.text('6 件'), findsOneWidget);
+
+      // 点击一键继承
+      await tester.tap(find.byKey(const ValueKey('inherit_backup_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('heritage_backup_dialog')), findsNothing);
+      expect(didInherit, isTrue);
+      expect(didDecline, isFalse);
+    });
   });
 }
+
 
