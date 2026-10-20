@@ -36,25 +36,25 @@ class CompanionDock extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: isNight
-            ? const Color(0xFF161334).withOpacity(0.90)
-            : Colors.white.withOpacity(0.95),
+            ? const Color(0xFF161334).withValues(alpha: 0.90)
+            : Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(26),
         border: Border.all(
-          color: isNight ? const Color(0xFF4338CA).withOpacity(0.4) : Colors.white,
+          color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : Colors.white,
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
             color: isNight
-                ? const Color(0xFF0D0A24).withOpacity(0.6)
-                : const Color(0xFF6366F1).withOpacity(0.12),
+                ? const Color(0xFF0D0A24).withValues(alpha: 0.6)
+                : const Color(0xFF6366F1).withValues(alpha: 0.12),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
           BoxShadow(
             color: isNight
-                ? const Color(0xFF6366F1).withOpacity(0.15)
-                : Colors.black.withOpacity(0.04),
+                ? const Color(0xFF6366F1).withValues(alpha: 0.15)
+                : Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -70,7 +70,7 @@ class CompanionDock extends StatelessWidget {
               icon: '🍱',
               label: '投喂',
               color: isNight ? const Color(0xFF241F48) : const Color(0xFFFFF7ED),
-              border: isNight ? const Color(0xFF6366F1).withOpacity(0.5) : const Color(0xFFFED7AA),
+              border: isNight ? const Color(0xFF6366F1).withValues(alpha: 0.5) : const Color(0xFFFED7AA),
               textColor: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
               onTap: onFeedTap,
             ),
@@ -80,7 +80,7 @@ class CompanionDock extends StatelessWidget {
                 icon: '🧶',
                 label: '逗趣',
                 color: isNight ? const Color(0xFF2A1C3C) : const Color(0xFFFDF2F8),
-                border: isNight ? const Color(0xFFEC4899).withOpacity(0.5) : const Color(0xFFFBCFE8),
+                border: isNight ? const Color(0xFFEC4899).withValues(alpha: 0.5) : const Color(0xFFFBCFE8),
                 textColor: isNight ? const Color(0xFFFCE7F3) : const Color(0xFF334155),
                 onTap: onTeaseTap!,
               ),
@@ -90,7 +90,7 @@ class CompanionDock extends StatelessWidget {
               icon: '👗',
               label: '衣橱',
               color: isNight ? const Color(0xFF221A44) : const Color(0xFFFAF5FF),
-              border: isNight ? const Color(0xFF8B5CF6).withOpacity(0.5) : const Color(0xFFE9D5FF),
+              border: isNight ? const Color(0xFF8B5CF6).withValues(alpha: 0.5) : const Color(0xFFE9D5FF),
               textColor: isNight ? const Color(0xFFEDE9FE) : const Color(0xFF334155),
               onTap: onWardrobeTap,
             ),
@@ -99,7 +99,7 @@ class CompanionDock extends StatelessWidget {
               icon: '✨',
               label: '绝活',
               color: isNight ? const Color(0xFF2E1C32) : const Color(0xFFFFF1F2),
-              border: isNight ? const Color(0xFFF43F5E).withOpacity(0.5) : const Color(0xFFFECDD3),
+              border: isNight ? const Color(0xFFF43F5E).withValues(alpha: 0.5) : const Color(0xFFFECDD3),
               textColor: isNight ? const Color(0xFFFFE4E6) : const Color(0xFF334155),
               onTap: onActionTap,
             ),
@@ -108,7 +108,7 @@ class CompanionDock extends StatelessWidget {
               icon: '📝',
               label: '便签',
               color: isNight ? const Color(0xFF2A232B) : const Color(0xFFFEFCE8),
-              border: isNight ? const Color(0xFFEAB308).withOpacity(0.5) : const Color(0xFFFEF08A),
+              border: isNight ? const Color(0xFFEAB308).withValues(alpha: 0.5) : const Color(0xFFFEF08A),
               textColor: isNight ? const Color(0xFFFEF9C3) : const Color(0xFF334155),
               onTap: onMemoTap,
             ),
@@ -117,7 +117,7 @@ class CompanionDock extends StatelessWidget {
               icon: '🫧',
               label: '洗澡',
               color: isNight ? const Color(0xFF172938) : const Color(0xFFECFDF5),
-              border: isNight ? const Color(0xFF10B981).withOpacity(0.5) : const Color(0xFFA7F3D0),
+              border: isNight ? const Color(0xFF10B981).withValues(alpha: 0.5) : const Color(0xFFA7F3D0),
               textColor: isNight ? const Color(0xFFD1FAE5) : const Color(0xFF334155),
               onTap: onBathTap,
             ),
@@ -129,7 +129,7 @@ class CompanionDock extends StatelessWidget {
                   ? const Color(0xFF231E54)
                   : (model.isSleeping ? const Color(0xFFFEF08A) : const Color(0xFFEEF2FF)),
               border: isNight
-                  ? const Color(0xFF818CF8).withOpacity(0.6)
+                  ? const Color(0xFF818CF8).withValues(alpha: 0.6)
                   : (model.isSleeping ? const Color(0xFFFACC15) : const Color(0xFFC7D2FE)),
               textColor: isNight ? const Color(0xFFE0E7FF) : const Color(0xFF334155),
               onTap: onSleepTap,
@@ -139,7 +139,7 @@ class CompanionDock extends StatelessWidget {
               icon: '📱',
               label: '悬浮',
               color: isNight ? const Color(0xFF1E2442) : const Color(0xFFF0FDF4),
-              border: isNight ? const Color(0xFF6366F1).withOpacity(0.5) : const Color(0xFFBBF7D0),
+              border: isNight ? const Color(0xFF6366F1).withValues(alpha: 0.5) : const Color(0xFFBBF7D0),
               textColor: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
               onTap: onToggleFloating,
             ),

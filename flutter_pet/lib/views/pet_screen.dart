@@ -113,6 +113,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _waterRippleTimer;
 
   // 方向二：沉浸式养宠仪式感 (拖拽投喂 + 睡垫盖小被子)
+  // 手势防误触与体验优化：抚摸微动 vs 悬空拖拽解耦
+  double _dragTotalDistance = 0.0;
+  bool _hasExceededDragThreshold = false;
+
+  /// 统一安全触觉震动反馈 (受设置 enableHaptics 严格约束)
+  void _vibrate([String type = 'medium']) {
+    if (!widget.petModel.enableHaptics) return;
+    switch (type) {
+      case 'selection':
+        HapticFeedback.selectionClick();
+        break;
+      case 'light':
+        HapticFeedback.lightImpact();
+        break;
+      case 'heavy':
+        HapticFeedback.heavyImpact();
+        break;
+      case 'medium':
+      default:
+        HapticFeedback.mediumImpact();
+        break;
+    }
+  }
   bool _showFoodTray = false;
   String? _draggingFoodId;
   String? _draggingFoodName;
@@ -221,6 +244,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    HapticService.enabled = widget.petModel.enableHaptics;
 
     _userScale = widget.petModel.userScale;
 
@@ -375,9 +399,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             if (_yarnBatCount < 2) {
               _yarnBatCount++;
               SoundService.playPop();
-              if (widget.petModel.enableHaptics) {
-                HapticFeedback.mediumImpact();
-              }
+              _vibrate('medium');
               // 爪爪一拍，球球带着初速度向前弹开！
               final forwardDir = _facingLeft ? -1.0 : 1.0;
               final rnd = math.Random();
@@ -404,9 +426,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
               _playAction('PLAY_YARN');
               SoundService.playMeow();
-              if (widget.petModel.enableHaptics) {
-                HapticFeedback.heavyImpact();
-              }
+              _vibrate('heavy');
 
               _squishController.forward(from: 0.0);
               _spawnParticles(ballPos, emoji: '🧶', count: 4);
@@ -471,9 +491,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         } else {
           // 扑到激光点瞬间！
           _squishController.forward(from: 0.0);
-          if (widget.petModel.enableHaptics) {
-            HapticFeedback.mediumImpact();
-          }
+          _vibrate('medium');
           _spawnParticles(_laserPos!, emoji: '💥', count: 3);
           _spawnTextParticle(Offset(_petX - 25, _petY - 45), '扑到啦！🐾', const Color(0xFFEF4444));
           // 激光点受惊随机跳向旁边（模拟真实手抖跳跃）
@@ -684,7 +702,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Future<void> _handleManualBackupScan() async {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+    _vibrate('medium');
 
     // 1. 若为 Android 且无权限，先申请权限
     if (!kIsWeb && Platform.isAndroid) {
@@ -711,7 +729,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _handleCopySaveCode() {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+    _vibrate('medium');
 
     final code = BackupService.exportSaveCode(widget.petModel.toDataMap());
     if (code.isNotEmpty) {
@@ -725,7 +743,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _handlePasteSaveCode() {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+    _vibrate('light');
 
     final textCtrl = TextEditingController();
 
@@ -820,7 +838,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Future<void> _handleForceBackup() async {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+    _vibrate('medium');
 
     await widget.petModel.saveToDisk();
     await widget.memoModel.saveToDisk();
@@ -829,6 +847,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   }
 
   void _onModelUpdated() {
+    HapticService.enabled = widget.petModel.enableHaptics;
     if (mounted) {
       setState(() {});
     }
@@ -837,7 +856,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      widget.petModel.saveToDisk();
+      widget.petModel.flushSave();
       widget.memoModel.saveToDisk();
       SensorService.stopListening();
     } else if (state == AppLifecycleState.resumed) {
@@ -848,7 +867,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.petModel.saveToDisk();
+    widget.petModel.flushSave();
     widget.memoModel.saveToDisk();
     widget.petModel.removeListener(_onModelUpdated);
     _idleAnimController.dispose();
@@ -901,7 +920,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _toggleBlanket() {
     _idleSeconds = 0;
     SoundService.playPop();
-    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+    _vibrate('medium');
     setState(() {
       _isCoveredWithBlanket = !_isCoveredWithBlanket;
     });
@@ -926,7 +945,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (dist < 110.0) {
       // 投喂成功！嗷呜飞扑吞食
       SoundService.playMeow(tone: MeowTone.short);
-      if (widget.petModel.enableHaptics) HapticFeedback.heavyImpact();
+      _vibrate('heavy');
       _squishController.forward(from: 0.0);
       widget.petModel.feed(_draggingFoodId ?? 'dried_fish');
       widget.petModel.addIntimacy(intimacyGain);
@@ -935,7 +954,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹  +$intimacyGain 亲密 💖', const Color(0xFFF43F5E));
       _triggerWink();
       if (math.Random().nextBool()) {
-        setState(() => _isBlep = true);
+        _triggerBlep();
       }
       if (widget.petModel.hunger >= 90) {
         _spawnParticles(Offset(_petX, _petY - 20), emoji: '😋', count: 4);
@@ -981,7 +1000,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _cycleWindowWeather() {
     _idleSeconds = 0;
     SoundService.playPop();
-    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+    _vibrate('light');
     setState(() {
       _windowScale = 0.88;
       _windowWeather = (_windowWeather + 1) % 4;
@@ -1025,7 +1044,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _showIntimacyBondModal() {
     _idleSeconds = 0;
     SoundService.playPop();
-    if (widget.petModel.enableHaptics) HapticFeedback.selectionClick();
+    _vibrate('selection');
 
     final bondInfo = widget.petModel.intimacyBondInfo;
     final stage = bondInfo['stage'] as int;
@@ -1103,10 +1122,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [color.withOpacity(0.18), color.withOpacity(0.06)],
+                    colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0.06)],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+                  border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1389,9 +1408,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _idleSeconds = 0;
     _stopRoaming();
     SoundService.playMeow();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     _squishController.forward(from: 0.0);
     _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 1);
 
@@ -1426,9 +1443,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _idleSeconds = 0;
     _stopRoaming();
     SoundService.playMeow();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
-    }
+    _vibrate('heavy');
     _playAction('HAPPY_SPIN');
     _spawnParticles(Offset(_petX, _petY - 40), emoji: '⭐', count: 1);
   }
@@ -1452,9 +1467,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     } else {
       SoundService.playMeow();
     }
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     setState(() {
       _state = actionId;
     });
@@ -1739,7 +1752,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      barrierColor: Colors.black.withOpacity(0.35),
+      barrierColor: Colors.black.withValues(alpha: 0.35),
       builder: (ctx) => sheet,
     );
   }
@@ -1750,9 +1763,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isRoaming = false;
     _targetWalkX = null;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _showBottomSheetModal(
       PokoBackpackDrawer(
         model: widget.petModel,
@@ -1773,9 +1784,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 final expGain = (food['exp'] as double).toInt();
 
                 widget.petModel.feed(foodId);
-                if (widget.petModel.enableHaptics) {
-                  HapticFeedback.mediumImpact();
-                }
+                _vibrate('medium');
 
                 // 触发进食咀嚼动画
                 _playAction('EATING');
@@ -1832,9 +1841,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isRoaming = false;
     _targetWalkX = null;
     SoundService.playMeow();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1861,9 +1868,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _laserPos = Offset(screenSize.width * 0.35, screenSize.height * 0.44);
       _state = 'IDLE';
     });
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     _showDialogueBubble('神奇激光笔启动！在屏幕任意位置滑动指尖，看波可疯狂追扑~ 🔴🐾', duration: const Duration(seconds: 4));
   }
 
@@ -1878,9 +1883,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 天象互动：夜空月亮轻触 (流星许愿)
   void _onMoonTap() {
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _spawnParticles(Offset(_petX - 30, _petY - 60), emoji: '🌠', count: 2);
     _spawnParticles(Offset(_petX + 30, _petY - 80), emoji: '⭐', count: 4);
     _spawnTextParticle(Offset(_petX - 30, _petY - 95), '流星许愿 +10 ⭐', const Color(0xFFFDE047));
@@ -1890,9 +1893,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 天象互动：白天晴空轻触 (微风甘露)
   void _onSunTap() {
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _spawnParticles(Offset(_petX - 60, _petY - 60), emoji: '🌈', count: 3);
     _spawnTextParticle(Offset(_petX - 25, _petY - 95), '晴空温煦 +10 ☀️', const Color(0xFFF59E0B));
     widget.petModel.addExp(10.0);
@@ -1901,9 +1902,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 天象罗盘光影模式切换 (在真实自然天文与4大四季时角天光之间平滑循环流转)
   void _cycleSkyTheme() {
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     setState(() {
       if (_skyManualMode == -1) {
         _skyManualMode = 0; // 破晓晨曦
@@ -1945,9 +1944,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isRoaming = false;
     _targetWalkX = null;
     SoundService.playMeow();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
-    }
+    _vibrate('heavy');
     setState(() {
       _state = 'PEEK_A_BOO';
     });
@@ -1961,9 +1958,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isRoaming = false;
     _targetWalkX = null;
     SoundService.playMeow();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _squishController.forward(from: 0.0);
     setState(() {
       _state = 'HAPPY_SPIN';
@@ -1972,7 +1967,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnParticles(Offset(_petX, _petY - 30), emoji: '💖', count: 4);
     _spawnTextParticle(Offset(_petX - 35, _petY - 65), '躲猫猫大成功！✨', const Color(0xFFEC4899));
     _showDialogueBubble('哈哈！发现主人啦！扑个大满怀~ 喵呜！(✧ω✧)💕', duration: const Duration(seconds: 4));
-    Timer(const Duration(milliseconds: 3200), () {
+    _actionTimer?.cancel();
+    _actionTimer = Timer(const Duration(milliseconds: 3200), () {
       if (mounted && _state == 'HAPPY_SPIN') {
         setState(() => _state = 'IDLE');
       }
@@ -1982,9 +1978,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 家具交互：猫草轻摇 (清香飘逸，猫咪开心跑过去嗅嗅)
   void _onPlantTap([bool walkIfFar = true]) {
     _idleSeconds = 0;
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _plantAnimTimer?.cancel();
     setState(() => _plantTilt = 0.14);
     _plantAnimTimer = Timer(const Duration(milliseconds: 240), () {
@@ -2023,11 +2017,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _idleSeconds = 0;
     SoundService.playScratch();
     if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
+      _vibrate('medium');
       Timer(const Duration(milliseconds: 100), () {
-        HapticFeedback.heavyImpact();
+        _vibrate('heavy');
         Timer(const Duration(milliseconds: 120), () {
-          HapticFeedback.lightImpact();
+          _vibrate('light');
         });
       });
     }
@@ -2122,9 +2116,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onDialogueBubbleTap() {
     _idleSeconds = 0;
     SoundService.playMeow(tone: MeowTone.soft);
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _triggerWink();
     _spawnParticles(Offset(_petX, _petY - 35), emoji: '✨', count: 3);
     final secretLines = [
@@ -2142,9 +2134,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onNightLampTap() {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     setState(() {
       _isLampSwitchDepressed = true;
       _isNightLampOn = !_isNightLampOn;
@@ -2154,7 +2144,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     if (_isNightLampOn) {
-      _twitchEar = 'RIGHT';
+      setState(() => _twitchEar = 'RIGHT');
+      _earTwitchTimer?.cancel();
+      _earTwitchTimer = Timer(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() => _twitchEar = null);
+      });
       _spawnParticles(Offset(_petX + 50, _petY), emoji: '💡', count: 4);
       _spawnParticles(Offset(_petX + 55, _petY - 20), emoji: '✨', count: 3);
       _spawnTextParticle(Offset(_petX + 35, _petY - 35), '暖光微亮 💡', const Color(0xFFFBBF24));
@@ -2170,9 +2164,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 家具交互：点按标签切换房间治愈 ASMR 白噪音 (雨声 / 猫咪深度打呼噜 / 关闭)
   Future<void> _cycleAmbientSound() async {
     _idleSeconds = 0;
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
-    }
+    _vibrate('heavy');
     final mode = await SoundService.cycleAmbientSound();
     setState(() {});
 
@@ -2197,9 +2189,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onPhotoTap() {
     _idleSeconds = 0;
     SoundService.playShutter();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _photoAnimTimer?.cancel();
     setState(() => _photoAngle = 0.10);
     _photoAnimTimer = Timer(const Duration(milliseconds: 260), () {
@@ -2231,9 +2221,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _isChasingYarn = false;
     _isYarnFlying = false;
 
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
 
     // 萌宠回归暖绒圆垫中心位置
     setState(() {
@@ -2259,7 +2247,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         if (kneadTick++ >= 12 || _state != 'KNEADING_BISCUITS') {
           t.cancel();
         } else {
-          HapticFeedback.selectionClick();
+          _vibrate('selection');
         }
       });
     }
@@ -2288,9 +2276,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.playMeow(tone: MeowTone.short);
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     setState(() {
       _state = 'HIGH_FIVE';
       _facingLeft = touchPos.dx < _petX;
@@ -2313,9 +2299,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.playMeow(tone: MeowTone.soft);
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _squishController.forward(from: 0.0);
     setState(() {
       _state = 'ROLL_ON_BACK';
@@ -2337,9 +2321,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.startPurr();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     setState(() {
       _state = 'BUNNY_KICKS';
     });
@@ -2361,9 +2343,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.playWaterLap();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     setState(() {
       _state = 'DRINK_WATER';
       _isWaterRippling = true;
@@ -2399,9 +2379,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.playCanChime();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
-    }
+    _vibrate('heavy');
     if (widget.petModel.isSleeping) {
       widget.petModel.wakeUp();
     }
@@ -2456,9 +2434,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     SoundService.stopPurr();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     // 阶段 1：揉揉睡眼洗小脸
     setState(() {
       _state = 'WASH_FACE';
@@ -2471,9 +2447,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (!mounted) return;
       // 阶段 2：正宗猫式大伸展
       SoundService.playMeow(tone: MeowTone.sweet);
-      if (widget.petModel.enableHaptics) {
-        HapticFeedback.mediumImpact();
-      }
+      _vibrate('medium');
       setState(() {
         _state = 'CAT_STRETCH';
       });
@@ -2526,9 +2500,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onFairyLightsTap() {
     _idleSeconds = 0;
     SoundService.playClick();
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.lightImpact();
-    }
+    _vibrate('light');
     _spawnParticles(Offset(_petX - 40, 85), emoji: '✨', count: 3);
     _spawnParticles(Offset(_petX + 40, 85), emoji: '🌟', count: 3);
     _showDialogueBubble('暖黄小串灯一闪一闪的，小窝变得好温馨呀~ ✨💡', duration: const Duration(seconds: 4));
@@ -2554,9 +2526,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _state = 'IDLE';
     });
     _showDialogueBubble('回到蓬松温暖的专属暖绒垫啦！舒服趴好~ 🐾☁️');
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.selectionClick();
-    }
+    _vibrate('selection');
   }
 
   /// 真实太阳天文算法与四季时角光影主题 (基于分钟进度 Color.lerp 平滑流光)
@@ -2616,9 +2586,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     SoundService.playMeow(tone: MeowTone.short);
     if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
+      _vibrate('heavy');
       Timer(const Duration(milliseconds: 120), () {
-        HapticFeedback.lightImpact();
+        _vibrate('light');
       });
     }
     _squishController.forward(from: 0.0);
@@ -2707,7 +2677,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 0.1 戳呆萌小舌头 (Blep Boop - 戳收回小舌头)
     if (_isBlep && (localPos.dx - 100).abs() < 16 && (localPos.dy - 104).abs() < 14) {
       SoundService.playPop();
-      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+      _vibrate('light');
       setState(() => _isBlep = false);
       _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 1);
       _spawnTextParticle(Offset(_petX - 35, _petY - 45), '收回小舌头~ (ฅ^ω^ฅ)', const Color(0xFFF43F5E));
@@ -2718,7 +2688,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 1. 点粉嫩小鼻子 (Nose Boop - 触发短促清脆小猫打喷嚏回应喵)
     if ((localPos.dx - 100).abs() < 14 && (localPos.dy - 93).abs() < 10) {
       SoundService.playMeow(tone: MeowTone.short);
-      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+      _vibrate('light');
       _squishController.forward(from: 0.0);
       setState(() => _bodyTiltAngle = -0.04);
       _tiltTimer?.cancel();
@@ -2739,7 +2709,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 3. 触摸左耳 (俏皮机敏轻短喵)
     if (localPos.dx >= 45 && localPos.dx <= 88 && localPos.dy >= 18 && localPos.dy <= 62) {
       SoundService.playMeow(tone: MeowTone.short);
-      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+      _vibrate('light');
       setState(() {
         _twitchEar = 'LEFT';
         _bodyTiltAngle = -0.05;
@@ -2760,7 +2730,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 4. 触摸右耳 (俏皮机敏轻短喵)
     if (localPos.dx >= 112 && localPos.dx <= 155 && localPos.dy >= 18 && localPos.dy <= 62) {
       SoundService.playMeow(tone: MeowTone.short);
-      if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+      _vibrate('light');
       setState(() {
         _twitchEar = 'RIGHT';
         _bodyTiltAngle = 0.05;
@@ -2783,9 +2753,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final isRightCheek = (localPos.dx >= 116 && localPos.dx <= 148 && localPos.dy >= 70 && localPos.dy <= 104);
     if (isLeftCheek || isRightCheek) {
       SoundService.playMeow(tone: MeowTone.soft);
-      if (widget.petModel.enableHaptics) {
-        HapticFeedback.lightImpact();
-      }
+      _vibrate('light');
       _squishController.forward(from: 0.0);
       setState(() => _bodyTiltAngle = isLeftCheek ? 0.07 : -0.07);
       _tiltTimer?.cancel();
@@ -2831,7 +2799,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (!mounted || _isSlowBlink || _state != 'IDLE') return;
     setState(() => _isSlowBlink = true);
     SoundService.playMeow(tone: MeowTone.soft);
-    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+    _vibrate('light');
     _spawnParticles(Offset(_petX, _petY - 35), emoji: '💖', count: 1);
     _spawnTextParticle(Offset(_petX - 35, _petY - 60), '猫咪之吻 🐾💕', const Color(0xFFF43F5E));
     widget.petModel.addIntimacy(3);
@@ -2867,9 +2835,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         Offset(_petX + 38, _petY + 22),
       ];
     });
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.heavyImpact();
-    }
+    _vibrate('heavy');
     _showDialogueBubble('波可跑来贴贴屏幕啦！主人也在看波可嘛？(ฅ\'ω\'ฅ)💕', duration: const Duration(seconds: 4));
 
     _boopTimer?.cancel();
@@ -2890,9 +2856,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _fishPopping = true;
       _poppingFishPos = Offset(38.0, nestY + 52.0);
     });
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
   }
 
   /// 逗趣与毛线球主动抛掷
@@ -2975,9 +2939,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       return;
     }
 
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     SoundService.playPop();
 
     // 敲击地板处泛起微光小波纹与爪印
@@ -2999,9 +2961,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _toggleBlanket();
       return;
     }
-    if (widget.petModel.enableHaptics) {
-      HapticFeedback.mediumImpact();
-    }
+    _vibrate('medium');
     SoundService.startPurr();
     setState(() {
       _petX = nestX;
@@ -3083,24 +3043,34 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // 助眠专注氛围：细雨微动粒子 (Rain ASMR Active)
-                if (SoundService.ambientMode == 'rain') ...[
-                  for (int i = 0; i < 14; i++)
-                    Positioned(
-                      left: ((i * 27.0 + _idleAnimController.value * 350.0) % screenSize.width),
-                      top: ((i * 59.0 + _idleAnimController.value * 650.0) % screenSize.height),
-                      child: IgnorePointer(
-                        child: Container(
-                          width: 1.5,
-                          height: 12.0,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.28),
-                            borderRadius: BorderRadius.circular(1),
-                          ),
-                        ),
+                // 助眠专注氛围：细雨微动粒子 (Rain ASMR Active，包裹 AnimatedBuilder 实现丝滑流动)
+                if (SoundService.ambientMode == 'rain')
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedBuilder(
+                        animation: _idleAnimController,
+                        builder: (context, _) {
+                          return Stack(
+                            children: [
+                              for (int i = 0; i < 14; i++)
+                                Positioned(
+                                  left: ((i * 27.0 + _idleAnimController.value * 350.0) % screenSize.width),
+                                  top: ((i * 59.0 + _idleAnimController.value * 650.0) % screenSize.height),
+                                  child: Container(
+                                    width: 1.5,
+                                    height: 12.0,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.28),
+                                      borderRadius: BorderRadius.circular(1),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
                       ),
                     ),
-                ],
+                  ),
                 // 背景微光氛围天象 (清晨/正午/日落/星夜，支持点击天象交互彩蛋)
                 if (isNight) ...[
                   // 漫天静谧微星 (支持轻触交互，飘出星光)
@@ -3109,7 +3079,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     left: 28,
                     child: GestureDetector(
                       onTap: _onMoonTap,
-                      child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withOpacity(0.7))),
+                      child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withValues(alpha: 0.7))),
                     ),
                   ),
                   Positioned(
@@ -3117,7 +3087,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     right: 70,
                     child: GestureDetector(
                       onTap: _onMoonTap,
-                      child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withOpacity(0.6))),
+                      child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withValues(alpha: 0.6))),
                     ),
                   ),
                   Positioned(
@@ -3125,7 +3095,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     left: 50,
                     child: GestureDetector(
                       onTap: _onMoonTap,
-                      child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withOpacity(0.5))),
+                      child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withValues(alpha: 0.5))),
                     ),
                   ),
                   Positioned(
@@ -3133,7 +3103,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     left: 110,
                     child: GestureDetector(
                       onTap: _onMoonTap,
-                      child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
+                      child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4))),
                     ),
                   ),
                 ] else ...[
@@ -3143,7 +3113,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     left: 24,
                     child: GestureDetector(
                       onTap: _onSunTap,
-                      child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withOpacity(0.6))),
+                      child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withValues(alpha: 0.6))),
                     ),
                   ),
                 ],
@@ -3257,8 +3227,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                               shape: BoxShape.circle,
                               gradient: RadialGradient(
                                 colors: [
-                                  (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withOpacity(0.38),
-                                  (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withOpacity(0.14),
+                                  (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withValues(alpha: 0.38),
+                                  (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withValues(alpha: 0.14),
                                   Colors.transparent,
                                 ],
                               ),
@@ -3280,8 +3250,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           center: Alignment.center,
                           radius: 1.1,
                           colors: [
-                            (isNight ? const Color(0xFF070417) : Colors.black).withOpacity(0.44),
-                            (isNight ? const Color(0xFF03010C) : Colors.black).withOpacity(0.54),
+                            (isNight ? const Color(0xFF070417) : Colors.black).withValues(alpha: 0.44),
+                            (isNight ? const Color(0xFF03010C) : Colors.black).withValues(alpha: 0.54),
                           ],
                         ),
                       ),
@@ -3321,7 +3291,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   idleAnimation: _idleAnimController,
                   onPetalTap: (index, x, y) {
                     SoundService.playPop();
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                    _vibrate('light');
                     _spawnParticles(Offset(x + 10, y + 10), emoji: '🌸', count: 3);
                     _spawnParticles(Offset(x + 10, y + 10), emoji: '✨', count: 2);
                     _spawnTextParticle(Offset(x - 15, y - 20), '落樱轻抚 🌸+1💖', const Color(0xFFF43F5E));
@@ -3376,7 +3346,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         _footprints.clear();
                       }
                     });
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                    _vibrate('light');
                     _showDialogueBubble(
                       widget.petModel.enableFootprints
                           ? '已开启温润小猫肉垫爪印~ 🐾'
@@ -3403,17 +3373,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   onScaleStart: (details) {
                     _baseScale = _userScale;
                     if (details.pointerCount == 1) {
-                      setState(() {
-                        _isDragging = true;
-                        _stopRoaming();
-                        _isChasingYarn = false;
-                        _isYarnFlying = false;
-                        _state = 'DANGLING';
-                        _strokeDistance = 0.0;
-                        _dragDirectionReversals = 0;
-                        _lastDragDirection = 0.0;
-                        _lastDragTime = DateTime.now();
-                      });
+                      _dragTotalDistance = 0.0;
+                      _hasExceededDragThreshold = false;
+                      _strokeDistance = 0.0;
+                      _dragDirectionReversals = 0;
+                      _lastDragDirection = 0.0;
+                      _lastDragTime = DateTime.now();
+                      _touchPos = details.localFocalPoint;
                     }
                   },
                   onScaleUpdate: (details) {
@@ -3424,63 +3390,75 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         setState(() {
                           _userScale = newScale;
                         });
-                        if (widget.petModel.enableHaptics) {
-                          HapticFeedback.selectionClick();
-                        }
+                        _vibrate('selection');
                       }
                       return;
                     }
 
-                    // 单指拖拽与抚摸
+                    // 单指拖拽与抚摸 (带位移阈值阻尼防误触)
                     final now = DateTime.now();
                     final dt = now.difference(_lastDragTime).inMilliseconds;
                     _lastDragTime = now;
 
+                    final deltaDist = details.focalPointDelta.distance;
+                    _dragTotalDistance += deltaDist;
+
+                    // 移动超过 16 像素阈值才正式认定为悬空拖拽，彻底解决原地顺毛/揉肚子被误抓起的痛点
+                    if (!_hasExceededDragThreshold && _dragTotalDistance > 16.0) {
+                      _hasExceededDragThreshold = true;
+                      _isDragging = true;
+                      _stopRoaming();
+                      _isChasingYarn = false;
+                      _isYarnFlying = false;
+                      if (_state != 'DIZZY') {
+                        _state = 'DANGLING';
+                      }
+                    }
+
                     setState(() {
-                      _petX += details.focalPointDelta.dx;
-                      _petY += details.focalPointDelta.dy;
+                      if (_hasExceededDragThreshold) {
+                        _petX += details.focalPointDelta.dx;
+                        _petY += details.focalPointDelta.dy;
 
-                      // 限制萌宠不出屏幕
-                      _petX = _petX.clamp(35.0, screenSize.width - 35.0);
-                      _petY = _petY.clamp(minSafeY, maxSafeY);
+                        // 限制萌宠不出屏幕
+                        _petX = _petX.clamp(35.0, screenSize.width - 35.0);
+                        _petY = _petY.clamp(minSafeY, maxSafeY);
 
-                      _facingLeft = (details.focalPointDelta.dx < -0.8);
+                        _facingLeft = (details.focalPointDelta.dx < -0.8);
+                      }
                       _touchPos = details.localFocalPoint;
 
-                      // 高频剧烈左右晃动眩晕检测
-                      final curDx = details.focalPointDelta.dx;
-                      if (curDx.abs() > 4.5 && dt < 80) {
-                        final dir = curDx > 0 ? 1.0 : -1.0;
-                        if (_lastDragDirection != 0.0 && dir != _lastDragDirection) {
-                          _dragDirectionReversals++;
-                          if (_dragDirectionReversals >= 5 && _state != 'DIZZY') {
-                            _state = 'DIZZY';
-                            _dragDirectionReversals = 0;
-                            if (widget.petModel.enableHaptics) {
-                              HapticService.heavy();
+                      // 高频剧烈左右晃动眩晕检测 (仅在真正悬空拖拽中生效)
+                      if (_hasExceededDragThreshold) {
+                        final curDx = details.focalPointDelta.dx;
+                        if (curDx.abs() > 4.5 && dt < 80) {
+                          final dir = curDx > 0 ? 1.0 : -1.0;
+                          if (_lastDragDirection != 0.0 && dir != _lastDragDirection) {
+                            _dragDirectionReversals++;
+                            if (_dragDirectionReversals >= 5 && _state != 'DIZZY') {
+                              _state = 'DIZZY';
+                              _dragDirectionReversals = 0;
+                              _vibrate('heavy');
+                              _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 1);
+                              _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
+                              Timer(const Duration(milliseconds: 3500), () {
+                                if (mounted && _state == 'DIZZY') {
+                                  setState(() => _state = 'IDLE');
+                                }
+                              });
                             }
-                            _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 1);
-                            _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
-                            Timer(const Duration(milliseconds: 3500), () {
-                              if (mounted && _state == 'DIZZY') {
-                                setState(() => _state = 'IDLE');
-                              }
-                            });
                           }
+                          _lastDragDirection = dir;
                         }
-                        _lastDragDirection = dir;
                       }
 
-                      // 拖拽移动与抚摸交互解耦 (慢速拂过触发呼噜微震与爱心漫溢)
-                      final delta = details.focalPointDelta.distance;
-                      if (delta > 2.0 && delta < 12.0) {
-                        _strokeDistance += delta;
-                        if (_strokeDistance > 52.0) {
+                      // 抚摸交互：慢速拂过累加抚摸进度，触发呼噜微震与爱心漫溢
+                      if (deltaDist > 1.5 && deltaDist < 14.0) {
+                        _strokeDistance += deltaDist;
+                        if (_strokeDistance > 46.0) {
                           _strokeDistance = 0.0;
                           _petProgress = 1.0;
-                          if (widget.petModel.enableHaptics) {
-                            HapticFeedback.selectionClick();
-                          }
+                          _vibrate('selection');
                           if (!_isPurring) {
                             _triggerPurringState(customDialogue: '呼噜噜... 好舒服呀，最喜欢主人的温柔抚摸啦~ 💕🐾');
                           }
@@ -3500,11 +3478,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     widget.petModel.setUserScale(_userScale);
                     widget.petModel.saveToDisk();
 
+                    final wasDragging = _hasExceededDragThreshold;
+                    _dragTotalDistance = 0.0;
+                    _hasExceededDragThreshold = false;
+
                     setState(() {
                       _isDragging = false;
                       _touchPos = null;
                       _petProgress = 0.0;
                       _dragDirectionReversals = 0;
+
+                      if (!wasDragging) {
+                        if (_state == 'DANGLING') _state = 'IDLE';
+                        return;
+                      }
 
                       // 贴边探头偷看判定 (靠屏幕边缘 < 50px 自动贴边)
                       if (_petX < 55) {
@@ -3529,9 +3516,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       if (_state != 'DIZZY') {
                         _state = 'IDLE';
                         _squishController.forward(from: 0.0);
-                        if (widget.petModel.enableHaptics) {
-                          HapticFeedback.lightImpact();
-                        }
+                        _vibrate('light');
                         _spawnParticles(Offset(_petX, _petY + 28), emoji: '💨', count: 2);
                         _spawnParticles(Offset(_petX, _petY + 28), emoji: '🐾', count: 2);
                       }
@@ -3545,28 +3530,30 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         child: Transform.scale(
                           scaleX: _squishScaleX.value,
                           scaleY: _squishScaleY.value,
-                          child: CustomPaint(
-                            size: const Size(200, 200),
-                            painter: PetPainter(
-                              model: widget.petModel,
-                              animTime: _idleAnimController.value * 10,
-                              state: _state,
-                              touchPos: (_isYarnFlying || _isYarnDragging)
-                                  ? Offset(_yarnX - _petX, _yarnY - _petY)
-                                  : (_touchPos ?? _lookTargetPos),
-                              facingLeft: _facingLeft,
-                              petProgress: _petProgress,
-                              isPurring: _isPurring,
-                              twitchEar: _twitchEar,
-                              isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null || _showFoodTray || (widget.petModel.hunger < 50 && _state == 'IDLE')),
-                              isTailPuffed: _isTailPuffed,
-                              isAirplaneEars: _isAirplaneEars,
-                              isBlep: _isBlep,
-                              isSlowBlink: _isSlowBlink,
-                              winkEye: _winkEye,
-                              isNight: isNight,
-                              userScale: _userScale,
-                              tiltX: _tiltX,
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              size: const Size(200, 200),
+                              painter: PetPainter(
+                                model: widget.petModel,
+                                animTime: _idleAnimController.value * 10,
+                                state: _state,
+                                touchPos: (_isYarnFlying || _isYarnDragging)
+                                    ? Offset(_yarnX - _petX, _yarnY - _petY)
+                                    : (_touchPos ?? _lookTargetPos),
+                                facingLeft: _facingLeft,
+                                petProgress: _petProgress,
+                                isPurring: _isPurring,
+                                twitchEar: _twitchEar,
+                                isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null || _showFoodTray || (widget.petModel.hunger < 50 && _state == 'IDLE')),
+                                isTailPuffed: _isTailPuffed,
+                                isAirplaneEars: _isAirplaneEars,
+                                isBlep: _isBlep,
+                                isSlowBlink: _isSlowBlink,
+                                winkEye: _winkEye,
+                                isNight: isNight,
+                                userScale: _userScale,
+                                tiltX: _tiltX,
+                              ),
                             ),
                           ),
                         ),
@@ -3600,7 +3587,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       isWaterRippling: _isWaterRippling,
                       onFoodBowlTap: () {
                         SoundService.playPop();
-                        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                        _vibrate('light');
                         setState(() {
                           _showFoodTray = !_showFoodTray;
                           if (_showFoodTray) {
@@ -3615,7 +3602,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       onFoodBowlDoubleTap: () => _popFishFromBowl(nestX, nestY),
                       onWaterBowlTap: () {
                         SoundService.playPop();
-                        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                        _vibrate('light');
                         setState(() {
                           _isWaterRippling = true;
                         });
@@ -3662,7 +3649,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 onToggleBlanket: _toggleBlanket,
                 onBlanketTap: () {
                   SoundService.startPurr();
-                  if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                  _vibrate('light');
                   _spawnParticles(Offset(_petX, _petY - 20), emoji: '💤', count: 3);
                   final sleepyQuotes = [
                     '呼呜... (梦话) 最喜欢主人了... 💤',
@@ -3685,9 +3672,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     isFlying: _isYarnFlying,
                     onTap: () {
                       SoundService.playPop();
-                      if (widget.petModel.enableHaptics) {
-                        HapticFeedback.mediumImpact();
-                      }
+                      _vibrate('medium');
                       _yarnBatCount = 0; // 重置拍球计数
                       final rnd = math.Random();
                       final vx = (rnd.nextDouble() * 10.0 + 4.0) * (rnd.nextBool() ? 1.0 : -1.0);
@@ -3750,7 +3735,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFF43F5E).withOpacity(0.32),
+                            color: const Color(0xFFF43F5E).withValues(alpha: 0.32),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -3776,7 +3761,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     child: Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: const Color(0xFFF43F5E).withOpacity(0.2),
+                          color: const Color(0xFFF43F5E).withValues(alpha: 0.2),
                           width: 4.5,
                         ),
                       ),
@@ -3816,19 +3801,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           emoji: '🫧',
                           count: 6,
                         );
-                        if (widget.petModel.enableHaptics) {
-                          HapticFeedback.lightImpact();
-                        }
+                        _vibrate('light');
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.9),
+                          color: Colors.white.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(color: const Color(0xFFFBCFE8), width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFEC4899).withOpacity(0.12),
+                              color: const Color(0xFFEC4899).withValues(alpha: 0.12),
                               blurRadius: 10,
                               offset: const Offset(0, 3),
                             ),
@@ -3877,13 +3860,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             shadows: p.color != null
                                 ? [
                                     Shadow(
-                                      color: Colors.white.withOpacity(0.85),
+                                      color: Colors.white.withValues(alpha: 0.85),
                                       blurRadius: 3,
                                     ),
                                   ]
                                 : [
                                     Shadow(
-                                      color: const Color(0xFFF472B6).withOpacity(0.35),
+                                      color: const Color(0xFFF472B6).withValues(alpha: 0.35),
                                       blurRadius: 4,
                                     ),
                                   ],
@@ -3952,8 +3935,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                               shape: BoxShape.circle,
                               gradient: RadialGradient(
                                 colors: [
-                                  const Color(0xFFEF4444).withOpacity(0.55),
-                                  const Color(0xFFEF4444).withOpacity(0.0),
+                                  const Color(0xFFEF4444).withValues(alpha: 0.55),
+                                  const Color(0xFFEF4444).withValues(alpha: 0.0),
                                 ],
                               ),
                             ),
@@ -3995,12 +3978,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF991B1B).withOpacity(0.92),
+                          color: const Color(0xFF991B1B).withValues(alpha: 0.92),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: const Color(0xFFF87171), width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFEF4444).withOpacity(0.3),
+                              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 3),
                             ),
@@ -4066,7 +4049,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   },
                   onGachaTap: _openGachaBottomSheet,
                   onClose: () {
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                    _vibrate('light');
                     setState(() => _isWardrobeMode = false);
                   },
                   onShowDialogue: (msg) => _showDialogueBubble(msg),
@@ -4078,9 +4061,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   actions: ActionDialog.actions,
                   onActionSelected: (actionId) => _playAction(actionId),
                   onClose: () {
-                    if (widget.petModel.enableHaptics) {
-                      HapticFeedback.lightImpact();
-                    }
+                    _vibrate('light');
                     setState(() => _isActionMode = false);
                   },
                 )
@@ -4104,7 +4085,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       _draggingFoodPos = details.globalPosition;
                       _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
                     });
-                    if (widget.petModel.enableHaptics) HapticFeedback.selectionClick();
+                    _vibrate('selection');
                   },
                   onFoodPanUpdate: (details) {
                     setState(() {
@@ -4116,7 +4097,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _finishDragToFeed(hunger, intimacyGain);
                   },
                   onClose: () {
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                    _vibrate('light');
                     setState(() => _showFoodTray = false);
                   },
                 )
@@ -4129,9 +4110,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _isRoaming = false;
                     _targetWalkX = null;
                     SoundService.playMeow();
-                    if (widget.petModel.enableHaptics) {
-                      HapticFeedback.lightImpact();
-                    }
+                    _vibrate('light');
                     setState(() {
                       _isWardrobeMode = true;
                       _isActionMode = false;
@@ -4145,9 +4124,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _isRoaming = false;
                     _targetWalkX = null;
                     SoundService.playMeow();
-                    if (widget.petModel.enableHaptics) {
-                      HapticFeedback.lightImpact();
-                    }
+                    _vibrate('light');
                     setState(() {
                       _isActionMode = true;
                       _isWardrobeMode = false;
@@ -4302,7 +4279,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFF43F5E).withOpacity(0.35),
+                color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),

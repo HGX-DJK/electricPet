@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -719,7 +720,43 @@ class PetModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> saveToDisk() async {
+  Timer? _saveDebounceTimer;
+  bool _isSaveDirty = false;
+
+  /// 智能防抖持久化写盘 (交互密集时合并 I/O，延长闪存寿命并杜绝高频卡顿)
+  /// [immediate] 为 true 时无视防抖立即同步写入 (如 App 后台/退出时)
+  Future<void> saveToDisk({bool immediate = false}) async {
+    _isSaveDirty = true;
+    if (immediate) {
+      _saveDebounceTimer?.cancel();
+      _saveDebounceTimer = null;
+      await _executeActualSave();
+      return;
+    }
+
+    if (_saveDebounceTimer != null && _saveDebounceTimer!.isActive) {
+      return; // 已有待写任务，防抖合并
+    }
+
+    _saveDebounceTimer = Timer(const Duration(milliseconds: 1800), () async {
+      _saveDebounceTimer = null;
+      if (_isSaveDirty) {
+        await _executeActualSave();
+      }
+    });
+  }
+
+  /// 立即强制写盘刷入
+  Future<void> flushSave() async {
+    _saveDebounceTimer?.cancel();
+    _saveDebounceTimer = null;
+    if (_isSaveDirty) {
+      await _executeActualSave();
+    }
+  }
+
+  Future<void> _executeActualSave() async {
+    _isSaveDirty = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       final data = toDataMap();
@@ -727,6 +764,12 @@ class PetModel extends ChangeNotifier {
       // 方案 B：静默双写到外部公用目录 (防卸载丢失)
       await BackupService.writeSilentBackup(data);
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _saveDebounceTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> loadFromDisk() async {

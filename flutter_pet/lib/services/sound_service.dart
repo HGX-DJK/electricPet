@@ -197,8 +197,8 @@ class SoundService {
 
   /// 敲敲猫罐头清脆金属音 (Can Chime)
   static Future<void> playCanChime() async {
-    SystemSound.play(SystemSoundType.click);
     if (!soundEnabled) return;
+    SystemSound.play(SystemSoundType.click);
     try {
       await sfxPlayer.stop();
       await sfxPlayer.play(AssetSource('audio/pop.wav'), volume: 0.95);

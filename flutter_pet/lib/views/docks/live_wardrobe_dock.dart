@@ -124,42 +124,11 @@ class LiveWardrobeDock extends StatelessWidget {
         : const Color(0xFFE9D5FF);
     final cardBg = isNight ? const Color(0xFF231B45) : const Color(0xFFF8FAFC);
     final titleColor = isNight ? Colors.white : const Color(0xFF1E293B);
-    final subColor = isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B);
 
-    final currentSkin = petModel.currentSkin;
     final skins = PetModel.availableSkins.values
         .where((s) => s.id != 'cat_white')
         .toList();
 
-    String currentSummary = '';
-    if (wardrobeTab == 0) {
-      final tags = getBreedSummary(currentSkin.id);
-      currentSummary = '🐱 当前品种：${currentSkin.name} ($tags)';
-    } else if (wardrobeTab == 1) {
-      final currentHead = petModel.decorations['head'] ?? 'none';
-      final item = headDecos.firstWhere((h) => h['id'] == currentHead, orElse: () => headDecos.first);
-      currentSummary = '🎩 头部装扮：${item['name']}';
-    } else if (wardrobeTab == 2) {
-      final currentFace = petModel.decorations['face'] ?? 'none';
-      final item = faceDecos.firstWhere((f) => f['id'] == currentFace, orElse: () => faceDecos.first);
-      currentSummary = '👓 面部目镜：${item['name']}';
-    } else if (wardrobeTab == 3) {
-      final currentNeck = petModel.decorations['neck'] ?? 'none';
-      final item = neckDecos.firstWhere((n) => n['id'] == currentNeck, orElse: () => neckDecos.first);
-      currentSummary = '🎀 颈部挂件：${item['name']}';
-    } else if (wardrobeTab == 4) {
-      final currentBack = petModel.decorations['back'] ?? 'none';
-      final item = backDecos.firstWhere((b) => b['id'] == currentBack, orElse: () => backDecos.first);
-      currentSummary = '🦸‍♂️ 背部装扮：${item['name']}';
-    } else if (wardrobeTab == 5) {
-      final currentHand = petModel.decorations['hand'] ?? 'none';
-      final item = handDecos.firstWhere((h) => h['id'] == currentHand, orElse: () => handDecos.first);
-      currentSummary = '🪄 前爪手持：${item['name']}';
-    } else {
-      final currentHab = petModel.habitat;
-      final item = habitatDecos.firstWhere((h) => h['id'] == currentHab, orElse: () => habitatDecos.first);
-      currentSummary = '🏠 赛博小窝：${item['name']}';
-    }
 
     return Positioned(
       key: const ValueKey('live_wardrobe_dock'),

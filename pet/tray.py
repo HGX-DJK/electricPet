@@ -175,6 +175,12 @@ class PetTrayIcon(QSystemTrayIcon):
         self.ontop_action.setChecked(self.model.always_on_top)
         self.ontop_action.triggered.connect(self._toggle_ontop)
 
+        # 鼠标穿透免打扰模式
+        self.click_through_action = menu.addAction("🖱️ 鼠标穿透 (免打扰模式)")
+        self.click_through_action.setCheckable(True)
+        self.click_through_action.setChecked(getattr(self.pet_window, "click_through", False))
+        self.click_through_action.triggered.connect(self._toggle_click_through)
+
         # 音效切换
         self.sound_action = menu.addAction("🔊 萌宠音效")
         self.sound_action.setCheckable(True)
@@ -222,6 +228,8 @@ class PetTrayIcon(QSystemTrayIcon):
             self.ontop_action.setChecked(self.model.always_on_top)
         if hasattr(self, "sound_action") and self.sound_action:
             self.sound_action.setChecked(self.model.sound_enabled)
+        if hasattr(self, "click_through_action") and self.click_through_action:
+            self.click_through_action.setChecked(getattr(self.pet_window, "click_through", False))
 
         # 动态更新系统托盘丰富健康状态 Tooltip (注入 CPU、内存与系统运行时间)
         try:
@@ -268,6 +276,12 @@ class PetTrayIcon(QSystemTrayIcon):
         self.model.always_on_top = self.ontop_action.isChecked()
         self.pet_window.apply_model_settings()
         self.model.save_to_disk()
+
+    def _toggle_click_through(self):
+        new_val = not getattr(self.pet_window, "click_through", False)
+        self.pet_window.set_click_through(new_val)
+        if hasattr(self, "click_through_action"):
+            self.click_through_action.setChecked(new_val)
 
     def _toggle_sound(self):
         self.model.sound_enabled = self.sound_action.isChecked()

@@ -39,7 +39,7 @@ class _MemoScreenState extends State<MemoScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.12),
+              color: Colors.black.withValues(alpha: 0.12),
               blurRadius: 24,
               offset: const Offset(0, -6),
             ),
@@ -55,7 +55,7 @@ class _MemoScreenState extends State<MemoScreen> {
                 width: 38,
                 height: 4.5,
                 decoration: BoxDecoration(
-                  color: theme.sub.withOpacity(0.3),
+                  color: theme.sub.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -87,9 +87,9 @@ class _MemoScreenState extends State<MemoScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: theme.border.withOpacity(0.6)),
+                        border: Border.all(color: theme.border.withValues(alpha: 0.6)),
                       ),
                       child: Row(
                         children: [
@@ -109,7 +109,7 @@ class _MemoScreenState extends State<MemoScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.8),
+                        color: Colors.white.withValues(alpha: 0.8),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.close, size: 18, color: theme.sub),
@@ -125,9 +125,9 @@ class _MemoScreenState extends State<MemoScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.75),
+                  color: Colors.white.withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: theme.border.withOpacity(0.8)),
+                  border: Border.all(color: theme.border.withValues(alpha: 0.8)),
                 ),
                 child: TextField(
                   controller: _controller,
@@ -174,7 +174,7 @@ class _MemoScreenState extends State<MemoScreen> {
                           boxShadow: isSelected
                               ? [
                                   BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
+                                    color: Colors.black.withValues(alpha: 0.15),
                                     blurRadius: 6,
                                     offset: const Offset(0, 2),
                                   ),
@@ -187,7 +187,7 @@ class _MemoScreenState extends State<MemoScreen> {
                   const Spacer(),
                   Text(
                     '字数: ${_controller.text.length}',
-                    style: TextStyle(fontSize: 11, color: theme.sub.withOpacity(0.85), fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 11, color: theme.sub.withValues(alpha: 0.85), fontWeight: FontWeight.w600),
                   ),
                 ],
               ),

@@ -971,6 +971,34 @@ class PetRenderer:
                 "spot_t": None, "spot_b": None,
                 "tail_l": "#F0F4F8", "tail_d": "#CBD7E4", "paw_t": "#FFFFFF", "paw_b": "#D8E4F0",
                 "inner_ear_t": "#FFB8C6", "inner_ear_b": "#E8768C"
+            },
+            "cat_british_blue": {
+                "body_hl": "#94A3B8", "body_light": "#64748B", "body_mid": "#475569", "body_dark": "#334155", "body_shadow": "#1E293B",
+                "outline": "#1E293B", "ear_l_t": "#64748B", "ear_l_b": "#334155", "ear_r_t": "#64748B", "ear_r_b": "#334155",
+                "spot_t": None, "spot_b": None,
+                "tail_l": "#64748B", "tail_d": "#334155", "paw_t": "#94A3B8", "paw_b": "#64748B",
+                "inner_ear_t": "#FDA4AF", "inner_ear_b": "#F43F5E"
+            },
+            "cat_american_tabby": {
+                "body_hl": "#FFFFFF", "body_light": "#F1F5F9", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
+                "outline": "#1E293B", "ear_l_t": "#E2E8F0", "ear_l_b": "#475569", "ear_r_t": "#E2E8F0", "ear_r_b": "#475569",
+                "spot_t": QColor(51, 65, 85, 190), "spot_b": QColor(30, 41, 59, 230),
+                "tail_l": "#94A3B8", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
+                "inner_ear_t": "#FECDD3", "inner_ear_b": "#FB7185"
+            },
+            "cat_persian_white": {
+                "body_hl": "#FFFFFF", "body_light": "#FFFFFF", "body_mid": "#F8FAFC", "body_dark": "#E2E8F0", "body_shadow": "#CBD5E1",
+                "outline": "#64748B", "ear_l_t": "#FFFFFF", "ear_l_b": "#E2E8F0", "ear_r_t": "#FFFFFF", "ear_r_b": "#E2E8F0",
+                "spot_t": None, "spot_b": None,
+                "tail_l": "#FFFFFF", "tail_d": "#E2E8F0", "paw_t": "#FFFFFF", "paw_b": "#F1F5F9",
+                "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
+            },
+            "cat_siamese": {
+                "body_hl": "#FFFFFF", "body_light": "#FAF5EF", "body_mid": "#F3E8DC", "body_dark": "#E5D5C5", "body_shadow": "#CBB59F",
+                "outline": "#3E2723", "ear_l_t": "#6D4C41", "ear_l_b": "#3E2723", "ear_r_t": "#6D4C41", "ear_r_b": "#3E2723",
+                "spot_t": QColor(92, 61, 46, 180), "spot_b": QColor(62, 39, 35, 220),
+                "tail_l": "#5C3D2E", "tail_d": "#2B1B14", "paw_t": "#8D6E63", "paw_b": "#4E342E",
+                "inner_ear_t": "#D7CCC8", "inner_ear_b": "#8D6E63"
             }
         }
         palette = colors.get(skin_id, colors["cat_calico"])
@@ -1464,6 +1492,18 @@ class PetRenderer:
         elif skin_id == "cat_black":
             eye_l_col = QColor("#FBBF24")  # 闪耀明金
             eye_r_col = QColor("#FBBF24")
+        elif skin_id == "cat_british_blue":
+            eye_l_col = QColor("#F59E0B")  # 温暖琥珀金圆眼
+            eye_r_col = QColor("#F59E0B")
+        elif skin_id == "cat_american_tabby":
+            eye_l_col = QColor("#10B981")  # 灵动薄荷绿碧玉眸
+            eye_r_col = QColor("#10B981")
+        elif skin_id == "cat_persian_white":
+            eye_l_col = QColor("#F59E0B")  # 鸳鸯异瞳：左金
+            eye_r_col = QColor("#0284C7")  # 鸳鸯异瞳：右海蓝
+        elif skin_id == "cat_siamese":
+            eye_l_col = QColor("#38BDF8")  # 暹罗电光天青蓝宝石眸
+            eye_r_col = QColor("#38BDF8")
 
         self._draw_face_by_state(painter, state, eye_l_col, eye_r_col)
 

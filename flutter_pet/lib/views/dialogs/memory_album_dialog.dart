@@ -311,7 +311,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                   borderRadius: BorderRadius.circular(16),
                 ),
                 elevation: 3,
-                shadowColor: const Color(0xFF6366F1).withOpacity(0.35),
+                shadowColor: const Color(0xFF6366F1).withValues(alpha: 0.35),
               ),
             ),
           ),
@@ -355,7 +355,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
         ),
         boxShadow: [
           BoxShadow(
-            color: isSelected ? const Color(0xFF6366F1).withOpacity(0.25) : Colors.black.withOpacity(0.08),
+            color: isSelected ? const Color(0xFF6366F1).withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.08),
             blurRadius: isSelected ? 12 : 8,
             offset: const Offset(0, 4),
           ),
@@ -398,7 +398,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                 if (_isFlashing && isSelected)
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.92),
+                      color: Colors.white.withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),

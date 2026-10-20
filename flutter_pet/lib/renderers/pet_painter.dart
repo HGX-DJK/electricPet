@@ -510,7 +510,7 @@ class PetPainter extends CustomPainter {
 
     // 身体边缘自然毛色同色系柔和轮廓 (避免生硬人工黑线)
     final borderPaint = Paint()
-      ..color = _darken(baseColor, 0.28).withOpacity(0.24)
+      ..color = _darken(baseColor, 0.28).withValues(alpha: 0.24)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6;
     canvas.drawOval(bodyRect, borderPaint);
@@ -522,8 +522,8 @@ class PetPainter extends CustomPainter {
         radius: 0.98,
         colors: [
           Colors.transparent,
-          _lighten(baseColor, 0.28).withOpacity(0.0),
-          _lighten(baseColor, 0.28).withOpacity(0.32),
+          _lighten(baseColor, 0.28).withValues(alpha: 0.0),
+          _lighten(baseColor, 0.28).withValues(alpha: 0.32),
         ],
         stops: const [0.0, 0.82, 1.0],
       ).createShader(bodyRect)
@@ -540,8 +540,8 @@ class PetPainter extends CustomPainter {
     final chinOcclusionPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          _darken(baseColor, 0.38).withOpacity(0.38),
-          _darken(baseColor, 0.38).withOpacity(0.0),
+          _darken(baseColor, 0.38).withValues(alpha: 0.38),
+          _darken(baseColor, 0.38).withValues(alpha: 0.0),
         ],
       ).createShader(chinOcclusionRect);
     canvas.drawOval(chinOcclusionRect, chinOcclusionPaint);
@@ -606,7 +606,7 @@ class PetPainter extends CustomPainter {
     if (skin.id == 'cat_calico') {
       final orangePatch = Paint()..color = const Color(0xFFFF9E7D);
       canvas.drawOval(Rect.fromCenter(center: const Offset(26, 26), width: 34, height: 26), orangePatch);
-      final blackPatch = Paint()..color = const Color(0xFF64748B).withOpacity(0.85);
+      final blackPatch = Paint()..color = const Color(0xFF64748B).withValues(alpha: 0.85);
       canvas.drawOval(Rect.fromCenter(center: const Offset(-24, 34), width: 28, height: 22), blackPatch);
     }
 
@@ -631,7 +631,7 @@ class PetPainter extends CustomPainter {
     // 3.3 森林缅因猫：侧身森林野性斑纹
     if (skin.id == 'cat_maine_coon') {
       final stripePaint = Paint()
-        ..color = Color(skin.secondaryColor).withOpacity(0.60)
+        ..color = Color(skin.secondaryColor).withValues(alpha: 0.60)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.2
         ..strokeCap = StrokeCap.round;
@@ -685,7 +685,7 @@ class PetPainter extends CustomPainter {
         Rect.fromCenter(center: const Offset(0, 36), width: 72, height: 50),
         bellyHighlight,
       );
-      final bellyGlow = Paint()..color = const Color(0xFFFDE2E4).withOpacity(0.7);
+      final bellyGlow = Paint()..color = const Color(0xFFFDE2E4).withValues(alpha: 0.7);
       canvas.drawOval(
         Rect.fromCenter(center: const Offset(0, 38), width: 44, height: 32),
         bellyGlow,
@@ -842,8 +842,8 @@ class PetPainter extends CustomPainter {
     final foreheadGlowPaint = Paint()
       ..shader = RadialGradient(
         colors: [
-          Colors.white.withOpacity(0.15),
-          Colors.white.withOpacity(0.0),
+          Colors.white.withValues(alpha: 0.15),
+          Colors.white.withValues(alpha: 0.0),
         ],
       ).createShader(foreheadGlowRect);
     canvas.drawOval(foreheadGlowRect, foreheadGlowPaint);
@@ -855,8 +855,8 @@ class PetPainter extends CustomPainter {
         radius: 0.98,
         colors: [
           Colors.transparent,
-          _lighten(headBaseColor, 0.28).withOpacity(0.0),
-          _lighten(headBaseColor, 0.28).withOpacity(0.30),
+          _lighten(headBaseColor, 0.28).withValues(alpha: 0.0),
+          _lighten(headBaseColor, 0.28).withValues(alpha: 0.30),
         ],
         stops: const [0.0, 0.85, 1.0],
       ).createShader(headBounds)
@@ -882,8 +882,8 @@ class PetPainter extends CustomPainter {
       final goldShader = Paint()
         ..shader = RadialGradient(
           colors: [
-            const Color(0xFFFDE68A).withOpacity(0.45),
-            const Color(0xFFD97706).withOpacity(0.0),
+            const Color(0xFFFDE68A).withValues(alpha: 0.45),
+            const Color(0xFFD97706).withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy - 16), width: 64, height: 36));
       canvas.drawOval(Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy - 16), width: 64, height: 36), goldShader);
@@ -891,14 +891,14 @@ class PetPainter extends CustomPainter {
       final silverShader = Paint()
         ..shader = RadialGradient(
           colors: [
-            Colors.white.withOpacity(0.65),
-            const Color(0xFF94A3B8).withOpacity(0.0),
+            Colors.white.withValues(alpha: 0.65),
+            const Color(0xFF94A3B8).withValues(alpha: 0.0),
           ],
         ).createShader(Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy - 16), width: 64, height: 36));
       canvas.drawOval(Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy - 16), width: 64, height: 36), silverShader);
     } else if (skin.id == 'cat_maine_coon') {
       final tabbyPaint = Paint()
-        ..color = Color(skin.secondaryColor).withOpacity(0.70)
+        ..color = Color(skin.secondaryColor).withValues(alpha: 0.70)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.8
         ..strokeCap = StrokeCap.round;
@@ -911,7 +911,7 @@ class PetPainter extends CustomPainter {
       canvas.drawPath(mPath, tabbyPaint);
     } else if (skin.id == 'cat_sakura_peach') {
       final petalPaint = Paint()
-        ..color = const Color(0xFFF472B6).withOpacity(0.35)
+        ..color = const Color(0xFFF472B6).withValues(alpha: 0.35)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(headCenter.dx + 28, headCenter.dy - 24), 5.5, petalPaint);
       canvas.drawCircle(Offset(headCenter.dx + 35, headCenter.dy - 18), 4.0, petalPaint);
@@ -937,7 +937,7 @@ class PetPainter extends CustomPainter {
     } else if (skin.id == 'cat_siamese') {
       // 暹罗猫经典重点色渐变面罩
       final maskPaint = Paint()
-        ..color = Color(skin.secondaryColor).withOpacity(0.90)
+        ..color = Color(skin.secondaryColor).withValues(alpha: 0.90)
         ..style = PaintingStyle.fill;
       canvas.drawOval(
         Rect.fromCenter(center: Offset(headCenter.dx, headCenter.dy + 8), width: 56, height: 44),
@@ -946,7 +946,7 @@ class PetPainter extends CustomPainter {
     } else if (skin.id == 'cat_ragdoll') {
       // 布偶猫经典海豹双色八字开脸面罩
       final maskPaint = Paint()
-        ..color = Color(skin.secondaryColor).withOpacity(0.88)
+        ..color = Color(skin.secondaryColor).withValues(alpha: 0.88)
         ..style = PaintingStyle.fill;
       // 左侧面罩 (围绕左眼与左脸颊)
       final leftMask = Path()
@@ -991,7 +991,7 @@ class PetPainter extends CustomPainter {
     if (isBackView) {
       if (skin.id == 'cat_american_tabby' || skin.id == 'cat_orange') {
         final stripePaint = Paint()
-          ..color = Color(skin.secondaryColor).withOpacity(0.65)
+          ..color = Color(skin.secondaryColor).withValues(alpha: 0.65)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 3.2
           ..strokeCap = StrokeCap.round;
@@ -1188,7 +1188,7 @@ class PetPainter extends CustomPainter {
 
           // 耳窝轻柔小微毛
           final microTuftPaint = Paint()
-            ..color = Colors.white.withOpacity(0.55)
+            ..color = Colors.white.withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.2
             ..strokeCap = StrokeCap.round;
@@ -1225,7 +1225,7 @@ class PetPainter extends CustomPainter {
 
           // 耳窝轻柔小微毛
           final microTuftPaint = Paint()
-            ..color = Colors.white.withOpacity(0.55)
+            ..color = Colors.white.withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.2
             ..strokeCap = StrokeCap.round;
@@ -1264,7 +1264,7 @@ class PetPainter extends CustomPainter {
 
         // 亨利小囊折痕 (Henry's Pocket)
         final notchPaint = Paint()
-          ..color = _darken(leftEarBaseColor, 0.28).withOpacity(0.40)
+          ..color = _darken(leftEarBaseColor, 0.28).withValues(alpha: 0.40)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round;
@@ -1272,7 +1272,7 @@ class PetPainter extends CustomPainter {
 
         // 基础耳窝微毛 (Base Ear Tufts)
         final microTuftPaint = Paint()
-          ..color = Colors.white.withOpacity(0.55)
+          ..color = Colors.white.withValues(alpha: 0.55)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round;
@@ -1301,7 +1301,7 @@ class PetPainter extends CustomPainter {
 
         // 亨利小囊折痕 (Henry's Pocket)
         final notchPaint = Paint()
-          ..color = _darken(rightEarBaseColor, 0.28).withOpacity(0.40)
+          ..color = _darken(rightEarBaseColor, 0.28).withValues(alpha: 0.40)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round;
@@ -1309,7 +1309,7 @@ class PetPainter extends CustomPainter {
 
         // 基础耳窝微毛 (Base Ear Tufts)
         final microTuftPaint = Paint()
-          ..color = Colors.white.withOpacity(0.55)
+          ..color = Colors.white.withValues(alpha: 0.55)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round;
@@ -1603,12 +1603,12 @@ class PetPainter extends CustomPainter {
 
       // 4. 虹膜放射状微晶体肌理线条 (Radial Iris Striations - 真实宝石与猫眼晶状体光泽)
       final striationLight = Paint()
-        ..color = _lighten(irisColor, 0.50).withOpacity(0.32)
+        ..color = _lighten(irisColor, 0.50).withValues(alpha: 0.32)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.85
         ..strokeCap = StrokeCap.round;
       final striationDark = Paint()
-        ..color = _darken(irisColor, 0.45).withOpacity(0.28)
+        ..color = _darken(irisColor, 0.45).withValues(alpha: 0.28)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.85
         ..strokeCap = StrokeCap.round;
@@ -1623,7 +1623,7 @@ class PetPainter extends CustomPainter {
 
       // 5. 下缘焦散透光弧 (Bottom Caustic Crescent Glow - 琉璃通透感)
       final causticPaint = Paint()
-        ..color = _lighten(irisColor, 0.75).withOpacity(0.55)
+        ..color = _lighten(irisColor, 0.75).withValues(alpha: 0.55)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
         ..strokeCap = StrokeCap.round;
@@ -1681,7 +1681,7 @@ class PetPainter extends CustomPainter {
 
       // 8. 下眼睑湿润水光反射弧 (Lower Eyelid Wet Tear Film Meniscus)
       final tearFilmPaint = Paint()
-        ..color = Colors.white.withOpacity(0.58)
+        ..color = Colors.white.withValues(alpha: 0.58)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 0.95
         ..strokeCap = StrokeCap.round;
@@ -1724,7 +1724,7 @@ class PetPainter extends CustomPainter {
     final noseCenter = Offset(headCenter.dx, headCenter.dy + 11);
 
     // 1. 鼓鼓饱满的双侧胡须肉垫 (Puffy Muzzle Whisker Pads / 包子嘴)
-    final padHighlight = Colors.white.withOpacity(0.18);
+    final padHighlight = Colors.white.withValues(alpha: 0.18);
     final padShadow = const Color(0x16000000);
 
     // 左胡须垫
@@ -1780,7 +1780,7 @@ class PetPainter extends CustomPainter {
     canvas.drawPath(nosePath, Paint()..shader = noseShader);
 
     // 鼻梁湿润高光微斑 (Moist Bridge Specular Glint)
-    final noseGlintPaint = Paint()..color = Colors.white.withOpacity(0.85);
+    final noseGlintPaint = Paint()..color = Colors.white.withValues(alpha: 0.85);
     canvas.drawOval(
       Rect.fromCenter(center: Offset(noseCenter.dx - 0.8, noseCenter.dy - 1.3), width: 3.2, height: 1.3),
       noseGlintPaint,
@@ -1918,7 +1918,7 @@ class PetPainter extends CustomPainter {
       canvas.drawPath(blepPath, blepBorder);
       // 舌头中间微浅小中缝
       final groovePaint = Paint()
-        ..color = const Color(0xFFF43F5E).withOpacity(0.6)
+        ..color = const Color(0xFFF43F5E).withValues(alpha: 0.6)
         ..strokeWidth = 1.0;
       canvas.drawLine(Offset(noseCenter.dx, noseCenter.dy + 6.0), Offset(noseCenter.dx, noseCenter.dy + 10.2), groovePaint);
     }
@@ -2004,7 +2004,7 @@ class PetPainter extends CustomPainter {
     final toeDx2 = center.dx;
     final toeDx3 = center.dx + width * 0.26;
 
-    final toeHighlightPaint = Paint()..color = Colors.white.withOpacity(0.18);
+    final toeHighlightPaint = Paint()..color = Colors.white.withValues(alpha: 0.18);
     for (final tdx in [toeDx1, toeDx2, toeDx3]) {
       final toeCenter = Offset(tdx, toeY);
       canvas.drawCircle(toeCenter, toeRadius, basePaint);
@@ -2017,7 +2017,7 @@ class PetPainter extends CustomPainter {
 
     // 3. 趾缝间微细自然阴影线 (Interdigital Creases)
     final creasePaint = Paint()
-      ..color = _darken(pawColor, 0.32).withOpacity(0.35)
+      ..color = _darken(pawColor, 0.32).withValues(alpha: 0.35)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.1
       ..strokeCap = StrokeCap.round;
@@ -2028,14 +2028,14 @@ class PetPainter extends CustomPainter {
 
     // 4. 爪边缘自然毛色同色系柔和轮廓
     final borderPaint = Paint()
-      ..color = _darken(pawColor, 0.28).withOpacity(0.24)
+      ..color = _darken(pawColor, 0.28).withValues(alpha: 0.24)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4;
     canvas.drawOval(baseRect, borderPaint);
 
     // 4.5 爪尖微隐晶莹半透明白爪刃 (Retracted Claw Sheaths - 生动逼真微细节)
     final clawPaint = Paint()
-      ..color = Colors.white.withOpacity(0.68)
+      ..color = Colors.white.withValues(alpha: 0.68)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.05
       ..strokeCap = StrokeCap.round;
@@ -2091,12 +2091,12 @@ class PetPainter extends CustomPainter {
         // 掌心肉垫高光
         canvas.drawOval(
           Rect.fromCenter(center: Offset(pawCenter.dx - 1.0, pawCenter.dy - 1.5), width: 5.5, height: 2.8),
-          Paint()..color = Colors.white.withOpacity(0.55),
+          Paint()..color = Colors.white.withValues(alpha: 0.55),
         );
 
         // 四个可爱小脚趾肉球 (Toe Beans)
         final beanPaint = Paint()..color = const Color(0xFFFB7185);
-        final beanGlint = Paint()..color = Colors.white.withOpacity(0.65);
+        final beanGlint = Paint()..color = Colors.white.withValues(alpha: 0.65);
         final toeBeans = [
           Offset(pawCenter.dx - 9, pawCenter.dy - 8),
           Offset(pawCenter.dx - 3.5, pawCenter.dy - 12),
@@ -2171,7 +2171,7 @@ class PetPainter extends CustomPainter {
       canvas.drawOval(Rect.fromCenter(center: rightCenter, width: 24 + rightSpread, height: 18), pawBorder);
 
       // 踩在垫子上受力时显现的粉嫩肉垫
-      final padPaint = Paint()..color = const Color(0xFFFB7185).withOpacity(0.9);
+      final padPaint = Paint()..color = const Color(0xFFFB7185).withValues(alpha: 0.9);
       if (leftPush > 0.8) {
         canvas.drawOval(Rect.fromCenter(center: Offset(leftCenter.dx, leftCenter.dy + 1), width: 10, height: 8), padPaint);
       }
@@ -2259,12 +2259,12 @@ class PetPainter extends CustomPainter {
       canvas.drawOval(padRect, Paint()..shader = padShader);
       canvas.drawOval(
         Rect.fromCenter(center: Offset(highPawCenter.dx - 0.8, highPawCenter.dy - 1.2), width: 5.0, height: 2.5),
-        Paint()..color = Colors.white.withOpacity(0.55),
+        Paint()..color = Colors.white.withValues(alpha: 0.55),
       );
 
       // 4 颗圆润粉嫩小肉球 (Toe Beans)
       final beanPaint = Paint()..color = const Color(0xFFFB7185);
-      final beanGlint = Paint()..color = Colors.white.withOpacity(0.65);
+      final beanGlint = Paint()..color = Colors.white.withValues(alpha: 0.65);
       final toeBeans = [
         Offset(highPawCenter.dx - 8, highPawCenter.dy - 7),
         Offset(highPawCenter.dx - 3, highPawCenter.dy - 11),
@@ -2661,13 +2661,13 @@ class PetPainter extends CustomPainter {
           }
           path.close();
 
-          canvas.drawPath(path, Paint()..color = const Color(0xFF16A34A).withOpacity(0.65));
+          canvas.drawPath(path, Paint()..color = const Color(0xFF16A34A).withValues(alpha: 0.65));
           canvas.drawPath(path, Paint()
             ..color = const Color(0xFF14532D)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 2.2);
           canvas.drawPath(path, Paint()
-            ..color = const Color(0xFF86EFAC).withOpacity(0.55)
+            ..color = const Color(0xFF86EFAC).withValues(alpha: 0.55)
             ..style = PaintingStyle.stroke
             ..strokeWidth = 1.0);
         }
@@ -2682,7 +2682,7 @@ class PetPainter extends CustomPainter {
 
         // 6. 3D 球形玻璃高光
         final shinePaint = Paint()
-          ..color = Colors.white.withOpacity(0.28)
+          ..color = Colors.white.withValues(alpha: 0.28)
           ..style = PaintingStyle.fill;
         canvas.drawOval(
           Rect.fromCenter(center: const Offset(-16, 24), width: 22, height: 12),
@@ -2696,7 +2696,7 @@ class PetPainter extends CustomPainter {
           ..strokeWidth = 4.0
           ..strokeCap = StrokeCap.round;
         final strapStitch = Paint()
-          ..color = const Color(0xFFFDE68A).withOpacity(0.7)
+          ..color = const Color(0xFFFDE68A).withValues(alpha: 0.7)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.2
           ..strokeCap = StrokeCap.round;
@@ -2746,7 +2746,7 @@ class PetPainter extends CustomPainter {
         // 胸口中央可爱小乌龟徽章
         canvas.drawCircle(const Offset(0, 32), 6.5, Paint()..color = const Color(0xFFFBBF24));
         canvas.drawCircle(const Offset(0, 32), 5.0, Paint()..color = const Color(0xFF16A34A));
-        canvas.drawCircle(const Offset(-1.5, 30.5), 1.2, Paint()..color = Colors.white.withOpacity(0.8));
+        canvas.drawCircle(const Offset(-1.5, 30.5), 1.2, Paint()..color = Colors.white.withValues(alpha: 0.8));
       }
     } else if (backDeco == 'cape_cyber') {
       if (isBackView) {
@@ -2940,7 +2940,7 @@ class PetPainter extends CustomPainter {
 
       // --- 第 3 层：立体面料流线光泽折痕 (Volumetric Fabric Highlights) ---
       final creasePaint = Paint()
-        ..color = const Color(0xFF6366F1).withOpacity(0.35)
+        ..color = const Color(0xFF6366F1).withValues(alpha: 0.35)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.6
         ..strokeCap = StrokeCap.round;
@@ -2997,7 +2997,7 @@ class PetPainter extends CustomPainter {
       // 🪽 天使羽翼 (Radiant Angel Wings)
       final flap = math.sin(animTime * 4.0) * 0.12;
       final wingPaint = Paint()
-        ..color = Colors.white.withOpacity(0.92)
+        ..color = Colors.white.withValues(alpha: 0.92)
         ..style = PaintingStyle.fill;
       final wingBorder = Paint()
         ..color = const Color(0xFFFDE68A)
@@ -3065,7 +3065,7 @@ class PetPainter extends CustomPainter {
         canvas.drawOval(Rect.fromCenter(center: shellCenter, width: shellW, height: shellH), domePaint);
 
         // 4. 猫咪身侧清晰可见的两侧蜂窝龟甲纹理 (Flank Hexagonal Scutes)
-        final flankScuteFill = Paint()..color = const Color(0xFF86EFAC).withOpacity(0.45);
+        final flankScuteFill = Paint()..color = const Color(0xFF86EFAC).withValues(alpha: 0.45);
         final flankScuteBorder = Paint()
           ..color = const Color(0xFF14532D)
           ..style = PaintingStyle.stroke
@@ -3347,7 +3347,7 @@ class PetPainter extends CustomPainter {
       canvas.drawLine(Offset(faceCenter.dx + 34, faceCenter.dy - 2), Offset(faceCenter.dx + 42, faceCenter.dy - 4), bridgePaint);
 
       final glintPaint = Paint()
-        ..color = Colors.white.withOpacity(0.4)
+        ..color = Colors.white.withValues(alpha: 0.4)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2;
       canvas.drawLine(Offset(faceCenter.dx - 28, faceCenter.dy - 8), Offset(faceCenter.dx - 24, faceCenter.dy - 4), glintPaint);
@@ -3408,7 +3408,7 @@ class PetPainter extends CustomPainter {
 
       final scanY = visorRect.top + ((animTime * 28.0) % visorRect.height);
       final scanPaint = Paint()
-        ..color = Colors.white.withOpacity(0.7)
+        ..color = Colors.white.withValues(alpha: 0.7)
         ..strokeWidth = 1.2;
       canvas.drawLine(Offset(visorRect.left + 4, scanY), Offset(visorRect.right - 4, scanY), scanPaint);
 
@@ -3487,7 +3487,7 @@ class PetPainter extends CustomPainter {
         canvas.drawCircle(
           Offset(stickEnd.dx + math.cos(a) * 8.0, stickEnd.dy + math.sin(a) * 8.0),
           1.8,
-          Paint()..color = const Color(0xFFF472B6).withOpacity(0.8),
+          Paint()..color = const Color(0xFFF472B6).withValues(alpha: 0.8),
         );
       }
     } else if (handDeco == 'coffee_cyber') {
@@ -3516,7 +3516,7 @@ class PetPainter extends CustomPainter {
       final dbCenter = const Offset(0, 54);
       canvas.drawLine(Offset(dbCenter.dx - 18, dbCenter.dy), Offset(dbCenter.dx + 18, dbCenter.dy), Paint()..color = const Color(0xFF94A3B8)..strokeWidth = 4.0..strokeCap = StrokeCap.round);
       final ringPaint = Paint()..color = const Color(0xFF0EA5E9);
-      final glowPaint = Paint()..color = const Color(0xFF38BDF8).withOpacity(0.5);
+      final glowPaint = Paint()..color = const Color(0xFF38BDF8).withValues(alpha: 0.5);
       for (final side in [-1, 1]) {
         final cx = dbCenter.dx + side * 16.0;
         canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromCenter(center: Offset(cx, dbCenter.dy), width: 8, height: 22), const Radius.circular(3)), ringPaint);
@@ -3543,7 +3543,7 @@ class PetPainter extends CustomPainter {
     canvas.drawOval(cushionRect, borderPaint);
 
     final weavePaint = Paint()
-      ..color = const Color(0xFFB45309).withOpacity(0.3)
+      ..color = const Color(0xFFB45309).withValues(alpha: 0.3)
       ..strokeWidth = 1.0;
     for (double x = cushionRect.left + 16; x < cushionRect.right - 16; x += 12) {
       canvas.drawLine(Offset(x, cushionCenter.dy - 8), Offset(x, cushionCenter.dy + 8), weavePaint);
@@ -3734,12 +3734,12 @@ class PetPainter extends CustomPainter {
       canvas.rotate(animTime * 10.0);
 
       final lineLight = Paint()
-        ..color = Colors.white.withOpacity(0.60)
+        ..color = Colors.white.withValues(alpha: 0.60)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
         ..strokeCap = StrokeCap.round;
       final lineDark = Paint()
-        ..color = const Color(0xFF881337).withOpacity(0.40)
+        ..color = const Color(0xFF881337).withValues(alpha: 0.40)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.3
         ..strokeCap = StrokeCap.round;
@@ -3764,11 +3764,11 @@ class PetPainter extends CustomPainter {
       // 5. 球体高光点
       canvas.drawOval(
         Rect.fromCenter(center: Offset(ballCenter.dx - 4, ballCenter.dy - 4), width: 5.5, height: 3.2),
-        Paint()..color = Colors.white.withOpacity(0.70),
+        Paint()..color = Colors.white.withValues(alpha: 0.70),
       );
 
       // 6. 爪爪拍球激起的欢快微绒毛粒子 (Playful fluff puffs)
-      final fluffPaint = Paint()..color = const Color(0xFFFBCFE8).withOpacity(0.65);
+      final fluffPaint = Paint()..color = const Color(0xFFFBCFE8).withValues(alpha: 0.65);
       canvas.drawCircle(Offset(ballCenter.dx - 12 + math.sin(animTime * 12.0) * 3, ballCenter.dy - 10), 1.6, fluffPaint);
       canvas.drawCircle(Offset(ballCenter.dx + 14 + math.cos(animTime * 12.0) * 3, ballCenter.dy - 8), 1.4, fluffPaint);
     }
@@ -3799,7 +3799,7 @@ class PetPainter extends CustomPainter {
       final notePainter = TextPainter(
         text: TextSpan(
           text: t > 1.0 ? '🎶' : '🎵',
-          style: TextStyle(fontSize: 16, color: Colors.indigo.withOpacity((1.0 - t / 2.0).clamp(0.0, 1.0))),
+          style: TextStyle(fontSize: 16, color: Colors.indigo.withValues(alpha: (1.0 - t / 2.0).clamp(0.0, 1.0))),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

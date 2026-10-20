@@ -1870,6 +1870,10 @@ class WardrobeDialog(ModernBaseDialog):
                 ("cat_orange", "温暖大头橘猫", "金橘温暖虎斑毛色，圆润治愈", "🐱", "R"),
                 ("cat_black", "暗夜黑曜猫", "玄黑优雅皮毛与明亮金黄大眼", "🐱", "SR"),
                 ("cat_white", "纯白雪球猫", "纯白底色与梦幻异色双瞳 (左冰蓝/右翠绿)", "🐱", "SSR"),
+                ("cat_british_blue", "经典英短蓝猫", "蓝灰缎面毛发，肉嘟嘟大包子脸与暖金琥珀眼", "🍊", "SSR"),
+                ("cat_american_tabby", "美短银虎斑", "银白底色配灵动黑灰鱼骨斑，额头 M 纹活泼敏捷", "🐯", "SR"),
+                ("cat_persian_white", "异瞳临清狮子猫", "雪白丝绸长毛配自带仙气的金银双色鸳鸯异瞳", "❄️", "SSR"),
+                ("cat_siamese", "焦糖拿铁暹罗", "贵族重点色大尖耳与电光天青蓝宝石双眸", "☕", "SSR"),
                 ("dog_shiba", "阳光赤柴", "元气金橙赤柴，经典白眉点", "🐶", "SR"),
                 ("dog_black", "帅气黑柴", "俊俏黑柴，系着帅气蓝色领巾", "🐶", "SR"),
                 ("dog_corgi", "软萌柯基", "暖金白领胸毛与呆萌大耳朵", "🐶", "R"),
@@ -2003,6 +2007,8 @@ class WardrobeDialog(ModernBaseDialog):
         """赛博随机混搭"""
         all_skins = [
             "cat_calico", "cat_orange", "cat_black", "cat_white",
+            "cat_golden_shaded", "cat_silver_shaded", "cat_ragdoll", "cat_tuxedo", "cat_maine_coon", "cat_sakura_peach",
+            "cat_british_blue", "cat_american_tabby", "cat_persian_white", "cat_siamese",
             "dog_shiba", "dog_black", "dog_corgi",
             "slime_blue", "slime_pink", "slime_gold", "penguin_tux"
         ]

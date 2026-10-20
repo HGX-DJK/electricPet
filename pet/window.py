@@ -50,6 +50,7 @@ class PetWindow(QWidget):
         self._memo_was_visible = False
         self.HOTKEY_BOSS_ID = 9527
         self._boss_filter_installed = False
+        self.click_through = False
 
         # 状态机：IDLE, WALK_LEFT, WALK_RIGHT, DRAGGING, FALLING, BOUNCE, 
         # 及多样动作：STRETCH_YAWN, WASH_FACE, CHASE_BUTTERFLY, HEAD_BOB_MUSIC, TILT_HEAD, HAPPY_SPIN, DOZE_OFF, DIZZY, CARDBOARD_BOX, PEEK_LEFT, PEEK_RIGHT
@@ -155,7 +156,9 @@ class PetWindow(QWidget):
         """全局老板键一键极速隐身 / 恢复显示 (Alt + P)"""
         self.is_boss_hidden = not getattr(self, "is_boss_hidden", False)
         if self.is_boss_hidden:
-            # 极速隐身：隐藏窗口、伴侣岛、气泡、便签并静音
+            # 极速隐身：隐藏窗口、伴侣岛、气泡、便签并静音，停用动画定时器彻底释放 CPU
+            if hasattr(self, "anim_timer") and self.anim_timer.isActive():
+                self.anim_timer.stop()
             self.hide()
             if hasattr(self, "dock"):
                 self.dock.hide()
@@ -168,7 +171,10 @@ class PetWindow(QWidget):
                 self._memo_was_visible = False
             sound_manager.muted = True
         else:
-            # 恢复现身
+            # 恢复现身：重启帧定时器
+            if hasattr(self, "anim_timer") and not self.anim_timer.isActive():
+                self.last_tick_time = time.time()
+                self.anim_timer.start(33 if self.model.is_sleeping else 16)
             sound_manager.muted = not getattr(self.model, "sound_enabled", True)
             self.show()
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
@@ -222,6 +228,19 @@ class PetWindow(QWidget):
 
         self.anchor_y = init_y
         self.move(int(init_x), int(init_y))
+
+    def set_click_through(self, enabled: bool):
+        """开启/关闭鼠标穿透免打扰模式"""
+        self.click_through = enabled
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, enabled)
+        if enabled:
+            if hasattr(self, "dock") and self.dock.isVisible():
+                self.dock.hide()
+            if hasattr(self, "dialogue"):
+                self.dialogue.say("开启鼠标穿透啦！波可静静陪着您，不会遮挡任何点击哦~ (ฅ^ω^ฅ)", duration=3.5)
+        else:
+            if hasattr(self, "dialogue"):
+                self.dialogue.say("已恢复正常鼠标互动~ 快来摸摸我吧！🐾", duration=3.5)
 
     def apply_model_settings(self):
         """重新应用设置参数（缩放、置顶、物理重力等），安全更新避免窗体句柄重构导致卡死"""
@@ -335,6 +354,8 @@ class PetWindow(QWidget):
     # ================= 60 FPS 核心帧循环 =================
     def _on_animation_tick(self):
         try:
+            if getattr(self, "is_boss_hidden", False) or not self.isVisible():
+                return
             now = time.time()
             dt = min(0.05, now - self.last_tick_time)
             self.last_tick_time = now

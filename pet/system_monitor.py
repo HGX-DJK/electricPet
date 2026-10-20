@@ -3,6 +3,7 @@
 基于 Windows 原生 NT 内核接口 (kernel32.dll)
 提供毫秒级、零第三方外部依赖 (0 Pip Dependency)、高健壮性的 CPU 负载与物理内存监控
 """
+import sys
 import ctypes
 import time
 from typing import Dict, Any, Tuple
@@ -39,7 +40,8 @@ class SystemHardwareMonitor:
         return cls._instance
 
     def _init_monitor(self):
-        self._kernel32 = ctypes.windll.kernel32
+        self.is_windows = (sys.platform == "win32")
+        self._kernel32 = getattr(ctypes, "windll", None).kernel32 if (self.is_windows and hasattr(ctypes, "windll")) else None
         self._last_idle_time = 0
         self._last_kernel_time = 0
         self._last_user_time = 0
@@ -56,6 +58,8 @@ class SystemHardwareMonitor:
         return (ft.dwHighDateTime << 32) + ft.dwLowDateTime
 
     def _sample_cpu_times(self) -> Tuple[int, int, int]:
+        if not self._kernel32:
+            return (0, 0, 0)
         idle = _FILETIME()
         kernel = _FILETIME()
         user = _FILETIME()
@@ -87,6 +91,9 @@ class SystemHardwareMonitor:
             return self._cached_stats
 
         self._last_sample_tick = now
+
+        if not self._kernel32:
+            return self._cached_stats
 
         # 1. 读取物理内存
         mem_load = 0

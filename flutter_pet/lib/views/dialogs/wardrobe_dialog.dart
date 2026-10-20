@@ -214,7 +214,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         borderRadius: BorderRadius.circular(12),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF0EA5E9).withOpacity(0.3),
+                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
                             blurRadius: 6,
                           ),
                         ],
@@ -271,7 +271,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 borderRadius: BorderRadius.circular(19),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFFA855F7).withOpacity(0.35),
+                    color: const Color(0xFFA855F7).withValues(alpha: 0.35),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -367,7 +367,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: const Color(0xFFA855F7).withOpacity(0.28),
+                              color: const Color(0xFFA855F7).withValues(alpha: 0.28),
                               blurRadius: 8,
                               offset: const Offset(0, 3),
                             ),
@@ -402,7 +402,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               height: 40,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.black.withOpacity(0.28),
+                                color: Colors.black.withValues(alpha: 0.28),
                               ),
                               child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
                             ),
@@ -480,7 +480,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFA855F7).withOpacity(0.18),
+                                color: const Color(0xFFA855F7).withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
@@ -638,7 +638,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFA855F7).withOpacity(0.20),
+                        color: const Color(0xFFA855F7).withValues(alpha: 0.20),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
@@ -680,7 +680,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withOpacity(0.18),
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -698,7 +698,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 else if (isSelected)
                   const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
                 else
-                  Icon(Icons.radio_button_unchecked, color: subColor.withOpacity(0.5), size: 18),
+                  Icon(Icons.radio_button_unchecked, color: subColor.withValues(alpha: 0.5), size: 18),
               ],
             ),
           ),
@@ -749,7 +749,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFA855F7).withOpacity(0.20),
+                        color: const Color(0xFFA855F7).withValues(alpha: 0.20),
                         blurRadius: 8,
                         offset: const Offset(0, 3),
                       ),
@@ -790,7 +790,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 if (isSelected)
                   const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
                 else
-                  Icon(Icons.radio_button_unchecked, color: subColor.withOpacity(0.5), size: 18),
+                  Icon(Icons.radio_button_unchecked, color: subColor.withValues(alpha: 0.5), size: 18),
               ],
             ),
           ),

@@ -2,9 +2,14 @@ import io
 import math
 import struct
 import wave
-import winsound
 import threading
+import queue
 import time
+
+try:
+    import winsound
+except ImportError:
+    winsound = None
 
 class SoundManager:
     """
@@ -28,6 +33,12 @@ class SoundManager:
         self._sound_cache = {}
         self._last_play_time = {}
         self._play_lock = threading.Lock()
+        self._audio_queue = queue.Queue(maxsize=16)
+
+        # 单持久守护线程，彻底避免高频频繁创建与销毁系统原生线程
+        self._worker_thread = threading.Thread(target=self._audio_worker_loop, daemon=True)
+        self._worker_thread.start()
+
         # 预先生成常用音效缓存
         try:
             self._sound_cache["meow"] = self._generate_meow()
@@ -288,8 +299,21 @@ class SoundManager:
             samples.append(sample)
         return self._create_wav_bytes(samples, sample_rate)
 
+    def _audio_worker_loop(self):
+        """持久后台音频工作循环"""
+        while True:
+            try:
+                data = self._audio_queue.get()
+                if data is None:
+                    break
+                if winsound is not None and not self.muted:
+                    winsound.PlaySound(data, winsound.SND_MEMORY)
+                self._audio_queue.task_done()
+            except Exception:
+                pass
+
     def play(self, sound_name):
-        """异步播放指定音效 (含150ms同一音效防爆音冷却与独立线程安全，杜绝偶发空指针/释放后访问异常)"""
+        """异步播放指定音效 (含150ms同一音效防爆音冷却、单工作线程与安全队列，彻底避免线程泄漏)"""
         if self.muted:
             return
         now = time.time()
@@ -302,12 +326,16 @@ class SoundManager:
         wav_bytes = self._sound_cache.get(sound_name)
         if not wav_bytes:
             return
-        def _worker(data):
-            try:
-                winsound.PlaySound(data, winsound.SND_MEMORY)
-            except Exception:
-                pass
-        threading.Thread(target=_worker, args=(wav_bytes,), daemon=True).start()
+
+        try:
+            if self._audio_queue.full():
+                try:
+                    self._audio_queue.get_nowait()
+                except Exception:
+                    pass
+            self._audio_queue.put_nowait(wav_bytes)
+        except Exception:
+            pass
 
     def toggle_mute(self):
         self.muted = not self.muted
