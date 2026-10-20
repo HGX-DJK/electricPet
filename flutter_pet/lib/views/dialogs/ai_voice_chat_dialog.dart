@@ -5,7 +5,7 @@ import '../../services/haptic_service.dart';
 import '../../services/minimax_service.dart';
 import '../../services/sound_service.dart';
 
-/// 波可与主人的 MiniMax AI 语音伴侣交互界面
+// 波可与主人的 MiniMax AI 语音伴侣交互界面
 class AiVoiceChatDialog extends StatefulWidget {
   final bool isNight;
   final Function(String action, String dialogue) onActionTriggered;
