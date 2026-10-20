@@ -189,17 +189,17 @@ class LiveWardrobeDock extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 【第一层级】顶层模式切换与快捷操作条
+            // 【第一层级】顶层模式切换与快捷操作条 (轻量呼吸胶囊)
             Row(
               children: [
-                // 1. 核心分段控制器 (👗 猫咪装扮 ⇄ 🏠 小窝场景)
+                // 1. 核心轻量分段切换 (👗 猫咪装扮 ⇄ 🏠 小窝场景)
                 Container(
                   padding: const EdgeInsets.all(2.5),
                   decoration: BoxDecoration(
                     color: isNight ? const Color(0xFF1E1A40) : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : const Color(0xFFE2E8F0),
+                      color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
                     ),
                   ),
                   child: Row(
@@ -215,20 +215,19 @@ class LiveWardrobeDock extends StatelessWidget {
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
                             gradient: wardrobeTab != 6
                                 ? const LinearGradient(
                                     colors: [Color(0xFFA855F7), Color(0xFF7C3AED)],
                                   )
                                 : null,
-                            color: wardrobeTab != 6 ? null : Colors.transparent,
                             borderRadius: BorderRadius.circular(13),
                             boxShadow: wardrobeTab != 6
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFFA855F7).withValues(alpha: 0.3),
-                                      blurRadius: 6,
+                                      color: const Color(0xFFA855F7).withValues(alpha: 0.28),
+                                      blurRadius: 5,
                                       offset: const Offset(0, 1.5),
                                     ),
                                   ]
@@ -237,12 +236,12 @@ class LiveWardrobeDock extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('👗', style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 4),
+                              const Text('👗', style: TextStyle(fontSize: 11.5)),
+                              const SizedBox(width: 3.5),
                               Text(
                                 '猫咪装扮',
                                 style: TextStyle(
-                                  fontSize: 11.5,
+                                  fontSize: 11,
                                   fontWeight: wardrobeTab != 6 ? FontWeight.bold : FontWeight.w500,
                                   color: wardrobeTab != 6
                                       ? Colors.white
@@ -265,20 +264,19 @@ class LiveWardrobeDock extends StatelessWidget {
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
                             gradient: wardrobeTab == 6
                                 ? const LinearGradient(
                                     colors: [Color(0xFF10B981), Color(0xFF059669)],
                                   )
                                 : null,
-                            color: wardrobeTab == 6 ? null : Colors.transparent,
                             borderRadius: BorderRadius.circular(13),
                             boxShadow: wardrobeTab == 6
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.3),
-                                      blurRadius: 6,
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.28),
+                                      blurRadius: 5,
                                       offset: const Offset(0, 1.5),
                                     ),
                                   ]
@@ -287,12 +285,12 @@ class LiveWardrobeDock extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('🏠', style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 4),
+                              const Text('🏠', style: TextStyle(fontSize: 11.5)),
+                              const SizedBox(width: 3.5),
                               Text(
                                 '小窝全景',
                                 style: TextStyle(
-                                  fontSize: 11.5,
+                                  fontSize: 11,
                                   fontWeight: wardrobeTab == 6 ? FontWeight.bold : FontWeight.w500,
                                   color: wardrobeTab == 6
                                       ? Colors.white
@@ -308,37 +306,32 @@ class LiveWardrobeDock extends StatelessWidget {
                 ),
                 const Spacer(),
 
-                // 2. 🔮 赛博盲盒快捷入口 (仅在猫咪装扮模式下展示，进入小窝全景DIY时彻底隐藏，保持小窝纯净沉浸)
+                // 2. 🔮 赛博盲盒快捷微胶囊 (轻盈不抢眼)
                 if (wardrobeTab != 6) ...[
                   BouncyTouchFeedback(
                     scaleDown: 0.94,
                     onTap: onGachaTap,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5.5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
+                        color: isNight ? const Color(0xFF262054) : const Color(0xFFF3E8FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isNight ? const Color(0xFF8B5CF6).withValues(alpha: 0.4) : const Color(0xFFD8B4FE),
+                          width: 1.0,
                         ),
-                        borderRadius: BorderRadius.circular(14),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                            blurRadius: 6,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('🔮', style: TextStyle(fontSize: 12)),
+                          Text('🔮', style: TextStyle(fontSize: 11.5)),
                           SizedBox(width: 3),
                           Text(
                             '盲盒',
                             style: TextStyle(
-                              fontSize: 11.5,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: Color(0xFF7C3AED),
                             ),
                           ),
                         ],
@@ -348,29 +341,31 @@ class LiveWardrobeDock extends StatelessWidget {
                   const SizedBox(width: 6),
                 ],
 
-                // 3. 完成退出换装按钮
+                // 3. 完成退出按钮 (优雅半透明微胶囊，轻量收敛)
                 BouncyTouchFeedback(
                   scaleDown: 0.94,
                   onTap: onClose,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4.5),
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF8B5CF6), Color(0xFF6366F1)],
+                      color: isNight ? const Color(0xFF241F48) : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isNight ? const Color(0xFF3B336A) : const Color(0xFFCBD5E1),
+                        width: 1.0,
                       ),
-                      borderRadius: BorderRadius.circular(14),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_rounded, color: Colors.white, size: 14),
-                        SizedBox(width: 2),
+                        Icon(Icons.check_rounded, color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B), size: 13),
+                        const SizedBox(width: 2),
                         Text(
                           '完成',
                           style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
                           ),
                         ),
                       ],
@@ -381,7 +376,7 @@ class LiveWardrobeDock extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // 【第二层级】零滑动直选栏
+            // 【第二层级】零滑动直选栏 (极简呼吸标签，无重框堆叠)
             if (wardrobeTab != 6) ...[
               Row(
                 children: [
@@ -415,7 +410,7 @@ class LiveWardrobeDock extends StatelessWidget {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        '4大家园主题 DIY · 实时变换全屏房间、地平线与环境光影',
+                        '4大家园主题 DIY · 实时变换全屏房间与环境光影',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
@@ -427,19 +422,6 @@ class LiveWardrobeDock extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 7),
-
-            // 状态指示摘要条
-            Text(
-              currentSummary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: subColor,
-              ),
-            ),
             const SizedBox(height: 8),
 
             // 水平滑动卡片展示列表
@@ -702,22 +684,20 @@ class LiveWardrobeDock extends StatelessWidget {
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 5.5, horizontal: 1),
           decoration: BoxDecoration(
             gradient: isSelected
                 ? const LinearGradient(
                     colors: [Color(0xFFA855F7), Color(0xFF7C3AED)],
                   )
                 : null,
-            color: isSelected
-                ? null
-                : (isNight ? const Color(0xFF262054) : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(12),
+            color: isSelected ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
                   ? const Color(0xFFA855F7)
-                  : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.3) : const Color(0xFFE2E8F0)),
-              width: isSelected ? 1.4 : 1.0,
+                  : Colors.transparent,
+              width: 1.0,
             ),
             boxShadow: isSelected
                 ? [
@@ -735,11 +715,11 @@ class LiveWardrobeDock extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 10.5,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
                     ? Colors.white
-                    : (isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                    : (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
               ),
             ),
           ),

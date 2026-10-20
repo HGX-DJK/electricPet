@@ -3095,12 +3095,26 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   Positioned(
                     left: 24.0,
                     top: floorTop + 16.0,
-                    child: CatGrassPlanter(isNight: isNight, plantTilt: _plantTilt, onTap: _onPlantTap),
+                    child: AnimatedOpacity(
+                      opacity: _isWardrobeMode ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: IgnorePointer(
+                        ignoring: _isWardrobeMode,
+                        child: CatGrassPlanter(isNight: isNight, plantTilt: _plantTilt, onTap: _onPlantTap),
+                      ),
+                    ),
                   ),
                   Positioned(
                     right: 24.0,
                     top: floorTop + 16.0,
-                    child: CatScratchingPost(isNight: isNight, postWiggle: _postWiggle, onTap: _onScratcherTap),
+                    child: AnimatedOpacity(
+                      opacity: _isWardrobeMode ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: IgnorePointer(
+                        ignoring: _isWardrobeMode,
+                        child: CatScratchingPost(isNight: isNight, postWiggle: _postWiggle, onTap: _onScratcherTap),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -3170,13 +3184,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               Positioned(
                 right: 24.0,
                 top: nestY + 98.0,
-                child: KittenNightLamp(
-                  isNight: isNight,
-                  isNightLampOn: _isNightLampOn,
-                  isLampSwitchDepressed: _isLampSwitchDepressed,
-                  ambientMode: SoundService.ambientMode,
-                  onAmbientTap: _cycleAmbientSound,
-                  onLampTap: _onNightLampTap,
+                child: AnimatedOpacity(
+                  opacity: _isWardrobeMode ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: _isWardrobeMode,
+                    child: KittenNightLamp(
+                      isNight: isNight,
+                      isNightLampOn: _isNightLampOn,
+                      isLampSwitchDepressed: _isLampSwitchDepressed,
+                      ambientMode: SoundService.ambientMode,
+                      onAmbientTap: _cycleAmbientSound,
+                      onLampTap: _onNightLampTap,
+                    ),
+                  ),
                 ),
               ),
 
@@ -3445,65 +3466,72 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 onTap: () => _onBedTap(nestX, nestY),
               ),
 
-              // 软装家具 3：左侧就餐角 · 萌宠立式三联食水一体托盘 (竖向陶瓷立式托盘，靠左侧边，开阔通透，零遮挡猫咪身躯)
+              // 软装家具 3：左侧就餐角 · 萌宠立式三联食水一体托盘 (换装模式自动淡出，纯净聚焦)
               Positioned(
                 left: 16.0,
                 top: nestY + 36.0,
-                child: CatDiningStation(
-                  isNight: isNight,
-                  isHungry: widget.petModel.hunger < 50,
-                  showFoodTray: _showFoodTray,
-                  isWaterRippling: _isWaterRippling,
-                  onFoodBowlTap: () {
-                    SoundService.playPop();
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
-                    setState(() {
-                      _showFoodTray = !_showFoodTray;
-                      if (_showFoodTray) {
-                        _isWardrobeMode = false;
-                        _isActionMode = false;
-                      }
-                    });
-                    if (_showFoodTray) {
-                      _showDialogueBubble('喵~ 好吃的！按住小鱼干拖给波可吧~ 🥣✨', duration: const Duration(seconds: 3));
-                    }
-                  },
-                  onFoodBowlDoubleTap: () => _popFishFromBowl(nestX, nestY),
-                  onWaterBowlTap: () {
-                    SoundService.playPop();
-                    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
-                    setState(() {
-                      _isWaterRippling = true;
-                    });
-                    _spawnParticles(Offset(45, nestY + 95), emoji: '💧', count: 4);
-                    _spawnTextParticle(Offset(35, nestY + 75), '解渴补水 💧✨', const Color(0xFF0284C7));
+                child: AnimatedOpacity(
+                  opacity: _isWardrobeMode ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: _isWardrobeMode,
+                    child: CatDiningStation(
+                      isNight: isNight,
+                      isHungry: widget.petModel.hunger < 50,
+                      showFoodTray: _showFoodTray,
+                      isWaterRippling: _isWaterRippling,
+                      onFoodBowlTap: () {
+                        SoundService.playPop();
+                        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                        setState(() {
+                          _showFoodTray = !_showFoodTray;
+                          if (_showFoodTray) {
+                            _isWardrobeMode = false;
+                            _isActionMode = false;
+                          }
+                        });
+                        if (_showFoodTray) {
+                          _showDialogueBubble('喵~ 好吃的！按住小鱼干拖给波可吧~ 🥣✨', duration: const Duration(seconds: 3));
+                        }
+                      },
+                      onFoodBowlDoubleTap: () => _popFishFromBowl(nestX, nestY),
+                      onWaterBowlTap: () {
+                        SoundService.playPop();
+                        if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+                        setState(() {
+                          _isWaterRippling = true;
+                        });
+                        _spawnParticles(Offset(45, nestY + 95), emoji: '💧', count: 4);
+                        _spawnTextParticle(Offset(35, nestY + 75), '解渴补水 💧✨', const Color(0xFF0284C7));
 
-                    // 如果猫咪在就餐角附近，直接触发低头小舔水微表情动作 (方向四)
-                    if ((_petX - 85.0).abs() < 100 && (_petY - (nestY + 85.0)).abs() < 90) {
-                      _startDrinkingWater(nestY);
-                    } else {
-                      widget.petModel.addCleanliness(8);
-                      widget.petModel.addMood(6);
-                      widget.petModel.addIntimacy(2);
-                      _showDialogueBubble('水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨', duration: const Duration(seconds: 3));
-                      _startWalkingTo(
-                        85.0,
-                        nestY + 85.0,
-                        'WATER_BOWL',
-                        '水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨',
-                      );
-                    }
+                        // 如果猫咪在就餐角附近，直接触发低头小舔水微表情动作 (方向四)
+                        if ((_petX - 85.0).abs() < 100 && (_petY - (nestY + 85.0)).abs() < 90) {
+                          _startDrinkingWater(nestY);
+                        } else {
+                          widget.petModel.addCleanliness(8);
+                          widget.petModel.addMood(6);
+                          widget.petModel.addIntimacy(2);
+                          _showDialogueBubble('水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨', duration: const Duration(seconds: 3));
+                          _startWalkingTo(
+                            85.0,
+                            nestY + 85.0,
+                            'WATER_BOWL',
+                            '水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨',
+                          );
+                        }
 
-                    _waterRippleTimer?.cancel();
-                    _waterRippleTimer = Timer(const Duration(milliseconds: 1200), () {
-                      if (mounted) setState(() => _isWaterRippling = false);
-                    });
-                  },
-                  onCanSummonTap: () => _onCanSummonTap(nestX, nestY),
+                        _waterRippleTimer?.cancel();
+                        _waterRippleTimer = Timer(const Duration(milliseconds: 1200), () {
+                          if (mounted) setState(() => _isWaterRippling = false);
+                        });
+                      },
+                      onCanSummonTap: () => _onCanSummonTap(nestX, nestY),
+                    ),
+                  ),
                 ),
               ),
 
-              // 暖绒舒睡圆垫小被子 (随呼吸起伏，支持盖被被与掀被被微互动)
+              // 暖绒舒睡圆垫小被子 (随呼吸起伏，支持盖被被与掀被被微互动，换装模式自动淡出)
               CoveredBlanket(
                 nestX: nestX,
                 nestY: nestY,
@@ -3512,6 +3540,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 isNight: isNight,
                 isCoveredWithBlanket: _isCoveredWithBlanket,
                 idleAnimation: _idleAnimController,
+                isWardrobeMode: _isWardrobeMode,
                 onToggleBlanket: _toggleBlanket,
                 onBlanketTap: () {
                   SoundService.startPurr();

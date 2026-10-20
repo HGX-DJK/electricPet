@@ -675,6 +675,7 @@ class CoveredBlanket extends StatelessWidget {
   final Animation<double> idleAnimation;
   final VoidCallback onToggleBlanket;
   final VoidCallback onBlanketTap;
+  final bool isWardrobeMode;
 
   const CoveredBlanket({
     super.key,
@@ -687,6 +688,7 @@ class CoveredBlanket extends StatelessWidget {
     required this.idleAnimation,
     required this.onToggleBlanket,
     required this.onBlanketTap,
+    this.isWardrobeMode = false,
   });
 
   @override
@@ -701,29 +703,36 @@ class CoveredBlanket extends StatelessWidget {
         key: const ValueKey('tuck_in_blanket_button'),
         left: nestX + 48,
         top: nestY + 28,
-        child: BouncyTouchFeedback(
-          scaleDown: 0.92,
-          onTap: onToggleBlanket,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [Color(0xFFFB7185), Color(0xFFF43F5E)]),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+        child: AnimatedOpacity(
+          opacity: isWardrobeMode ? 0.0 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: isWardrobeMode,
+            child: BouncyTouchFeedback(
+              scaleDown: 0.92,
+              onTap: onToggleBlanket,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFFFB7185), Color(0xFFF43F5E)]),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('🛏️', style: TextStyle(fontSize: 10)),
-                SizedBox(width: 2.5),
-                Text('盖被被', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
-              ],
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('🛏️', style: TextStyle(fontSize: 10)),
+                    SizedBox(width: 2.5),
+                    Text('盖被被', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -736,10 +745,15 @@ class CoveredBlanket extends StatelessWidget {
       key: const ValueKey('covered_blanket'),
       left: petX - 62,
       top: petY + 18 + breathOffset,
-      child: BouncyTouchFeedback(
-        scaleDown: 0.95,
-        onTap: onBlanketTap,
-        child: Stack(
+      child: AnimatedOpacity(
+        opacity: isWardrobeMode ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: IgnorePointer(
+          ignoring: isWardrobeMode,
+          child: BouncyTouchFeedback(
+            scaleDown: 0.95,
+            onTap: onBlanketTap,
+            child: Stack(
           clipBehavior: Clip.none,
           children: [
             Container(
@@ -858,8 +872,10 @@ class CoveredBlanket extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 }
 
 /// 软装家具 4：萌猫头温馨夜灯 + ASMR 白噪音切换胶囊
@@ -896,24 +912,24 @@ class KittenNightLamp extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
             decoration: BoxDecoration(
               color: ambientMode == 'rain'
-                  ? const Color(0xFF0284C7).withValues(alpha: 0.24)
+                  ? const Color(0xFF0284C7).withValues(alpha: 0.22)
                   : (ambientMode == 'purr'
-                      ? const Color(0xFF9333EA).withValues(alpha: 0.24)
-                      : (isNight ? const Color(0xFF1E1838) : Colors.white.withValues(alpha: 0.95))),
+                      ? const Color(0xFF9333EA).withValues(alpha: 0.22)
+                      : (isNight ? const Color(0xFF1E1838).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.72))),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: ambientMode == 'rain'
                     ? const Color(0xFF38BDF8)
                     : (ambientMode == 'purr'
                         ? const Color(0xFFA855F7)
-                        : (isNight ? const Color(0xFF6366F1).withValues(alpha: 0.4) : const Color(0xFFCBD5E1))),
-                width: 1.2,
+                        : (isNight ? const Color(0xFF6366F1).withValues(alpha: 0.3) : const Color(0xFFE2E8F0))),
+                width: 1.0,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: isNight ? 0.3 : 0.06),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withValues(alpha: isNight ? 0.2 : 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1.5),
                 ),
               ],
             ),
@@ -925,7 +941,7 @@ class KittenNightLamp extends StatelessWidget {
                       ? '🌧️ 雨声'
                       : (ambientMode == 'purr' ? '🐱 呼噜' : '🎵 ASMR'),
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.bold,
                     color: ambientMode == 'rain'
                         ? const Color(0xFF38BDF8)
@@ -946,25 +962,25 @@ class KittenNightLamp extends StatelessWidget {
           child: Transform.translate(
             offset: Offset(0, isLampSwitchDepressed ? 2.0 : 0.0),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6.5),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
               decoration: BoxDecoration(
                 color: isNightLampOn
-                    ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7))
-                    : (isNight ? const Color(0xFF181330) : Colors.white.withValues(alpha: 0.96)),
-                borderRadius: BorderRadius.circular(18),
+                    ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7).withValues(alpha: 0.9))
+                    : (isNight ? const Color(0xFF181330).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.75)),
+                borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isNightLampOn
                       ? const Color(0xFFF59E0B)
-                      : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : const Color(0xFF94A3B8).withValues(alpha: 0.4)),
-                  width: 1.5,
+                      : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.3) : const Color(0xFFE2E8F0)),
+                  width: 1.0,
                 ),
                 boxShadow: [
                   BoxShadow(
                     color: isNightLampOn
-                        ? const Color(0xFFF59E0B).withValues(alpha: 0.42)
-                        : Colors.black.withValues(alpha: 0.08),
-                    blurRadius: isNightLampOn ? 14 : 6,
-                    offset: Offset(0, isLampSwitchDepressed ? 1.5 : 3.0),
+                        ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
+                        : Colors.black.withValues(alpha: 0.04),
+                    blurRadius: isNightLampOn ? 10 : 4,
+                    offset: Offset(0, isLampSwitchDepressed ? 1.0 : 2.0),
                   ),
                 ],
               ),
