@@ -635,17 +635,19 @@ class CatRugBed extends StatelessWidget {
   }
 }
 
-/// 暖绒圆垫前侧轻触响应区 (位于圆垫前缘，零遮挡猫爪，支持轻触圆垫触发幸福踩奶)
+/// 暖绒圆垫前侧轻触响应区 (位于圆垫前缘，零遮挡猫爪，支持轻触触发幸福踩奶，长按一键就寝)
 class CozyCatRug extends StatelessWidget {
   final double nestX;
   final double nestY;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const CozyCatRug({
     super.key,
     required this.nestX,
     required this.nestY,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -659,6 +661,7 @@ class CozyCatRug extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        onLongPress: onLongPress,
       ),
     );
   }

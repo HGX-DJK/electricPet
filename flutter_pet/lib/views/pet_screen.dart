@@ -160,6 +160,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   double _petProgress = 0.0;
   Offset? _touchPos;
   Offset? _lookTargetPos; // 视线追踪目标坐标 (实时注视手指/光标)
+  int _lastFloorTapTime = 0; // 地板轻敲双击召唤判定时间戳
+  Offset _lastFloorTapPos = Offset.zero;
 
   // 飘浮爱心粒子列表
   final List<_Particle> _particles = [];
@@ -837,6 +839,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       widget.petModel.saveToDisk();
       widget.memoModel.saveToDisk();
+      SensorService.stopListening();
+    } else if (state == AppLifecycleState.resumed) {
+      SensorService.startListening();
     }
   }
 
@@ -1311,6 +1316,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
 
     if (_showDialogue) return;
+
+    // 自发生理需求提醒 (优先于普通自言自语)
+    if (widget.petModel.hunger < 35 && math.Random().nextDouble() < 0.35) {
+      final hungryLines = [
+        '咕噜噜... (肚子悄悄叫啦) 好想吃香喷喷的小鱼干呀~ 🥣🐟',
+        '小肚肚空落落的... 主人，波可的小食碗在招手呢~ 🥣✨',
+        '波可闻到零食的香味啦，主人要不要投喂一口酥脆酥罐呀？🥫🐾',
+      ];
+      _spawnParticles(Offset(_petX + 15, _petY - 35), emoji: '🐟', count: 1);
+      _showDialogueBubble(hungryLines[math.Random().nextInt(hungryLines.length)]);
+      return;
+    }
+
+    if (widget.petModel.energy < 25 && math.Random().nextDouble() < 0.35) {
+      final tiredLines = [
+        '哈欠~ (揉眼睛) 困意袭来啦，要不要早点盖被被呼呼睡呢~ 🥱💤',
+        '眼皮有点打架啦... 主人长按小窝毛毯，让波可就寝吧~ 🛌✨',
+      ];
+      _spawnParticles(Offset(_petX + 15, _petY - 35), emoji: '💤', count: 1);
+      _showDialogueBubble(tiredLines[math.Random().nextInt(tiredLines.length)]);
+      return;
+    }
+
     if (math.Random().nextDouble() < 0.20) {
       final lines = [
         '主人看屏幕累了吗？眨眨眼睛休息一下吧~ 🐾',
@@ -2622,6 +2650,37 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble(tailQuotes[math.Random().nextInt(tailQuotes.length)], duration: const Duration(seconds: 4));
   }
 
+  /// 触发猫咪极度满足的呼噜状态 (Purr Haptic Engine + ASMR)
+  void _triggerPurringState({String? customDialogue}) {
+    setState(() {
+      _isPurring = true;
+    });
+    SoundService.startPurr();
+    _purrHapticTimer?.cancel();
+    int purrTick = 0;
+    if (widget.petModel.enableHaptics) {
+      _purrHapticTimer = Timer.periodic(const Duration(milliseconds: 130), (t) {
+        if (purrTick++ >= 9 || !_isPurring) {
+          t.cancel();
+        } else {
+          HapticService.purrHaptic();
+          _spawnParticles(Offset(_petX + (purrTick.isEven ? -18 : 18), _petY - 24), emoji: '💕', count: 1);
+        }
+      });
+    }
+    _purrTimer?.cancel();
+    _purrTimer = Timer(const Duration(milliseconds: 2600), () {
+      SoundService.stopPurr();
+      if (mounted) {
+        setState(() => _isPurring = false);
+        _triggerSlowBlink();
+      }
+    });
+    widget.petModel.petHead();
+    _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 5);
+    _showDialogueBubble(customDialogue ?? '咕噜咕噜... 下巴挠得好舒服，要融化在主人手心啦~ (˘ω˘)💕', duration: const Duration(seconds: 4));
+  }
+
   /// 维度一：部位差异化触感与猫咪打呼噜反应
   void _handleBodyPartTouch(Offset localPos, Size screenSize) {
     _idleSeconds = 0;
@@ -2676,33 +2735,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 2. 挠下巴 / 颈窝 (Chin Scratch - 触发猫咪打呼噜连续细密震动与真实ASMR喉音起伏)
     if ((localPos.dx - 100).abs() < 24 && (localPos.dy >= 99 && localPos.dy <= 122)) {
-      setState(() {
-        _isPurring = true;
-      });
-      SoundService.startPurr();
-      _purrHapticTimer?.cancel();
-      int purrTick = 0;
-      if (widget.petModel.enableHaptics) {
-        _purrHapticTimer = Timer.periodic(const Duration(milliseconds: 130), (t) {
-          if (purrTick++ >= 9 || !_isPurring) {
-            t.cancel();
-          } else {
-            HapticService.purrHaptic();
-            _spawnParticles(Offset(_petX + (purrTick.isEven ? -18 : 18), _petY - 24), emoji: '🫧', count: 1);
-          }
-        });
-      }
-      _purrTimer?.cancel();
-      _purrTimer = Timer(const Duration(milliseconds: 2600), () {
-        SoundService.stopPurr();
-        if (mounted) {
-          setState(() => _isPurring = false);
-          _triggerSlowBlink();
-        }
-      });
-      widget.petModel.petHead();
-      _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 5);
-      _showDialogueBubble('咕噜咕噜... 下巴挠得好舒服，要融化在主人手心啦~ (˘ω˘)💕', duration: const Duration(seconds: 4));
+      _triggerPurringState();
       return;
     }
 
@@ -2879,12 +2912,35 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('逗猫时间到！毛线球飞起来啦，波可快去追~ 🧶💨', duration: const Duration(seconds: 4));
   }
 
-  /// 轻触空白背景区域：眼神机敏注视追踪与耳尖微动 (Eye Glance Tracking)
+  /// 轻触空白背景区域：眼神机敏注视追踪与双击轻敲地板呼唤 (Eye Glance & Floor Calling)
   void _onBackgroundPointerDown(Offset globalPos, Size screenSize) {
     if (_isDragging || _isLaserMode || _showFoodTray || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
+
+    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final nestX = screenSize.width / 2;
+    final nestY = floorTop + 130.0;
     final relX = globalPos.dx - _petX;
     final relY = globalPos.dy - _petY;
     final dist = math.sqrt(relX * relX + relY * relY);
+
+    // 智能双击地板检测 (Floor Double-Tap Calling - 仅限开阔地板空白处，绝不干扰猫咪自身抚摸与家具按钮)
+    final isNearCat = dist < 75.0;
+    final isNearBed = (globalPos.dx - nestX).abs() < 85 && (globalPos.dy - nestY).abs() < 60;
+    final isNearDining = globalPos.dx < 130 && (globalPos.dy - nestY).abs() < 85;
+    final isOnFloor = globalPos.dy >= floorTop + 25 && globalPos.dy <= screenSize.height - 85;
+
+    if (isOnFloor && !isNearCat && !isNearBed && !isNearDining) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final isDoubleTap = (now - _lastFloorTapTime < 340) && ((globalPos - _lastFloorTapPos).distance < 48.0);
+      _lastFloorTapTime = now;
+      _lastFloorTapPos = globalPos;
+
+      if (isDoubleTap) {
+        _highFiveTimer?.cancel();
+        _onFloorDoubleTap(globalPos, screenSize);
+        return;
+      }
+    }
     // 点击在猫咪外部时，猫咪机敏转动眼珠与耳尖注视指尖落点
     if (dist > 50.0 && dist < 340.0) {
       setState(() {
@@ -2912,6 +2968,53 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         });
       }
     }
+  }
+
+  /// 双击地板空白处：轻敲地面呼唤唤回波可 (Floor Double-Tap Calling)
+  void _onFloorDoubleTap(Offset targetPos, Size screenSize) {
+    if (_isDragging || _isLaserMode || _showFoodTray || _isWardrobeMode || _isActionMode) return;
+    if (widget.petModel.isSleeping) {
+      _showDialogueBubble('波可正在被窝里熟睡呢，轻轻摸摸头唤醒它吧~ 💤');
+      return;
+    }
+
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    SoundService.playPop();
+
+    // 敲击地板处泛起微光小波纹与爪印
+    _spawnParticles(targetPos, emoji: '🐾', count: 2);
+    _spawnTextParticle(Offset(targetPos.dx - 22, targetPos.dy - 24), '哒哒！✨', const Color(0xFF6366F1));
+
+    // 唤起波可敏捷小跑靠近指尖落点
+    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final targetX = targetPos.dx.clamp(45.0, screenSize.width - 45.0);
+    final targetY = targetPos.dy.clamp(floorTop + 20.0, screenSize.height - 85.0);
+
+    _showDialogueBubble('来啦来啦~ 听见主人的呼唤，小跑过来啦！🐾✨', duration: const Duration(seconds: 3));
+    _startWalkingTo(targetX, targetY, 'CALL_SUMMON', '来啦来啦~ 听见主人的呼唤，小跑过来啦！🐾✨');
+  }
+
+  /// 长按小窝圆垫：自动钻进被窝就寝入眠 (Cozy Nest Long-Press to Sleep)
+  void _onBedLongPress(double nestX, double nestY) {
+    if (widget.petModel.isSleeping) {
+      _toggleBlanket();
+      return;
+    }
+    if (widget.petModel.enableHaptics) {
+      HapticFeedback.mediumImpact();
+    }
+    SoundService.startPurr();
+    setState(() {
+      _petX = nestX;
+      _petY = nestY;
+      _isCoveredWithBlanket = true;
+      _state = 'IDLE';
+    });
+    widget.petModel.sleep();
+    _spawnParticles(Offset(nestX, nestY - 20), emoji: '💤', count: 3);
+    _showDialogueBubble('钻进温暖被窝啦~ 晚安主人，做个香甜好梦！🛌✨', duration: const Duration(seconds: 4));
   }
 
   @override
@@ -3075,21 +3178,30 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     top: 64,
                     left: 18,
                     right: 18,
-                    child: FairyLightsRow(isNight: isNight, onTap: _onFairyLightsTap),
+                    child: Transform.translate(
+                      offset: Offset(_tiltX * -6.0, 0),
+                      child: FairyLightsRow(isNight: isNight, onTap: _onFairyLightsTap),
+                    ),
                   ),
                   Positioned(
                     top: 106,
                     left: 18,
-                    child: PolaroidFrame(isNight: isNight, photoAngle: _photoAngle, onTap: _onPhotoTap),
+                    child: Transform.translate(
+                      offset: Offset(_tiltX * -8.0, 0),
+                      child: PolaroidFrame(isNight: isNight, photoAngle: _photoAngle, onTap: _onPhotoTap),
+                    ),
                   ),
                   Positioned(
                     top: 62,
                     left: screenSize.width / 2 - 43,
-                    child: FrenchArchWindow(
-                      isNight: isNight,
-                      windowWeather: _windowWeather,
-                      windowScale: _windowScale,
-                      onTap: _cycleWindowWeather,
+                    child: Transform.translate(
+                      offset: Offset(_tiltX * -10.0, 0),
+                      child: FrenchArchWindow(
+                        isNight: isNight,
+                        windowWeather: _windowWeather,
+                        windowScale: _windowScale,
+                        onTap: _cycleWindowWeather,
+                      ),
                     ),
                   ),
                   Positioned(
@@ -3362,16 +3474,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         _lastDragDirection = dir;
                       }
 
-                      // 拖拽移动与抚摸交互解耦
+                      // 拖拽移动与抚摸交互解耦 (慢速拂过触发呼噜微震与爱心漫溢)
                       final delta = details.focalPointDelta.distance;
                       if (delta > 2.0 && delta < 12.0) {
                         _strokeDistance += delta;
-                        if (_strokeDistance > 60.0) {
+                        if (_strokeDistance > 52.0) {
                           _strokeDistance = 0.0;
                           _petProgress = 1.0;
+                          if (widget.petModel.enableHaptics) {
+                            HapticFeedback.selectionClick();
+                          }
+                          if (!_isPurring) {
+                            _triggerPurringState(customDialogue: '呼噜噜... 好舒服呀，最喜欢主人的温柔抚摸啦~ 💕🐾');
+                          }
+                          final emojis = ['💕', '✨', '🌸', '🐾'];
+                          final pickedEmoji = emojis[math.Random().nextInt(emojis.length)];
                           _spawnParticles(
                             Offset(_petX, _petY - 40),
-                            emoji: '✨',
+                            emoji: pickedEmoji,
                             count: 1,
                           );
                         }
@@ -3459,11 +3579,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 ),
               ),
 
-              // 暖绒圆垫前侧轻触响应区 (位于圆垫前缘，零遮挡猫爪，支持轻触圆垫触发幸福踩奶)
+              // 暖绒圆垫前侧轻触响应区 (位于圆垫前缘，零遮挡猫爪，支持轻触圆垫触发幸福踩奶，长按一键入眠)
               CozyCatRug(
                 nestX: nestX,
                 nestY: nestY,
                 onTap: () => _onBedTap(nestX, nestY),
+                onLongPress: () => _onBedLongPress(nestX, nestY),
               ),
 
               // 软装家具 3：左侧就餐角 · 萌宠立式三联食水一体托盘 (换装模式自动淡出，纯净聚焦)

@@ -260,149 +260,102 @@ class TopDualIslands extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 2.5),
-              // 下排：快捷控制按钮 (声音开关、爪印开关、天光罗盘、回窝按钮)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 1. 音效开关
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onSoundToggle,
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      decoration: BoxDecoration(
-                        color: SoundService.soundEnabled
-                            ? (isNight ? const Color(0xFF312E81) : const Color(0xFFEEF2FF))
-                            : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
-                        shape: BoxShape.circle,
-                        border: Border.all(
+              // 下排：一体化半透明磨砂快捷微胶囊群 (声音、爪印、天光、回窝)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 2.0),
+                decoration: BoxDecoration(
+                  color: isNight
+                      ? const Color(0xFF1E1A40).withValues(alpha: 0.65)
+                      : const Color(0xFFF8FAFC).withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isNight
+                        ? const Color(0xFF6366F1).withValues(alpha: 0.22)
+                        : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 1. 音效开关
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onSoundToggle,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                        decoration: BoxDecoration(
                           color: SoundService.soundEnabled
-                              ? const Color(0xFF6366F1)
-                              : (isNight ? const Color(0xFF4F46E5).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
-                          width: 1.0,
+                              ? (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.6) : const Color(0xFFEEF2FF))
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
                         child: Text(
                           SoundService.soundEnabled ? '🔊' : '🔇',
-                          style: const TextStyle(fontSize: 11.5),
+                          style: const TextStyle(fontSize: 11),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 3.5),
-                  // 2. 地板猫爪印开关
-                  GestureDetector(
-                    key: const ValueKey('footprint_toggle_button'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onFootprintsToggle,
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      decoration: BoxDecoration(
-                        color: petModel.enableFootprints
-                            ? (isNight ? const Color(0xFF312E81) : const Color(0xFFFFF1F2))
-                            : (isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9)),
-                        shape: BoxShape.circle,
-                        border: Border.all(
+                    const SizedBox(width: 2.5),
+                    // 2. 地板猫爪印开关
+                    GestureDetector(
+                      key: const ValueKey('footprint_toggle_button'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onFootprintsToggle,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                        decoration: BoxDecoration(
                           color: petModel.enableFootprints
-                              ? const Color(0xFFFB7185)
-                              : (isNight ? const Color(0xFF4F46E5).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
-                          width: 1.0,
+                              ? (isNight ? const Color(0xFFBE185D).withValues(alpha: 0.45) : const Color(0xFFFFF1F2))
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
                         child: Text(
                           petModel.enableFootprints ? '🐾' : '🧹',
-                          style: const TextStyle(fontSize: 11.5),
+                          style: const TextStyle(fontSize: 11),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 3.5),
-                  // 3. 天光罗盘开关
-                  GestureDetector(
-                    key: const ValueKey('sky_rhythm_toggle_button'),
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onSkyRhythmToggle,
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      decoration: BoxDecoration(
-                        color: !isManualSky
-                            ? (isNight ? const Color(0xFF312E81) : const Color(0xFFF0FDF4))
-                            : (isNight ? const Color(0xFF3B0764) : const Color(0xFFFFFBEB)),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: !isManualSky
-                              ? (isNight ? const Color(0xFF6366F1) : const Color(0xFF86EFAC))
-                              : (isNight ? const Color(0xFFA855F7) : const Color(0xFFFBBF24)),
-                          width: 1.0,
+                    const SizedBox(width: 2.5),
+                    // 3. 天光罗盘开关
+                    GestureDetector(
+                      key: const ValueKey('sky_rhythm_toggle_button'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onSkyRhythmToggle,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: isManualSky
+                              ? (isNight ? const Color(0xFF581C87).withValues(alpha: 0.5) : const Color(0xFFFEF3C7))
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
                         child: Text(
                           circadianTheme['icon'] as String,
-                          style: const TextStyle(fontSize: 11.5),
+                          style: const TextStyle(fontSize: 11),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 3.5),
-                  // 4. 回到小窝按钮
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onResetToMat,
-                    child: Container(
-                      width: 25,
-                      height: 25,
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF26204E) : const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: isNight ? const Color(0xFF4F46E5).withValues(alpha: 0.4) : const Color(0xFFE2E8F0),
-                          width: 1.0,
+                    const SizedBox(width: 2.5),
+                    // 4. 回到小窝按钮
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onResetToMat,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: isNight ? 0.25 : 0.05),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
-                      ),
-                      child: Center(
                         child: Icon(
                           Icons.home_rounded,
-                          size: 14.0,
+                          size: 13.5,
                           color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

@@ -519,6 +519,17 @@ class PetModel extends ChangeNotifier {
     }
   }
 
+  /// 哄睡
+  void sleep() {
+    if (!isSleeping) {
+      isSleeping = true;
+      isStudying = false;
+      addPersonalityPoint('lazy', 2);
+      notifyListeners();
+      saveToDisk();
+    }
+  }
+
   /// 专注学习
   bool toggleStudy() {
     isStudying = !isStudying;
