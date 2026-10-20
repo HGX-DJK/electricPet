@@ -4,7 +4,7 @@ import 'models/pet_model.dart';
 import 'models/memo_model.dart';
 import 'views/pet_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 状态栏沉浸透明
@@ -15,11 +15,22 @@ void main() {
     ),
   );
 
-  runApp(const DesktopElectricPetApp());
+  final petModel = PetModel();
+  final memoModel = MemoModel();
+  await Future.wait([petModel.isReady, memoModel.isReady]);
+
+  runApp(DesktopElectricPetApp(petModel: petModel, memoModel: memoModel));
 }
 
 class DesktopElectricPetApp extends StatefulWidget {
-  const DesktopElectricPetApp({super.key});
+  final PetModel? petModel;
+  final MemoModel? memoModel;
+
+  const DesktopElectricPetApp({
+    super.key,
+    this.petModel,
+    this.memoModel,
+  });
 
   @override
   State<DesktopElectricPetApp> createState() => _DesktopElectricPetAppState();
@@ -32,8 +43,8 @@ class _DesktopElectricPetAppState extends State<DesktopElectricPetApp> {
   @override
   void initState() {
     super.initState();
-    _petModel = PetModel();
-    _memoModel = MemoModel();
+    _petModel = widget.petModel ?? PetModel();
+    _memoModel = widget.memoModel ?? MemoModel();
   }
 
   @override

@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/pet_model.dart';
 import '../models/memo_model.dart';
 import '../renderers/pet_painter.dart';
@@ -547,38 +550,280 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
   }
 
-  /// 首次安装/沙盒为空时探测公共存储中的历史档案并呼出继承弹窗
+  /// 首启/重装后探测公共存储中的历史档案并呼出继承弹窗 (防卸载丢失)
   Future<void> _checkHeritageBackupOnLaunch() async {
     if (!mounted) return;
-    if (widget.petModel.isFreshInstall) {
-      final backup = await BackupService.checkHistoricalBackup();
-      if (backup != null && mounted) {
-        showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => HeritageBackupDialog(
-            backupData: backup,
-            onInherit: () async {
-              final ok = await BackupService.restoreFromHistoricalBackup(
-                backup,
-                widget.petModel,
-                memo: widget.memoModel,
-              );
-              if (ok && mounted) {
-                _playAction('HAPPY_SPIN');
-                _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 6);
-                _showDialogueBubble('🎉 哇！成功找回了波可的全部记忆与装扮，欢迎回家主人~ ✨', duration: const Duration(seconds: 5));
-              }
-            },
-            onDecline: () {
-              if (mounted) {
-                _showDialogueBubble('🐾 好的，新旅程开启！波可会一直陪着您~', duration: const Duration(seconds: 4));
-              }
-            },
-          ),
-        );
+    // 等待 PetModel 完成底层载入，杜绝时序竞态
+    await widget.petModel.isReady;
+
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasDeclined = prefs.getBool('poko_heritage_declined') ?? false;
+
+    // 探测公用目录与原生通道的历史备份
+    final backup = await BackupService.checkHistoricalBackup();
+    if (backup != null && mounted) {
+      final petData = backup['pet'] as Map<String, dynamic>?;
+      final backupLevel = (petData?['level'] as num?)?.toInt() ?? 1;
+      final backupItems = (petData?['unlockedItems'] as List?)?.length ?? 0;
+      final backupCoins = (petData?['coins'] as num?)?.toInt() ?? 200;
+
+      // 智能继承判定：
+      // 1. 全新安装 (isFreshInstall == true)
+      // 2. 或者当前宠物为初生状态 (level == 1 且解锁装扮 <= 5) 且备份更有价值
+      // 3. 或者备份等级明显高于当前本地等级
+      final bool isCurrentPristine = widget.petModel.level == 1 && widget.petModel.unlockedItems.length <= 5;
+      final bool hasSuperiorBackup = backupLevel > widget.petModel.level ||
+          (isCurrentPristine && (backupLevel >= 2 || backupItems > 5 || backupCoins > 200));
+
+      if (hasSuperiorBackup && !hasDeclined) {
+        _showHeritageInheritDialog(backup);
+        return;
       }
     }
+
+    // 若未读取到备份，且当前处于 Android 初生状态，提示授权以扫描公共下载目录
+    if (!kIsWeb && Platform.isAndroid && widget.petModel.level == 1 && !hasDeclined) {
+      final hasPerm = await BackupService.isStoragePermissionGranted();
+      final hasPromptedPerm = prefs.getBool('poko_storage_perm_prompted') ?? false;
+      if (!hasPerm && !hasPromptedPerm && mounted) {
+        await prefs.setBool('poko_storage_perm_prompted', true);
+        _promptStoragePermissionGuidance();
+      }
+    }
+  }
+
+  /// 呼出历史波可档案继承确认弹窗
+  void _showHeritageInheritDialog(Map<String, dynamic> backup) {
+    if (!mounted) return;
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => HeritageBackupDialog(
+        backupData: backup,
+        onInherit: () async {
+          final ok = await BackupService.restoreFromHistoricalBackup(
+            backup,
+            widget.petModel,
+            memo: widget.memoModel,
+          );
+          if (ok && mounted) {
+            setState(() {});
+            _playAction('HAPPY_SPIN');
+            _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 6);
+            _showDialogueBubble('🎉 哇！成功找回了波可的全部记忆与装扮，欢迎回家主人~ ✨', duration: const Duration(seconds: 5));
+          }
+        },
+        onDecline: () async {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('poko_heritage_declined', true);
+          if (mounted) {
+            _showDialogueBubble('🐾 好的，新旅程开启！波可会一直陪着您~', duration: const Duration(seconds: 4));
+          }
+        },
+      ),
+    );
+  }
+
+  /// 首次初生状态引导授权扫描公共下载目录
+  void _promptStoragePermissionGuidance() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        backgroundColor: const Color(0xFFFFFDF9),
+        title: const Row(
+          children: [
+            Text('🐾 ', style: TextStyle(fontSize: 22)),
+            Text(
+              '想要找回历史波可吗？',
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF78350F),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          '检测到您当前波可处于初生状态。若您之前曾安装过波可，授权存储访问后即可自动扫描手机公共下载目录，找回以往的等级、金币与全部装扮！',
+          style: TextStyle(
+            fontSize: 12.5,
+            height: 1.5,
+            color: Color(0xFF92400E),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('从头开始', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await BackupService.requestStoragePermission();
+              Future.delayed(const Duration(milliseconds: 1200), () {
+                if (mounted) _checkHeritageBackupOnLaunch();
+              });
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('授权并扫描档案 ✨'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手动触发扫描历史公共档案
+  Future<void> _handleManualBackupScan() async {
+    _idleSeconds = 0;
+    SoundService.playClick();
+    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+
+    // 1. 若为 Android 且无权限，先申请权限
+    if (!kIsWeb && Platform.isAndroid) {
+      final hasPerm = await BackupService.isStoragePermissionGranted();
+      if (!hasPerm) {
+        await BackupService.requestStoragePermission();
+        _showDialogueBubble('📱 请在设置中开启存储权限，返回后波可将为您重新扫描公共目录~ 🐾', duration: const Duration(seconds: 4));
+        return;
+      }
+    }
+
+    // 2. 执行备份探测
+    final backup = await BackupService.checkHistoricalBackup();
+    if (backup != null && mounted) {
+      _showHeritageInheritDialog(backup);
+    } else {
+      if (mounted) {
+        _showDialogueBubble('🔍 公共目录中暂未找到历史备份文件 (poko_backup.json)。您也可以使用【导入口令恢复】哦~', duration: const Duration(seconds: 4));
+      }
+    }
+  }
+
+  /// 复制防丢口令码到剪贴板
+  void _handleCopySaveCode() {
+    _idleSeconds = 0;
+    SoundService.playClick();
+    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+
+    final code = BackupService.exportSaveCode(widget.petModel.toDataMap());
+    if (code.isNotEmpty) {
+      Clipboard.setData(ClipboardData(text: code));
+      _spawnParticles(Offset(_petX, _petY - 20), emoji: '📋', count: 4);
+      _showDialogueBubble('📋 防丢存档口令已复制到剪贴板！换机或重装时粘贴即可恢复全部等级与装扮~ ✨', duration: const Duration(seconds: 5));
+    }
+  }
+
+  /// 粘贴口令码恢复档案弹窗
+  void _handlePasteSaveCode() {
+    _idleSeconds = 0;
+    SoundService.playClick();
+    if (widget.petModel.enableHaptics) HapticFeedback.lightImpact();
+
+    final textCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        backgroundColor: const Color(0xFFFFFDF9),
+        title: const Row(
+          children: [
+            Text('📥 ', style: TextStyle(fontSize: 22)),
+            Text(
+              '导入口令码恢复档案',
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF78350F),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '请粘贴之前导出的波可防丢口令码 (以 POKO# 开头)：',
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF92400E), height: 1.45),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: textCtrl,
+              maxLines: 3,
+              style: const TextStyle(fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'POKO#v2#...',
+                hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.all(10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFFED7AA)),
+                ),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.paste_rounded, color: Color(0xFFEA580C)),
+                  tooltip: '读取剪贴板',
+                  onPressed: () async {
+                    final data = await Clipboard.getData(Clipboard.kTextPlain);
+                    if (data?.text != null) {
+                      textCtrl.text = data!.text!.trim();
+                    }
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('取消', style: TextStyle(color: Color(0xFF94A3B8))),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final input = textCtrl.text.trim();
+              if (input.isEmpty) return;
+              final data = BackupService.importSaveCode(input);
+              if (data == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('⚠️ 口令格式不正确或解析失败，请检查后重试')),
+                );
+                return;
+              }
+              Navigator.of(ctx).pop();
+              final backupPayload = {'version': 2, 'savedAt': DateTime.now().toIso8601String(), 'pet': data};
+              _showHeritageInheritDialog(backupPayload);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text('解析并恢复 🚀'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 手动强制触发一份最新公共备份
+  Future<void> _handleForceBackup() async {
+    _idleSeconds = 0;
+    SoundService.playClick();
+    if (widget.petModel.enableHaptics) HapticFeedback.mediumImpact();
+
+    await widget.petModel.saveToDisk();
+    await widget.memoModel.saveToDisk();
+    _spawnParticles(Offset(_petX, _petY - 20), emoji: '💾', count: 4);
+    _showDialogueBubble('💾 已将当前波可状态 (Lv.${widget.petModel.level}) 完整备份至手机公共存储！', duration: const Duration(seconds: 4));
   }
 
   void _onModelUpdated() {
@@ -1544,6 +1789,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         onToggleFloating: () {
           _handleFloatingTap();
         },
+        onScanBackupTap: _handleManualBackupScan,
+        onCopySaveCodeTap: _handleCopySaveCode,
+        onPasteSaveCodeTap: _handlePasteSaveCode,
+        onForceBackupTap: _handleForceBackup,
       ),
     );
   }

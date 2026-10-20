@@ -10,6 +10,7 @@ import 'package:flutter_pet/renderers/pet_painter.dart';
 import 'package:flutter_pet/services/backup_service.dart';
 import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
 import 'package:flutter_pet/views/dialogs/heritage_backup_dialog.dart';
+import 'package:flutter_pet/views/backpack_drawer.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -388,6 +389,75 @@ void main() {
       expect(find.byKey(const ValueKey('heritage_backup_dialog')), findsNothing);
       expect(didInherit, isTrue);
       expect(didDecline, isFalse);
+    });
+
+    test('PetModel and MemoModel isReady Async Lifecycle and Value Evaluation Test', () async {
+      final pet = PetModel();
+      await pet.isReady;
+      expect(pet.level, greaterThanOrEqualTo(1));
+
+      // 验证 isBackupValuable 智能判定
+      expect(BackupService.isBackupValuable({'pet': {'level': 1, 'unlockedItems': ['none'], 'coins': 200, 'skinId': 'cat_calico'}}), isFalse);
+      expect(BackupService.isBackupValuable({'pet': {'level': 5}}), isTrue);
+      expect(BackupService.isBackupValuable({'pet': {'level': 1, 'coins': 450}}), isTrue);
+      expect(BackupService.isBackupValuable({'pet': {'level': 1, 'unlockedItems': ['none', '1', '2', '3', '4', '5', '6']}}), isTrue);
+      expect(BackupService.isBackupValuable({'pet': {'level': 1, 'skinId': 'cat_ragdoll'}}), isTrue);
+    });
+
+    testWidgets('Backpack Drawer Heritage & Backup Toolbar Interaction Test', (WidgetTester tester) async {
+      final pet = PetModel();
+      bool didScan = false;
+      bool didCopy = false;
+      bool didPaste = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PokoBackpackDrawer(
+              model: pet,
+              isNight: false,
+              memoCount: 1,
+              onFeedTap: () {},
+              onLaserTap: () {},
+              onTeaseTap: () {},
+              onMemoTap: () {},
+              onBathTap: () {},
+              onSleepTap: () {},
+              onToggleFloating: () {},
+              onScanBackupTap: () {
+                didScan = true;
+              },
+              onCopySaveCodeTap: () {
+                didCopy = true;
+              },
+              onPasteSaveCodeTap: () {
+                didPaste = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('档案守护与防丢继承'), findsOneWidget);
+      expect(find.text('扫描历史档案'), findsOneWidget);
+      expect(find.text('复制存档口令'), findsOneWidget);
+      expect(find.text('导入口令恢复'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('扫描历史档案'));
+      await tester.tap(find.text('扫描历史档案'), warnIfMissed: false);
+      await tester.pump();
+      expect(didScan, isTrue);
+
+      await tester.ensureVisible(find.text('复制存档口令'));
+      await tester.tap(find.text('复制存档口令'), warnIfMissed: false);
+      await tester.pump();
+      expect(didCopy, isTrue);
+
+      await tester.ensureVisible(find.text('导入口令恢复'));
+      await tester.tap(find.text('导入口令恢复'), warnIfMissed: false);
+      await tester.pump();
+      expect(didPaste, isTrue);
     });
   });
 }

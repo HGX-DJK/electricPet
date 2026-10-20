@@ -67,8 +67,11 @@ class MemoModel extends ChangeNotifier {
   bool isPinned = true;
   String updatedAt = '';
 
+  /// 异步磁盘载入完成凭证
+  late final Future<void> isReady;
+
   MemoModel() {
-    loadFromDisk();
+    isReady = loadFromDisk();
   }
 
   MemoTheme get currentTheme => themes[currentThemeKey] ?? themes['yellow']!;

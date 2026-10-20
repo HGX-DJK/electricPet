@@ -15,6 +15,10 @@ class PokoBackpackDrawer extends StatelessWidget {
   final VoidCallback onBathTap;
   final VoidCallback onSleepTap;
   final VoidCallback onToggleFloating;
+  final VoidCallback? onScanBackupTap;
+  final VoidCallback? onCopySaveCodeTap;
+  final VoidCallback? onPasteSaveCodeTap;
+  final VoidCallback? onForceBackupTap;
 
   const PokoBackpackDrawer({
     super.key,
@@ -28,6 +32,10 @@ class PokoBackpackDrawer extends StatelessWidget {
     required this.onBathTap,
     required this.onSleepTap,
     required this.onToggleFloating,
+    this.onScanBackupTap,
+    this.onCopySaveCodeTap,
+    this.onPasteSaveCodeTap,
+    this.onForceBackupTap,
   });
 
   @override
@@ -57,10 +65,12 @@ class PokoBackpackDrawer extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // 1. 顶部拖拽把手
             Center(
               child: Container(
@@ -292,6 +302,162 @@ class PokoBackpackDrawer extends StatelessWidget {
                   },
                 ),
               ],
+            ),
+            const SizedBox(height: 14),
+
+            // 4. 档案安全与防丢继承快捷工具栏 (Heritage & Backup Bar)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isNight
+                    ? const Color(0xFF1E1B4B).withValues(alpha: 0.8)
+                    : const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isNight
+                      ? const Color(0xFF4338CA).withValues(alpha: 0.4)
+                      : const Color(0xFFE2E8F0),
+                  width: 1.2,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('🛡️ ', style: TextStyle(fontSize: 13)),
+                          Text(
+                            '档案守护与防丢继承',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '防卸载 · 免登录',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isNight ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      // 1. 扫描历史档案
+                      Expanded(
+                        child: _BackupActionChip(
+                          icon: '🔄',
+                          label: '扫描历史档案',
+                          isNight: isNight,
+                          onTap: () {
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                            onScanBackupTap?.call();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // 2. 复制存档码
+                      Expanded(
+                        child: _BackupActionChip(
+                          icon: '📋',
+                          label: '复制存档口令',
+                          isNight: isNight,
+                          onTap: () {
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                            onCopySaveCodeTap?.call();
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // 3. 粘贴口令恢复
+                      Expanded(
+                        child: _BackupActionChip(
+                          icon: '📥',
+                          label: '导入口令恢复',
+                          isNight: isNight,
+                          onTap: () {
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                            onPasteSaveCodeTap?.call();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+class _BackupActionChip extends StatelessWidget {
+  final String icon;
+  final String label;
+  final bool isNight;
+  final VoidCallback onTap;
+
+  const _BackupActionChip({
+    required this.icon,
+    required this.label,
+    required this.isNight,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+        decoration: BoxDecoration(
+          color: isNight ? const Color(0xFF2E2A66) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.5) : const Color(0xFFCBD5E1),
+            width: 1.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: isNight ? 0.2 : 0.04),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(icon, style: const TextStyle(fontSize: 14)),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isNight ? Colors.white : const Color(0xFF334155),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

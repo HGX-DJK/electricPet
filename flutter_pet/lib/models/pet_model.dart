@@ -189,8 +189,11 @@ class PetModel extends ChangeNotifier {
   /// 首次启动/重装后初生状态标记 (用于触发首启历史档案检测)
   bool isFreshInstall = false;
 
+  /// 异步磁盘载入完成凭证 (避免构造函数未完成时的读取时序竞态)
+  late final Future<void> isReady;
+
   PetModel() {
-    loadFromDisk();
+    isReady = loadFromDisk();
   }
 
   /// 主导性格判定: HACKER (极客黑客喵), ATHLETE (元气运动喵), LAZY (佛系大懒喵), BALANCED (纯真萌体)
