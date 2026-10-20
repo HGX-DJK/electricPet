@@ -1,3 +1,4 @@
+import '../config/ai_config.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -47,9 +48,9 @@ class MinimaxService {
   MinimaxService._internal();
 
   String _apiKey = '';
-  String _voiceId = 'female-tianmei'; // 甜美女性音 / 萌系奶音
-  int _pitch = 2;                     // 略微升调呈现幼态甜萌音 (范围 -12 ~ 12)
-  double _speed = 1.05;               // 稍快的轻快语速
+  String _voiceId = AiConfig.defaultVoiceId; // 甜美女性音 / 萌系奶音
+  int _pitch = AiConfig.defaultPitch;                     // 略微升调呈现幼态甜萌音 (范围 -12 ~ 12)
+  double _speed = AiConfig.defaultSpeed;               // 稍快的轻快语速
   bool _isInitialized = false;
 
   final List<ChatMessage> _chatHistory = [];
@@ -72,12 +73,18 @@ class MinimaxService {
     if (_isInitialized) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      _apiKey = prefs.getString(prefApiKey) ?? '';
-      _voiceId = prefs.getString(prefVoiceId) ?? 'female-tianmei';
-      _pitch = prefs.getInt(prefPitch) ?? 2;
-      _speed = prefs.getDouble(prefSpeed) ?? 1.05;
+      final savedKey = prefs.getString(prefApiKey);
+      if (savedKey != null && savedKey.trim().isNotEmpty) {
+        _apiKey = savedKey.trim();
+      } else {
+        _apiKey = AiConfig.defaultMinimaxApiKey.trim();
+      }
+      _voiceId = prefs.getString(prefVoiceId) ?? AiConfig.defaultVoiceId;
+      _pitch = prefs.getInt(prefPitch) ?? AiConfig.defaultPitch;
+      _speed = prefs.getDouble(prefSpeed) ?? AiConfig.defaultSpeed;
       _isInitialized = true;
     } catch (_) {
+      _apiKey = AiConfig.defaultMinimaxApiKey.trim();
       _isInitialized = true;
     }
   }
