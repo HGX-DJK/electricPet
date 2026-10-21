@@ -20,6 +20,11 @@ class SoundService {
       stopPurr();
     }
   }
+
+  /// 是否启用波可语音小奶音朗读 (为 true 时小猫会亲口说话，而不是机械重复喵叫)
+  static bool voiceSpeechEnabled = true;
+
+  static DateTime? _lastMeowTime;
   static AudioPlayer? _sfxPlayer;
   static AudioPlayer? _purrPlayer;
   static AudioPlayer? _ambientPlayer;
@@ -100,8 +105,15 @@ class SoundService {
   }
 
   /// 软萌猫咪叫声 (Mew~ 喵呜~，原生真实高清录音，支持三种真实小猫音调随机池)
-  static Future<void> playMeow({MeowTone tone = MeowTone.random}) async {
+  static Future<void> playMeow({MeowTone tone = MeowTone.random, bool force = false}) async {
     if (!soundEnabled) return;
+    final now = DateTime.now();
+    // 叫声频率防护：限制叫声触发频率，杜绝高频重复触发造成的听觉疲劳
+    if (!force && _lastMeowTime != null && now.difference(_lastMeowTime!).inMilliseconds < 2500) {
+      return;
+    }
+    _lastMeowTime = now;
+
     try {
       await sfxPlayer.stop();
       String asset;

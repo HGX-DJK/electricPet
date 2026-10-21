@@ -650,6 +650,78 @@ class MinimaxService {
     SoundService.playMeow(tone: MeowTone.sweet);
   }
 
+  /// 内存语音音频缓存 (Key 为清洗后的对白文本，实现 0ms 瞬间秒播)
+  final Map<String, Uint8List> _voiceCache = {};
+  DateTime? _lastSpokenTime;
+
+  /// 让波可用专属萌系小奶音亲口说话！(支持内存高速缓存，零延迟复用已合成语音)
+  Future<void> speakPetVoice(String text, {bool force = false}) async {
+    if (!SoundService.soundEnabled || !SoundService.voiceSpeechEnabled) return;
+    final now = DateTime.now();
+    // 说话频率节流：非强制状态下，至少间隔 3.0 秒，防止连续操作叠音打架
+    if (!force && _lastSpokenTime != null && now.difference(_lastSpokenTime!).inMilliseconds < 3000) {
+      return;
+    }
+    _lastSpokenTime = now;
+
+    // 清洗括号内容、Emoji 与格式符，提取纯净有声台词
+    final clean = text
+        .replaceAll(RegExp(r'[\(（\[【][^\)）\]】]*[\)）\]】]'), '')
+        .replaceAll(
+          RegExp(
+            r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}'
+            r'\u{FE00}-\u{FE0F}\u{200D}\u{FE0E}]',
+            unicode: true,
+          ),
+          '',
+        )
+        .replaceAll(RegExp(r'[\*#>`_~]'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    if (clean.isEmpty) return;
+
+    try {
+      // 1. 优先从内存缓存中秒开播放 (0ms 网络等待)
+      if (_voiceCache.containsKey(clean)) {
+        await playVoiceResponse(_voiceCache[clean]);
+        return;
+      }
+
+      // 2. 异步调用 MiniMax T2A 合成小奶音
+      final audioBytes = await synthesizeVoice(clean);
+      if (audioBytes != null && audioBytes.isNotEmpty) {
+        if (_voiceCache.length > 60) {
+          _voiceCache.remove(_voiceCache.keys.first);
+        }
+        _voiceCache[clean] = audioBytes;
+        await playVoiceResponse(audioBytes);
+      }
+    } catch (e) {
+      debugPrint('speakPetVoice error: $e');
+    }
+  }
+
+  /// 预热常用高频生活日常语录，实现零网络延迟小奶音交互
+  Future<void> prewarmCommonVoices() async {
+    final commonLines = [
+      '蹭蹭主人的手心！好喜欢主人~',
+      '波可的小脑袋随时供主人揉揉~',
+      '今天也是元气满满的一天，主人冲鸭！',
+      '看波可开心大回旋！主人笑一个嘛~',
+      '嗷呜！太香啦，谢谢主人投喂！',
+    ];
+    for (final line in commonLines) {
+      if (_voiceCache.containsKey(line)) continue;
+      try {
+        final audio = await synthesizeVoice(line);
+        if (audio != null && audio.isNotEmpty) {
+          _voiceCache[line] = audio;
+        }
+      } catch (_) {}
+    }
+  }
+
   /// 一键试听小奶音并验证扬声器声音输出
   Future<Map<String, dynamic>> testVoiceOutput() async {
     await init();
