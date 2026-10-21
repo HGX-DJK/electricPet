@@ -195,7 +195,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🎙️ 麦克风录音权限未开启或系统未安装语音引擎，已开启打字对话（输入法自带麦克风可语音打字）！'),
+            content: Text('🎙️ 麦克风录音权限未开启或系统语音服务未就绪，请在手机系统设置中授予麦克风权限！'),
             duration: Duration(seconds: 3),
           ),
         );
@@ -322,7 +322,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '如需自由语音对话，请点击【切换打字】，使用手机键盘上的麦克风🎙️即可精准语音转文字！',
+                        '直接点击底部大麦克风即可语音对话（支持轻触说话或按住对讲），也可以点选下方预置心声与波可快速互动！',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6B21A8),
@@ -1174,10 +1174,11 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       ),
                       const Spacer(),
                       Text(
-                        '💡 手机输入法自带麦克风可精准语音打字',
+                        '💡 点击麦克风直接说话，或按住对讲',
                         style: TextStyle(
                           fontSize: 10,
                           color: isNight ? const Color(0xFF818CF8) : const Color(0xFF7C3AED),
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -1223,7 +1224,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                 color: isNight ? Colors.white : Colors.black,
                               ),
                               decoration: InputDecoration(
-                                hintText: '对波可说点什么吧...（输入法麦克风可语音打字）',
+                                hintText: '对波可说点什么吧...',
                                 hintStyle: TextStyle(
                                   fontSize: 12,
                                   color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
@@ -1281,6 +1282,12 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                           Expanded(
                             child: GestureDetector(
                               onTap: _toggleListening,
+                              onLongPressStart: (_) {
+                                if (!_isRealListening) _startListening();
+                              },
+                              onLongPressEnd: (_) {
+                                if (_isRealListening) _stopListeningAndSend();
+                              },
                               child: Container(
                                 height: 44,
                                 decoration: BoxDecoration(
@@ -1306,7 +1313,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                     Flexible(
                                       child: Text(
                                         _isRealListening
-                                            ? (_liveSpokenWords.isEmpty ? '正在聆听... (点击发送)' : '点击发送: "$_liveSpokenWords"')
+                                            ? (_liveSpokenWords.isEmpty ? '正在聆听... (松手发送)' : '松手发送: "$_liveSpokenWords"')
                                             : '轻触对波可说话',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
