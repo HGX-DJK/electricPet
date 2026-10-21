@@ -72,7 +72,6 @@ class BottomFloatingBar extends StatelessWidget {
                     onBackpackTap();
                   }
                 },
-                flex: 6,
                 compact: compact,
               ),
               _DockItem(
@@ -80,7 +79,6 @@ class BottomFloatingBar extends StatelessWidget {
                 icon: '👗',
                 label: '装扮小窝',
                 onTap: onWardrobeTap,
-                flex: 5,
                 compact: compact,
               ),
               _DockItem(
@@ -88,7 +86,6 @@ class BottomFloatingBar extends StatelessWidget {
                 icon: '✨',
                 label: '专属绝活',
                 onTap: onActionTap,
-                flex: 5,
                 compact: compact,
               ),
               if (onVoiceChatTap != null)
@@ -98,7 +95,6 @@ class BottomFloatingBar extends StatelessWidget {
                   label: 'AI语聊',
                   onTap: onVoiceChatTap!,
                   primary: true,
-                  flex: 5,
                   compact: compact,
                 ),
             ];
@@ -143,6 +139,10 @@ class BottomFloatingBar extends StatelessWidget {
 }
 
 /// 浮动坞内的单个入口
+///
+/// 竖排布局 (图标在上 / 文字在下), 这是移动端底栏的标准形态:
+/// 横向排布时 4 个带文字的入口在 320~360px 窄屏上会把文字挤成省略号,
+/// 竖排后每个入口只占 "文字宽度 + 一点内边距", 最窄到 320px 也不会截断。
 class _DockItem extends StatelessWidget {
   final bool isNight;
   final String icon;
@@ -151,9 +151,6 @@ class _DockItem extends StatelessWidget {
   final bool primary;
   final bool showChevron;
   final void Function(DragEndDetails)? onVerticalDragEnd;
-
-  /// 伸缩占比 —— 按该入口的自然宽度分配, 窄屏时整体等比收缩
-  final int flex;
   final bool compact;
 
   const _DockItem({
@@ -164,40 +161,28 @@ class _DockItem extends StatelessWidget {
     this.primary = false,
     this.showChevron = false,
     this.onVerticalDragEnd,
-    this.flex = 5,
     this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = context.poko(isNight);
-    final double iconSize = compact ? 13 : 14;
-    final double fontSize = compact ? 11 : 12;
-    final double hPad = compact ? 5 : 6;
+    final double iconSize = compact ? 15 : 16;
+    final double fontSize = compact ? 10 : 10.5;
+    final double hPad = compact ? 7 : 9;
+    final double vPad = compact ? 4 : 5;
 
-    final labelWidget = Row(
+    // 顶部图标行 (背包入口额外挂一个"上滑打开"的小箭头)
+    final iconRow = Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(icon, style: TextStyle(fontSize: iconSize)),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-              height: 1.2,
-              color: primary ? Colors.white : t.textPrimary,
-            ),
-          ),
-        ),
+        Text(icon, style: TextStyle(fontSize: iconSize, height: 1.05)),
         if (showChevron) ...[
           const SizedBox(width: 1),
           Icon(
             Icons.keyboard_arrow_up_rounded,
-            size: compact ? 13 : 14,
+            size: iconSize,
             color: primary ? Colors.white70 : t.textMuted,
           ),
         ],
@@ -205,22 +190,40 @@ class _DockItem extends StatelessWidget {
     );
 
     return Flexible(
-      flex: flex,
       child: BouncyTouchFeedback(
         scaleDown: 0.93,
         onTap: onTap,
         onVerticalDragEnd: onVerticalDragEnd,
         child: Container(
-          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
           decoration: BoxDecoration(
             // 主操作用品牌渐变实心, 其余保持同一张底色 —— 不再四种底色打架
             gradient: primary
                 ? const LinearGradient(colors: PokoPalette.brandGradient)
                 : null,
             color: primary ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(PokoRadius.pill),
+            borderRadius: BorderRadius.circular(PokoRadius.md),
           ),
-          child: labelWidget,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              iconRow,
+              const SizedBox(height: 1),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
+                  color: primary ? Colors.white : t.textPrimary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
