@@ -1,16 +1,18 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../models/pet_model.dart';
 import '../../services/sound_service.dart';
 import '../../theme/poko_theme.dart';
+import '../../widgets/bouncy_touch_feedback.dart';
 
-/// 顶部双灵动岛浮空栏：左侧身份好感 + 右侧饱腹心情小窝。
+/// 顶部双灵动岛浮空栏：左侧萌宠身份水晶勋章 + 右侧活力状态与微晶操控台。
 ///
-/// 统一后的规范:
-///  - 卡片外观全部走设计令牌 (同一张底色 / 1px 描边 / 同一档阴影);
-///  - 字号下限提到 8pt, 正文不低于 9pt (原先最小 6.5pt, 在高密度屏上几乎不可读);
-///  - 图标按钮触摸区从 ~19x16 提升到 30x30, 贴近移动端可用尺寸;
-///  - 窄屏自适应: 外层用 [LayoutBuilder] 按可用宽度给两侧灵动岛分配上限,
-///    岛内文本一律走 [Flexible] + 省略号收缩, 因此 360px 窄屏也不会溢出。
+/// 视觉与布局重构要点:
+///  1. 完美双岛等高基准：两侧高度统一(约56-58px)，彻底消除原先“左瘪右鼓”的失衡视觉倾斜；
+///  2. 极光毛玻璃微拟态：引入 [BackdropFilter] 柔和高斯模糊与 1.2px 高光微描边，呈现浮空透气晶体质感；
+///  3. 萌宠身份温度：左侧增加立体头像萌猫光环与外嵌 Lv 徽章，名字、亲密度、羁绊勋章呼吸排布；
+///  4. 状态与控制去拥挤：右侧上层使用精巧双联芯片展示饱腹、心情与天象，下层统一使用水滴微晶圆纽，
+///     消除花里胡哨的五彩方块贴纸感，交互手感丝滑。
 class TopDualIslands extends StatelessWidget {
   final PetModel petModel;
   final Size screenSize;
@@ -55,7 +57,7 @@ class TopDualIslands extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 左岛上限 47%, 右岛 51% —— 合计 98%, 天然留出安全间隙
+            // 左岛上限 47%, 右岛 51% —— 自然避开正中央的天窗景致
             ConstrainedBox(
               constraints: BoxConstraints(maxWidth: avail * 0.47),
               child: _leftIsland(context, t, bondInfo, bondColor, avail),
@@ -70,7 +72,7 @@ class TopDualIslands extends StatelessWidget {
     );
   }
 
-  /// 左侧灵动岛：等级、名称与亲密称号徽章
+  /// 左侧灵动岛：萌宠头像勋章 + 等级 + 名字 + 亲密胶囊 + 羁绊成就
   Widget _leftIsland(
     BuildContext context,
     PokoTokens t,
@@ -80,114 +82,138 @@ class TopDualIslands extends StatelessWidget {
   ) {
     return _islandShell(
       context,
+      minHeight: 56.0,
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // 等级徽章
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: PokoPalette.brandGradient),
-              borderRadius: BorderRadius.circular(PokoRadius.xs),
-            ),
-            child: Text(
-              'Lv.${petModel.level}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.bold,
-                height: 1.2,
-              ),
-            ),
-          ),
-          const SizedBox(width: PokoSpacing.xs),
-          // 名称 + 亲密度 + 称号 (文本可收缩, 窄屏自动省略)
+          // 萌宠头像 + 嵌套 Lv 气泡
+          _petAvatarBadge(context, t),
+          const SizedBox(width: 6),
+          // 名字、亲密值与称号 (弹性自适应排版)
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: (avail * 0.22).clamp(40.0, 88.0),
-                  ),
-                  child: Text(
-                    petModel.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: PokoFont.caption,
-                      fontWeight: FontWeight.bold,
-                      height: 1.25,
-                      color: t.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 2),
+                // 上行：名字 + 亲密爱心小胶囊
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      '❤️ ${petModel.intimacy}',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        height: 1.2,
-                        color: isNight ? PokoPalette.rose : PokoPalette.roseDeep,
+                    Flexible(
+                      child: Text(
+                        petModel.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.2,
+                          letterSpacing: 0.2,
+                          color: t.textPrimary,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 3),
-                    // 亲密羁绊称号勋章 (点按呼出成就卡片)
-                    // 空间不足时逐级降级: 完整称号 -> 仅图标 -> 整体隐藏, 保证不溢出
-                    Flexible(
-                      child: LayoutBuilder(
-                        builder: (context, badgeConstraints) {
-                          if (badgeConstraints.maxWidth < 19) {
-                            return const SizedBox.shrink();
-                          }
-                          final bool showTitle = badgeConstraints.maxWidth >= 32;
-                          return GestureDetector(
-                            key: const ValueKey('intimacy_bond_badge'),
-                            behavior: HitTestBehavior.opaque,
-                            onTap: onIntimacyTap,
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: bondColor.withValues(alpha: 0.16),
-                                borderRadius: BorderRadius.circular(PokoRadius.xs),
-                                border: Border.all(
-                                    color: bondColor.withValues(alpha: 0.55), width: 1),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(bondInfo['icon'] as String,
-                                      style: const TextStyle(fontSize: PokoFont.micro)),
-                                  if (showTitle) ...[
-                                    const SizedBox(width: 2),
-                                    Flexible(
-                                      child: Text(
-                                        bondInfo['title'] as String,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: PokoFont.micro,
-                                          fontWeight: FontWeight.bold,
-                                          height: 1.2,
-                                          color: bondColor,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                    const SizedBox(width: 3.5),
+                    // 亲密度药丸
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: isNight
+                            ? PokoPalette.rose.withValues(alpha: 0.2)
+                            : const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(PokoRadius.pill),
+                        border: Border.all(
+                          color: PokoPalette.rose.withValues(alpha: isNight ? 0.45 : 0.3),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('❤️', style: TextStyle(fontSize: 8)),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${petModel.intimacy}',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                              color: isNight ? PokoPalette.rose : PokoPalette.roseDeep,
                             ),
-                          );
-                        },
+                          ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 3),
+                // 下行：亲密羁绊称号勋章 (支持点按弹窗)
+                Flexible(
+                  child: LayoutBuilder(
+                    builder: (context, badgeConstraints) {
+                      if (badgeConstraints.maxWidth < 18) {
+                        return const SizedBox.shrink();
+                      }
+                      final bool showTitle = badgeConstraints.maxWidth >= 32;
+                      return BouncyTouchFeedback(
+                        key: const ValueKey('intimacy_bond_badge'),
+                        scaleDown: 0.94,
+                        onTap: onIntimacyTap,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bondColor.withValues(
+                              alpha: isNight ? 0.22 : 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(PokoRadius.pill),
+                            border: Border.all(
+                              color: bondColor.withValues(
+                                alpha: isNight ? 0.6 : 0.45,
+                              ),
+                              width: 0.9,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                bondInfo['icon'] as String,
+                                style: const TextStyle(fontSize: 8.5),
+                              ),
+                              if (showTitle) ...[
+                                const SizedBox(width: 2.5),
+                                Flexible(
+                                  child: Text(
+                                    bondInfo['title'] as String,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.15,
+                                      color: bondColor,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 1),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 10,
+                                  color: bondColor.withValues(alpha: 0.75),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -197,175 +223,291 @@ class TopDualIslands extends StatelessWidget {
     );
   }
 
-  /// 右侧灵动岛：状态数值 + 快捷工具组
+  /// 萌猫微头像 + 嵌套 Lv 等级气泡
+  Widget _petAvatarBadge(BuildContext context, PokoTokens t) {
+    return BouncyTouchFeedback(
+      scaleDown: 0.92,
+      onTap: onIntimacyTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          // 头像圆形光环底座
+          Container(
+            width: 35,
+            height: 35,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isNight
+                    ? const [Color(0xFF3730A3), Color(0xFF581C87)]
+                    : const [Color(0xFFFFF7ED), Color(0xFFFEE2E2), Color(0xFFF3E8FF)],
+              ),
+              border: Border.all(
+                color: isNight
+                    ? const Color(0xFF6366F1).withValues(alpha: 0.6)
+                    : Colors.white,
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: (isNight ? const Color(0xFF0F0B2E) : const Color(0xFF7C3AED))
+                      .withValues(alpha: isNight ? 0.35 : 0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Text('🐱', style: TextStyle(fontSize: 17)),
+          ),
+          // 悬浮右下角等级微标
+          Positioned(
+            bottom: -2,
+            right: -3,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 3.5, vertical: 0.8),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: PokoPalette.brandGradient,
+                ),
+                borderRadius: BorderRadius.circular(PokoRadius.pill),
+                border: Border.all(
+                  color: Colors.white,
+                  width: 1.0,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.15),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                'Lv.${petModel.level}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w900,
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 右侧灵动岛：双联状态微晶胶囊 + 微晶操作圆钮
   Widget _rightIsland(BuildContext context, PokoTokens t) {
     return _islandShell(
       context,
-      padding: const EdgeInsets.symmetric(horizontal: PokoSpacing.sm, vertical: 6),
+      minHeight: 56.0,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // 上排：饱腹 / 心情 / 天象
+          // 上排：饱腹/心情 + 天象环境徽章
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('🍗', style: TextStyle(fontSize: 9)),
-              const SizedBox(width: 3),
-              Text(
-                '${petModel.hunger.toInt()}%',
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                  color: PokoPalette.amber,
+              // 饱腹 & 心情双联药丸 (自然流线尺寸，紧凑呼吸)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
+                decoration: BoxDecoration(
+                  color: t.surfaceAlt.withValues(
+                    alpha: isNight ? 0.65 : 0.85,
+                  ),
+                  borderRadius: BorderRadius.circular(PokoRadius.pill),
+                  border: Border.all(
+                    color: t.border.withValues(alpha: isNight ? 0.35 : 0.6),
+                    width: 0.8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('🍗', style: TextStyle(fontSize: 8.5)),
+                    const SizedBox(width: 1.5),
+                    Text(
+                      '${petModel.hunger.toInt()}%',
+                      style: const TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        color: PokoPalette.amberDeep,
+                      ),
+                    ),
+                    Container(
+                      width: 1,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                      color: t.border.withValues(alpha: 0.8),
+                    ),
+                    const Text('💖', style: TextStyle(fontSize: 8.5)),
+                    const SizedBox(width: 1.5),
+                    Text(
+                      '${petModel.mood.toInt()}%',
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        height: 1.1,
+                        color: isNight
+                            ? const Color(0xFF34D399)
+                            : PokoPalette.emeraldDeep,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: PokoSpacing.xs),
-              const Text('💖', style: TextStyle(fontSize: 9)),
               const SizedBox(width: 3),
-              Text(
-                '${petModel.mood.toInt()}%',
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                  color: PokoPalette.emerald,
-                ),
-              ),
-              const SizedBox(width: 3),
-              // 天象徽章 (轻触亦可流转天光) —— 名称可省略, 模式标签空间不足时隐藏
+              // 天象环境徽章 (轻触流转天光，可收缩适配窄屏)
               Flexible(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
+                child: BouncyTouchFeedback(
+                  scaleDown: 0.94,
                   onTap: onSkyRhythmToggle,
-                  child: LayoutBuilder(
-                    builder: (context, badgeConstraints) {
-                      final bool showMode = badgeConstraints.maxWidth >= 32;
-                      return Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              circadianTheme['name'] as String,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                height: 1.2,
-                                color: t.textSecondary,
-                              ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: (!isManualSky
+                              ? (isNight ? PokoPalette.indigoDeep : PokoPalette.mintSoft)
+                              : (isNight ? PokoPalette.violetDeep : PokoPalette.amberSoft))
+                          .withValues(alpha: isNight ? 0.35 : 0.85),
+                      borderRadius: BorderRadius.circular(PokoRadius.pill),
+                      border: Border.all(
+                        color: (!isManualSky
+                                ? (isNight ? PokoPalette.indigo : PokoPalette.mintDeep)
+                                : (isNight ? PokoPalette.violet : PokoPalette.amberDeep))
+                            .withValues(alpha: 0.3),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          circadianTheme['icon'] as String,
+                          style: const TextStyle(fontSize: 8.5),
+                        ),
+                        const SizedBox(width: 2),
+                        Flexible(
+                          child: Text(
+                            circadianTheme['name'] as String,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              height: 1.1,
+                              color: t.textSecondary,
                             ),
                           ),
-                          if (showMode) ...[
-                            const SizedBox(width: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: !isManualSky
-                                    ? (isNight
-                                        ? PokoPalette.indigoDeep
-                                        : PokoPalette.mintSoft)
-                                    : (isNight
-                                        ? PokoPalette.violetDeep
-                                        : PokoPalette.amberSoft),
-                                borderRadius: BorderRadius.circular(PokoRadius.xs),
-                              ),
-                              child: Text(
-                                !isManualSky ? '自然' : '模式',
-                                style: TextStyle(
-                                  fontSize: PokoFont.micro,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.2,
-                                  color: !isManualSky
-                                      ? (isNight
-                                          ? PokoPalette.indigoSoft
-                                          : PokoPalette.mintDeep)
-                                      : (isNight
-                                          ? PokoPalette.violetSoft
-                                          : PokoPalette.amberDeep),
-                                ),
-                              ),
+                        ),
+                        const SizedBox(width: 2),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.6),
+                          decoration: BoxDecoration(
+                            color: !isManualSky
+                                ? (isNight ? PokoPalette.indigo : PokoPalette.mintDeep)
+                                : (isNight ? PokoPalette.violet : PokoPalette.amberDeep),
+                            borderRadius: BorderRadius.circular(PokoRadius.xs),
+                          ),
+                          child: Text(
+                            !isManualSky ? '自然' : '模式',
+                            style: const TextStyle(
+                              fontSize: 7.0,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                              color: Colors.white,
                             ),
-                          ],
-                        ],
-                      );
-                    },
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          // 下排：快捷开关组
+          const SizedBox(height: 3),
+          // 下排：微晶水滴操控组 (声音、白噪音、足迹、天象、归窝)
           Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _toggleButton(
+              _actionPearlButton(
                 context,
+                t,
                 key: const ValueKey('sound_toggle_button'),
                 active: SoundService.soundEnabled,
-                activeColor: isNight
-                    ? PokoPalette.indigo.withValues(alpha: 0.38)
-                    : PokoPalette.indigoSoft,
-                child: Text(SoundService.soundEnabled ? '🔊' : '🔇',
-                    style: const TextStyle(fontSize: 13)),
+                activeAccent: PokoPalette.indigo,
+                tooltip: '音效开关',
                 onTap: onSoundToggle,
+                child: Text(
+                  SoundService.soundEnabled ? '🔊' : '🔇',
+                  style: const TextStyle(fontSize: 12.0),
+                ),
               ),
-              if (onAmbientToggle != null) ...[
-                const SizedBox(width: PokoSpacing.xs),
-                _toggleButton(
+              if (onAmbientToggle != null)
+                _actionPearlButton(
                   context,
+                  t,
                   key: const ValueKey('ambient_asmr_toggle_button'),
                   active: ambientMode != 'none',
-                  activeColor: ambientMode == 'rain'
-                      ? (isNight ? const Color(0xFF0369A1).withValues(alpha: 0.4) : const Color(0xFFE0F2FE))
-                      : (isNight ? const Color(0xFF7E22CE).withValues(alpha: 0.4) : const Color(0xFFF3E8FF)),
+                  activeAccent: ambientMode == 'rain'
+                      ? const Color(0xFF0284C7)
+                      : const Color(0xFF9333EA),
+                  tooltip: '助眠音效',
+                  onTap: onAmbientToggle!,
                   child: Text(
                     ambientMode == 'rain'
                         ? '🌧️'
                         : (ambientMode == 'purr' ? '🐱' : '🎵'),
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: 11.5),
                   ),
-                  onTap: onAmbientToggle!,
                 ),
-              ],
-              const SizedBox(width: PokoSpacing.xs),
-              _toggleButton(
+              _actionPearlButton(
                 context,
+                t,
                 key: const ValueKey('footprint_toggle_button'),
                 active: petModel.enableFootprints,
-                activeColor: isNight
-                    ? PokoPalette.rose.withValues(alpha: 0.32)
-                    : PokoPalette.roseSoft,
-                child: Text(petModel.enableFootprints ? '🐾' : '🧹',
-                    style: const TextStyle(fontSize: 13)),
+                activeAccent: PokoPalette.rose,
+                tooltip: '肉垫爪印',
                 onTap: onFootprintsToggle,
+                child: Text(
+                  petModel.enableFootprints ? '🐾' : '🧹',
+                  style: const TextStyle(fontSize: 12.0),
+                ),
               ),
-              const SizedBox(width: PokoSpacing.xs),
-              _toggleButton(
+              _actionPearlButton(
                 context,
+                t,
                 key: const ValueKey('sky_rhythm_toggle_button'),
                 active: isManualSky,
-                activeColor: isNight
-                    ? PokoPalette.violet.withValues(alpha: 0.38)
-                    : PokoPalette.amberSoft,
-                child: Text(circadianTheme['icon'] as String,
-                    style: const TextStyle(fontSize: 13)),
+                activeAccent: PokoPalette.amber,
+                tooltip: '流转天象',
                 onTap: onSkyRhythmToggle,
+                child: Text(
+                  circadianTheme['icon'] as String,
+                  style: const TextStyle(fontSize: 12.0),
+                ),
               ),
-              const SizedBox(width: PokoSpacing.xs),
-              _toggleButton(
+              _actionPearlButton(
                 context,
+                t,
                 active: false,
-                activeColor: Colors.transparent,
+                tooltip: '唤回猫垫',
+                onTap: onResetToMat,
                 child: Icon(
                   Icons.home_rounded,
-                  size: 15,
+                  size: 14.0,
                   color: t.textSecondary,
                 ),
-                onTap: onResetToMat,
               ),
             ],
           ),
@@ -374,51 +516,112 @@ class TopDualIslands extends StatelessWidget {
     );
   }
 
-  /// 灵动岛统一外壳
+  /// 通用毛玻璃灵动外壳 (统一 22px 药丸圆角 + 高光微描边 + 柔和双层阴影)
   Widget _islandShell(
     BuildContext context, {
     required Widget child,
+    double? minHeight,
     EdgeInsetsGeometry padding =
-        const EdgeInsets.symmetric(horizontal: PokoSpacing.sm, vertical: 6),
+        const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
   }) {
     final t = context.poko(isNight);
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: t.surface.withValues(alpha: isNight ? 0.88 : 0.94),
-        borderRadius: BorderRadius.circular(PokoRadius.lg),
-        border: Border.all(color: t.border, width: 1),
-        boxShadow: PokoShadow.soft(t.shadow),
-      ),
-      child: child,
-    );
-  }
-
-  /// 快捷开关按钮 (触摸区 30x30, 极端窄屏下等比收缩)
-  Widget _toggleButton(
-    BuildContext context, {
-    required bool active,
-    required Color activeColor,
-    required Widget child,
-    required VoidCallback onTap,
-    Key? key,
-  }) {
-    return Flexible(
-      child: GestureDetector(
-        key: key,
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
+          constraints: minHeight != null
+              ? BoxConstraints(minHeight: minHeight)
+              : null,
+          padding: padding,
           decoration: BoxDecoration(
-            color: active ? activeColor : Colors.transparent,
-            borderRadius: BorderRadius.circular(PokoRadius.xs),
+            color: t.surface.withValues(alpha: isNight ? 0.85 : 0.90),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: isNight
+                  ? const Color(0xFF4C4282).withValues(alpha: 0.55)
+                  : Colors.white.withValues(alpha: 0.95),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: t.shadow.withValues(alpha: isNight ? 0.32 : 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: (isNight ? Colors.black : t.accent)
+                    .withValues(alpha: isNight ? 0.18 : 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
           child: child,
         ),
       ),
+    );
+  }
+
+  /// 水滴微晶按键：触控果冻弹性回弹 + 统一视觉状态
+  Widget _actionPearlButton(
+    BuildContext context,
+    PokoTokens t, {
+    Key? key,
+    required bool active,
+    required Widget child,
+    required VoidCallback onTap,
+    Color? activeAccent,
+    String? tooltip,
+  }) {
+    Widget content = BouncyTouchFeedback(
+      key: key,
+      scaleDown: 0.88,
+      onTap: onTap,
+      child: Container(
+        width: 27,
+        height: 25,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active
+              ? (activeAccent ?? PokoPalette.indigo)
+                  .withValues(alpha: isNight ? 0.30 : 0.14)
+              : (isNight
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.035)),
+          borderRadius: BorderRadius.circular(8.5),
+          border: Border.all(
+            color: active
+                ? (activeAccent ?? PokoPalette.indigo)
+                    .withValues(alpha: isNight ? 0.65 : 0.40)
+                : t.border.withValues(alpha: isNight ? 0.25 : 0.45),
+            width: 0.9,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: (activeAccent ?? PokoPalette.indigo)
+                        .withValues(alpha: isNight ? 0.25 : 0.12),
+                    blurRadius: 5,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: child,
+      ),
+    );
+
+    if (tooltip != null) {
+      content = Tooltip(
+        message: tooltip,
+        waitDuration: const Duration(milliseconds: 600),
+        child: content,
+      );
+    }
+
+    return Flexible(
+      child: content,
     );
   }
 }
