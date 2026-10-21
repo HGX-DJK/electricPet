@@ -13,11 +13,15 @@ class AiVoiceChatDialog extends StatefulWidget {
   final bool autoStartListening;
   final Function(String action, String dialogue) onActionTriggered;
 
+  /// 注入的 AI 服务 (默认使用全局单例, 供单元测试替换为桩实现)
+  final MinimaxService? aiService;
+
   const AiVoiceChatDialog({
     super.key,
     required this.isNight,
     this.autoStartListening = false,
     required this.onActionTriggered,
+    this.aiService,
   });
 
   /// 快速便捷弹出语音伴侣面板
@@ -46,14 +50,28 @@ class AiVoiceChatDialog extends StatefulWidget {
 class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final MinimaxService _ai = MinimaxService.instance;
   final AudioRecorder _audioRecorder = AudioRecorder();
+  late final MinimaxService _ai;
 
-  bool _isLoading = false;
+  /// 大模型请求进行中 (气泡上屏 + 动作联动)
+  bool _isSending = false;
+  /// 录音结束后的语音识别进行中
+  bool _isTranscribing = false;
+  /// 麦克风正在收音
   bool _isRecording = false;
+  /// 录音启动流程进行中 (含权限申请, 防止重复启动)
+  bool _isStarting = false;
+  /// 当前的录音启动流程, 供"松手"时等待其真正建立 (修复长按竞态)
+  Future<void>? _startFuture;
+  /// 本次录音的临时文件路径 (转写完成后清理)
   String? _currentRecordPath;
+  /// 单次录音时长上限的看门狗
+  Timer? _maxRecordTimer;
+
+  /// 是否处于"等待回复"的忙碌态 (UI 指示条)
+  bool get _isBusy => _isSending || _isTranscribing;
+
   bool _showKeyboardInput = false;
-  Timer? _listeningTimer;
   late final AnimationController _waveAnimController;
 
   final List<String> _quickPrompts = const [
@@ -69,6 +87,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   @override
   void initState() {
     super.initState();
+    _ai = widget.aiService ?? MinimaxService.instance;
     _ai.init();
     _waveAnimController = AnimationController(
       vsync: this,
@@ -76,7 +95,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     );
     if (widget.autoStartListening) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_isRecording) _startListening();
+        if (mounted && !_isRecording) _ensureRecording();
       });
     }
   }
@@ -84,7 +103,10 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   @override
   void dispose() {
     _waveAnimController.dispose();
-    _listeningTimer?.cancel();
+    _maxRecordTimer?.cancel();
+    _maxRecordTimer = null;
+    // 关闭面板时掐断小奶音, 避免弹窗已消失仍在后台说话
+    _ai.stopVoice();
     try {
       _audioRecorder.dispose();
     } catch (_) {}
@@ -105,34 +127,55 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     });
   }
 
+  /// 统一的轻提示
+  void _showToast(String message, {Duration duration = const Duration(seconds: 2)}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: duration,
+      ),
+    );
+  }
+
+  /// 统一的发送入口。守卫只看 [_isSending] —— 语音识别阶段 ([_isTranscribing]) 不拦截,
+  /// 否则"录音 → 识别 → 发送"链路会因为识别中已置 busy 而被静默丢弃。
   Future<void> _sendMessage(String text) async {
     final query = text.trim();
-    if (query.isEmpty || _isLoading) return;
+    if (query.isEmpty || _isSending) return;
 
     _textController.clear();
     _waveAnimController.repeat(reverse: true);
     setState(() {
-      _isLoading = true;
+      _isSending = true;
       _isRecording = false;
     });
     _scrollToBottom();
     HapticService.selection();
 
-    final resp = await _ai.chatWithPoko(query);
+    try {
+      final resp = await _ai.chatWithPoko(
+        query,
+        // 语音合成在服务端后台完成, 到达后再播 —— 文本气泡无需等待 TTS
+        onAudioReady: (audio) {
+          if (mounted) _ai.playVoiceResponse(audio);
+        },
+      );
 
-    if (mounted) {
-      _waveAnimController.stop();
-      setState(() {
-        _isLoading = false;
-      });
-      _scrollToBottom();
+      if (mounted) {
+        _scrollToBottom();
 
-      // 播放语音响应 (MiniMax T2A 音频或回退喵叫)
-      _ai.playVoiceResponse(resp.audioBytes);
-
-      // 若大模型给出了物理动作指令，联动驱动房间内的小猫执行动作！
-      if (resp.action != null && resp.action!.isNotEmpty) {
-        widget.onActionTriggered(resp.action!, resp.text);
+        // 若大模型给出了物理动作指令，联动驱动房间内的小猫执行动作！
+        if (resp.action != null && resp.action!.isNotEmpty) {
+          widget.onActionTriggered(resp.action!, resp.text);
+        }
+      }
+    } finally {
+      if (mounted) {
+        _waveAnimController.stop();
+        setState(() {
+          _isSending = false;
+        });
       }
     }
   }
@@ -141,23 +184,37 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     if (_isRecording) {
       await _stopRecordingAndProcess();
     } else {
-      await _startRecording();
+      await _ensureRecording();
     }
   }
 
-  Future<void> _startListening() => _startRecording();
+  /// 幂等地启动录音, 并记录启动流程供"松手"时等待
+  /// (修复: 长按对讲时, 权限申请尚未完成就松手, 旧实现会直接 return 导致录音停不下来)
+  Future<void> _ensureRecording() {
+    final pending = _startFuture;
+    if (pending != null) return pending;
 
-  Future<void> _startRecording() async {
+    final future = _doStartRecording();
+    _startFuture = future;
+    // 启动结束后释放句柄, 允许下一次录音
+    future.whenComplete(() {
+      if (identical(_startFuture, future)) _startFuture = null;
+    });
+    return future;
+  }
+
+  Future<void> _doStartRecording() async {
+    if (_isRecording || _isStarting) return;
+    _isStarting = true;
     try {
+      // 先掐断正在播放的小奶音, 否则麦克风会录到波可自己的声音 (自我识别 + 啸叫)
+      await _ai.stopVoice();
+
       final hasPerm = await _audioRecorder.hasPermission();
       if (!hasPerm) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🎙️ 麦克风录音权限未开启，请在手机系统设置中授予麦克风权限！'),
-              duration: Duration(seconds: 3),
-            ),
-          );
+          _showToast('🎙️ 麦克风录音权限未开启，请在手机系统设置中授予麦克风权限！',
+              duration: const Duration(seconds: 3));
         }
         return;
       }
@@ -166,7 +223,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       SoundService.playPop();
 
       final tempDir = Directory.systemTemp;
-      _currentRecordPath = '${tempDir.path}/poko_user_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _currentRecordPath =
+          '${tempDir.path}/poko_user_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
       await _audioRecorder.start(
         const RecordConfig(
@@ -176,6 +234,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
         ),
         path: _currentRecordPath!,
       );
+
+      // 单次录音最长 60 秒 (record 包未提供 maxDuration, 这里自行兜底,
+      // 防止主人忘记松手导致音频文件无限增长)
+      _maxRecordTimer?.cancel();
+      _maxRecordTimer = Timer(const Duration(seconds: 60), () {
+        if (mounted && _isRecording) _stopRecordingAndProcess();
+      });
 
       if (mounted) {
         setState(() {
@@ -190,46 +255,74 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           _isRecording = false;
         });
         _waveAnimController.stop();
+        _showToast('🎙️ 麦克风启动失败，请重试~');
       }
+    } finally {
+      _isStarting = false;
     }
   }
 
+  /// 停止录音 → 语音识别 → 把识别文本送入大模型
   Future<void> _stopRecordingAndProcess() async {
+    if (_isTranscribing) return;
+
+    // 等待可能仍在进行中的启动流程, 避免"松手"时录音尚未建立就直接返回
+    final pending = _startFuture;
+    if (pending != null) {
+      try {
+        await pending;
+      } catch (_) {}
+    }
     if (!_isRecording) return;
+
     HapticService.light();
     _waveAnimController.stop();
+    _maxRecordTimer?.cancel();
+    _maxRecordTimer = null;
 
     setState(() {
       _isRecording = false;
-      _isLoading = true;
+      _isTranscribing = true;
     });
 
+    String? recordPath;
     try {
       final path = await _audioRecorder.stop();
-      final audioFile = File(path ?? _currentRecordPath ?? '');
+      recordPath = path ?? _currentRecordPath;
+      final audioFile = File(recordPath ?? '');
 
-      if (await audioFile.exists() && await audioFile.length() > 300) {
+      // 使用同步 stat: 单次系统调用, 既避免 async I/O 带来的竞态窗口
+      // (两次 await 之间文件可能被并发清理), 也让该链路可在单元测试中稳定复现
+      if (audioFile.existsSync() && audioFile.lengthSync() > 300) {
         final recognized = await _ai.transcribeAudio(audioFile);
         if (recognized != null && recognized.trim().isNotEmpty) {
+          // ★ 关键: 识别文本必须真正送进大模型 (此处不再被 busy 守卫拦截)
           await _sendMessage(recognized.trim());
           return;
         }
+        // 识别失败: 透出具体原因, 区分"没听清"与"服务异常"
+        final reason = _ai.lastAsrError;
+        _showToast(reason == null
+            ? '🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾'
+            : '🐱 $reason');
+        return;
       }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
+      _showToast('🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾');
     } catch (e) {
       debugPrint('Audio recording/transcribe error: $e');
+      if (mounted) {
+        _showToast('🎙️ 录音或识别出错了，请再试一次~');
+      }
     } finally {
+      // 清理录音临时文件, 避免缓存目录无限堆积 (非阻塞, 不拖慢界面流程)
+      final tempPath = recordPath;
+      if (tempPath != null) {
+        File(tempPath).delete().then((_) {}).catchError((_) {});
+      }
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isTranscribing = false;
         });
       }
     }
@@ -415,7 +508,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '选择大模型服务商并填入对应的 API Key。配置后即可体验大语言模型深度对话与专属萌系小奶音朗读！',
+                      '选择大模型服务商并填入对应的 API Key。配置后即可体验大语言模型深度对话与专属萌系小奶音朗读！\n'
+                      '💡 未配置时波可会自动切换为「本地拟真陪伴模式」，功能依然可用。',
                       style: TextStyle(
                         fontSize: 12,
                         color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
@@ -977,8 +1071,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   ),
           ),
 
-          // 3. AI 思考中 / 录音声波动画指示条
-          if (_isLoading || _isRecording)
+          // 3. AI 思考中 / 语音识别中 / 录音声波动画指示条
+          if (_isBusy || _isRecording)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -1009,7 +1103,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     child: Text(
                       _isRecording
                           ? '正在倾听主人的声音... 说话完毕轻触或松手即可发送 🎙️'
-                          : '波可正在用猫猫脑瓜认真思考并生成回复... ✨',
+                          : _isTranscribing
+                              ? '正在识别主人的声音... 请稍等喵~ 🐾'
+                              : '波可正在用猫猫脑瓜认真思考并生成回复... ✨',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1250,10 +1346,12 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                             child: GestureDetector(
                               onTap: _toggleListening,
                               onLongPressStart: (_) {
-                                if (!_isRecording) _startRecording();
+                                // 按住即开始录音; 内部会等待权限申请完成
+                                _ensureRecording();
                               },
                               onLongPressEnd: (_) {
-                                if (_isRecording) _stopRecordingAndProcess();
+                                // 松手即停止并转写; 内部会等待录音真正建立, 避免竞态漏停
+                                _stopRecordingAndProcess();
                               },
                               child: Container(
                                 height: 44,

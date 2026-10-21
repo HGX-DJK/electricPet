@@ -12,7 +12,7 @@ import 'sound_service.dart';
 class MinimaxResponse {
   final String text;           // 显示与朗读纯文本 (已清洗指令标签)
   final String? action;        // 解析提取的游戏联动指令 (FEED, SLEEP, SPIN, YARN, PET, BATH)
-  final Uint8List? audioBytes; // MiniMax T2A 合成的语音字节 (MP3)
+  final Uint8List? audioBytes; // 合成语音字节 (MP3) —— 现由 chatWithPoko 的 onAudioReady 回调异步送达
   final bool isSimulated;      // 是否为本地拟真智能模式 (无 Key 或请求异常时降级)
   final String? errorHint;     // 详细错误说明 (供 UI 与排错使用)
 
@@ -30,7 +30,9 @@ class ChatMessage {
   final String role; // 'user' or 'assistant'
   final String content;
   final DateTime timestamp;
-  final Uint8List? audioBytes;
+
+  /// 语音合成结果 (后台异步回填, 可为空 —— 为空时点击"重播"会即时重新合成)
+  Uint8List? audioBytes;
 
   ChatMessage({
     required this.role,
@@ -54,11 +56,16 @@ class MinimaxService {
   factory MinimaxService() => instance;
   MinimaxService._internal();
 
+  /// 供单元测试注入的独立构造器 (不污染全局单例)
+  @visibleForTesting
+  MinimaxService.forTesting();
+
   String _apiKey = '';
   String _provider = 'minimax'; // 'minimax', 'deepseek', 'openai'
   String _customUrl = '';
   String _customModel = '';
   String? _lastError;
+  String? _lastAsrError;   // 最近一次语音识别的失败原因 (供 UI 透出, 避免与"没听清"混淆)
   String _voiceId = AiConfig.defaultVoiceId; // 甜美女性音 / 萌系奶音
   int _pitch = AiConfig.defaultPitch;       // 升调呈现幼态甜萌音 (范围 -12 ~ 12)
   double _speed = AiConfig.defaultSpeed;   // 稍快的轻快语速
@@ -66,12 +73,17 @@ class MinimaxService {
 
   final List<ChatMessage> _chatHistory = [];
   AudioPlayer? _voicePlayer;
+  File? _currentVoiceTempFile; // 当前 TTS 播放用的临时文件 (播放结束后清理)
 
   String get apiKey => _apiKey;
   String get provider => _provider;
   String get customUrl => _customUrl;
   String get customModel => _customModel;
   String? get lastError => _lastError;
+
+  /// 最近一次语音识别失败的原因 (null 表示上次识别成功或尚未发起)
+  String? get lastAsrError => _lastAsrError;
+
   String get voiceId => _voiceId;
   int get pitch => _pitch;
   double get speed => _speed;
@@ -90,7 +102,10 @@ class MinimaxService {
   }
 
   AudioPlayer get voicePlayer {
-    _voicePlayer ??= AudioPlayer()..setReleaseMode(ReleaseMode.stop);
+    _voicePlayer ??= AudioPlayer()
+      ..setReleaseMode(ReleaseMode.stop)
+      // 播放自然结束后立即清理临时文件, 避免缓存目录无限堆积
+      ..onPlayerComplete.listen((_) => _cleanupVoiceTempFile());
     return _voicePlayer!;
   }
 
@@ -166,11 +181,26 @@ class MinimaxService {
     _chatHistory.clear();
   }
 
+  /// 限制历史长度, 避免上下文无限膨胀
+  void _trimHistory() {
+    const maxMessages = 12;
+    if (_chatHistory.length > maxMessages) {
+      _chatHistory.removeRange(0, _chatHistory.length - maxMessages);
+    }
+  }
+
   /// 核心对话交互：输入用户语音/文本，流经大模型并自动调用 T2A 语音合成与动作解析
-  Future<MinimaxResponse> chatWithPoko(String userText) async {
+  ///
+  /// [onAudioReady] 语音合成完成后的回调。语音合成放到后台进行,
+  /// 因此文本气泡可以先上屏, 不必干等 TTS 返回, 首字响应更快。
+  Future<MinimaxResponse> chatWithPoko(
+    String userText, {
+    void Function(Uint8List? audio)? onAudioReady,
+  }) async {
     await init();
     final trimmedText = userText.trim();
     if (trimmedText.isEmpty) {
+      onAudioReady?.call(null);
       return const MinimaxResponse(
         text: '喵呜？波可没有听清主人的悄悄话，再说一次好不好嘛~ 🐾',
         isSimulated: true,
@@ -179,13 +209,13 @@ class MinimaxService {
 
     // 记录用户消息
     _chatHistory.add(ChatMessage(role: 'user', content: trimmedText));
-    if (_chatHistory.length > 12) {
-      _chatHistory.removeRange(0, _chatHistory.length - 12);
-    }
+    _trimHistory();
 
     // 若未配置 API Key，无缝回退至本地智能情感引擎
     if (!hasApiKey) {
-      return _generateLocalCompanionResponse(trimmedText);
+      final local = _generateLocalCompanionResponse(trimmedText);
+      onAudioReady?.call(null);
+      return local;
     }
 
     try {
@@ -198,31 +228,40 @@ class MinimaxService {
       final cleanText = _cleanActionTags(rawReply);
       _lastError = null;
 
-      // 2. 请求 MiniMax T2A 语音合成 (即使文本由 DeepSeek/OpenAI 生成，也可借用 MiniMax 朗读小奶音)
-      Uint8List? audioBytes;
-      try {
-        audioBytes = await synthesizeVoice(cleanText);
-      } catch (e) {
-        debugPrint('T2A voice synthesis warning: $e');
-      }
-
-      _chatHistory.add(ChatMessage(
-        role: 'assistant',
-        content: cleanText,
-        audioBytes: audioBytes,
-      ));
+      // 2. 文本先落屏 (气泡立即可见), 语音合成转后台并行, 不阻塞首字响应
+      final assistantMsg = ChatMessage(role: 'assistant', content: cleanText);
+      _chatHistory.add(assistantMsg);
+      _trimHistory();
+      unawaited(_synthesizeInBackground(cleanText, assistantMsg, onAudioReady));
 
       return MinimaxResponse(
         text: cleanText,
         action: action,
-        audioBytes: audioBytes,
         isSimulated: false,
       );
     } catch (e) {
       _lastError = e.toString().replaceAll('Exception: ', '');
       debugPrint('AI Chat Error: $_lastError');
-      return _generateLocalCompanionResponse(trimmedText, errorReason: _lastError);
+      final local = _generateLocalCompanionResponse(trimmedText, errorReason: _lastError);
+      onAudioReady?.call(null);
+      return local;
     }
+  }
+
+  /// 后台合成语音: 完成后回填音频并回调; 失败则回退为喵叫
+  Future<void> _synthesizeInBackground(
+    String text,
+    ChatMessage message,
+    void Function(Uint8List? audio)? onReady,
+  ) async {
+    Uint8List? audio;
+    try {
+      audio = await synthesizeVoice(text);
+    } catch (e) {
+      debugPrint('T2A voice synthesis warning: $e');
+    }
+    message.audioBytes = audio;
+    onReady?.call(audio);
   }
 
   /// 统一调用大模型 Chat Completion API (支持 MiniMax / DeepSeek / OpenAI 兼容接口)
@@ -409,11 +448,21 @@ class MinimaxService {
       request.headers.set('Authorization', 'Bearer $voiceKey');
       request.headers.set('Content-Type', 'application/json; charset=utf-8');
 
-      // 清洗特殊格式字符，方便语音合成朗读
+      // 清洗特殊格式字符与 Emoji, 避免语音合成把 "🐾" "✨" 之类念出声
       final cleanSpeech = textToSpeak
           .replaceAll(RegExp(r'[\*#>`_~]'), '')
+          .replaceAll(
+            RegExp(
+              r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}'
+              r'\u{FE00}-\u{FE0F}\u{200D}\u{FE0E}]',
+              unicode: true,
+            ),
+            ' ',
+          )
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
+
+      if (cleanSpeech.isEmpty) return null;
 
       final payload = jsonEncode({
         'model': 'speech-01-turbo',
@@ -459,12 +508,21 @@ class MinimaxService {
   }
 
   /// 调用 MiniMax ASR 语音识别 API (`asr-1.0`)，将麦克风录制的音频文件精准转写为中文文本
+  /// 失败时通过 [lastAsrError] 透出具体原因, 便于区分"没听清"与"服务异常"
   Future<String?> transcribeAudio(File audioFile) async {
     final asrKey = (_provider == 'minimax' && hasApiKey)
         ? _apiKey
         : (AiConfig.hasBuiltinKey ? AiConfig.defaultMinimaxApiKey.trim() : null);
 
-    if (asrKey == null || asrKey.isEmpty || !await audioFile.exists()) return null;
+    if (asrKey == null || asrKey.isEmpty) {
+      _lastAsrError = '未配置 MiniMax 语音识别密钥, 请在 ⚙️ 设置中填入 API Key';
+      return null;
+    }
+    if (!await audioFile.exists()) {
+      _lastAsrError = '录音文件丢失, 请重新说一次';
+      return null;
+    }
+    _lastAsrError = null;
 
     final client = HttpClient();
     client.connectionTimeout = const Duration(seconds: 15);
@@ -494,11 +552,16 @@ class MinimaxService {
         if (text != null && text.trim().isNotEmpty) {
           return text.trim();
         }
+        _lastAsrError = '没有识别到有效语音内容';
+        return null;
       } else {
+        _lastAsrError = '语音识别服务返回 HTTP ${response.statusCode}';
         debugPrint('MiniMax ASR error status: ${response.statusCode}, body: $body');
+        return null;
       }
-      return null;
     } catch (e) {
+      _lastAsrError =
+          '语音识别请求失败: ${e.toString().replaceAll("Exception: ", "")}';
       debugPrint('MiniMax ASR exception: $e');
       return null;
     } finally {
@@ -506,14 +569,36 @@ class MinimaxService {
     }
   }
 
+  /// 停止当前正在播放的小奶音
+  /// 录音前调用可避免麦克风录到波可自己的声音 (自我识别 + 外放啸叫)
+  Future<void> stopVoice() async {
+    try {
+      await voicePlayer.stop();
+    } catch (e) {
+      debugPrint('stopVoice failed: $e');
+    }
+  }
+
+  /// 清理 TTS 播放用的临时文件, 避免缓存目录无限堆积
+  void _cleanupVoiceTempFile() {
+    final file = _currentVoiceTempFile;
+    _currentVoiceTempFile = null;
+    if (file == null) return;
+    file.delete().then((_) {}).catchError((_) {});
+  }
+
   /// 播放合成的语音音频；优先写入系统临时文件通过底层原生文件描述符播放 (彻底避免 Android MediaPlayer BytesSource 错误 -38)，若失败回退 BytesSource
   Future<void> playVoiceResponse(Uint8List? audioBytes) async {
     if (audioBytes != null && audioBytes.isNotEmpty) {
       try {
+        await voicePlayer.stop();
+        // 上一段音频若未正常结束 (被打断), 先清理, 避免临时文件堆积
+        _cleanupVoiceTempFile();
+
         final tempDir = Directory.systemTemp;
         final tempFile = File('${tempDir.path}/poko_voice_${DateTime.now().millisecondsSinceEpoch}.mp3');
         await tempFile.writeAsBytes(audioBytes, flush: true);
-        await voicePlayer.stop();
+        _currentVoiceTempFile = tempFile;
         await voicePlayer.setVolume(1.0);
         await voicePlayer.play(DeviceFileSource(tempFile.path));
         return;

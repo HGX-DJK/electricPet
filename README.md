@@ -110,6 +110,22 @@
 
 ---
 
+## 📱 Flutter 跨端版构建 (含 AI 语音陪伴功能)
+
+`flutter_pet/` 目录是与桌面版对齐的 Flutter 跨端实现 (Android / iOS / Windows / macOS / Web)。
+
+```bash
+cd flutter_pet
+flutter build apk --release --no-tree-shake-icons
+```
+
+- **AI 能力开箱即用**：MiniMax 云端大模型 + 萌系小奶音的密钥已内置在
+  `flutter_pet/lib/config/ai_config.dart` 的 `defaultMinimaxApiKey` 中, 换密钥改这一行即可。
+- 也可在 App 内 **⚙️ 设置** 面板手动填写 Key (保存在本机 SharedPreferences), 优先级高于内置值。
+- 密钥来源：MiniMax 开放平台 <https://platform.minimaxi.com/> → 账户管理 → 接口密钥。
+
+---
+
 ## 🎮 常用快捷操作
 
 - **鼠标右键点击宠物**：打开毛玻璃快捷互动菜单（喂食成长、萌宠衣橱、玩耍互动、沐浴、睡觉、专注、状态等）。
