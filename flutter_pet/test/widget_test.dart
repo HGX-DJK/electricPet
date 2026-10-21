@@ -469,11 +469,13 @@ void main() {
     await tester.pumpWidget(const DesktopElectricPetApp());
     await tester.pump(const Duration(milliseconds: 200));
 
-    // 1. 验证顶部灵动岛即使在 360px 窄屏下也绝无溢出，所有按钮均在屏幕范围内
-    final homeIconFinder = find.byIcon(Icons.home_rounded);
-    expect(homeIconFinder, findsOneWidget);
-    final homeBottomRight = tester.getBottomRight(homeIconFinder);
-    expect(homeBottomRight.dx, lessThan(360.0));
+    // 1. 验证顶部灵动岛即使在 360px 窄屏下也绝无溢出，所有按钮均在屏幕范围内；冗余唤回猫垫图标已移除
+    expect(find.byIcon(Icons.home_rounded), findsNothing);
+
+    final skyButtonFinder = find.byKey(const ValueKey('sky_rhythm_toggle_button'));
+    expect(skyButtonFinder, findsOneWidget);
+    final skyBottomRight = tester.getBottomRight(skyButtonFinder);
+    expect(skyBottomRight.dx, lessThan(360.0));
 
     final fpButtonFinder = find.byKey(const ValueKey('footprint_toggle_button'));
     expect(fpButtonFinder, findsOneWidget);

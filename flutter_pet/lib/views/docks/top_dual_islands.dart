@@ -25,7 +25,6 @@ class TopDualIslands extends StatelessWidget {
   final VoidCallback onSoundToggle;
   final VoidCallback onFootprintsToggle;
   final VoidCallback onSkyRhythmToggle;
-  final VoidCallback onResetToMat;
 
   const TopDualIslands({
     super.key,
@@ -40,7 +39,6 @@ class TopDualIslands extends StatelessWidget {
     required this.onSoundToggle,
     required this.onFootprintsToggle,
     required this.onSkyRhythmToggle,
-    required this.onResetToMat,
   });
 
   @override
@@ -436,7 +434,7 @@ class TopDualIslands extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 3),
-          // 下排：微晶水滴操控组 (声音、白噪音、足迹、天象、归窝)
+          // 下排：微晶水滴操控组 (声音、白噪音、足迹、天象)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -495,18 +493,6 @@ class TopDualIslands extends StatelessWidget {
                 child: Text(
                   circadianTheme['icon'] as String,
                   style: const TextStyle(fontSize: 12.0),
-                ),
-              ),
-              _actionPearlButton(
-                context,
-                t,
-                active: false,
-                tooltip: '唤回猫垫',
-                onTap: onResetToMat,
-                child: Icon(
-                  Icons.home_rounded,
-                  size: 14.0,
-                  color: t.textSecondary,
                 ),
               ),
             ],

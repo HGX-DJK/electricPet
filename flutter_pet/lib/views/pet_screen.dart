@@ -2699,28 +2699,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('暖黄小串灯一闪一闪的，小窝变得好温馨呀~ ✨💡', duration: const Duration(seconds: 4));
   }
 
-  /// 重置萌宠回到专属暖绒圆垫
-  void _resetToMat(Size screenSize) {
-    _idleSeconds = 0;
-    _stopRoaming();
-    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
-    final nestX = screenSize.width / 2;
-    final nestY = floorTop + 130.0;
-    setState(() {
-      _petX = nestX;
-      _petY = nestY;
-      _yarnX = screenSize.width * 0.5;
-      _yarnY = nestY + 155.0;
-      _isYarnFlying = false;
-      _isChasingYarn = false;
-      _yarnVx = 0.0;
-      _yarnVy = 0.0;
-      _state = 'IDLE';
-    });
-    _showDialogueBubble('回到蓬松温暖的专属暖绒垫啦！舒服趴好~ 🐾☁️');
-    _vibrate('selection');
-  }
-
   /// 当前昼夜状态 (与主界面昼夜节律一致, 供各类弹层统一取用)
   bool get _isNightMode => _getCircadianTheme()['isNight'] as bool;
 
@@ -3546,7 +3524,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     );
                   },
                   onSkyRhythmToggle: _cycleSkyTheme,
-                  onResetToMat: () => _resetToMat(screenSize),
                 ),
               ),
 
