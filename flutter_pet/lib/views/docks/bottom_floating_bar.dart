@@ -4,13 +4,8 @@ import '../../widgets/bouncy_touch_feedback.dart';
 
 /// 底部统一浮动坞 —— 单一容器承载多个入口。
 ///
-/// 之前是 4 个各自独立的彩色胶囊 (白/紫/琥珀/蓝), 彼此抢夺注意力;
-/// 现在收敛为一个毛玻璃浮层, 用细分隔线区分入口, 并把「AI 语聊」做成
-/// 唯一的主操作 (实心渐变), 视觉层级一眼分明。
-///
-/// 窄屏策略:
-///  - 可用宽度不足时自动切换到紧凑密度 (更小的图标/字号/内边距), 而不是缩放整条栏;
-///  - 每个入口按自然宽度占比分配 flex, 极端窄屏时标签等比省略, 绝不溢出。
+/// 视觉层级明确、空间舒展大方的高阶灵动岛胶囊。
+/// 拥有充裕舒适的横向与纵向间距呼吸感，大图标、清爽分隔留白以及专属高亮「AI语聊」胶囊。
 class BottomFloatingBar extends StatelessWidget {
   final bool isNight;
   final VoidCallback onBackpackTap;
@@ -38,8 +33,8 @@ class BottomFloatingBar extends StatelessWidget {
     return Positioned(
       key: const ValueKey('bottom_floating_bar'),
       bottom: 16,
-      left: 12,
-      right: 12,
+      left: 10,
+      right: 10,
       child: TweenAnimationBuilder<double>(
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
@@ -55,8 +50,18 @@ class BottomFloatingBar extends StatelessWidget {
         },
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // 宽度不够时切紧凑密度, 而不是把整条栏等比缩小
-            final bool compact = constraints.maxWidth < 348;
+            final double maxWidth = constraints.maxWidth;
+            // 响应式间距阶梯：宽屏舒展展开，标准屏舒适通透，超窄屏精巧自适应
+            final bool isLargeScreen = maxWidth >= 380;
+            final bool isCompact = maxWidth < 340;
+
+            final double iconSize = isCompact ? 16.5 : (isLargeScreen ? 19.0 : 18.0);
+            final double fontSize = isCompact ? 10.5 : (isLargeScreen ? 11.5 : 11.0);
+            final double hPad = isCompact ? 8.5 : (isLargeScreen ? 13.5 : 11.0);
+            final double vPad = isCompact ? 5.5 : (isLargeScreen ? 7.5 : 6.5);
+            final double primaryHPad = isCompact ? 10.5 : (isLargeScreen ? 16.0 : 13.5);
+            final double dividerMargin = isCompact ? 3.5 : (isLargeScreen ? 6.0 : 4.5);
+            final double iconTextGap = isCompact ? 2.5 : (isLargeScreen ? 4.0 : 3.5);
 
             final items = <Widget>[
               _DockItem(
@@ -72,21 +77,33 @@ class BottomFloatingBar extends StatelessWidget {
                     onBackpackTap();
                   }
                 },
-                compact: compact,
+                iconSize: iconSize,
+                fontSize: fontSize,
+                hPad: hPad,
+                vPad: vPad,
+                iconTextGap: iconTextGap,
               ),
               _DockItem(
                 isNight: isNight,
                 icon: '👗',
                 label: '装扮小窝',
                 onTap: onWardrobeTap,
-                compact: compact,
+                iconSize: iconSize,
+                fontSize: fontSize,
+                hPad: hPad,
+                vPad: vPad,
+                iconTextGap: iconTextGap,
               ),
               _DockItem(
                 isNight: isNight,
                 icon: '✨',
                 label: '专属绝活',
                 onTap: onActionTap,
-                compact: compact,
+                iconSize: iconSize,
+                fontSize: fontSize,
+                hPad: hPad,
+                vPad: vPad,
+                iconTextGap: iconTextGap,
               ),
               if (onVoiceChatTap != null)
                 _DockItem(
@@ -95,19 +112,23 @@ class BottomFloatingBar extends StatelessWidget {
                   label: 'AI语聊',
                   onTap: onVoiceChatTap!,
                   primary: true,
-                  compact: compact,
+                  iconSize: iconSize,
+                  fontSize: fontSize,
+                  hPad: primaryHPad,
+                  vPad: vPad,
+                  iconTextGap: iconTextGap,
                 ),
             ];
 
-            // 入口之间用细分隔线, 替代原先各自独立的描边胶囊
+            // 入口之间配置高雅通透的分隔线，给予充足呼吸留白
             final children = <Widget>[];
             for (var i = 0; i < items.length; i++) {
               if (i > 0) {
                 children.add(Container(
                   width: 1,
-                  height: 20,
-                  margin: const EdgeInsets.symmetric(horizontal: 1),
-                  color: t.border,
+                  height: isCompact ? 18 : 22,
+                  margin: EdgeInsets.symmetric(horizontal: dividerMargin),
+                  color: t.border.withValues(alpha: isNight ? 0.35 : 0.6),
                 ));
               }
               children.add(items[i]);
@@ -116,14 +137,23 @@ class BottomFloatingBar extends StatelessWidget {
             return Center(
               child: Container(
                 padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 3 : 4,
-                  vertical: compact ? 5 : 6,
+                  horizontal: isCompact ? 6 : (isLargeScreen ? 10 : 8),
+                  vertical: isCompact ? 5.5 : (isLargeScreen ? 7 : 6),
                 ),
                 decoration: BoxDecoration(
-                  color: t.surface.withValues(alpha: isNight ? 0.90 : 0.95),
+                  color: t.surface.withValues(alpha: isNight ? 0.92 : 0.96),
                   borderRadius: BorderRadius.circular(PokoRadius.pill),
-                  border: Border.all(color: t.border, width: 1),
-                  boxShadow: PokoShadow.card(t.shadow),
+                  border: Border.all(
+                    color: t.border.withValues(alpha: isNight ? 0.45 : 0.7),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: isNight ? 0.28 : 0.08),
+                      blurRadius: 18,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -140,9 +170,7 @@ class BottomFloatingBar extends StatelessWidget {
 
 /// 浮动坞内的单个入口
 ///
-/// 竖排布局 (图标在上 / 文字在下), 这是移动端底栏的标准形态:
-/// 横向排布时 4 个带文字的入口在 320~360px 窄屏上会把文字挤成省略号,
-/// 竖排后每个入口只占 "文字宽度 + 一点内边距", 最窄到 320px 也不会截断。
+/// 竖排布局 (图标在上 / 文字在下), 提供充裕的呼吸留白与触摸舒适度。
 class _DockItem extends StatelessWidget {
   final bool isNight;
   final String icon;
@@ -151,7 +179,11 @@ class _DockItem extends StatelessWidget {
   final bool primary;
   final bool showChevron;
   final void Function(DragEndDetails)? onVerticalDragEnd;
-  final bool compact;
+  final double iconSize;
+  final double fontSize;
+  final double hPad;
+  final double vPad;
+  final double iconTextGap;
 
   const _DockItem({
     required this.isNight,
@@ -161,16 +193,16 @@ class _DockItem extends StatelessWidget {
     this.primary = false,
     this.showChevron = false,
     this.onVerticalDragEnd,
-    this.compact = false,
+    required this.iconSize,
+    required this.fontSize,
+    required this.hPad,
+    required this.vPad,
+    required this.iconTextGap,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = context.poko(isNight);
-    final double iconSize = compact ? 15 : 16;
-    final double fontSize = compact ? 10 : 10.5;
-    final double hPad = compact ? 7 : 9;
-    final double vPad = compact ? 4 : 5;
 
     // 顶部图标行 (背包入口额外挂一个"上滑打开"的小箭头)
     final iconRow = Row(
@@ -179,11 +211,11 @@ class _DockItem extends StatelessWidget {
       children: [
         Text(icon, style: TextStyle(fontSize: iconSize, height: 1.05)),
         if (showChevron) ...[
-          const SizedBox(width: 1),
+          const SizedBox(width: 2),
           Icon(
             Icons.keyboard_arrow_up_rounded,
-            size: iconSize,
-            color: primary ? Colors.white70 : t.textMuted,
+            size: iconSize * 0.9,
+            color: primary ? Colors.white70 : t.textMuted.withValues(alpha: 0.75),
           ),
         ],
       ],
@@ -197,19 +229,31 @@ class _DockItem extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.symmetric(horizontal: hPad, vertical: vPad),
           decoration: BoxDecoration(
-            // 主操作用品牌渐变实心, 其余保持同一张底色 —— 不再四种底色打架
             gradient: primary
-                ? const LinearGradient(colors: PokoPalette.brandGradient)
+                ? const LinearGradient(
+                    colors: PokoPalette.brandGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
                 : null,
             color: primary ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(PokoRadius.md),
+            borderRadius: BorderRadius.circular(primary ? PokoRadius.pill : PokoRadius.md),
+            boxShadow: primary
+                ? [
+                    BoxShadow(
+                      color: PokoPalette.indigo.withValues(alpha: isNight ? 0.38 : 0.25),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               iconRow,
-              const SizedBox(height: 1),
+              SizedBox(height: iconTextGap),
               Text(
                 label,
                 maxLines: 1,
@@ -217,7 +261,8 @@ class _DockItem extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: fontSize,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: primary ? FontWeight.bold : FontWeight.w600,
+                  letterSpacing: 0.2,
                   height: 1.15,
                   color: primary ? Colors.white : t.textPrimary,
                 ),
