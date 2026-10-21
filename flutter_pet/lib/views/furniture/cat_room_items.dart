@@ -177,7 +177,7 @@ class PolaroidFrame extends StatelessWidget {
   }
 }
 
-/// 软装家具 1：萌宠猫草盆栽 (轻触轻摇，散发清香与青草粒子，静立于木地板墙角)
+/// 软装家具 1：萌宠有机猫草盆栽 (轻触轻摇，散发清香与青草粒子，静立于木地板墙角)
 class CatGrassPlanter extends StatelessWidget {
   final bool isNight;
   final double plantTilt;
@@ -192,12 +192,14 @@ class CatGrassPlanter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return BouncyTouchFeedback(
+      scaleDown: 0.92,
       onTap: onTap,
       child: Transform.rotate(
         angle: plantTilt,
+        origin: const Offset(0, 24),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
             color: isNight ? const Color(0xFF1E1838) : Colors.white.withValues(alpha: 0.96),
             borderRadius: BorderRadius.circular(18),
@@ -207,7 +209,7 @@ class CatGrassPlanter extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.22 : 0.14),
+                color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.22 : 0.16),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
@@ -216,7 +218,76 @@ class CatGrassPlanter extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('🪴', style: TextStyle(fontSize: 24)),
+              // 鲜嫩多层次猫草盆栽 (陶瓷花盆 + 肥沃土壤 + 鲜翠麦苗)
+              SizedBox(
+                width: 38,
+                height: 32,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    // 陶瓷花盆底座
+                    Container(
+                      width: 32,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: isNight
+                              ? [const Color(0xFF334155), const Color(0xFF1E293B)]
+                              : [const Color(0xFFFEF3C7), const Color(0xFFFDE68A)],
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(8),
+                          bottomRight: Radius.circular(8),
+                          topLeft: Radius.circular(3),
+                          topRight: Radius.circular(3),
+                        ),
+                        border: Border.all(
+                          color: isNight ? const Color(0xFF475569) : const Color(0xFFF59E0B),
+                          width: 1.0,
+                        ),
+                      ),
+                    ),
+                    // 肥沃土壤表层
+                    Positioned(
+                      bottom: 12,
+                      child: Container(
+                        width: 30,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF451A03),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ),
+                    // 鲜嫩挺拔的猫草青叶 (多株交错麦苗)
+                    Positioned(
+                      bottom: 11,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Transform.rotate(
+                            angle: -0.15,
+                            child: const Text('🌱', style: TextStyle(fontSize: 16)),
+                          ),
+                          const SizedBox(width: 1),
+                          Transform.translate(
+                            offset: const Offset(0, -3),
+                            child: const Text('🌿', style: TextStyle(fontSize: 18)),
+                          ),
+                          const SizedBox(width: 1),
+                          Transform.rotate(
+                            angle: 0.15,
+                            child: const Text('🌱', style: TextStyle(fontSize: 15)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 2),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -227,7 +298,7 @@ class CatGrassPlanter extends StatelessWidget {
                 child: Text(
                   '猫草',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.bold,
                     color: isNight ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
                   ),

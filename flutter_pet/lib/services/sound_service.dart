@@ -241,6 +241,17 @@ class SoundService {
     }
   }
 
+  /// 猫草轻摇沙沙声与清脆咀嚼音效 (Cat Grass Rustle & Nibble)
+  static Future<void> playGrassRustle() async {
+    if (!soundEnabled) return;
+    try {
+      await sfxPlayer.stop();
+      await sfxPlayer.play(AssetSource('audio/grass_rustle.wav'), volume: 0.85);
+    } catch (_) {
+      SystemSound.play(SystemSoundType.click);
+    }
+  }
+
   /// 释放音频资源
   static void dispose() {
     _sfxPlayer?.dispose();

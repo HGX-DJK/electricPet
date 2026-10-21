@@ -239,6 +239,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   // 6大高阶交互演进定时器
   Timer? _highFiveTimer;
   Timer? _drinkTimer;
+  Timer? _grassNibbleTimer;
   Timer? _sprintTimer;
   Timer? _bunnyKickTimer;
 
@@ -900,6 +901,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _glanceTimer?.cancel();
     _highFiveTimer?.cancel();
     _drinkTimer?.cancel();
+    _grassNibbleTimer?.cancel();
     _sprintTimer?.cancel();
     _bunnyKickTimer?.cancel();
     SensorService.stopListening();
@@ -1725,9 +1727,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     switch (targetName) {
       case 'CAT_GRASS':
-        _onPlantTap(false);
-        _playAction('LOOK_AROUND');
-        _showDialogueBubble('巡视猫草盆栽~ 凑近闻闻青草清香！🌱✨');
+        _startNibblingGrass(floorTop);
         break;
       case 'SCRATCHING_POST':
         _onScratcherTap(false);
@@ -2067,17 +2067,25 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
   }
 
-  /// 家具交互：猫草轻摇 (清香飘逸，猫咪开心跑过去嗅嗅)
+  /// 家具交互：猫草轻摇 (轻晃散发清香，诱发猫咪好奇小步跑来啃草)
   void _onPlantTap([bool walkIfFar = true]) {
     _idleSeconds = 0;
+    SoundService.playGrassRustle();
     _vibrate('light');
+
+    // 弹性轻摆多段物理回弹
     _plantAnimTimer?.cancel();
-    setState(() => _plantTilt = 0.14);
-    _plantAnimTimer = Timer(const Duration(milliseconds: 240), () {
+    setState(() => _plantTilt = 0.16);
+    _plantAnimTimer = Timer(const Duration(milliseconds: 180), () {
       if (mounted) {
-        setState(() => _plantTilt = -0.08);
-        _plantAnimTimer = Timer(const Duration(milliseconds: 200), () {
-          if (mounted) setState(() => _plantTilt = 0.0);
+        setState(() => _plantTilt = -0.10);
+        _plantAnimTimer = Timer(const Duration(milliseconds: 160), () {
+          if (mounted) {
+            setState(() => _plantTilt = 0.05);
+            _plantAnimTimer = Timer(const Duration(milliseconds: 140), () {
+              if (mounted) setState(() => _plantTilt = 0.0);
+            });
+          }
         });
       }
     });
@@ -2086,8 +2094,18 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     const plantCenterX = 24.0 + 24.0;
     final plantCenterY = floorTop + 16.0 + 26.0;
 
-    // 若猫咪距离猫草较远，迈着小碎步跑过去互动
-    if (walkIfFar && ((_petX - plantCenterX).abs() > 65.0) && !_isDragging && !widget.petModel.isSleeping) {
+    // 盆栽处飘出鲜嫩草叶与清香微粒子
+    _spawnParticles(Offset(plantCenterX, plantCenterY - 10), emoji: '🌿', count: 4);
+    _spawnParticles(Offset(plantCenterX + 12, plantCenterY - 15), emoji: '✨', count: 2);
+    _spawnTextParticle(Offset(plantCenterX - 15, plantCenterY - 30), '猫草清香 🌿✨', const Color(0xFF10B981));
+
+    // 判断猫咪是否已经在猫草旁边
+    final isNearPlant = (_petX - (plantCenterX + 38.0)).abs() < 60.0 && (_petY - plantCenterY).abs() < 55.0;
+
+    if (isNearPlant) {
+      _startNibblingGrass(floorTop);
+    } else if (walkIfFar && !_isDragging && !widget.petModel.isSleeping) {
+      _showDialogueBubble('猫草清香扑鼻~ 迈着小碎步跑过去尝鲜咬一口！🌱🐾', duration: const Duration(seconds: 3), speak: true);
       _startWalkingTo(
         (plantCenterX + 38.0).clamp(35.0, _lastScreenSize.width - 35.0),
         plantCenterY,
@@ -2095,12 +2113,81 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         '猫草清香扑鼻~ 波可小步跑过去闻闻咬一小口！🌱😋',
       );
     }
+  }
 
-    _spawnParticles(Offset(_petX - 80, _petY - 20), emoji: '🌿', count: 3);
-    _spawnParticles(Offset(_petX - 60, _petY - 30), emoji: '🌱', count: 2);
-    _spawnTextParticle(Offset(_petX - 85, _petY - 50), '猫草清香 +5 🌱', const Color(0xFF10B981));
-    widget.petModel.addExp(5.0);
-    _showDialogueBubble('猫草清香扑鼻~ 波可闻到了开心咬了一小口！🌱😋', duration: const Duration(seconds: 4));
+  /// 萌宠就餐角 · 专属啃猫草与调理肠胃仪式 (Cat Grass Nibbling & Digestion Ritual 🌿🌱)
+  void _startNibblingGrass(double floorTop) {
+    _stopRoaming();
+    _idleSeconds = 0;
+    _facingLeft = true;
+
+    // Phase 1: 凑近轻嗅青草芳香
+    _playAction('LOOK_AROUND');
+    _vibrate('light');
+    const plantCenterX = 24.0 + 24.0;
+    final plantCenterY = floorTop + 16.0 + 26.0;
+
+    _spawnParticles(Offset(plantCenterX, plantCenterY - 10), emoji: '🌿', count: 3);
+    _spawnParticles(Offset(plantCenterX + 10, plantCenterY - 15), emoji: '✨', count: 2);
+    _showDialogueBubble('凑近深吸一口~ 鲜嫩青草香气真好闻！准备下嘴啃嫩草啦~ (ฅ^ω^ฅ)🌱', duration: const Duration(seconds: 3));
+
+    // Phase 2: 大口咀嚼进食动作 (伴随清脆咀嚼音效与水嫩绿叶微粒子)
+    Timer(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      SoundService.playGrassRustle();
+      _vibrate('medium');
+      _playAction('EATING');
+
+      // 盆栽微摇
+      setState(() => _plantTilt = 0.12);
+      Timer(const Duration(milliseconds: 180), () {
+        if (mounted) setState(() => _plantTilt = -0.08);
+      });
+      Timer(const Duration(milliseconds: 360), () {
+        if (mounted) setState(() => _plantTilt = 0.0);
+      });
+
+      _spawnParticles(Offset(_petX - 25, _petY - 20), emoji: '🌱', count: 5);
+      _spawnParticles(Offset(_petX - 15, _petY - 30), emoji: '🌿', count: 3);
+
+      _grassNibbleTimer?.cancel();
+      _grassNibbleTimer = Timer(const Duration(milliseconds: 2400), () {
+        if (!mounted) return;
+        // Phase 3: 肠胃舒畅满足结算 (调理肠胃，促进毛球排出)
+        widget.petModel.addIntimacy(4);
+        widget.petModel.addCleanliness(6);
+        widget.petModel.addMood(8);
+        widget.petModel.addExp(10.0);
+
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '排出毛球 · 肠胃舒畅 🌱✨', const Color(0xFF10B981));
+        _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验  +8 愉悦  +4 亲密 💖', const Color(0xFF059669));
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '💖', count: 4);
+
+        _triggerBlep();
+        _triggerWink();
+        SoundService.startPurr();
+        Timer(const Duration(milliseconds: 1600), () => SoundService.stopPurr());
+
+        _playAction('WASH_FACE');
+
+        final grassQuotes = [
+          '嗷呜咬下鲜嫩的小草尖！清甜脆嫩，肚肚里的毛球都被消化调理啦~ 🌿😋',
+          '嚼嚼嚼~ 纯天然无公害有机猫草太棒啦！整只猫都神清气爽！🌱✨',
+          '蹭蹭草叶~ 嘴巴里留着淡淡的青草清香，波可好喜欢这个盆栽！💚🐾',
+        ];
+        _showDialogueBubble(
+          grassQuotes[math.Random().nextInt(grassQuotes.length)],
+          duration: const Duration(seconds: 4),
+          speak: true,
+        );
+
+        Timer(const Duration(milliseconds: 1800), () {
+          if (mounted && _state == 'WASH_FACE') {
+            setState(() => _state = 'IDLE');
+          }
+        });
+      });
+    });
   }
 
   /// 家具交互：原木剑麻猫抓柱磨爪 (真实解压利爪抓挠撕扯沙沙声 + 弹性震颤 + 真实木屑火花 + 猫咪惬意跑来磨爪)
