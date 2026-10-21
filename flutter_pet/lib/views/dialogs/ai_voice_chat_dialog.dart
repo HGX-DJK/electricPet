@@ -67,6 +67,10 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   String? _currentRecordPath;
   /// 单次录音时长上限的看门狗
   Timer? _maxRecordTimer;
+  /// 本次按住是否已超过"认真说话"的最小时长
+  bool _micHeldLongEnough = false;
+  /// 按住时长判定计时器
+  Timer? _micHoldTimer;
 
   /// 是否处于"等待回复"的忙碌态 (UI 指示条)
   bool get _isBusy => _isSending || _isTranscribing;
@@ -180,12 +184,24 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     }
   }
 
-  Future<void> _toggleListening() async {
-    if (_isRecording) {
-      await _stopRecordingAndProcess();
-    } else {
-      await _ensureRecording();
-    }
+  /// 麦克风按下: 立刻开始录音 (走原始指针事件, 不经手势竞技场)
+  void _onMicPointerDown() {
+    _micHeldLongEnough = false;
+    _micHoldTimer?.cancel();
+    // 用计时器而不是墙钟来判断"是否认真说话": 计时器可被测试时钟驱动, 行为可复现
+    _micHoldTimer = Timer(const Duration(milliseconds: 400), () {
+      _micHeldLongEnough = true;
+    });
+    _ensureRecording();
+  }
+
+  /// 麦克风抬起: 必定停止录音并发送, 不存在"松手了还在录"的情况
+  void _onMicPointerUp({bool cancelled = false}) {
+    _micHoldTimer?.cancel();
+    _micHoldTimer = null;
+    final tooShort = !_micHeldLongEnough;
+    _micHeldLongEnough = false;
+    _stopRecordingAndProcess(tooShort: tooShort, cancelled: cancelled);
   }
 
   /// 幂等地启动录音, 并记录启动流程供"松手"时等待
@@ -263,7 +279,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   }
 
   /// 停止录音 → 语音识别 → 把识别文本送入大模型
-  Future<void> _stopRecordingAndProcess() async {
+  ///
+  /// [tooShort] 本次按住过短 (轻触误按), [cancelled] 指针被系统取消
+  Future<void> _stopRecordingAndProcess({bool tooShort = false, bool cancelled = false}) async {
     if (_isTranscribing) return;
 
     // 等待可能仍在进行中的启动流程, 避免"松手"时录音尚未建立就直接返回
@@ -291,9 +309,16 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       recordPath = path ?? _currentRecordPath;
       final audioFile = File(recordPath ?? '');
 
+      // 轻触误按 (按住不足 400ms): 不发送, 改为提示正确用法,
+      // 避免用户"松手了却什么都没发生"却不知道该怎么操作
+      final isAccidentalTap = tooShort;
+
       // 使用同步 stat: 单次系统调用, 既避免 async I/O 带来的竞态窗口
       // (两次 await 之间文件可能被并发清理), 也让该链路可在单元测试中稳定复现
-      if (audioFile.existsSync() && audioFile.lengthSync() > 300) {
+      if (!cancelled &&
+          !isAccidentalTap &&
+          audioFile.existsSync() &&
+          audioFile.lengthSync() > 300) {
         final recognized = await _ai.transcribeAudio(audioFile);
         if (recognized != null && recognized.trim().isNotEmpty) {
           // ★ 关键: 识别文本必须真正送进大模型 (此处不再被 busy 守卫拦截)
@@ -308,7 +333,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
         return;
       }
 
-      _showToast('🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾');
+      if (isAccidentalTap) {
+        _showToast('🐱 要按住麦克风说话哦，松开手就会发送给波可~');
+      } else if (cancelled) {
+        _showToast('🐱 这次录音被取消啦，再试一次嘛~');
+      } else {
+        _showToast('🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾');
+      }
     } catch (e) {
       debugPrint('Audio recording/transcribe error: $e');
       if (mounted) {
@@ -953,16 +984,15 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: GestureDetector(
-            onTap: _toggleListening,
-            onLongPressStart: (_) {
-              // 按住即开始录音; 内部会等待权限申请完成
-              _ensureRecording();
-            },
-            onLongPressEnd: (_) {
-              // 松手即停止并转写; 内部会等待录音真正建立, 避免竞态漏停
-              _stopRecordingAndProcess();
-            },
+          child: Listener(
+            // ★ 用 Listener 直接接管原始指针事件, 绕开手势竞技场。
+            //   之前 onTap + onLongPressStart 并存时, 手指抬起不足 500ms 的话
+            //   长按识别器会被 reject, onLongPressEnd 不触发, 只剩 onTap 在松手
+            //   那一刻才去启动录音 —— 表现为"松手了还在录、也没发出去"。
+            //   现在按下即录、松手必定停止并发送, 没有中间状态。
+            onPointerDown: (_) => _onMicPointerDown(),
+            onPointerUp: (_) => _onMicPointerUp(),
+            onPointerCancel: (_) => _onMicPointerUp(cancelled: true),
             child: Container(
               height: 50,
               decoration: BoxDecoration(
@@ -990,7 +1020,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      _isRecording ? '正在录音中... (松手或点击发送)' : '轻触对波可说话',
+                      _isRecording ? '松手就发送给波可~' : '按住说话，松手发送',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -1406,7 +1436,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   Flexible(
                     child: Text(
                       _isRecording
-                          ? '正在倾听主人的声音... 说话完毕轻触或松手即可发送 🎙️'
+                          ? '正在倾听主人的声音... 松手就发送给波可~ 🎙️'
                           : _isTranscribing
                               ? '正在识别主人的声音... 请稍等喵~ 🐾'
                               : '波可正在用猫猫脑瓜认真思考并生成回复... ✨',

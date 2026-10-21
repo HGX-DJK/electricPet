@@ -168,7 +168,8 @@ void main() {
   });
 
   group('AI 语音链路回归测试', () {
-    testWidgets('P0-1: 录音 → 识别 → 文本必须真正送达大模型', (WidgetTester tester) async {
+    testWidgets('P0-1: 按住说话 → 松手 → 识别文本必须真正送达大模型',
+        (WidgetTester tester) async {
       final ai = _FakeAiService()..transcribed = '波可今天想吃小鱼干';
       String? triggeredAction;
 
@@ -183,16 +184,18 @@ void main() {
       ));
       await _flush(tester, 4);
 
-      // 轻触麦克风开始录音
-      await tester.tap(find.text('轻触对波可说话'));
+      // 按住麦克风开始录音
+      final mic = find.text('按住说话，松手发送');
+      final gesture = await tester.startGesture(tester.getCenter(mic));
       await _flush(tester);
-      expect(fakePlatform.startCount, 1, reason: '麦克风应已开始录音');
+      expect(fakePlatform.startCount, 1, reason: '按下即应开始录音');
+      expect(find.text('松手就发送给波可~'), findsOneWidget);
 
-      // 再次轻触 → 停止录音并转写
-      await tester.tap(find.text('正在录音中... (松手或点击发送)'));
+      // 松手 → 停止录音并转写发送
+      await gesture.up();
       await _flush(tester);
 
-      expect(fakePlatform.stopCount, 1, reason: '录音应被停止');
+      expect(fakePlatform.stopCount, 1, reason: '松手后录音应被停止');
       expect(
         ai.sentTexts,
         contains('波可今天想吃小鱼干'),
@@ -203,8 +206,41 @@ void main() {
       expect(triggeredAction, 'FEED', reason: '动作联动应照常触发');
     });
 
-    testWidgets('P0-2: 长按对讲松手时, 录音必须被真正停止并送达', (WidgetTester tester) async {
-      // 权限申请耗时 300ms: 复现"长按松手时录音尚未建立"的竞态
+    testWidgets('P0-3: 轻触误按(<400ms)不应发送, 而应提示正确用法',
+        (WidgetTester tester) async {
+      final ai = _FakeAiService()..transcribed = '波可今天想吃小鱼干';
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: AiVoiceChatDialog(
+            isNight: false,
+            aiService: ai,
+            onActionTriggered: (action, dialogue) {},
+          ),
+        ),
+      ));
+      await _flush(tester, 4);
+
+      // 极短的轻触: 旧实现会因为长按被 reject 而"松手后仍在录音且不发送"
+      final mic = find.text('按住说话，松手发送');
+      final gesture = await tester.startGesture(tester.getCenter(mic));
+      await tester.pump(const Duration(milliseconds: 150));
+      await gesture.up();
+      await _flush(tester);
+
+      expect(fakePlatform.stopCount, 1, reason: '★ 轻触也必须把录音停下来, 不能一直开着');
+      expect(ai.sentTexts, isEmpty, reason: '轻触误按不应该发送');
+      expect(
+        find.textContaining('按住麦克风说话'),
+        findsOneWidget,
+        reason: '★ 应提示正确的用法, 让用户知道要按住',
+      );
+      // 面板回到可继续对话的状态
+      expect(find.text('按住说话，松手发送'), findsOneWidget);
+    });
+
+    testWidgets('P0-2: 按住到松手, 录音必须被真正停止并送达', (WidgetTester tester) async {
+      // 权限申请耗时 300ms: 复现"松手时录音尚未建立"的竞态
       fakePlatform.permissionDelay = const Duration(milliseconds: 300);
       final ai = _FakeAiService()..transcribed = '波可陪我玩毛线球';
 
@@ -219,13 +255,13 @@ void main() {
       ));
       await _flush(tester, 4);
 
-      final mic = find.text('轻触对波可说话');
+      final mic = find.text('按住说话，松手发送');
       final gesture = await tester.startGesture(tester.getCenter(mic));
-      await tester.pump(const Duration(milliseconds: 520)); // 触发 longPressStart
-      await gesture.up(); // 立刻松手 (此时录音尚未真正建立)
+      await tester.pump(const Duration(milliseconds: 520)); // 按住
+      await gesture.up(); // 松手 (此时录音可能尚未真正建立)
       await _flush(tester, 20);
 
-      expect(fakePlatform.startCount, 1, reason: '长按应启动录音');
+      expect(fakePlatform.startCount, 1, reason: '按住应启动录音');
       expect(
         fakePlatform.stopCount,
         greaterThanOrEqualTo(1),
@@ -234,7 +270,7 @@ void main() {
       expect(
         ai.sentTexts,
         contains('波可陪我玩毛线球'),
-        reason: '★ 长按对讲的识别结果同样必须送达大模型',
+        reason: '★ 对讲的识别结果同样必须送达大模型',
       );
     });
 
@@ -254,9 +290,10 @@ void main() {
       ));
       await _flush(tester, 4);
 
-      await tester.tap(find.text('轻触对波可说话'));
+      final mic = find.text('按住说话，松手发送');
+      final gesture = await tester.startGesture(tester.getCenter(mic));
       await _flush(tester);
-      await tester.tap(find.text('正在录音中... (松手或点击发送)'));
+      await gesture.up();
       await _flush(tester);
 
       expect(ai.sentTexts, isEmpty, reason: '识别失败时不应发送任何文本');

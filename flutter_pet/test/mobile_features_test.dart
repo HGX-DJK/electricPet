@@ -524,7 +524,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('波可的小电台'), findsOneWidget);
-      expect(find.text('轻触对波可说话'), findsOneWidget);
+      expect(find.text('按住说话，松手发送'), findsOneWidget);
 
       // 主面板保持简洁: 预置短语统一收在「快捷心声」面板
       expect(find.text('🐟 投喂小鱼干'), findsNothing);
