@@ -267,7 +267,7 @@ void main() {
       );
     });
 
-    testWidgets('快捷灵感话题路径不受影响', (WidgetTester tester) async {
+    testWidgets('快捷心声面板: 预置短语可正常送达大模型', (WidgetTester tester) async {
       final ai = _FakeAiService();
       String? triggeredAction;
 
@@ -282,10 +282,16 @@ void main() {
       ));
       await _flush(tester, 4);
 
-      await tester.tap(find.text('🐟 投喂小鱼干'));
+      // 主面板不再堆一排快捷按钮, 预置短语收在「快捷心声」面板里
+      expect(find.text('🐟 投喂小鱼干'), findsNothing);
+      await tester.tap(find.byTooltip('快捷心声'));
+      await _flush(tester, 4);
+
+      expect(find.text('想和波可说点什么？'), findsOneWidget);
+      await tester.tap(find.text('波可，给你准备了香酥小鱼干，快来吃呀！'));
       await _flush(tester);
 
-      expect(ai.sentTexts, contains('🐟 投喂小鱼干'));
+      expect(ai.sentTexts, contains('波可，给你准备了香酥小鱼干，快来吃呀！'));
       expect(triggeredAction, 'FEED');
     });
   });

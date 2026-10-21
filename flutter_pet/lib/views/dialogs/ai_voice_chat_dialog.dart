@@ -74,14 +74,14 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   bool _showKeyboardInput = false;
   late final AnimationController _waveAnimController;
 
-  final List<String> _quickPrompts = const [
-    '🐟 投喂小鱼干',
-    '🌙 晚安睡觉觉',
-    '🧶 陪我玩毛线球',
-    '🌀 跳个开心大回旋',
-    '🐾 今天好累求摸摸',
-    '🐱 讲个猫猫悄悄话',
-    '✨ 你最喜欢吃什么呀',
+  /// 预置心声 —— 统一收在「💭 心声」面板里, 主面板不再重复堆一排按钮
+  final List<({String emoji, String text})> _presetPhrases = const [
+    (emoji: '🐟', text: '波可，给你准备了香酥小鱼干，快来吃呀！'),
+    (emoji: '🌙', text: '波可，今天好累呀，互道晚安睡觉觉好不好？'),
+    (emoji: '🌀', text: '波可，来表演一个超级无敌大回旋跳舞吧！'),
+    (emoji: '🧶', text: '波可，毛线球准备好啦，出来玩耍咯！'),
+    (emoji: '🐾', text: '波可，写代码好累啊，求摸摸头安慰一下~'),
+    (emoji: '🐱', text: '波可，讲个猫猫悄悄话哄我开心好不好？'),
   ];
 
   @override
@@ -339,130 +339,197 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       builder: (ctx) {
         final isNight = widget.isNight;
         return Container(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           decoration: BoxDecoration(
             color: isNight ? const Color(0xFF1E1B4B) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             boxShadow: const [
-              BoxShadow(color: Color(0x33000000), blurRadius: 20, offset: Offset(0, -4)),
+              BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(0, -6)),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('🎙️', style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '快捷倾诉与心声互动',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: isNight ? Colors.white : const Color(0xFF1E293B),
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF2E2A60) : const Color(0xFFF3E8FF),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Text('💡', style: TextStyle(fontSize: 14)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '直接点击底部大麦克风即可语音对话（支持轻触说话或按住对讲），也可以点选下方预置心声与波可快速互动！',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6B21A8),
-                          height: 1.35,
-                        ),
+                  // 拖拽手柄
+                  Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 10, bottom: 6),
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: isNight ? const Color(0xFF3B356D) : const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '选择你想对波可说的心声：',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: isNight ? Colors.white70 : const Color(0xFF475569),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _speechChip(ctx, '🐟 波可，给你准备了香酥小鱼干，快来吃呀！'),
-                  _speechChip(ctx, '🌙 波可，今天好累呀，互道晚安睡觉觉好不好？'),
-                  _speechChip(ctx, '🌀 波可，来表演一个超级无敌大回旋跳舞吧！'),
-                  _speechChip(ctx, '🧶 波可，毛线球准备好啦，出来玩耍咯！'),
-                  _speechChip(ctx, '🐾 波可，写代码好累啊，求摸摸头安慰一下~'),
-                  _speechChip(ctx, '🐱 波可，讲个猫猫悄悄话哄我开心好不好？'),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 6, 22, 0),
+                    child: Row(
+                      children: [
+                        const Text('💭', style: TextStyle(fontSize: 20)),
+                        const SizedBox(width: 8),
+                        Text(
+                          '想和波可说点什么？',
+                          style: TextStyle(
+                            fontSize: 16.5,
+                            fontWeight: FontWeight.bold,
+                            color: isNight ? Colors.white : const Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 4, 22, 16),
+                    child: Text(
+                      '选一句心声立刻开聊，或者直接按住麦克风说话~',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+
+                  // 预置心声: 整行可点, 比小圆片更好读
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        for (final p in _presetPhrases)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _presetRow(ctx, p.emoji, p.text, isNight),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+                  Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: isNight ? const Color(0xFF2E2A60) : const Color(0xFFF1F5F9),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // 次级操作收拢到面板底部, 主面板不再堆按钮
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _sheetAction(
+                          ctx,
+                          icon: Icons.keyboard_alt_rounded,
+                          label: '切换到打字输入',
+                          isNight: isNight,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            setState(() => _showKeyboardInput = true);
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _sheetAction(
+                          ctx,
+                          icon: Icons.auto_delete_outlined,
+                          label: '清空记忆',
+                          isNight: isNight,
+                          onTap: () {
+                            Navigator.pop(ctx);
+                            _ai.clearHistory();
+                            setState(() {});
+                            HapticService.light();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
-              const SizedBox(height: 14),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    setState(() => _showKeyboardInput = true);
-                  },
-                  icon: const Icon(Icons.keyboard_alt_rounded, size: 18),
-                  label: const Text('切换至打字输入 (自由提问与语音转字)'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _speechChip(BuildContext ctx, String text) {
-    final isNight = widget.isNight;
-    return GestureDetector(
-      onTap: () {
-        Navigator.pop(ctx);
-        _sendMessage(text);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isNight ? const Color(0xFF282352) : const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isNight ? const Color(0xFF4338CA) : const Color(0xFFE2E8F0),
+  /// 预置心声的整行条目
+  Widget _presetRow(BuildContext ctx, String emoji, String text, bool isNight) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          Navigator.pop(ctx);
+          _sendMessage(text);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF262352) : const Color(0xFFFAF7FF),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isNight ? const Color(0xFF3B356D) : const Color(0xFFEDE9FE),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(emoji, style: const TextStyle(fontSize: 16)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    height: 1.3,
+                    color: isNight ? const Color(0xFFE0E7FF) : const Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: isNight ? const Color(0xFF6366F1) : const Color(0xFFA78BFA),
+              ),
+            ],
           ),
         ),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            color: isNight ? Colors.white : const Color(0xFF1E293B),
-          ),
+      ),
+    );
+  }
+
+  /// 面板底部的次级操作按钮
+  Widget _sheetAction(
+    BuildContext ctx, {
+    required IconData icon,
+    required String label,
+    required bool isNight,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 17, color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7C3AED)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7C3AED),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -801,6 +868,266 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     );
   }
 
+  /// 状态胶囊: 绿=就绪 / 橙=本地陪伴 / 红=云端异常, 点击可直接进入设置排查
+  Widget _statusPill(bool isNight) {
+    final hasError = _ai.lastError != null;
+    final color = hasError
+        ? const Color(0xFFEF4444)
+        : (_ai.hasApiKey ? const Color(0xFF10B981) : const Color(0xFFF59E0B));
+    final label = hasError
+        ? '云端连接异常'
+        : (_ai.hasApiKey ? '就绪' : '智能陪伴模式');
+    return GestureDetector(
+      onTap: _openSettingsDialog,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(7, 3, 9, 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.13),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                height: 1.1,
+                color: isNight ? color.withValues(alpha: 0.95) : color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 头部圆形图标按钮 (视觉成对, 统一尺寸)
+  Widget _roundIconButton({
+    required IconData icon,
+    required String tooltip,
+    required bool isNight,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: () {
+          HapticService.light();
+          onTap();
+        },
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF26234F) : const Color(0xFFF1F5F9),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 18,
+            color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 语音模式输入条: 💭 心声 | 大麦克风 | 键盘
+  Widget _voiceInputBar(bool isNight) {
+    return Row(
+      children: [
+        _softCircleButton(
+          icon: Icons.chat_bubble_outline_rounded,
+          tooltip: '快捷心声',
+          isNight: isNight,
+          onTap: _showVoiceSpeechSheet,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: GestureDetector(
+            onTap: _toggleListening,
+            onLongPressStart: (_) {
+              // 按住即开始录音; 内部会等待权限申请完成
+              _ensureRecording();
+            },
+            onLongPressEnd: (_) {
+              // 松手即停止并转写; 内部会等待录音真正建立, 避免竞态漏停
+              _stopRecordingAndProcess();
+            },
+            child: Container(
+              height: 50,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _isRecording
+                      ? const [Color(0xFFEF4444), Color(0xFFDC2626)]
+                      : const [Color(0xFFA855F7), Color(0xFF6366F1)],
+                ),
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isRecording
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFF6366F1))
+                        .withValues(alpha: _isRecording ? 0.42 : 0.30),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(_isRecording ? '🛑' : '🎙️', style: const TextStyle(fontSize: 19)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      _isRecording ? '正在录音中... (松手或点击发送)' : '轻触对波可说话',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        _softCircleButton(
+          icon: Icons.keyboard_alt_outlined,
+          tooltip: '打字输入',
+          isNight: isNight,
+          onTap: () => setState(() => _showKeyboardInput = true),
+        ),
+      ],
+    );
+  }
+
+  /// 打字模式输入条: 💭 心声 | 🎤 + 输入框 + 发送
+  Widget _keyboardInputBar(bool isNight) {
+    return Row(
+      children: [
+        _softCircleButton(
+          icon: Icons.chat_bubble_outline_rounded,
+          tooltip: '快捷心声',
+          isNight: isNight,
+          onTap: _showVoiceSpeechSheet,
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Container(
+            height: 50,
+            padding: const EdgeInsets.symmetric(horizontal: 13),
+            decoration: BoxDecoration(
+              color: isNight ? const Color(0xFF282352) : const Color(0xFFF6F7FB),
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(
+                color: isNight ? const Color(0xFF3B356D) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Row(
+              children: [
+                // 回到语音输入
+                GestureDetector(
+                  onTap: () => setState(() => _showKeyboardInput = false),
+                  child: Icon(
+                    Icons.mic_rounded,
+                    size: 18,
+                    color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+                  ),
+                ),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: _sendMessage,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: isNight ? Colors.white : Colors.black,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '对波可说点什么吧...',
+                      hintStyle: TextStyle(
+                        fontSize: 12.5,
+                        color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                // 发送
+                GestureDetector(
+                  onTap: () => _sendMessage(_textController.text),
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF6366F1),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.send_rounded, size: 15, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 底部次级圆形按钮
+  Widget _softCircleButton({
+    required IconData icon,
+    required String tooltip,
+    required bool isNight,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: () {
+          HapticService.light();
+          onTap();
+        },
+        child: Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 20,
+            color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
+          ),
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -825,9 +1152,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       ),
       child: Column(
         children: [
-          // 1. 顶部手柄与功能导航栏
+          // 1. 顶部: 拖拽手柄 + 紧凑标题栏
           Container(
-            padding: const EdgeInsets.fromLTRB(18, 12, 14, 10),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
@@ -836,12 +1162,26 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                 ),
               ),
             ),
-            child: Row(
+            child: Column(
+              children: [
+                // 拖拽手柄
+                Container(
+                  margin: const EdgeInsets.only(top: 8, bottom: 2),
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isNight ? const Color(0xFF3B356D) : const Color(0xFFE2D3F7),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 12, 12),
+                  child: Row(
               children: [
                 // 呼吸光环小头像
                 Container(
-                  width: 36,
-                  height: 36,
+                  width: 34,
+                  height: 34,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -854,78 +1194,43 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       ),
                     ],
                   ),
-                  child: const Center(child: Text('🐱', style: TextStyle(fontSize: 20))),
+                  child: const Center(child: Text('🐱', style: TextStyle(fontSize: 19))),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          Text(
-                            '波可的 AI 语音小电台',
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.bold,
-                              color: isNight ? Colors.white : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text('🎙️', style: TextStyle(fontSize: 13)),
-                        ],
+                      Text(
+                        '波可的小电台',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? Colors.white : const Color(0xFF1E293B),
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      Row(
-                        children: [
-                          Container(
-                            width: 6.5,
-                            height: 6.5,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: (_ai.lastError != null)
-                                  ? const Color(0xFFEF4444)
-                                  : (_ai.hasApiKey ? const Color(0xFF10B981) : const Color(0xFFF59E0B)),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            (_ai.lastError != null)
-                                ? '云端连接异常 (点击 ⚙️ 排查)'
-                                : (_ai.hasApiKey ? ' 就绪' : '智能陪伴模式 (点击 ⚙️ 设置)'),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: (_ai.lastError != null)
-                                  ? const Color(0xFFEF4444)
-                                  : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7E22CE)),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: 4),
+                      _statusPill(isNight),
                     ],
                   ),
                 ),
                 // 设置按钮
-                IconButton(
-                  icon: const Text('⚙️', style: TextStyle(fontSize: 18)),
-                  onPressed: _openSettingsDialog,
+                _roundIconButton(
+                  icon: Icons.tune_rounded,
                   tooltip: '设置 API Key',
+                  isNight: isNight,
+                  onTap: _openSettingsDialog,
                 ),
+                const SizedBox(width: 6),
                 // 关闭按钮
-                GestureDetector(
+                _roundIconButton(
+                  icon: Icons.close_rounded,
+                  tooltip: '关闭',
+                  isNight: isNight,
                   onTap: () => Navigator.pop(context),
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF26234F) : const Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B),
-                    ),
+                ),
+                    ],
                   ),
                 ),
               ],
@@ -1016,45 +1321,44 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                       ),
                                     ),
                                     if (!isUser) ...[
-                                      const SizedBox(height: 6),
-                                      GestureDetector(
-                                        onTap: () async {
-                                          HapticService.light();
-                                          if (msg.audioBytes != null && msg.audioBytes!.isNotEmpty) {
-                                            await _ai.playVoiceResponse(msg.audioBytes);
-                                          } else {
-                                            final audio = await _ai.synthesizeVoice(msg.content);
-                                            if (audio != null) {
-                                              await _ai.playVoiceResponse(audio);
-                                            } else {
-                                              SoundService.playMeow(tone: MeowTone.sweet);
-                                            }
-                                          }
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                                          decoration: BoxDecoration(
-                                            color: isNight ? const Color(0xFF2E2A60) : const Color(0xFFF3E8FF),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(
-                                              color: isNight ? const Color(0xFF4C4482) : const Color(0xFFE9D5FF),
-                                              width: 0.8,
-                                            ),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Text('🔊', style: TextStyle(fontSize: 11)),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '重播小奶音',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF7C3AED),
-                                                ),
+                                      const SizedBox(height: 4),
+                                      // 小奶音重播: 收成一枚圆形图标, 保持气泡干净
+                                      Align(
+                                        alignment: Alignment.centerRight,
+                                        child: Tooltip(
+                                          message: '重播小奶音',
+                                          child: GestureDetector(
+                                            onTap: () async {
+                                              HapticService.light();
+                                              if (msg.audioBytes != null && msg.audioBytes!.isNotEmpty) {
+                                                await _ai.playVoiceResponse(msg.audioBytes);
+                                              } else {
+                                                final audio = await _ai.synthesizeVoice(msg.content);
+                                                if (audio != null) {
+                                                  await _ai.playVoiceResponse(audio);
+                                                } else {
+                                                  SoundService.playMeow(tone: MeowTone.sweet);
+                                                }
+                                              }
+                                            },
+                                            child: Container(
+                                              width: 26,
+                                              height: 26,
+                                              decoration: BoxDecoration(
+                                                color: isNight
+                                                    ? const Color(0xFF2E2A60)
+                                                    : const Color(0xFFF3E8FF),
+                                                shape: BoxShape.circle,
                                               ),
-                                            ],
+                                              alignment: Alignment.center,
+                                              child: Icon(
+                                                Icons.volume_up_rounded,
+                                                size: 14,
+                                                color: isNight
+                                                    ? const Color(0xFFA5B4FC)
+                                                    : const Color(0xFF7C3AED),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -1119,46 +1423,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
               ),
             ),
 
-          // 4. 快捷灵感话题横滑标签 (Quick Action Chips)
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              scrollDirection: Axis.horizontal,
-              itemCount: _quickPrompts.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final prompt = _quickPrompts[index];
-                return GestureDetector(
-                  onTap: () => _sendMessage(prompt),
-                  child: Container(
-                    alignment: Alignment.center,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF241F48) : Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isNight ? const Color(0xFF4C4482) : const Color(0xFFE9D5FF),
-                      ),
-                    ),
-                    child: Text(
-                      prompt,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: isNight ? const Color(0xFFE0E7FF) : const Color(0xFF581C87),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
-
-          // 5. 底部语音 / 键盘输入控制条
+          // 4. 底部输入区: 💭 心声 | 主输入 | 键盘/发送
           Container(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 16),
             decoration: BoxDecoration(
               color: isNight ? const Color(0xFF1E1A3C) : Colors.white,
               border: Border(
@@ -1168,275 +1434,12 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                 ),
               ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 模式快速切换导航与提示
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => setState(() => _showKeyboardInput = true),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: _showKeyboardInput
-                                ? const Color(0xFF6366F1)
-                                : (isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('⌨️', style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 4),
-                              Text(
-                                '键盘打字',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: _showKeyboardInput
-                                      ? Colors.white
-                                      : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF475569)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => setState(() => _showKeyboardInput = false),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
-                          decoration: BoxDecoration(
-                            color: !_showKeyboardInput
-                                ? const Color(0xFF8B5CF6)
-                                : (isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9)),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('🎙️', style: TextStyle(fontSize: 12)),
-                              const SizedBox(width: 4),
-                              Text(
-                                '快捷倾诉',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: !_showKeyboardInput
-                                      ? Colors.white
-                                      : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF475569)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '💡 点击麦克风直接说话，或按住对讲',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isNight ? const Color(0xFF818CF8) : const Color(0xFF7C3AED),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                _showKeyboardInput
-                    ? Row(
-                        children: [
-                          InkWell(
-                            onTap: () => setState(() => _showKeyboardInput = false),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text('🎙️', style: TextStyle(fontSize: 14)),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '语音',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: TextField(
-                              controller: _textController,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: _sendMessage,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isNight ? Colors.white : Colors.black,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: '对波可说点什么吧...',
-                                hintStyle: TextStyle(
-                                  fontSize: 12,
-                                  color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                  borderSide: BorderSide.none,
-                                ),
-                                filled: true,
-                                fillColor: isNight ? const Color(0xFF282352) : const Color(0xFFF8FAFC),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          IconButton(
-                            icon: const Icon(Icons.send_rounded, color: Color(0xFF6366F1), size: 22),
-                            onPressed: () => _sendMessage(_textController.text),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          InkWell(
-                            onTap: () => setState(() => _showKeyboardInput = true),
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.keyboard_alt_rounded,
-                                    color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    '打字',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: _toggleListening,
-                              onLongPressStart: (_) {
-                                // 按住即开始录音; 内部会等待权限申请完成
-                                _ensureRecording();
-                              },
-                              onLongPressEnd: (_) {
-                                // 松手即停止并转写; 内部会等待录音真正建立, 避免竞态漏停
-                                _stopRecordingAndProcess();
-                              },
-                              child: Container(
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: _isRecording
-                                        ? const [Color(0xFFEF4444), Color(0xFFDC2626)]
-                                        : const [Color(0xFFA855F7), Color(0xFF6366F1)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(22),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: (_isRecording ? const Color(0xFFEF4444) : const Color(0xFF6366F1)).withValues(alpha: 0.35),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(_isRecording ? '🛑' : '🎙️', style: const TextStyle(fontSize: 18)),
-                                    const SizedBox(width: 8),
-                                    Flexible(
-                                      child: Text(
-                                        _isRecording
-                                            ? '正在录音中... (松手或点击发送)'
-                                            : '轻触对波可说话',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          // 快捷心声卡片入口
-                          InkWell(
-                            onTap: _showVoiceSpeechSheet,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isNight ? const Color(0xFF282352) : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text('💡', style: TextStyle(fontSize: 14)),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    '心声',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          // 清空记录按钮
-                          IconButton(
-                            icon: const Text('🧹', style: TextStyle(fontSize: 16)),
-                            onPressed: () {
-                              _ai.clearHistory();
-                              setState(() {});
-                              HapticService.light();
-                            },
-                            tooltip: '清空记忆',
-                          ),
-                        ],
-                      ),
-              ],
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: SafeArea(
+              top: false,
+              child: _showKeyboardInput
+                  ? _keyboardInputBar(isNight)
+                  : _voiceInputBar(isNight),
             ),
           ),
         ],

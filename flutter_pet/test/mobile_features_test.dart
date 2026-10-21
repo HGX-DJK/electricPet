@@ -523,12 +523,19 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('波可的 AI 语音小电台'), findsOneWidget);
+      expect(find.text('波可的小电台'), findsOneWidget);
       expect(find.text('轻触对波可说话'), findsOneWidget);
-      expect(find.text('🐟 投喂小鱼干'), findsOneWidget);
 
-      // 点击快速灵感话题
-      await tester.tap(find.text('🐟 投喂小鱼干'));
+      // 主面板保持简洁: 预置短语统一收在「快捷心声」面板
+      expect(find.text('🐟 投喂小鱼干'), findsNothing);
+      await tester.tap(find.byTooltip('快捷心声'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('想和波可说点什么？'), findsOneWidget);
+
+      // 点选一条预置心声
+      await tester.tap(find.text('波可，给你准备了香酥小鱼干，快来吃呀！'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
 
