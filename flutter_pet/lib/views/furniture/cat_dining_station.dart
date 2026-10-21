@@ -7,6 +7,7 @@ class CatDiningStation extends StatelessWidget {
   final bool isHungry;
   final bool showFoodTray;
   final bool isWaterRippling;
+  final bool isDrinking;
   final VoidCallback onFoodBowlTap;
   final VoidCallback onFoodBowlDoubleTap;
   final VoidCallback onWaterBowlTap;
@@ -18,6 +19,7 @@ class CatDiningStation extends StatelessWidget {
     required this.isHungry,
     required this.showFoodTray,
     required this.isWaterRippling,
+    this.isDrinking = false,
     required this.onFoodBowlTap,
     required this.onFoodBowlDoubleTap,
     required this.onWaterBowlTap,
@@ -186,46 +188,115 @@ class CatDiningStation extends StatelessWidget {
     );
   }
 
-  /// 水碗组件
+  /// 水碗组件 (精致陶瓷浅盆 · 动态清泉水面与同心水波涟漪)
   Widget _buildWaterBowl() {
+    final active = isWaterRippling || isDrinking;
     return BouncyTouchFeedback(
       key: const ValueKey('cat_water_bowl'),
       scaleDown: 0.92,
       onTap: onWaterBowlTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
-          color: isWaterRippling
-              ? const Color(0xFF38BDF8).withValues(alpha: 0.25)
-              : (isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9)),
+          color: isNight
+              ? (active ? const Color(0xFF1E293B) : const Color(0xFF140F2A))
+              : (active ? const Color(0xFFE0F2FE) : const Color(0xFFF8FAFC)),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isWaterRippling
+            color: active
                 ? const Color(0xFF0284C7)
                 : (isNight
                     ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
                     : const Color(0xFFBAE6FD)),
-            width: 1.0,
+            width: active ? 1.4 : 1.0,
           ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF0284C7).withValues(alpha: 0.28),
+                    blurRadius: 6,
+                    offset: const Offset(0, 1.5),
+                  ),
+                ]
+              : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('🥣', style: TextStyle(fontSize: 14)),
-                const SizedBox(width: 2),
-                Text(isWaterRippling ? '🫧' : '💧', style: const TextStyle(fontSize: 11)),
-              ],
+            // 真实陶瓷注水碗 (含水面反光与同心涟漪波纹)
+            SizedBox(
+              width: 32,
+              height: 20,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 陶瓷碗外壁与厚度阴影
+                  Container(
+                    width: 32,
+                    height: 19,
+                    decoration: BoxDecoration(
+                      color: isNight ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isNight ? const Color(0xFF475569) : Colors.white,
+                        width: 1.2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // 碗内湛蓝清泉水体
+                  Container(
+                    width: 26,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFF38BDF8), Color(0xFF0284C7)],
+                      ),
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                  ),
+                  // 水面高光与波光涟漪
+                  if (active)
+                    _WaterRippleEffect(isNight: isNight)
+                  else
+                    // 静止微光高光点
+                    Positioned(
+                      top: 4,
+                      left: 6,
+                      child: Container(
+                        width: 5,
+                        height: 2,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                      ),
+                    ),
+                  // 漂浮小水珠或小气泡
+                  Center(
+                    child: Text(
+                      isDrinking ? '🫧' : (active ? '💧' : ''),
+                      style: const TextStyle(fontSize: 8.5),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 1.5),
+            const SizedBox(height: 2),
             Text(
-              isWaterRippling ? '波光粼粼' : '水碗',
+              isDrinking ? '舔水中' : (active ? '波光粼粼' : '水碗'),
               style: TextStyle(
                 fontSize: 8.5,
                 fontWeight: FontWeight.bold,
-                color: isWaterRippling
+                color: active
                     ? const Color(0xFF0284C7)
                     : (isNight ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1)),
               ),
@@ -279,4 +350,76 @@ class CatDiningStation extends StatelessWidget {
       ),
     );
   }
+}
+
+
+/// 水碗动态水波涟漪组件 (Concentric Water Ripples)
+class _WaterRippleEffect extends StatefulWidget {
+  final bool isNight;
+  const _WaterRippleEffect({required this.isNight});
+
+  @override
+  State<_WaterRippleEffect> createState() => _WaterRippleEffectState();
+}
+
+class _WaterRippleEffectState extends State<_WaterRippleEffect>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final val = _controller.value;
+        return CustomPaint(
+          size: const Size(26, 14),
+          painter: _RipplePainter(val),
+        );
+      },
+    );
+  }
+}
+
+class _RipplePainter extends CustomPainter {
+  final double progress;
+  _RipplePainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    for (int i = 0; i < 2; i++) {
+      final p = (progress + i * 0.5) % 1.0;
+      final radiusX = 4.0 + p * 8.0;
+      final radiusY = 2.0 + p * 4.0;
+      final opacity = (1.0 - p).clamp(0.0, 0.85);
+      final paint = Paint()
+        ..color = Colors.white.withValues(alpha: opacity)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      canvas.drawOval(
+        Rect.fromCenter(center: center, width: radiusX * 2, height: radiusY * 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RipplePainter oldDelegate) =>
+      oldDelegate.progress != progress;
 }

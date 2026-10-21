@@ -994,8 +994,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
             final nestY = floorTop + 130.0;
             _startWalkingTo(
-              85.0,
-              nestY + 85.0,
+              78.0,
+              nestY + 72.0,
               'WATER_BOWL',
               '吃得香喷喷，嘴巴有点干啦~ 踱步去水碗喝口清甜的水水！💧🐾',
             );
@@ -2431,22 +2431,48 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _isWaterRippling = true;
       _facingLeft = true;
     });
-    _spawnParticles(Offset(78.0, nestY + 115.0), emoji: '💧', count: 4);
-    _spawnParticles(Offset(85.0, nestY + 105.0), emoji: '✨', count: 2);
-    _spawnTextParticle(Offset(55.0, nestY + 90.0), '咕嘟咕嘟喝饱水 💧✨', const Color(0xFF0284C7));
-    widget.petModel.addCleanliness(8);
-    widget.petModel.addMood(6);
-    widget.petModel.addIntimacy(2);
-    _showDialogueBubble('吧唧吧唧~ 纯净水甘甜清冽，小猫咕嘟咕嘟喝饱啦！清洁+8 心情+6 💧(ฅ^ω^ฅ)', duration: const Duration(seconds: 4));
+
+    // 饮水过程水花四溅微粒子
+    _spawnParticles(Offset(45.0, nestY + 80.0), emoji: '💧', count: 4);
+    _spawnParticles(Offset(52.0, nestY + 75.0), emoji: '🫧', count: 2);
+    _showDialogueBubble('吧唧吧唧~ 纯净水甘甜清冽，小猫咕嘟咕嘟喝水啦！💧(ฅ^ω^ฅ)', duration: const Duration(seconds: 3));
+
+    Timer(const Duration(milliseconds: 1200), () {
+      if (mounted && _state == 'DRINK_WATER') {
+        _spawnParticles(Offset(45.0, nestY + 80.0), emoji: '💧', count: 3);
+      }
+    });
 
     _drinkTimer?.cancel();
-    _drinkTimer = Timer(const Duration(milliseconds: 2400), () {
+    _drinkTimer = Timer(const Duration(milliseconds: 2800), () {
       if (mounted) {
+        // 饮水完成结算身心属性并播放治愈呼噜
+        widget.petModel.addCleanliness(8);
+        widget.petModel.addMood(6);
+        widget.petModel.addIntimacy(2);
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+8 清洁  +6 愉悦  +2 亲密 💧✨', const Color(0xFF0284C7));
+        _spawnParticles(Offset(_petX, _petY - 20), emoji: '💖', count: 3);
+        _triggerBlep();
+        _triggerWink();
+        SoundService.startPurr();
+        Timer(const Duration(milliseconds: 1600), () => SoundService.stopPurr());
+
         setState(() {
           _isWaterRippling = false;
           _state = 'WASH_FACE';
         });
-        _showDialogueBubble('喝完水水洗洗小脸蛋，理理胡须帅帅哒~ 🫧✨');
+
+        final drinkQuotes = [
+          '咕嘟咕嘟~ 今天的清水甘甜又清凉，波可的小肚肚好舒服呀！(ฅ^ω^ฅ)💧',
+          '呼~ 补充了满满的水分！舔舔胡须擦擦嘴，整只猫都神清气爽啦~ 🫧✨',
+          '吧唧吧唧好满足！谢谢主人的新鲜清水，波可最喜欢喝水啦~ 💧💕',
+        ];
+        _showDialogueBubble(
+          drinkQuotes[math.Random().nextInt(drinkQuotes.length)],
+          duration: const Duration(seconds: 4),
+          speak: true,
+        );
+
         Timer(const Duration(milliseconds: 1800), () {
           if (mounted && _state == 'WASH_FACE') {
             setState(() => _state = 'IDLE');
@@ -3663,6 +3689,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       isHungry: widget.petModel.hunger < 50,
                       showFoodTray: _showFoodTray,
                       isWaterRippling: _isWaterRippling,
+                      isDrinking: _state == 'DRINK_WATER',
                       onFoodBowlTap: () {
                         SoundService.playPop();
                         _vibrate('light');
@@ -3679,33 +3706,41 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       },
                       onFoodBowlDoubleTap: () => _popFishFromBowl(nestX, nestY),
                       onWaterBowlTap: () {
-                        SoundService.playPop();
+                        // 播放清澈注水水滴音效与轻触反馈
+                        SoundService.playWaterDrop();
                         _vibrate('light');
                         setState(() {
                           _isWaterRippling = true;
                         });
-                        _spawnParticles(Offset(45, nestY + 95), emoji: '💧', count: 4);
-                        _spawnTextParticle(Offset(35, nestY + 75), '解渴补水 💧✨', const Color(0xFF0284C7));
+                        _spawnParticles(Offset(42, nestY + 80), emoji: '💧', count: 5);
+                        _spawnParticles(Offset(48, nestY + 70), emoji: '✨', count: 3);
+                        _spawnTextParticle(Offset(32, nestY + 55), '注满清冽甘泉 💧✨', const Color(0xFF0284C7));
 
-                        // 如果猫咪在就餐角附近，直接触发低头小舔水微表情动作 (方向四)
-                        if ((_petX - 85.0).abs() < 100 && (_petY - (nestY + 85.0)).abs() < 90) {
+                        if (_state == 'DRINK_WATER') {
+                          _showDialogueBubble('添入新鲜甘泉啦！水质格外清冽冰凉~ 咕嘟咕嘟！💧✨', duration: const Duration(seconds: 3), speak: true);
+                          return;
+                        }
+
+                        final isNearBowl = (_petX - 78.0).abs() < 80 && (_petY - (nestY + 72.0)).abs() < 75;
+
+                        if (isNearBowl) {
+                          _showDialogueBubble('闻到清甜纯净水的气味啦~ 凑近水碗吧唧吧唧喝大口！💧(ฅ^ω^ฅ)', duration: const Duration(seconds: 3), speak: true);
                           _startDrinkingWater(nestY);
                         } else {
-                          widget.petModel.addCleanliness(8);
-                          widget.petModel.addMood(6);
-                          widget.petModel.addIntimacy(2);
-                          _showDialogueBubble('水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨', duration: const Duration(seconds: 3));
+                          _showDialogueBubble('听到清脆的倒水声啦！踱步过去喝清甜纯净水~ 💧🐾', duration: const Duration(seconds: 3), speak: true);
                           _startWalkingTo(
-                            85.0,
-                            nestY + 85.0,
+                            78.0,
+                            nestY + 72.0,
                             'WATER_BOWL',
-                            '水碗泛起粼粼清澈涟漪~ 唤波可过来喝水补充水分吧！💧✨',
+                            '添了清澈纯净水~ 踱步去水碗喝口清甜水水！💧🐾',
                           );
                         }
 
                         _waterRippleTimer?.cancel();
-                        _waterRippleTimer = Timer(const Duration(milliseconds: 1200), () {
-                          if (mounted) setState(() => _isWaterRippling = false);
+                        _waterRippleTimer = Timer(const Duration(milliseconds: 3000), () {
+                          if (mounted && _state != 'DRINK_WATER') {
+                            setState(() => _isWaterRippling = false);
+                          }
                         });
                       },
                       onCanSummonTap: () => _onCanSummonTap(nestX, nestY),

@@ -219,12 +219,23 @@ class SoundService {
     }
   }
 
-  /// 猫咪小口舔水吧唧音效 (Water Lapping)
+  /// 清洌水滴与添水涟漪音效 (Water Drop / Refill)
+  static Future<void> playWaterDrop() async {
+    if (!soundEnabled) return;
+    try {
+      await sfxPlayer.stop();
+      await sfxPlayer.play(AssetSource('audio/water_drop.wav'), volume: 0.75);
+    } catch (_) {
+      SystemSound.play(SystemSoundType.click);
+    }
+  }
+
+  /// 猫咪小口舔水吧唧真实水流音效 (Water Lapping)
   static Future<void> playWaterLap() async {
     if (!soundEnabled) return;
     try {
       await sfxPlayer.stop();
-      await sfxPlayer.play(AssetSource('audio/pop.wav'), volume: 0.65);
+      await sfxPlayer.play(AssetSource('audio/water_lap.wav'), volume: 0.85);
     } catch (_) {
       SystemSound.play(SystemSoundType.click);
     }
