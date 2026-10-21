@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import '../../models/pet_model.dart';
 import '../../services/haptic_service.dart';
 import '../../services/sound_service.dart';
+import '../../theme/poko_theme.dart';
+
+/// 扭蛋机专属「落日珊瑚」品牌色。
+/// 设计令牌 (PokoPalette) 暂未收录该色相, 故在此集中定义一处, 便于后续并入令牌体系。
+const Color _sunsetCoral = Color(0xFFFF7A55);
 
 class GachaItem {
   final String rarity;
@@ -56,11 +61,13 @@ class GachaItem {
 class GachaDialog extends StatefulWidget {
   final PetModel model;
   final VoidCallback onUpdated;
+  final bool isNight;
 
   const GachaDialog({
     super.key,
     required this.model,
     required this.onUpdated,
+    this.isNight = false,
   });
 
   @override
@@ -94,9 +101,11 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('⚡ 能量币不足 (需 $cost 币)，多陪波可玩耍或投喂可获得能量币！'),
-          backgroundColor: const Color(0xFFF43F5E),
+          backgroundColor: PokoPalette.rose,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
+          ),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -145,14 +154,14 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
   Color _getRarityColor(String rarity) {
     switch (rarity) {
       case 'UR':
-        return const Color(0xFFF43F5E); // 绝品梦幻粉金
+        return PokoPalette.rose; // 绝品梦幻粉金
       case 'SSR':
-        return const Color(0xFFF59E0B); // 璀璨曜金
+        return PokoPalette.amber; // 璀璨曜金
       case 'SR':
-        return const Color(0xFFA855F7); // 幻梦星紫
+        return PokoPalette.violet; // 幻梦星紫
       case 'R':
       default:
-        return const Color(0xFF0EA5E9); // 清晨天青
+        return PokoPalette.sky; // 清晨天青
     }
   }
 
@@ -173,198 +182,193 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final model = widget.model;
-    final isNight = Theme.of(context).brightness == Brightness.dark;
+    final isNight = widget.isNight;
+    final t = context.poko(isNight);
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.78,
-      decoration: BoxDecoration(
-        color: isNight ? const Color(0xFF1E1738) : const Color(0xFFFFFDF8),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        border: Border.all(
-          color: isNight ? const Color(0xFF4C3D77) : const Color(0xFFFED7AA),
-          width: 1.2,
+    return PokoSheetShell(
+      isNight: isNight,
+      maxHeightFactor: 0.78,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          PokoSpacing.xl,
+          0,
+          PokoSpacing.xl,
+          PokoSpacing.xl,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 28,
-            offset: Offset(0, -8),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 顶部指示条
-          Center(
-            child: Container(
-              width: 42,
-              height: 4.5,
-              decoration: BoxDecoration(
-                color: isNight ? const Color(0xFF4C3D77) : const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 标题栏：心愿扭蛋机、代币余额、关闭按钮
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFFFEDD5), Color(0xFFFDE68A)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      alignment: Alignment.center,
-                      child: const Text('✨', style: TextStyle(fontSize: 18)),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '奇迹星愿扭蛋机',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isNight ? Colors.white : const Color(0xFF1E293B),
-                              letterSpacing: 0.3,
-                            ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题栏：心愿扭蛋机、代币余额、关闭按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              PokoPalette.amberSoft,
+                              PokoPalette.amber.withValues(alpha: 0.35),
+                            ],
                           ),
-                          const SizedBox(height: 1),
-                          const Text(
-                            'DREAM CAPSULE POD',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          borderRadius: BorderRadius.circular(PokoRadius.sm),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Text('✨', style: TextStyle(fontSize: 18)),
+                      ),
+                      const SizedBox(width: PokoSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '奇迹星愿扭蛋机',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: PokoFont.title,
+                                fontWeight: FontWeight.bold,
+                                color: t.textPrimary,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            const Text(
+                              'DREAM CAPSULE POD',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: PokoFont.micro,
+                                fontWeight: FontWeight.w700,
+                                color: _sunsetCoral,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: PokoSpacing.xs),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 能量币余额胶囊
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: PokoSpacing.sm,
+                        vertical: PokoSpacing.xs,
+                      ),
+                      decoration: BoxDecoration(
+                        color: t.surfaceAlt,
+                        borderRadius: BorderRadius.circular(PokoRadius.md),
+                        border: Border.all(
+                          color: PokoPalette.amber.withValues(alpha: 0.5),
+                          width: 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text('🪙', style: TextStyle(fontSize: 12)),
+                          const SizedBox(width: PokoSpacing.xs),
+                          Text(
+                            '${model.coins}',
                             style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFFFF7A55),
-                              letterSpacing: 0.8,
+                              fontSize: PokoFont.small,
+                              fontWeight: FontWeight.bold,
+                              color: isNight
+                                  ? PokoPalette.amber
+                                  : PokoPalette.amberDeep,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(width: PokoSpacing.xs),
+                    GestureDetector(
+                      onTap: () {
+                        SoundService.playClick();
+                        Navigator.of(context).pop();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(PokoSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: t.surfaceAlt,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.close_rounded,
+                          size: 17,
+                          color: t.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            if (_lastEquippedMessage != null) ...[
+              const SizedBox(height: PokoSpacing.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PokoSpacing.md,
+                  vertical: PokoSpacing.xs,
+                ),
+                decoration: BoxDecoration(
+                  color: PokoPalette.emerald.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(PokoRadius.xs),
+                  border: Border.all(
+                    color: PokoPalette.emerald.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Text('🐾', style: TextStyle(fontSize: 13)),
+                    const SizedBox(width: PokoSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        _lastEquippedMessage!,
+                        style: const TextStyle(
+                          fontSize: PokoFont.caption,
+                          fontWeight: FontWeight.w600,
+                          color: PokoPalette.emeraldDeep,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(width: 6),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 能量币余额胶囊
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🪙', style: TextStyle(fontSize: 12)),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${model.coins}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () {
-                      SoundService.playClick();
-                      Navigator.of(context).pop();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF2E2452) : const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 17,
-                        color: isNight ? Colors.white70 : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
-          ),
 
-          if (_lastEquippedMessage != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Text('🐾', style: TextStyle(fontSize: 13)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      _lastEquippedMessage!,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF047857),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            const SizedBox(height: PokoSpacing.md),
+
+            // 核心内容展示区 (机舱外观 / 抽取结果卡片流)
+            Expanded(
+              child: _recentResults != null
+                  ? _buildResultsView(isNight)
+                  : _buildPodShowcase(isNight),
             ),
+
+            const SizedBox(height: PokoSpacing.md),
+
+            // 底部抽卡祈愿按钮区
+            _buildActionButtons(isNight),
           ],
-
-          const SizedBox(height: 12),
-
-          // 核心内容展示区 (机舱外观 / 抽取结果卡片流)
-          Expanded(
-            child: _recentResults != null
-                ? _buildResultsView(isNight)
-                : _buildPodShowcase(isNight),
-          ),
-
-          const SizedBox(height: 12),
-
-          // 底部抽卡祈愿按钮区
-          _buildActionButtons(isNight),
-        ],
+        ),
       ),
     );
   }
 
   /// 萌趣梦幻扭蛋机展示视图
   Widget _buildPodShowcase(bool isNight) {
+    final t = context.poko(isNight);
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -380,9 +384,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  const Color(0xFFFFEDD5),
-                  const Color(0xFFFED7AA).withValues(alpha: 0.6),
-                  const Color(0xFFFDE68A).withValues(alpha: 0.2),
+                  PokoPalette.amberSoft,
+                  PokoPalette.amber.withValues(alpha: 0.35),
+                  PokoPalette.amber.withValues(alpha: 0.2),
                   Colors.transparent,
                 ],
               ),
@@ -396,11 +400,15 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFFFF9E7D), Color(0xFFFF7A55), Color(0xFFF59E0B)],
+                    colors: [
+                      PokoPalette.amberSoft,
+                      _sunsetCoral,
+                      PokoPalette.amber,
+                    ],
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF7A55).withValues(alpha: 0.4),
+                      color: _sunsetCoral.withValues(alpha: 0.4),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
@@ -413,17 +421,20 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                     Positioned(
                       bottom: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PokoSpacing.sm,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.88),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(PokoRadius.xs),
                         ),
                         child: const Text(
                           'POKO POD',
                           style: TextStyle(
-                            fontSize: 8.5,
+                            fontSize: PokoFont.micro,
                             fontWeight: FontWeight.w900,
-                            color: Color(0xFFEA580C),
+                            color: PokoPalette.amberDeep,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -436,39 +447,42 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: PokoSpacing.lg),
 
         // 保底特权横幅 (十连必出 SSR / UR)
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          padding: const EdgeInsets.symmetric(
+            horizontal: PokoSpacing.lg,
+            vertical: PokoSpacing.sm,
+          ),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFF7ED), Color(0xFFFEF3C7)],
+            gradient: LinearGradient(
+              colors: [
+                PokoPalette.amberSoft,
+                PokoPalette.amber.withValues(alpha: 0.22),
+              ],
             ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.45), width: 1.1),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(PokoRadius.md),
+            border: Border.all(
+              color: PokoPalette.amber.withValues(alpha: 0.45),
+              width: 1,
+            ),
+            boxShadow: PokoShadow.soft(PokoPalette.amber),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text('✨', style: TextStyle(fontSize: 14)),
-              SizedBox(width: 6),
+              SizedBox(width: PokoSpacing.xs),
               Flexible(
                 child: Text(
                   '十连抽享 9 折且 100% 保底 SSR / UR 绝品神装！',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 11.5,
+                    fontSize: PokoFont.caption,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF9A3412),
+                    color: PokoPalette.amberDeep,
                   ),
                 ),
               ),
@@ -476,18 +490,18 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           ),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: PokoSpacing.md),
 
         // 奖池爆款配件预览
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: PokoSpacing.xl),
           child: Text(
             '🌟 绝品装扮涵盖：战术目镜、RGB机械键盘、全息光纤逗猫棒、夏日阳光海滩、暗夜霓虹极客房、圣洁天使羽翼',
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: PokoFont.caption,
               height: 1.4,
-              color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+              color: t.textSecondary,
             ),
           ),
         ),
@@ -497,6 +511,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
 
   /// 抽取结果卡片流
   Widget _buildResultsView(bool isNight) {
+    final t = context.poko(isNight);
     final results = _recentResults!;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,13 +522,13 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
             Row(
               children: [
                 const Text('🎉', style: TextStyle(fontSize: 16)),
-                const SizedBox(width: 6),
+                const SizedBox(width: PokoSpacing.xs),
                 Text(
                   '愿望启封达成 (${results.length} 件心愿之礼)',
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: PokoFont.body,
                     fontWeight: FontWeight.bold,
-                    color: isNight ? Colors.white : const Color(0xFF1E293B),
+                    color: t.textPrimary,
                   ),
                 ),
               ],
@@ -524,23 +539,32 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                 setState(() => _recentResults = null);
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: PokoSpacing.sm,
+                  vertical: PokoSpacing.xs,
+                ),
                 decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFF7ED),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFF7A55).withValues(alpha: 0.4)),
+                  color: t.surfaceAlt,
+                  borderRadius: BorderRadius.circular(PokoRadius.sm),
+                  border: Border.all(
+                    color: _sunsetCoral.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.arrow_back_rounded, size: 13, color: Color(0xFFFF7A55)),
-                    SizedBox(width: 3),
+                    Icon(
+                      Icons.arrow_back_rounded,
+                      size: 13,
+                      color: _sunsetCoral,
+                    ),
+                    SizedBox(width: PokoSpacing.xxs),
                     Text(
                       '返回机舱',
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: PokoFont.caption,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFFFF7A55),
+                        color: _sunsetCoral,
                       ),
                     ),
                   ],
@@ -549,7 +573,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: PokoSpacing.sm),
         Expanded(
           child: GridView.builder(
             itemCount: results.length,
@@ -557,8 +581,8 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               childAspectRatio: 1.28,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+              crossAxisSpacing: PokoSpacing.sm,
+              mainAxisSpacing: PokoSpacing.sm,
             ),
             itemBuilder: (context, index) {
               final item = results[index];
@@ -585,27 +609,23 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                 },
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF281F47) : Colors.white,
-                    borderRadius: BorderRadius.circular(16),
+                    color: t.surface,
+                    borderRadius: BorderRadius.circular(PokoRadius.md),
                     border: Border.all(
                       color: rarityColor.withValues(alpha: isHighRarity ? 0.85 : 0.65),
-                      width: isHighRarity ? 1.8 : 1.4,
+                      width: isHighRarity ? 1.5 : 1,
                     ),
                     boxShadow: [
-                      BoxShadow(
-                        color: rarityColor.withValues(alpha: isHighRarity ? 0.32 : 0.16),
-                        blurRadius: isHighRarity ? 14 : 10,
-                        offset: const Offset(0, 3),
-                      ),
+                      ...PokoShadow.card(rarityColor),
                       if (isHighRarity)
                         BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
+                          color: PokoPalette.amber.withValues(alpha: 0.18),
                           blurRadius: 6,
                           offset: const Offset(0, 1),
                         ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(PokoSpacing.sm),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -619,7 +639,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                             height: 34,
                             decoration: BoxDecoration(
                               color: rarityColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(PokoRadius.xs),
                             ),
                             alignment: Alignment.center,
                             child: Text(item.icon, style: const TextStyle(fontSize: 20)),
@@ -629,58 +649,80 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                             children: [
                               if (item.refundCoins > 0)
                                 Container(
-                                  margin: const EdgeInsets.only(right: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+                                  margin: const EdgeInsets.only(
+                                    right: PokoSpacing.xs,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: PokoSpacing.xs,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withValues(alpha: 0.16),
-                                    borderRadius: BorderRadius.circular(6),
+                                    color: PokoPalette.emerald.withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(
+                                      PokoRadius.xs,
+                                    ),
                                     border: Border.all(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.5),
-                                      width: 0.8,
+                                      color: PokoPalette.emerald.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      width: 1,
                                     ),
                                   ),
                                   child: const Text(
                                     '♻️+15🪙',
                                     style: TextStyle(
-                                      fontSize: 8.0,
+                                      fontSize: PokoFont.micro,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF059669),
+                                      color: PokoPalette.emeraldDeep,
                                     ),
                                   ),
                                 )
                               else if (item.isNew)
                                 Container(
-                                  margin: const EdgeInsets.only(right: 4),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 2),
+                                  margin: const EdgeInsets.only(
+                                    right: PokoSpacing.xs,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: PokoSpacing.xs,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
-                                      colors: [Color(0xFFEF4444), Color(0xFFF59E0B)],
+                                      colors: [
+                                        PokoPalette.rose,
+                                        PokoPalette.amber,
+                                      ],
                                     ),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: BorderRadius.circular(
+                                      PokoRadius.xs,
+                                    ),
                                   ),
                                   child: const Text(
                                     'NEW',
                                     style: TextStyle(
-                                      fontSize: 7.5,
+                                      fontSize: PokoFont.micro,
                                       fontWeight: FontWeight.w900,
                                       color: Colors.white,
                                     ),
                                   ),
                                 ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: PokoSpacing.xs,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: rarityColor.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(PokoRadius.xs),
                                   border: Border.all(
                                     color: rarityColor.withValues(alpha: 0.8),
-                                    width: 0.9,
+                                    width: 1,
                                   ),
                                 ),
                                 child: Text(
                                   _getRarityLabel(item.rarity),
                                   style: TextStyle(
-                                    fontSize: 9.5,
+                                    fontSize: PokoFont.tiny,
                                     fontWeight: FontWeight.w800,
                                     color: rarityColor,
                                   ),
@@ -698,21 +740,21 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                           Text(
                             item.name,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: PokoFont.small,
                               fontWeight: FontWeight.bold,
-                              color: isNight ? Colors.white : const Color(0xFF1E293B),
+                              color: t.textPrimary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: PokoSpacing.xxs),
                           Text(
                             item.desc.isNotEmpty ? item.desc : item.slotName,
                             style: TextStyle(
-                              fontSize: 9.5,
+                              fontSize: PokoFont.tiny,
                               height: 1.2,
                               fontWeight: FontWeight.w500,
-                              color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                              color: t.textSecondary,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -726,12 +768,12 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                         height: 26,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: isEquipped
-                                ? (isNight ? const Color(0xFF3B2E5C) : const Color(0xFFE2E8F0))
-                                : rarityColor,
+                            backgroundColor: isEquipped ? t.surfaceAlt : rarityColor,
                             padding: EdgeInsets.zero,
                             elevation: isEquipped ? 0 : 2,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(PokoRadius.xs),
+                            ),
                           ),
                           onPressed: isEquipped
                               ? null
@@ -755,11 +797,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                                 ? (isHabitat ? '已布置' : '已穿戴')
                                 : (isHabitat ? '布置小窝 🏠' : '一键穿戴 ✨'),
                             style: TextStyle(
-                              fontSize: 10.5,
+                              fontSize: PokoFont.caption,
                               fontWeight: FontWeight.bold,
-                              color: isEquipped
-                                  ? (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B))
-                                  : Colors.white,
+                              color: isEquipped ? t.textMuted : Colors.white,
                             ),
                           ),
                         ),
@@ -777,19 +817,20 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
 
   /// 底部抽卡按钮区
   Widget _buildActionButtons(bool isNight) {
+    final t = context.poko(isNight);
     return Row(
       children: [
         // 单抽
         Expanded(
           child: ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: isNight ? const Color(0xFF281F47) : Colors.white,
-              foregroundColor: const Color(0xFFFF7A55),
-              padding: const EdgeInsets.symmetric(vertical: 10),
+              backgroundColor: t.surface,
+              foregroundColor: _sunsetCoral,
+              padding: const EdgeInsets.symmetric(vertical: PokoSpacing.sm),
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Color(0xFFFF7A55), width: 1.2),
+                borderRadius: BorderRadius.circular(PokoRadius.md),
+                side: const BorderSide(color: _sunsetCoral, width: 1.5),
               ),
             ),
             onPressed: _isPulling ? null : () => _handleDraw(1),
@@ -798,19 +839,25 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               children: [
                 Text(
                   '🌟 开启心愿',
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: PokoFont.body,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                SizedBox(height: 2),
+                SizedBox(height: PokoSpacing.xxs),
                 Text(
                   '30 能量币',
-                  style: TextStyle(fontSize: 10.5, color: Color(0xFF94A3B8)),
+                  style: TextStyle(
+                    fontSize: PokoFont.caption,
+                    color: PokoPalette.amberDeep,
+                  ),
                 ),
               ],
             ),
           ),
         ),
 
-        const SizedBox(width: 12),
+        const SizedBox(width: PokoSpacing.md),
 
         // 十连抽 (保底)
         Expanded(
@@ -818,12 +865,12 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           child: Container(
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF7A55), Color(0xFFF59E0B)],
+                colors: [_sunsetCoral, PokoPalette.amber],
               ),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(PokoRadius.md),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF7A55).withValues(alpha: 0.35),
+                  color: _sunsetCoral.withValues(alpha: 0.35),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -834,9 +881,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 10),
+                padding: const EdgeInsets.symmetric(vertical: PokoSpacing.sm),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(PokoRadius.md),
                 ),
               ),
               onPressed: _isPulling ? null : () => _handleDraw(10),
@@ -846,15 +893,30 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('🚀 幸运十连', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      SizedBox(width: 6),
-                      Text('保底SSR/UR', style: TextStyle(fontSize: 10, color: Color(0xFFFEF3C7))),
+                      Text(
+                        '🚀 幸运十连',
+                        style: TextStyle(
+                          fontSize: PokoFont.bodyLg,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(width: PokoSpacing.xs),
+                      Text(
+                        '保底SSR/UR',
+                        style: TextStyle(
+                          fontSize: PokoFont.tiny,
+                          color: PokoPalette.amberSoft,
+                        ),
+                      ),
                     ],
                   ),
-                  SizedBox(height: 2),
+                  SizedBox(height: PokoSpacing.xxs),
                   Text(
                     '270 能量币 (限时9折)',
-                    style: TextStyle(fontSize: 10.5, color: Color(0xFFFFFBEB)),
+                    style: TextStyle(
+                      fontSize: PokoFont.caption,
+                      color: PokoPalette.amberSoft,
+                    ),
                   ),
                 ],
               ),

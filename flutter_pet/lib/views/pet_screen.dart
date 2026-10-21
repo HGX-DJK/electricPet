@@ -621,6 +621,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       barrierDismissible: false,
       builder: (ctx) => HeritageBackupDialog(
         backupData: backup,
+        isNight: _isNightMode,
         onInherit: () async {
           final ok = await BackupService.restoreFromHistoricalBackup(
             backup,
@@ -1769,7 +1770,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     AiVoiceChatDialog.show(
       context,
-      isNight: _windowWeather == 3,
+      isNight: _isNightMode,
       autoStartListening: autoListen,
       onActionTriggered: (action, dialogue) {
         _handleAiVoiceAction(action, dialogue);
@@ -1832,6 +1833,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _showBottomSheetModal(
             FeedingDialog(
               model: widget.petModel,
+              isNight: isNight,
               onFeedSelected: (foodId) {
                 final food = PetModel.foodMenu.firstWhere(
                   (f) => f['id'] == foodId,
@@ -1907,6 +1909,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       backgroundColor: Colors.transparent,
       builder: (_) => GachaDialog(
         model: widget.petModel,
+        isNight: _isNightMode,
         onUpdated: () => setState(() {}),
       ),
     );
@@ -2269,7 +2272,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => MemoryAlbumDialog(model: widget.petModel),
+      builder: (ctx) => MemoryAlbumDialog(
+        model: widget.petModel,
+        isNight: _isNightMode,
+      ),
     );
   }
 
@@ -2587,6 +2593,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('回到蓬松温暖的专属暖绒垫啦！舒服趴好~ 🐾☁️');
     _vibrate('selection');
   }
+
+  /// 当前昼夜状态 (与主界面昼夜节律一致, 供各类弹层统一取用)
+  bool get _isNightMode => _getCircadianTheme()['isNight'] as bool;
 
   /// 真实太阳天文算法与四季时角光影主题 (基于分钟进度 Color.lerp 平滑流光)
   Map<String, dynamic> _getCircadianTheme() {

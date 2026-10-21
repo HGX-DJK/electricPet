@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
+import '../../theme/poko_theme.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
-// 底部三灵动黄金大胶囊 (背包 + 装扮小窝 + 绝活，宽大舒适，零层级深度)
+/// 底部统一浮动坞 —— 单一容器承载多个入口。
+///
+/// 之前是 4 个各自独立的彩色胶囊 (白/紫/琥珀/蓝), 彼此抢夺注意力;
+/// 现在收敛为一个毛玻璃浮层, 用细分隔线区分入口, 并把「AI 语聊」做成
+/// 唯一的主操作 (实心渐变), 视觉层级一眼分明。
+///
+/// 窄屏策略:
+///  - 可用宽度不足时自动切换到紧凑密度 (更小的图标/字号/内边距), 而不是缩放整条栏;
+///  - 每个入口按自然宽度占比分配 flex, 极端窄屏时标签等比省略, 绝不溢出。
 class BottomFloatingBar extends StatelessWidget {
   final bool isNight;
   final VoidCallback onBackpackTap;
@@ -24,6 +33,8 @@ class BottomFloatingBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.poko(isNight);
+
     return Positioned(
       key: const ValueKey('bottom_floating_bar'),
       bottom: 16,
@@ -42,208 +53,176 @@ class BottomFloatingBar extends StatelessWidget {
             ),
           );
         },
-        child: Center(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-              // 1. 奇妙背包
-              BouncyTouchFeedback(
-                scaleDown: 0.93,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // 宽度不够时切紧凑密度, 而不是把整条栏等比缩小
+            final bool compact = constraints.maxWidth < 348;
+
+            final items = <Widget>[
+              _DockItem(
+                isNight: isNight,
+                icon: '🎒',
+                label: '奇妙背包',
                 onTap: onBackpackTap,
+                // 保留"上滑打开"的提示
+                showChevron: true,
                 onVerticalDragEnd: (details) {
-                  if (details.primaryVelocity != null && details.primaryVelocity! < -50) {
+                  if (details.primaryVelocity != null &&
+                      details.primaryVelocity! < -50) {
                     onBackpackTap();
                   }
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
-                  decoration: BoxDecoration(
-                    color: isNight
-                        ? const Color(0xFF1E1A40).withValues(alpha: 0.92)
-                        : Colors.white.withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isNight
-                          ? const Color(0xFF6366F1).withValues(alpha: 0.45)
-                          : const Color(0xFFE2E8F0),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isNight
-                            ? const Color(0xFF0F0C24).withValues(alpha: 0.5)
-                            : const Color(0xFF6366F1).withValues(alpha: 0.12),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🎒', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '奇妙背包',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(
-                        Icons.keyboard_arrow_up_rounded,
-                        size: 16,
-                        color: isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8),
-                      ),
-                    ],
-                  ),
-                ),
+                flex: 6,
+                compact: compact,
               ),
-              const SizedBox(width: 8),
-
-              // 2. 装扮小窝 (整合猫咪装扮与小窝全景，一键进入双层零滑动空间)
-              BouncyTouchFeedback(
-                scaleDown: 0.93,
+              _DockItem(
+                isNight: isNight,
+                icon: '👗',
+                label: '装扮小窝',
                 onTap: onWardrobeTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8.5),
-                  decoration: BoxDecoration(
-                    color: isNight
-                        ? const Color(0xFF2C194D).withValues(alpha: 0.92)
-                        : const Color(0xFFFAF5FF).withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isNight
-                          ? const Color(0xFFA855F7).withValues(alpha: 0.6)
-                          : const Color(0xFFE9D5FF),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFA855F7).withValues(alpha: 0.18),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('👗', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '装扮小窝',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE),
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                flex: 5,
+                compact: compact,
               ),
-              const SizedBox(width: 8),
-
-              // 3. 专属绝活 (直达 1-Tap 开启悬浮点播坞)
-              BouncyTouchFeedback(
-                scaleDown: 0.93,
+              _DockItem(
+                isNight: isNight,
+                icon: '✨',
+                label: '专属绝活',
                 onTap: onActionTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
-                  decoration: BoxDecoration(
-                    color: isNight
-                        ? const Color(0xFF3B2412).withValues(alpha: 0.92)
-                        : const Color(0xFFFFFBEB).withValues(alpha: 0.95),
-                    borderRadius: BorderRadius.circular(22),
-                    border: Border.all(
-                      color: isNight
-                          ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
-                          : const Color(0xFFFDE68A),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('✨', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 5),
-                      Text(
-                        '专属绝活',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ],
-                  ),
+                flex: 5,
+                compact: compact,
+              ),
+              if (onVoiceChatTap != null)
+                _DockItem(
+                  isNight: isNight,
+                  icon: '🎙️',
+                  label: 'AI语聊',
+                  onTap: onVoiceChatTap!,
+                  primary: true,
+                  flex: 5,
+                  compact: compact,
+                ),
+            ];
+
+            // 入口之间用细分隔线, 替代原先各自独立的描边胶囊
+            final children = <Widget>[];
+            for (var i = 0; i < items.length; i++) {
+              if (i > 0) {
+                children.add(Container(
+                  width: 1,
+                  height: 20,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  color: t.border,
+                ));
+              }
+              children.add(items[i]);
+            }
+
+            return Center(
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 3 : 4,
+                  vertical: compact ? 5 : 6,
+                ),
+                decoration: BoxDecoration(
+                  color: t.surface.withValues(alpha: isNight ? 0.90 : 0.95),
+                  borderRadius: BorderRadius.circular(PokoRadius.pill),
+                  border: Border.all(color: t.border, width: 1),
+                  boxShadow: PokoShadow.card(t.shadow),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
                 ),
               ),
-              if (onVoiceChatTap != null) ...[
-                const SizedBox(width: 8),
-                BouncyTouchFeedback(
-                  scaleDown: 0.93,
-                  onTap: onVoiceChatTap!,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8.5),
-                    decoration: BoxDecoration(
-                      color: isNight
-                          ? const Color(0xFF1E153D).withValues(alpha: 0.92)
-                          : const Color(0xFFEFF6FF).withValues(alpha: 0.95),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: isNight
-                            ? const Color(0xFF818CF8).withValues(alpha: 0.6)
-                            : const Color(0xFFBFDBFE),
-                        width: 1.5,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.20),
-                          blurRadius: 10,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🎙️', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 5),
-                        Text(
-                          'AI语聊',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.bold,
-                            color: isNight ? const Color(0xFFC7D2FE) : const Color(0xFF2563EB),
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+            );
+          },
         ),
       ),
-    ),
-  );
+    );
+  }
 }
+
+/// 浮动坞内的单个入口
+class _DockItem extends StatelessWidget {
+  final bool isNight;
+  final String icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+  final bool showChevron;
+  final void Function(DragEndDetails)? onVerticalDragEnd;
+
+  /// 伸缩占比 —— 按该入口的自然宽度分配, 窄屏时整体等比收缩
+  final int flex;
+  final bool compact;
+
+  const _DockItem({
+    required this.isNight,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+    this.showChevron = false,
+    this.onVerticalDragEnd,
+    this.flex = 5,
+    this.compact = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.poko(isNight);
+    final double iconSize = compact ? 13 : 14;
+    final double fontSize = compact ? 11 : 12;
+    final double hPad = compact ? 5 : 6;
+
+    final labelWidget = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(icon, style: TextStyle(fontSize: iconSize)),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+              color: primary ? Colors.white : t.textPrimary,
+            ),
+          ),
+        ),
+        if (showChevron) ...[
+          const SizedBox(width: 1),
+          Icon(
+            Icons.keyboard_arrow_up_rounded,
+            size: compact ? 13 : 14,
+            color: primary ? Colors.white70 : t.textMuted,
+          ),
+        ],
+      ],
+    );
+
+    return Flexible(
+      flex: flex,
+      child: BouncyTouchFeedback(
+        scaleDown: 0.93,
+        onTap: onTap,
+        onVerticalDragEnd: onVerticalDragEnd,
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: hPad, vertical: 8),
+          decoration: BoxDecoration(
+            // 主操作用品牌渐变实心, 其余保持同一张底色 —— 不再四种底色打架
+            gradient: primary
+                ? const LinearGradient(colors: PokoPalette.brandGradient)
+                : null,
+            color: primary ? null : Colors.transparent,
+            borderRadius: BorderRadius.circular(PokoRadius.pill),
+          ),
+          child: labelWidget,
+        ),
+      ),
+    );
+  }
 }

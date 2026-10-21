@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../theme/poko_theme.dart';
 
 /// 萌宠 14 种才艺绝活展示半屏面板
 class ActionDialog extends StatelessWidget {
   final ValueChanged<String> onActionSelected;
+  final bool isNight;
 
-  const ActionDialog({super.key, required this.onActionSelected});
+  const ActionDialog({
+    super.key,
+    required this.onActionSelected,
+    this.isNight = false,
+  });
 
   static const List<Map<String, String>> actions = [
     {'id': 'CARDBOARD_BOX', 'name': '纸箱藏猫猫', 'icon': '📦', 'desc': '钻入快递箱探头暗中观察'},
@@ -30,131 +36,140 @@ class ActionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x1A000000),
-            blurRadius: 24,
-            offset: Offset(0, -6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 顶部拖拽把手指示条
-          Center(
-            child: Container(
-              width: 38,
-              height: 4.5,
-              decoration: BoxDecoration(
-                color: const Color(0xFFCBD5E1),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // 标题与关闭按钮
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Text('✨', style: TextStyle(fontSize: 22)),
-                  SizedBox(width: 8),
-                  Text(
-                    '波可的才艺才华秀',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF1F5F9),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close, size: 18, color: Color(0xFF64748B)),
+    final t = context.poko(isNight);
+    return PokoSheetShell(
+      isNight: isNight,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          PokoSpacing.xl,
+          0,
+          PokoSpacing.xl,
+          PokoSpacing.xxl,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题与关闭按钮
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Text('✨', style: TextStyle(fontSize: 22)),
+                    const SizedBox(width: PokoSpacing.sm),
+                    Text(
+                      '波可的才艺才华秀',
+                      style: TextStyle(
+                        fontSize: PokoFont.title,
+                        fontWeight: FontWeight.bold,
+                        color: t.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            '点击任意绝活，上方小猫将即刻展示独家特技~ 🐾',
-            style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-          ),
-          const SizedBox(height: 14),
-
-          // 14 种才艺双列卡片
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 330),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const BouncingScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 2.15,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
-              ),
-              itemCount: actions.length,
-              itemBuilder: (context, index) {
-                final act = actions[index];
-                return GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
-                    onActionSelected(act['id']!);
-                  },
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.all(PokoSpacing.xs),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      color: t.surfaceAlt,
+                      shape: BoxShape.circle,
                     ),
-                    child: Row(
-                      children: [
-                        Text(act['icon']!, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                act['name']!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                act['desc']!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 9.5, color: Color(0xFF64748B)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF6366F1), size: 18),
-                      ],
-                    ),
+                    child: Icon(Icons.close, size: 18, color: t.textMuted),
                   ),
-                );
-              },
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: PokoSpacing.xs),
+            Text(
+              '点击任意绝活，上方小猫将即刻展示独家特技~ 🐾',
+              style: TextStyle(
+                fontSize: PokoFont.small,
+                color: t.textSecondary,
+              ),
+            ),
+            const SizedBox(height: PokoSpacing.md),
+
+            // 14 种才艺双列卡片
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 330),
+              child: GridView.builder(
+                shrinkWrap: true,
+                physics: const BouncingScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 2.15,
+                  crossAxisSpacing: PokoSpacing.sm,
+                  mainAxisSpacing: PokoSpacing.sm,
+                ),
+                itemCount: actions.length,
+                itemBuilder: (context, index) {
+                  final act = actions[index];
+                  return GestureDetector(
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      onActionSelected(act['id']!);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: PokoSpacing.sm,
+                        vertical: PokoSpacing.sm,
+                      ),
+                      decoration: BoxDecoration(
+                        color: t.surfaceAlt,
+                        borderRadius: BorderRadius.circular(PokoRadius.md),
+                        border: Border.all(color: t.border),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            act['icon']!,
+                            style: const TextStyle(fontSize: 22),
+                          ),
+                          const SizedBox(width: PokoSpacing.sm),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  act['name']!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: PokoFont.small,
+                                    fontWeight: FontWeight.bold,
+                                    color: t.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: PokoSpacing.xxs),
+                                Text(
+                                  act['desc']!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: PokoFont.tiny,
+                                    color: t.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(
+                            Icons.play_circle_fill_rounded,
+                            color: t.accent,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

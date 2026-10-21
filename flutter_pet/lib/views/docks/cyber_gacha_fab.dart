@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../theme/poko_theme.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
 /// 独立发光微动扭蛋机悬浮球 (Cyber Gacha FAB)
@@ -43,6 +44,8 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final t = context.poko(widget.isNight);
+
     return BouncyTouchFeedback(
       key: const ValueKey('cyber_gacha_fab'),
       scaleDown: 0.90,
@@ -66,8 +69,8 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFA855F7).withValues(alpha: widget.isNight ? 0.35 : 0.22),
-                      const Color(0xFF0EA5E9).withValues(alpha: widget.isNight ? 0.18 : 0.10),
+                      PokoPalette.violet.withValues(alpha: widget.isNight ? 0.35 : 0.22),
+                      PokoPalette.skyGlow.withValues(alpha: widget.isNight ? 0.18 : 0.10),
                       Colors.transparent,
                     ],
                   ),
@@ -84,23 +87,23 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: widget.isNight
-                        ? const [Color(0xFF2E1B4E), Color(0xFF162D4A)]
-                        : const [Color(0xFFFAF5FF), Color(0xFFF0F9FF)],
+                        ? [t.surfaceAlt, t.accentAlt]
+                        : const [PokoPalette.violetSoft, PokoPalette.skySoft],
                   ),
                   border: Border.all(
                     color: widget.isNight
-                        ? const Color(0xFFA855F7).withValues(alpha: 0.7)
-                        : const Color(0xFFC084FC),
+                        ? PokoPalette.violet.withValues(alpha: 0.7)
+                        : PokoPalette.violet,
                     width: 1.8,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFA855F7).withValues(alpha: 0.35),
+                      color: PokoPalette.violet.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 3),
                     ),
                     BoxShadow(
-                      color: const Color(0xFF0EA5E9).withValues(alpha: 0.25),
+                      color: PokoPalette.skyGlow.withValues(alpha: 0.25),
                       blurRadius: 6,
                       offset: const Offset(0, 1),
                     ),
@@ -122,13 +125,13 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFF59E0B), Color(0xFFEF4444)],
+                      colors: [PokoPalette.amber, PokoPalette.rose],
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(PokoRadius.xs),
                     border: Border.all(color: Colors.white, width: 1.0),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+                        color: PokoPalette.rose.withValues(alpha: 0.45),
                         blurRadius: 5,
                         offset: const Offset(0, 1.5),
                       ),
@@ -140,7 +143,7 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                       Text(
                         '✨保底',
                         style: TextStyle(
-                          fontSize: 8.5,
+                          fontSize: PokoFont.micro,
                           color: Colors.white,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.2,

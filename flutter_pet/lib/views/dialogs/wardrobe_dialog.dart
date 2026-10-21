@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
+import '../../theme/poko_theme.dart';
 import 'gacha_dialog.dart';
 
 /// 萌宠魔法衣橱换装面板 (支持 8 大纯种猫咪品种切换、头部、面部、颈部、背部、手持、小窝 7 Tab 架构)
@@ -94,222 +95,233 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
   Widget build(BuildContext context) {
     final model = widget.model;
     final isNight = widget.isNight;
+    final t = context.poko(isNight);
 
-    final bgColor = isNight ? const Color(0xFF1E1B4B) : Colors.white;
-    final titleColor = isNight ? Colors.white : const Color(0xFF1E293B);
-    final subColor = isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final cardBg = isNight ? const Color(0xFF2E2A68) : const Color(0xFFF8FAFC);
-    final borderColor = isNight ? const Color(0xFF4338CA) : const Color(0xFFE2E8F0);
+    final titleColor = t.textPrimary;
+    final subColor = t.textSecondary;
+    final cardBg = t.surfaceAlt;
+    final borderColor = t.border;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.72,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 24,
-            offset: Offset(0, -6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 顶部拖拽指示把手
-          Center(
-            child: Container(
-              width: 38,
-              height: 4.5,
-              decoration: BoxDecoration(
-                color: isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // 标题与快捷功能按键 (盲盒扭蛋、随机混搭、关闭)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Text('👗', style: TextStyle(fontSize: 22)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '波可的魔法衣橱',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: titleColor),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  // 🎲 随机混搭穿戴
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.mediumImpact();
-                      final rand = math.Random();
-                      setState(() {
-                        final heads = _headDecos.map((e) => e['id']!).toList();
-                        final faces = _faceDecos.map((e) => e['id']!).toList();
-                        final necks = _neckDecos.map((e) => e['id']!).toList();
-                        final backs = _backDecos.map((e) => e['id']!).toList();
-                        final hands = _handDecos.map((e) => e['id']!).toList();
-                        model.setDecoration('head', heads[rand.nextInt(heads.length)]);
-                        model.setDecoration('face', faces[rand.nextInt(faces.length)]);
-                        model.setDecoration('neck', necks[rand.nextInt(necks.length)]);
-                        model.setDecoration('back', backs[rand.nextInt(backs.length)]);
-                        model.setDecoration('hand', hands[rand.nextInt(hands.length)]);
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('🎲 灵感迸发！已随机换上一套全新混搭神装~ ✨'),
-                          duration: Duration(seconds: 1),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                      margin: const EdgeInsets.only(right: 6),
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Text('🎲', style: TextStyle(fontSize: 12)),
-                          const SizedBox(width: 3),
-                          Text('混搭', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: subColor)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 🔮 赛博能量盲盒入口
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (_) => GachaDialog(
-                          model: widget.model,
-                          onUpdated: () => setState(() {}),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                      margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF0EA5E9), Color(0xFF8B5CF6)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF0EA5E9).withValues(alpha: 0.3),
-                            blurRadius: 6,
-                          ),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('🔮', style: TextStyle(fontSize: 12)),
-                          SizedBox(width: 3),
-                          Text('盲盒', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // 关闭按钮
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.close, size: 18, color: subColor),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '5大插槽神装混搭与赛博小窝，轻触即可即时生效 🐾',
-            style: TextStyle(fontSize: 11.5, color: subColor),
-          ),
-          const SizedBox(height: 12),
-
-          // 7 大分类可滑动 Tab 栏
-          Container(
-            height: 38,
-            decoration: BoxDecoration(
-              color: isNight ? const Color(0xFF131131) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(19),
-            ),
-            child: TabBar(
-              controller: _tabController,
-              isScrollable: true,
-              tabAlignment: TabAlignment.start,
-              indicatorSize: TabBarIndicatorSize.tab,
-              dividerColor: Colors.transparent,
-              indicator: BoxDecoration(
-                color: const Color(0xFFA855F7),
-                borderRadius: BorderRadius.circular(19),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFA855F7).withValues(alpha: 0.35),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              labelColor: Colors.white,
-              unselectedLabelColor: subColor,
-              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.normal),
-              tabs: const [
-                Tab(text: '🐱 品种'),
-                Tab(text: '🎩 头部'),
-                Tab(text: '👓 面部'),
-                Tab(text: '🎀 颈部'),
-                Tab(text: '🦸‍♂️ 背部'),
-                Tab(text: '🪄 手持'),
-                Tab(text: '🏠 小窝'),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Tab 内容展示区域
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
+    return PokoSheetShell(
+      isNight: isNight,
+      maxHeightFactor: 0.72,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          PokoSpacing.xl,
+          0,
+          PokoSpacing.xl,
+          PokoSpacing.lg,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 标题与快捷功能按键 (盲盒扭蛋、随机混搭、关闭)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildBreedTab(model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildDecoTab('head', _headDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildDecoTab('face', _faceDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildDecoTab('neck', _neckDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildDecoTab('back', _backDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildDecoTab('hand', _handDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
-                _buildHabitatTab(model, isNight, cardBg, borderColor, titleColor, subColor),
+                Row(
+                  children: [
+                    const Text('👗', style: TextStyle(fontSize: 22)),
+                    const SizedBox(width: PokoSpacing.sm),
+                    Text(
+                      '波可的魔法衣橱',
+                      style: TextStyle(
+                        fontSize: PokoFont.title,
+                        fontWeight: FontWeight.bold,
+                        color: titleColor,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    // 🎲 随机混搭穿戴
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        final rand = math.Random();
+                        setState(() {
+                          final heads = _headDecos.map((e) => e['id']!).toList();
+                          final faces = _faceDecos.map((e) => e['id']!).toList();
+                          final necks = _neckDecos.map((e) => e['id']!).toList();
+                          final backs = _backDecos.map((e) => e['id']!).toList();
+                          final hands = _handDecos.map((e) => e['id']!).toList();
+                          model.setDecoration('head', heads[rand.nextInt(heads.length)]);
+                          model.setDecoration('face', faces[rand.nextInt(faces.length)]);
+                          model.setDecoration('neck', necks[rand.nextInt(necks.length)]);
+                          model.setDecoration('back', backs[rand.nextInt(backs.length)]);
+                          model.setDecoration('hand', hands[rand.nextInt(hands.length)]);
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('🎲 灵感迸发！已随机换上一套全新混搭神装~ ✨'),
+                            duration: Duration(seconds: 1),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PokoSpacing.sm,
+                          vertical: PokoSpacing.xs,
+                        ),
+                        margin: const EdgeInsets.only(
+                          right: PokoSpacing.xs,
+                        ),
+                        decoration: BoxDecoration(
+                          color: t.surfaceAlt,
+                          borderRadius: BorderRadius.circular(PokoRadius.sm),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('🎲', style: TextStyle(fontSize: 12)),
+                            const SizedBox(width: PokoSpacing.xxs),
+                            Text(
+                              '混搭',
+                              style: TextStyle(
+                                fontSize: PokoFont.caption,
+                                fontWeight: FontWeight.bold,
+                                color: subColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // 🔮 赛博能量盲盒入口
+                    GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (_) => GachaDialog(
+                            model: widget.model,
+                            onUpdated: () => setState(() {}),
+                            isNight: isNight,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PokoSpacing.sm,
+                          vertical: PokoSpacing.xs,
+                        ),
+                        margin: const EdgeInsets.only(
+                          right: PokoSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [PokoPalette.sky, PokoPalette.violet],
+                          ),
+                          borderRadius: BorderRadius.circular(PokoRadius.sm),
+                          boxShadow: PokoShadow.soft(PokoPalette.sky),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('🔮', style: TextStyle(fontSize: 12)),
+                            SizedBox(width: PokoSpacing.xxs),
+                            Text(
+                              '盲盒',
+                              style: TextStyle(
+                                fontSize: PokoFont.caption,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // 关闭按钮
+                    GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(PokoSpacing.xs),
+                        decoration: BoxDecoration(
+                          color: t.surfaceAlt,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.close, size: 18, color: subColor),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: PokoSpacing.xxs),
+            Text(
+              '5大插槽神装混搭与赛博小窝，轻触即可即时生效 🐾',
+              style: TextStyle(
+                fontSize: PokoFont.caption,
+                color: subColor,
+              ),
+            ),
+            const SizedBox(height: PokoSpacing.md),
+
+            // 7 大分类可滑动 Tab 栏
+            Container(
+              height: 38,
+              decoration: BoxDecoration(
+                color: t.surfaceAlt,
+                borderRadius: BorderRadius.circular(PokoRadius.pill),
+              ),
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                indicator: BoxDecoration(
+                  color: PokoPalette.violet,
+                  borderRadius: BorderRadius.circular(PokoRadius.pill),
+                  boxShadow: PokoShadow.soft(PokoPalette.violet),
+                ),
+                labelColor: Colors.white,
+                unselectedLabelColor: subColor,
+                labelStyle: const TextStyle(
+                  fontSize: PokoFont.small,
+                  fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: PokoFont.small,
+                  fontWeight: FontWeight.normal,
+                ),
+                tabs: const [
+                  Tab(text: '🐱 品种'),
+                  Tab(text: '🎩 头部'),
+                  Tab(text: '👓 面部'),
+                  Tab(text: '🎀 颈部'),
+                  Tab(text: '🦸‍♂️ 背部'),
+                  Tab(text: '🪄 手持'),
+                  Tab(text: '🏠 小窝'),
+                ],
+              ),
+            ),
+            const SizedBox(height: PokoSpacing.md),
+
+            // Tab 内容展示区域
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildBreedTab(model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildDecoTab('head', _headDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildDecoTab('face', _faceDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildDecoTab('neck', _neckDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildDecoTab('back', _backDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildDecoTab('hand', _handDecos, model, isNight, cardBg, borderColor, titleColor, subColor),
+                  _buildHabitatTab(model, isNight, cardBg, borderColor, titleColor, subColor),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -323,6 +335,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
     Color titleColor,
     Color subColor,
   ) {
+    final t = context.poko(isNight);
     // 过滤展示 8 大特色纯种猫咪品种 (排重 cat_white)
     final skins = PetModel.availableSkins.values
         .where((s) => s.id != 'cat_white')
@@ -353,25 +366,28 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 96,
-                  margin: const EdgeInsets.only(right: 10, top: 2, bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  margin: const EdgeInsets.only(
+                    right: PokoSpacing.sm,
+                    top: 2,
+                    bottom: PokoSpacing.xs,
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: PokoSpacing.xs,
+                    vertical: PokoSpacing.sm,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                        ? (isNight
+                            ? PokoPalette.violetDeep
+                            : PokoPalette.violetSoft)
                         : cardBg,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(PokoRadius.lg),
                     border: Border.all(
-                      color: isSelected ? const Color(0xFFA855F7) : borderColor,
-                      width: isSelected ? 2.2 : 1.0,
+                      color: isSelected ? PokoPalette.violet : borderColor,
+                      width: isSelected ? 1.5 : 1.0,
                     ),
                     boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFFA855F7).withValues(alpha: 0.28),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ]
+                        ? PokoShadow.soft(PokoPalette.violet)
                         : null,
                   ),
                   child: Column(
@@ -387,10 +403,11 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                             decoration: BoxDecoration(
                               color: Color(skin.primaryColor),
                               shape: BoxShape.circle,
-                              border: Border.all(color: Color(skin.secondaryColor), width: 3.2),
-                              boxShadow: const [
-                                BoxShadow(color: Color(0x18000000), blurRadius: 4, offset: Offset(0, 2)),
-                              ],
+                              border: Border.all(
+                                color: Color(skin.secondaryColor),
+                                width: 3.2,
+                              ),
+                              boxShadow: PokoShadow.soft(Colors.black),
                             ),
                             child: Center(
                               child: Text(skin.icon, style: const TextStyle(fontSize: 16)),
@@ -404,20 +421,28 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                                 shape: BoxShape.circle,
                                 color: Colors.black.withValues(alpha: 0.28),
                               ),
-                              child: const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 22,
+                              ),
                             ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: PokoSpacing.xs),
                       Text(
                         skin.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                          fontSize: PokoFont.caption,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w500,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violetDeep)
                               : titleColor,
                         ),
                       ),
@@ -427,9 +452,11 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 9.5,
+                          fontSize: PokoFont.tiny,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFD8B4FE) : const Color(0xFFA855F7))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violet)
                               : subColor,
                         ),
                       ),
@@ -440,19 +467,21 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             },
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: PokoSpacing.sm),
 
         // 选中品种的详细特征图鉴卡片 (Profile Card)
         Expanded(
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(PokoSpacing.md),
             decoration: BoxDecoration(
-              color: isNight ? const Color(0xFF262153) : const Color(0xFFFAF5FF),
-              borderRadius: BorderRadius.circular(20),
+              color: isNight ? t.surfaceAlt : PokoPalette.violetSoft,
+              borderRadius: BorderRadius.circular(PokoRadius.lg),
               border: Border.all(
-                color: isNight ? const Color(0xFF6B21A8) : const Color(0xFFE9D5FF),
-                width: 1.2,
+                color: isNight
+                    ? PokoPalette.violetDeep
+                    : PokoPalette.violetSoft,
+                width: 1.5,
               ),
             ),
             child: SingleChildScrollView(
@@ -463,7 +492,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   Row(
                     children: [
                       Text(currentSkin.icon, style: const TextStyle(fontSize: 24)),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: PokoSpacing.sm),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,24 +500,27 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                             Text(
                               currentSkin.breed,
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: PokoFont.bodyLg,
                                 fontWeight: FontWeight.bold,
                                 color: titleColor,
                               ),
                             ),
                             const SizedBox(height: 1),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: PokoSpacing.sm,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFA855F7).withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(6),
+                                color: PokoPalette.violet.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(PokoRadius.xs),
                               ),
                               child: Text(
                                 currentSkin.title,
                                 style: const TextStyle(
-                                  fontSize: 10.5,
+                                  fontSize: PokoFont.caption,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFA855F7),
+                                  color: PokoPalette.violet,
                                 ),
                               ),
                             ),
@@ -499,70 +531,82 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                       Row(
                         children: [
                           _buildColorDot(currentSkin.primaryColor, '毛色底色'),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: PokoSpacing.xs),
                           _buildColorDot(currentSkin.secondaryColor, '斑纹重点色'),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: PokoSpacing.xs),
                           _buildColorDot(currentSkin.eyeColor, '瞳孔宝石色'),
                         ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: PokoSpacing.sm),
                   Text(
                     currentSkin.desc,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: PokoFont.small,
                       height: 1.45,
-                      color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                      color: t.textSecondary,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: PokoSpacing.sm),
 
                   // 专属骨骼体态与外貌特征标签组
                   Wrap(
-                    spacing: 6,
-                    runSpacing: 5,
+                    spacing: PokoSpacing.xs,
+                    runSpacing: PokoSpacing.xs,
                     children: _getBreedTags(currentSkin.id).map((tag) {
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PokoSpacing.sm,
+                          vertical: PokoSpacing.xs,
+                        ),
                         decoration: BoxDecoration(
-                          color: isNight ? const Color(0xFF3B2F7E) : const Color(0xFFEDE9FE),
-                          borderRadius: BorderRadius.circular(8),
+                          color: t.accentSoft,
+                          borderRadius: BorderRadius.circular(PokoRadius.xs),
                           border: Border.all(
-                            color: isNight ? const Color(0xFF6D28D9) : const Color(0xFFDDD6FE),
-                            width: 0.8,
+                            color: t.borderStrong,
+                            width: 1.0,
                           ),
                         ),
                         child: Text(
                           tag,
                           style: TextStyle(
-                            fontSize: 10.5,
+                            fontSize: PokoFont.caption,
                             fontWeight: FontWeight.w600,
-                            color: isNight ? const Color(0xFFDDD6FE) : const Color(0xFF6D28D9),
+                            color: t.accentDeep,
                           ),
                         ),
                       );
                     }).toList(),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: PokoSpacing.sm),
 
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: PokoSpacing.sm,
+                      vertical: PokoSpacing.xs,
+                    ),
                     decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF1E1944) : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      color: t.surface,
+                      borderRadius: BorderRadius.circular(PokoRadius.sm),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.auto_awesome, size: 14, color: Color(0xFFA855F7)),
-                        const SizedBox(width: 5),
+                        const Icon(
+                          Icons.auto_awesome,
+                          size: 14,
+                          color: PokoPalette.violet,
+                        ),
+                        const SizedBox(width: PokoSpacing.xs),
                         Expanded(
                           child: Text(
                             '专属形态已生效：脸型、耳型、体型、尾巴已全面切换为${currentSkin.name}',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: PokoFont.caption,
                               fontWeight: FontWeight.w500,
-                              color: isNight ? const Color(0xFFE9D5FF) : const Color(0xFF6B21A8),
+                              color: isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violetDeep,
                             ),
                           ),
                         ),
@@ -612,7 +656,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   content: Text('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖'),
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
-                  backgroundColor: const Color(0xFF8B5CF6),
+                  backgroundColor: PokoPalette.violet,
                 ),
               );
               return;
@@ -624,31 +668,28 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            margin: const EdgeInsets.only(bottom: PokoSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: PokoSpacing.md,
+              vertical: PokoSpacing.sm,
+            ),
             decoration: BoxDecoration(
               color: isSelected
-                  ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                  ? (isNight ? PokoPalette.violetDeep : PokoPalette.violetSoft)
                   : cardBg,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(PokoRadius.md),
               border: Border.all(
-                color: isSelected ? const Color(0xFFA855F7) : borderColor,
-                width: isSelected ? 2.0 : 1.0,
+                color: isSelected ? PokoPalette.violet : borderColor,
+                width: isSelected ? 1.5 : 1.0,
               ),
               boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFFA855F7).withValues(alpha: 0.20),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
+                  ? PokoShadow.soft(PokoPalette.violet)
                   : null,
             ),
             child: Row(
               children: [
                 Text(item['icon']!, style: const TextStyle(fontSize: 26)),
-                const SizedBox(width: 12),
+                const SizedBox(width: PokoSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -656,20 +697,26 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                       Text(
                         item['name']!,
                         style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          fontSize: PokoFont.body,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w600,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violetDeep)
                               : titleColor,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: PokoSpacing.xxs),
                       Text(
                         item['desc']!,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: PokoFont.caption,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFD8B4FE) : const Color(0xFFA855F7))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violet)
                               : subColor,
                         ),
                       ),
@@ -678,27 +725,46 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 ),
                 if (isLocked)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: PokoSpacing.xs,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(8),
+                      color: PokoPalette.amber.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(PokoRadius.xs),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.lock_rounded, size: 12, color: Color(0xFFF59E0B)),
-                        const SizedBox(width: 2),
+                        const Icon(
+                          Icons.lock_rounded,
+                          size: 12,
+                          color: PokoPalette.amber,
+                        ),
+                        const SizedBox(width: PokoSpacing.xxs),
                         Text(
                           '阶$minStage解锁',
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF59E0B)),
+                          style: const TextStyle(
+                            fontSize: PokoFont.tiny,
+                            fontWeight: FontWeight.bold,
+                            color: PokoPalette.amber,
+                          ),
                         ),
                       ],
                     ),
                   )
                 else if (isSelected)
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: PokoPalette.violet,
+                    size: 20,
+                  )
                 else
-                  Icon(Icons.radio_button_unchecked, color: subColor.withValues(alpha: 0.5), size: 18),
+                  Icon(
+                    Icons.radio_button_unchecked,
+                    color: subColor.withValues(alpha: 0.5),
+                    size: 18,
+                  ),
               ],
             ),
           ),
@@ -735,31 +801,28 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
           },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            margin: const EdgeInsets.only(bottom: PokoSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: PokoSpacing.md,
+              vertical: PokoSpacing.sm,
+            ),
             decoration: BoxDecoration(
               color: isSelected
-                  ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                  ? (isNight ? PokoPalette.violetDeep : PokoPalette.violetSoft)
                   : cardBg,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(PokoRadius.md),
               border: Border.all(
-                color: isSelected ? const Color(0xFFA855F7) : borderColor,
-                width: isSelected ? 2.0 : 1.0,
+                color: isSelected ? PokoPalette.violet : borderColor,
+                width: isSelected ? 1.5 : 1.0,
               ),
               boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: const Color(0xFFA855F7).withValues(alpha: 0.20),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
+                  ? PokoShadow.soft(PokoPalette.violet)
                   : null,
             ),
             child: Row(
               children: [
                 Text(item['icon']!, style: const TextStyle(fontSize: 26)),
-                const SizedBox(width: 12),
+                const SizedBox(width: PokoSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -767,20 +830,26 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                       Text(
                         item['name']!,
                         style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          fontSize: PokoFont.body,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.w600,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violetDeep)
                               : titleColor,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: PokoSpacing.xxs),
                       Text(
                         item['desc']!,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: PokoFont.caption,
                           color: isSelected
-                              ? (isNight ? const Color(0xFFD8B4FE) : const Color(0xFFA855F7))
+                              ? (isNight
+                                  ? PokoPalette.violetSoft
+                                  : PokoPalette.violet)
                               : subColor,
                         ),
                       ),
@@ -788,9 +857,17 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   ),
                 ),
                 if (isSelected)
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFFA855F7), size: 20)
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: PokoPalette.violet,
+                    size: 20,
+                  )
                 else
-                  Icon(Icons.radio_button_unchecked, color: subColor.withValues(alpha: 0.5), size: 18),
+                  Icon(
+                    Icons.radio_button_unchecked,
+                    color: subColor.withValues(alpha: 0.5),
+                    size: 18,
+                  ),
               ],
             ),
           ),
@@ -809,8 +886,12 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
           color: Color(colorHex),
           shape: BoxShape.circle,
           border: Border.all(color: Colors.white, width: 1.5),
-          boxShadow: const [
-            BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.13),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
           ],
         ),
       ),

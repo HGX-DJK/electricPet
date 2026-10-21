@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../models/pet_model.dart';
 import '../../services/haptic_service.dart';
 import '../../services/sound_service.dart';
+import '../../theme/poko_theme.dart';
 
 /// 🌸 历史波可档案一键继承弹窗 (Heritage Backup Inheritance Dialog)
 /// 当用户卸载重装后首次启动，自动探测到外部公用目录历史备份时主动呼出
@@ -9,16 +10,19 @@ class HeritageBackupDialog extends StatelessWidget {
   final Map<String, dynamic> backupData;
   final VoidCallback onInherit;
   final VoidCallback? onDecline;
+  final bool isNight;
 
   const HeritageBackupDialog({
     super.key,
     required this.backupData,
     required this.onInherit,
     this.onDecline,
+    this.isNight = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final t = context.poko(isNight);
     final pet = (backupData['pet'] as Map<String, dynamic>?) ?? {};
     final name = pet['name'] as String? ?? '波可 (Poko)';
     final level = (pet['level'] as num?)?.toInt() ?? 1;
@@ -39,73 +43,79 @@ class HeritageBackupDialog extends StatelessWidget {
     return Dialog(
       key: const ValueKey('heritage_backup_dialog'),
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(
+        horizontal: PokoSpacing.xxl,
+        vertical: PokoSpacing.xxl,
+      ),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 380),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFFDF9),
-          borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: const Color(0xFFFDE68A), width: 1.6),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFF78350F).withValues(alpha: 0.16),
-              blurRadius: 28,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          color: t.surface,
+          borderRadius: BorderRadius.circular(PokoRadius.xl),
+          border: Border.all(
+            color: PokoPalette.amber.withValues(alpha: 0.45),
+            width: 1.5,
+          ),
+          boxShadow: PokoShadow.card(t.shadow),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        padding: const EdgeInsets.symmetric(
+          horizontal: PokoSpacing.xl,
+          vertical: PokoSpacing.xxl,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             // 顶层暖金发光徽章与大标题
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(PokoSpacing.md),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFEF3C7), Color(0xFFFDE68A)],
+                gradient: LinearGradient(
+                  colors: [
+                    PokoPalette.amberSoft,
+                    PokoPalette.amber.withValues(alpha: 0.35),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
-                    blurRadius: 14,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                boxShadow: PokoShadow.card(PokoPalette.amber),
               ),
               child: const Text('👑', style: TextStyle(fontSize: 34)),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: PokoSpacing.md),
             const Text(
               '🎉 发现历史波可档案！',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: PokoFont.headline,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF78350F),
+                color: PokoPalette.amberDeep,
                 letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: PokoSpacing.xs),
             Text(
               '检测到您曾经在手机上培养的波可伙伴\n即使卸载重装，它的成长记忆依然被完整守护着',
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 12.5,
+                fontSize: PokoFont.small,
                 height: 1.45,
-                color: const Color(0xFF92400E).withValues(alpha: 0.85),
+                color: PokoPalette.amberDeep.withValues(alpha: 0.85),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: PokoSpacing.lg),
 
             // 核心档案预览卡片
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              padding: const EdgeInsets.symmetric(
+                horizontal: PokoSpacing.lg,
+                vertical: PokoSpacing.md,
+              ),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: const Color(0xFFFED7AA), width: 1.2),
+                color: PokoPalette.amberSoft,
+                borderRadius: BorderRadius.circular(PokoRadius.lg),
+                border: Border.all(
+                  color: PokoPalette.amber.withValues(alpha: 0.45),
+                  width: 1,
+                ),
               ),
               child: Column(
                 children: [
@@ -118,38 +128,50 @@ class HeritageBackupDialog extends StatelessWidget {
                           const Text('🐱 ', style: TextStyle(fontSize: 18)),
                           Text(
                             name,
-                            style: const TextStyle(
-                              fontSize: 15,
+                            style: TextStyle(
+                              fontSize: PokoFont.bodyLg,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
+                              color: t.textPrimary,
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: PokoSpacing.xs),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: PokoSpacing.xs,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFED7AA),
-                              borderRadius: BorderRadius.circular(6),
+                              color: PokoPalette.amber.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(
+                                PokoRadius.xs,
+                              ),
                             ),
                             child: Text(
                               skinName,
-                              style: const TextStyle(fontSize: 10.5, color: Color(0xFF9A3412), fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontSize: PokoFont.caption,
+                                color: PokoPalette.amberDeep,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: PokoSpacing.sm,
+                          vertical: PokoSpacing.xs,
+                        ),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFFF8A65), Color(0xFFEA580C)],
+                            colors: [PokoPalette.amber, PokoPalette.amberDeep],
                           ),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(PokoRadius.sm),
                         ),
                         child: Text(
                           'Lv. $level',
                           style: const TextStyle(
-                            fontSize: 12,
+                            fontSize: PokoFont.small,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -157,9 +179,14 @@ class HeritageBackupDialog extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 10),
-                    child: Divider(height: 1, color: Color(0xFFFED7AA)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: PokoSpacing.sm,
+                    ),
+                    child: Divider(
+                      height: 1,
+                      color: PokoPalette.amber.withValues(alpha: 0.45),
+                    ),
                   ),
                   // 三维数据矩阵
                   Row(
@@ -171,15 +198,22 @@ class HeritageBackupDialog extends StatelessWidget {
                     ],
                   ),
                   if (timeFormatted.isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: PokoSpacing.sm),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.history_rounded, size: 12, color: Color(0xFF94A3B8)),
-                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.history_rounded,
+                          size: 12,
+                          color: PokoPalette.sky,
+                        ),
+                        const SizedBox(width: PokoSpacing.xs),
                         Text(
                           '上次冒险存档: $timeFormatted',
-                          style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                          style: TextStyle(
+                            fontSize: PokoFont.tiny,
+                            color: t.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -187,7 +221,7 @@ class HeritageBackupDialog extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: PokoSpacing.xl),
 
             // 操作按钮
             // 1. 主按钮：一键继承档案
@@ -207,35 +241,33 @@ class HeritageBackupDialog extends StatelessWidget {
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(PokoRadius.md),
                   ),
                   padding: EdgeInsets.zero,
                 ),
                 child: Ink(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFFF7A55), Color(0xFFEA580C)],
+                      colors: [PokoPalette.amber, PokoPalette.amberDeep],
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFEA580C).withValues(alpha: 0.35),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    borderRadius: BorderRadius.circular(PokoRadius.md),
+                    boxShadow: PokoShadow.card(PokoPalette.amber),
                   ),
                   child: Container(
                     alignment: Alignment.center,
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 18),
-                        SizedBox(width: 8),
+                        Icon(
+                          Icons.auto_awesome_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        SizedBox(width: PokoSpacing.sm),
                         Text(
                           '一键继承档案，欢迎回家',
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: PokoFont.bodyLg,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                             letterSpacing: 0.2,
@@ -247,7 +279,7 @@ class HeritageBackupDialog extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: PokoSpacing.sm),
 
             // 2. 次按钮：从头开启新旅程
             SizedBox(
@@ -262,14 +294,14 @@ class HeritageBackupDialog extends StatelessWidget {
                 },
                 style: TextButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(PokoRadius.sm),
                   ),
                 ),
-                child: const Text(
+                child: Text(
                   '从头开始新旅程 🐾',
                   style: TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFF94A3B8),
+                    fontSize: PokoFont.body,
+                    color: t.textMuted,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -287,17 +319,17 @@ class HeritageBackupDialog extends StatelessWidget {
         Text(
           value,
           style: const TextStyle(
-            fontSize: 14,
+            fontSize: PokoFont.bodyLg,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF9A3412),
+            color: PokoPalette.amberDeep,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: PokoSpacing.xxs),
         Text(
           label,
           style: const TextStyle(
-            fontSize: 10.5,
-            color: Color(0xFFB45309),
+            fontSize: PokoFont.tiny,
+            color: PokoPalette.amberDeep,
           ),
         ),
       ],
