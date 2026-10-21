@@ -458,6 +458,54 @@ class MinimaxService {
     }
   }
 
+  /// 调用 MiniMax ASR 语音识别 API (`asr-1.0`)，将麦克风录制的音频文件精准转写为中文文本
+  Future<String?> transcribeAudio(File audioFile) async {
+    final asrKey = (_provider == 'minimax' && hasApiKey)
+        ? _apiKey
+        : (AiConfig.hasBuiltinKey ? AiConfig.defaultMinimaxApiKey.trim() : null);
+
+    if (asrKey == null || asrKey.isEmpty || !await audioFile.exists()) return null;
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 15);
+
+    try {
+      final uri = Uri.parse('https://api.minimax.chat/v1/speech_to_text');
+      final request = await client.postUrl(uri);
+
+      final boundary = '----MiniMaxASRBoundary${DateTime.now().millisecondsSinceEpoch}';
+      request.headers.set('Authorization', 'Bearer $asrKey');
+      request.headers.set('Content-Type', 'multipart/form-data; boundary=$boundary');
+
+      final audioBytes = await audioFile.readAsBytes();
+      final fileName = audioFile.path.split(Platform.pathSeparator).last;
+
+      request.add(utf8.encode('--$boundary\r\nContent-Disposition: form-data; name="model"\r\n\r\nasr-1.0\r\n'));
+      request.add(utf8.encode('--$boundary\r\nContent-Disposition: form-data; name="file"; filename="$fileName"\r\nContent-Type: audio/m4a\r\n\r\n'));
+      request.add(audioBytes);
+      request.add(utf8.encode('\r\n--$boundary--\r\n'));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode == 200) {
+        final jsonMap = jsonDecode(body) as Map<String, dynamic>;
+        final text = jsonMap['text'] as String?;
+        if (text != null && text.trim().isNotEmpty) {
+          return text.trim();
+        }
+      } else {
+        debugPrint('MiniMax ASR error status: ${response.statusCode}, body: $body');
+      }
+      return null;
+    } catch (e) {
+      debugPrint('MiniMax ASR exception: $e');
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
   /// 播放合成的语音音频；优先写入系统临时文件通过底层原生文件描述符播放 (彻底避免 Android MediaPlayer BytesSource 错误 -38)，若失败回退 BytesSource
   Future<void> playVoiceResponse(Uint8List? audioBytes) async {
     if (audioBytes != null && audioBytes.isNotEmpty) {

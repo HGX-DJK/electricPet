@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:record/record.dart';
 import '../../services/haptic_service.dart';
 import '../../services/minimax_service.dart';
 import '../../services/sound_service.dart';
@@ -46,13 +47,11 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final MinimaxService _ai = MinimaxService.instance;
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  final AudioRecorder _audioRecorder = AudioRecorder();
 
   bool _isLoading = false;
-  bool _speechEnabled = false;
-  bool _isRealListening = false;
-  String _liveSpokenWords = '';
-  double _soundLevel = 0.0;
+  bool _isRecording = false;
+  String? _currentRecordPath;
   bool _showKeyboardInput = false;
   Timer? _listeningTimer;
   late final AnimationController _waveAnimController;
@@ -75,47 +74,10 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _initSpeech();
-  }
-
-  Future<void> _initSpeech() async {
-    try {
-      final available = await _speech.initialize(
-        onError: (err) {
-          debugPrint('STT error: ${err.errorMsg}');
-          if (mounted) {
-            setState(() {
-              _isRealListening = false;
-              _waveAnimController.stop();
-            });
-          }
-        },
-        onStatus: (status) {
-          debugPrint('STT status: $status');
-          if (status == 'done' || status == 'notListening') {
-            if (mounted && _isRealListening) {
-              _stopListeningAndSend();
-            }
-          }
-        },
-      );
-      if (mounted) {
-        setState(() {
-          _speechEnabled = available;
-        });
-        if (widget.autoStartListening && available && !_isRealListening) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _startListening();
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('STT initialize failed: $e');
-      if (mounted) {
-        setState(() {
-          _speechEnabled = false;
-        });
-      }
+    if (widget.autoStartListening) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_isRecording) _startListening();
+      });
     }
   }
 
@@ -124,7 +86,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     _waveAnimController.dispose();
     _listeningTimer?.cancel();
     try {
-      _speech.stop();
+      _audioRecorder.dispose();
     } catch (_) {}
     _textController.dispose();
     _scrollController.dispose();
@@ -151,7 +113,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     _waveAnimController.repeat(reverse: true);
     setState(() {
       _isLoading = true;
-      _isRealListening = false;
+      _isRecording = false;
     });
     _scrollToBottom();
     HapticService.selection();
@@ -176,94 +138,100 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   }
 
   Future<void> _toggleListening() async {
-    if (_isRealListening) {
-      await _stopListeningAndSend();
+    if (_isRecording) {
+      await _stopRecordingAndProcess();
     } else {
-      await _startListening();
+      await _startRecording();
     }
   }
 
-  Future<void> _startListening() async {
-    HapticService.medium();
-    SoundService.playPop();
+  Future<void> _startListening() => _startRecording();
 
-    if (!_speechEnabled) {
-      await _initSpeech();
-    }
-
-    if (!_speechEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎙️ 麦克风录音权限未开启或系统语音服务未就绪，请在手机系统设置中授予麦克风权限！'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-        _showVoiceSpeechSheet();
-      }
-      return;
-    }
-
-    _liveSpokenWords = '';
-    _soundLevel = 0.0;
-    setState(() {
-      _isRealListening = true;
-    });
-    _waveAnimController.repeat(reverse: true);
-
+  Future<void> _startRecording() async {
     try {
-      await _speech.listen(
-        onResult: (result) {
-          if (mounted) {
-            setState(() {
-              _liveSpokenWords = result.recognizedWords;
-            });
-            if (result.finalResult && _liveSpokenWords.trim().isNotEmpty) {
-              _stopListeningAndSend();
-            }
-          }
-        },
-        onSoundLevelChange: (level) {
-          if (mounted) {
-            setState(() {
-              _soundLevel = level;
-            });
-          }
-        },
-        listenOptions: stt.SpeechListenOptions(
-          listenMode: stt.ListenMode.confirmation,
-          cancelOnError: true,
-          partialResults: true,
-          autoPunctuation: true,
+      final hasPerm = await _audioRecorder.hasPermission();
+      if (!hasPerm) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🎙️ 麦克风录音权限未开启，请在手机系统设置中授予麦克风权限！'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      HapticService.medium();
+      SoundService.playPop();
+
+      final tempDir = Directory.systemTemp;
+      _currentRecordPath = '${tempDir.path}/poko_user_voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          sampleRate: 16000,
+          bitRate: 64000,
         ),
+        path: _currentRecordPath!,
       );
-    } catch (e) {
-      debugPrint('STT listen error: $e');
+
       if (mounted) {
         setState(() {
-          _isRealListening = false;
+          _isRecording = true;
+        });
+        _waveAnimController.repeat(reverse: true);
+      }
+    } catch (e) {
+      debugPrint('Start recording error: $e');
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
         });
         _waveAnimController.stop();
       }
     }
   }
 
-  Future<void> _stopListeningAndSend() async {
-    if (!_isRealListening && _liveSpokenWords.trim().isEmpty) return;
-    try {
-      await _speech.stop();
-    } catch (_) {}
-
+  Future<void> _stopRecordingAndProcess() async {
+    if (!_isRecording) return;
+    HapticService.light();
     _waveAnimController.stop();
-    final toSend = _liveSpokenWords.trim();
+
     setState(() {
-      _isRealListening = false;
-      _liveSpokenWords = '';
+      _isRecording = false;
+      _isLoading = true;
     });
 
-    if (toSend.isNotEmpty) {
-      HapticService.light();
-      await _sendMessage(toSend);
+    try {
+      final path = await _audioRecorder.stop();
+      final audioFile = File(path ?? _currentRecordPath ?? '');
+
+      if (await audioFile.exists() && await audioFile.length() > 300) {
+        final recognized = await _ai.transcribeAudio(audioFile);
+        if (recognized != null && recognized.trim().isNotEmpty) {
+          await _sendMessage(recognized.trim());
+          return;
+        }
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🐱 说话时间太短或未能听清，请离麦克风近一点再说一次好不好嘛~ 🐾'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Audio recording/transcribe error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -1009,8 +977,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   ),
           ),
 
-          // 3. AI 思考中 / 声波动画指示条
-          if (_isLoading || _isRealListening)
+          // 3. AI 思考中 / 录音声波动画指示条
+          if (_isLoading || _isRecording)
             Container(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -1022,14 +990,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       return Row(
                         mainAxisSize: MainAxisSize.min,
                         children: List.generate(5, (i) {
-                          final dynamicLevel = _isRealListening ? math.max(_soundLevel * 1.5, 0.0) : 0.0;
-                          final height = 6.0 + (12.0 + dynamicLevel * 10.0) * math.sin((_waveAnimController.value * math.pi) + (i * 0.6)).abs();
+                          final height = 6.0 + 16.0 * math.sin((_waveAnimController.value * math.pi) + (i * 0.6)).abs();
                           return Container(
                             margin: const EdgeInsets.symmetric(horizontal: 2),
                             width: 3.5,
-                            height: height.clamp(4.0, 26.0),
+                            height: height.clamp(4.0, 24.0),
                             decoration: BoxDecoration(
-                              color: _isRealListening ? const Color(0xFFEF4444) : const Color(0xFFA855F7),
+                              color: _isRecording ? const Color(0xFFEF4444) : const Color(0xFFA855F7),
                               borderRadius: BorderRadius.circular(2),
                             ),
                           );
@@ -1040,15 +1007,15 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
-                      _isRealListening
-                          ? (_liveSpokenWords.isEmpty ? '正在倾听主人的声音... 🎙️' : '识别中: "$_liveSpokenWords"')
-                          : '波可正在用猫猫脑瓜认真思考中... ✨',
+                      _isRecording
+                          ? '正在倾听主人的声音... 说话完毕轻触或松手即可发送 🎙️'
+                          : '波可正在用猫猫脑瓜认真思考并生成回复... ✨',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: _isRealListening ? const Color(0xFFEF4444) : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1)),
+                        color: _isRecording ? const Color(0xFFEF4444) : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF6366F1)),
                       ),
                     ),
                   ),
@@ -1283,23 +1250,23 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                             child: GestureDetector(
                               onTap: _toggleListening,
                               onLongPressStart: (_) {
-                                if (!_isRealListening) _startListening();
+                                if (!_isRecording) _startRecording();
                               },
                               onLongPressEnd: (_) {
-                                if (_isRealListening) _stopListeningAndSend();
+                                if (_isRecording) _stopRecordingAndProcess();
                               },
                               child: Container(
                                 height: 44,
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
-                                    colors: _isRealListening
+                                    colors: _isRecording
                                         ? const [Color(0xFFEF4444), Color(0xFFDC2626)]
                                         : const [Color(0xFFA855F7), Color(0xFF6366F1)],
                                   ),
                                   borderRadius: BorderRadius.circular(22),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: (_isRealListening ? const Color(0xFFEF4444) : const Color(0xFF6366F1)).withValues(alpha: 0.35),
+                                      color: (_isRecording ? const Color(0xFFEF4444) : const Color(0xFF6366F1)).withValues(alpha: 0.35),
                                       blurRadius: 10,
                                       offset: const Offset(0, 3),
                                     ),
@@ -1308,12 +1275,12 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(_isRealListening ? '🛑' : '🎙️', style: const TextStyle(fontSize: 18)),
+                                    Text(_isRecording ? '🛑' : '🎙️', style: const TextStyle(fontSize: 18)),
                                     const SizedBox(width: 8),
                                     Flexible(
                                       child: Text(
-                                        _isRealListening
-                                            ? (_liveSpokenWords.isEmpty ? '正在聆听... (松手发送)' : '松手发送: "$_liveSpokenWords"')
+                                        _isRecording
+                                            ? '正在录音中... (松手或点击发送)'
                                             : '轻触对波可说话',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
