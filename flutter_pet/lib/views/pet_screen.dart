@@ -333,7 +333,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
           const minX = 24.0;
           final maxX = _lastScreenSize.width > 100 ? (_lastScreenSize.width - 24.0) : 340.0;
-          final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+          final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
           final minY = floorTop + 20.0;
           final maxY = _lastScreenSize.height > 200 ? (_lastScreenSize.height - 110.0) : 600.0;
 
@@ -393,7 +393,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             final norm = diff / dist;
             _petX += norm.dx * speed;
             _petY += norm.dy * speed;
-            final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+            final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
             _petX = _petX.clamp(35.0, _lastScreenSize.width - 35.0);
             _petY = _petY.clamp(floorTop + 25.0, _lastScreenSize.height - 115.0);
             _maybeAddFootprint(Offset(_petX, _petY));
@@ -993,7 +993,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       if (math.Random().nextDouble() < 0.40) {
         Timer(const Duration(milliseconds: 1800), () {
           if (mounted && !_isDragging && !widget.petModel.isSleeping) {
-            final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+            final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
             final nestY = floorTop + 130.0;
             _startWalkingTo(
               78.0,
@@ -1564,7 +1564,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (!mounted || _isDragging || _isLaserMode || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
     if (_isRoaming) return;
 
-    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
     final nestX = screenSize.width / 2;
     final nestY = floorTop + 130.0;
     final rnd = math.Random();
@@ -1721,7 +1721,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 漫步到达巡视目的地后的智能有机交互触发
   void _onArrivedAtDestination(String? targetName) {
     _roamTimer?.cancel();
-    final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
     final nestX = _lastScreenSize.width / 2;
     final nestY = floorTop + 130.0;
 
@@ -2090,7 +2090,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
     });
 
-    final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
     const plantCenterX = 24.0 + 24.0;
     final plantCenterY = floorTop + 16.0 + 26.0;
 
@@ -2227,7 +2227,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     // 精准定位在右上角猫抓柱真实几何中心
-    final floorTop = (_lastScreenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
     final postCenterX = _lastScreenSize.width - 24.0 - 24.0;
     final postCenterY = floorTop + 16.0 + 26.0;
 
@@ -2703,7 +2703,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _resetToMat(Size screenSize) {
     _idleSeconds = 0;
     _stopRoaming();
-    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
     final nestX = screenSize.width / 2;
     final nestY = floorTop + 130.0;
     setState(() {
@@ -2970,7 +2970,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 6. 摸肉垫 / 肚皮其他区域
     if (localPos.dy > 120) {
-      final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+      final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
       final nestX = screenSize.width / 2;
       final nestY = floorTop + 130.0;
       if ((_petX - nestX).abs() < 25 && (_petY - nestY).abs() < 25) {
@@ -3066,7 +3066,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onBackgroundPointerDown(Offset globalPos, Size screenSize) {
     if (_isDragging || _isLaserMode || _showFoodTray || _isWardrobeMode || _isActionMode || widget.petModel.isSleeping) return;
 
-    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
     final nestX = screenSize.width / 2;
     final nestY = floorTop + 130.0;
     final relX = globalPos.dx - _petX;
@@ -3136,7 +3136,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnTextParticle(Offset(targetPos.dx - 22, targetPos.dy - 24), '哒哒！✨', const Color(0xFF6366F1));
 
     // 唤起波可敏捷小跑靠近指尖落点
-    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
     final targetX = targetPos.dx.clamp(45.0, screenSize.width - 45.0);
     final targetY = targetPos.dy.clamp(floorTop + 20.0, screenSize.height - 85.0);
 
@@ -3170,7 +3170,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 房间空间黄金分割：
     // 踢脚线与地板起始位置：在上方约 22%，给宽敞木地板留足 78% 空间
-    final floorTop = (screenSize.height * 0.28).clamp(195.0, 245.0);
+    final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
     // 房间核心重心：萌宠专属暖绒圆垫位于中景焦点黄金位置
     final nestX = screenSize.width / 2;
     final nestY = floorTop + 130.0;
@@ -3264,7 +3264,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 if (isNight) ...[
                   // 漫天静谧微星 (支持轻触交互，飘出星光)
                   Positioned(
-                    top: 85,
+                    top: 112,
                     left: 28,
                     child: GestureDetector(
                       onTap: _onMoonTap,
@@ -3298,7 +3298,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 ] else ...[
                   // 白天环境氛围 (云朵轻触触发晴空微风彩蛋)
                   Positioned(
-                    top: 115,
+                    top: 145,
                     left: 24,
                     child: GestureDetector(
                       onTap: _onSunTap,
@@ -3331,7 +3331,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 idleAnimation: _idleAnimController,
                 defaultDecorations: [
                   Positioned(
-                    top: 64,
+                    top: 92,
                     left: 18,
                     right: 18,
                     child: Transform.translate(
@@ -3340,7 +3340,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     ),
                   ),
                   Positioned(
-                    top: 106,
+                    top: 138,
                     left: 18,
                     child: Transform.translate(
                       offset: Offset(_tiltX * -8.0, 0),
@@ -3348,7 +3348,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     ),
                   ),
                   Positioned(
-                    top: 62,
+                    top: 92,
                     left: screenSize.width / 2 - 43,
                     child: Transform.translate(
                       offset: Offset(_tiltX * -10.0, 0),
@@ -4169,7 +4169,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     ),
                   ),
                 Positioned(
-                  top: 56,
+                  top: 76,
                   left: 20,
                   right: 20,
                   child: Center(
