@@ -21,7 +21,12 @@ class AiConfig {
   static const double defaultSpeed = 1.05;
 
   /// MiniMax 对话大语言模型代号
-  static const String defaultChatModel = 'abab6.5s-chat';
+  ///
+  /// 注意: MiniMax 已下线 abab6.5s-chat / abab5.5s-chat / MiniMax-M2 等旧模型,
+  /// 下线后接口仍返回 HTTP 200, 但 body 里是
+  /// `{"choices":null,"base_resp":{"status_code":2069,"status_msg":"... no longer available."}}`,
+  /// 所以必须换成当前在线的模型代号, 否则表现为"连不上云端大脑"。
+  static const String defaultChatModel = 'MiniMax-Text-01';
 
   /// MiniMax T2A 神经语音合成模型代号
   static const String defaultT2aModel = 'speech-01-turbo';

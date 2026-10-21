@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/services/minimax_service.dart';
+import 'package:flutter_pet/config/ai_config.dart';
 import 'package:flutter_pet/views/dialogs/ai_voice_chat_dialog.dart';
 import 'package:record/record.dart';
 import 'package:record_platform_interface/record_platform_interface.dart';
@@ -330,6 +331,36 @@ void main() {
 
       expect(ai.sentTexts, contains('波可，给你准备了香酥小鱼干，快来吃呀！'));
       expect(triggeredAction, 'FEED');
+    });
+  });
+
+  group('大模型回复清洗与兜底', () {
+    test('去掉动作标签后保留正文', () {
+      final ai = _FakeAiService();
+      final text =
+          ai.cleanReplyText('呼噜呼噜~ 波可来给主人踩背啦！[ACTION:PET]', '摸摸头');
+      expect(text, '呼噜呼噜~ 波可来给主人踩背啦！');
+      expect(text.contains('[ACTION'), isFalse);
+    });
+
+    test('模型只回动作标签时不能产生空气泡', () {
+      final ai = _FakeAiService();
+      final text = ai.cleanReplyText('[ACTION:PET]', '好的');
+      expect(text.trim(), isNotEmpty);
+      expect(text.contains('[ACTION'), isFalse);
+    });
+
+    test('模型回空内容时不能产生空气泡', () {
+      final ai = _FakeAiService();
+      expect(ai.cleanReplyText('', '好的').trim(), isNotEmpty);
+      expect(ai.cleanReplyText('   ', '好的').trim(), isNotEmpty);
+    });
+
+    test('内置对话模型不是已下线的旧型号 (下线后接口只回 base_resp 错误)', () {
+      expect(AiConfig.defaultChatModel.trim(), isNotEmpty);
+      expect(AiConfig.defaultChatModel, isNot('abab6.5s-chat'));
+      expect(AiConfig.defaultChatModel, isNot('abab5.5s-chat'));
+      expect(AiConfig.defaultChatModel, isNot('MiniMax-M2'));
     });
   });
 }

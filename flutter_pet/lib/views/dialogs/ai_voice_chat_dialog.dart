@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
+import '../../config/ai_config.dart';
 import '../../services/haptic_service.dart';
 import '../../services/minimax_service.dart';
 import '../../services/sound_service.dart';
@@ -573,6 +574,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   void _openSettingsDialog() {
     final keyController = TextEditingController(text: _ai.apiKey);
     final customUrlController = TextEditingController(text: _ai.customUrl);
+    final modelController = TextEditingController(text: _ai.customModel);
     String selectedProvider = _ai.provider;
     bool isTesting = false;
     bool isTestingVoice = false;
@@ -643,6 +645,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                           child: GestureDetector(
                             onTap: () {
                               setDialogState(() {
+                                if (selectedProvider != 'minimax') {
+                                  modelController.clear();
+                                }
                                 selectedProvider = 'minimax';
                                 testResult = null;
                               });
@@ -675,6 +680,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                           child: GestureDetector(
                             onTap: () {
                               setDialogState(() {
+                                if (selectedProvider != 'deepseek') {
+                                  modelController.clear();
+                                }
                                 selectedProvider = 'deepseek';
                                 testResult = null;
                               });
@@ -707,6 +715,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                           child: GestureDetector(
                             onTap: () {
                               setDialogState(() {
+                                if (selectedProvider != 'openai') {
+                                  modelController.clear();
+                                }
                                 selectedProvider = 'openai';
                                 testResult = null;
                               });
@@ -771,6 +782,25 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       ),
                     ],
 
+                    const SizedBox(height: PokoSpacing.sm),
+
+                    // 模型代号 (可选): MiniMax 下线旧模型时, 用户可在此自行切换, 无需换包
+                    TextField(
+                      controller: modelController,
+                      style: TextStyle(color: t.textPrimary, fontSize: PokoFont.small),
+                      decoration: InputDecoration(
+                        labelText: '模型代号 (可选)',
+                        hintText: selectedProvider == 'minimax'
+                            ? '留空使用内置 ${AiConfig.defaultChatModel}'
+                            : (selectedProvider == 'deepseek'
+                                ? '留空使用内置 deepseek-chat'
+                                : '留空使用内置 gpt-4o-mini'),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: PokoSpacing.md, vertical: PokoSpacing.sm),
+                      ),
+                    ),
+
                     const SizedBox(height: PokoSpacing.md),
 
                     // 测试连接与试听语音按钮
@@ -791,6 +821,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                     apiKey: keyController.text,
                                     provider: selectedProvider,
                                     customUrl: customUrlController.text,
+                                    customModel: modelController.text,
                                   );
                                   setDialogState(() {
                                     isTesting = false;
@@ -894,6 +925,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       apiKey: keyController.text,
                       provider: selectedProvider,
                       customUrl: customUrlController.text,
+                      customModel: modelController.text,
                     );
                     if (ctx.mounted) Navigator.pop(ctx);
                     setState(() {});

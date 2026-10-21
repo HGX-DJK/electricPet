@@ -224,8 +224,8 @@ class MinimaxService {
       final rawReply = llmResult['reply'] ?? '';
       final action = llmResult['action'];
 
-      // 清洗标签后的纯文本
-      final cleanText = _cleanActionTags(rawReply);
+      // 清洗标签后的纯文本 (正文为空时兜底, 避免空气泡)
+      final cleanText = cleanReplyText(rawReply, trimmedText);
       _lastError = null;
 
       // 2. 文本先落屏 (气泡立即可见), 语音合成转后台并行, 不阻塞首字响应
@@ -280,7 +280,9 @@ class MinimaxService {
         model = _customModel.isNotEmpty ? _customModel : 'gpt-4o-mini';
       } else {
         uri = Uri.parse('https://api.minimax.chat/v1/text/chatcompletion_v2');
-        model = 'abab6.5s-chat';
+        // 允许用户在设置里覆盖模型代号 (MiniMax 偶尔会下线旧模型)
+        final override = _customModel.trim();
+        model = override.isNotEmpty ? override : AiConfig.defaultChatModel;
       }
 
       final request = await client.postUrl(uri);
@@ -302,6 +304,7 @@ class MinimaxService {
    - [ACTION:PET] : 顺毛、摸摸头、蹭蹭贴贴、求抱抱
    - [ACTION:BATH] : 洗澡、洗香香、清洁爪子
 6. 回复字数限制：请保持在 25 到 65 个汉字以内，简短生动，极适合语音合成朗读。
+7. 【输出格式强制要求】：每次回复必须先说出 25 到 65 个汉字的台词，再在末尾附带动作标签。严禁只输出动作标签而没有台词，即正文与动作标签同时存在，缺一不可。
 ''';
 
       final messages = <Map<String, String>>[
@@ -342,6 +345,17 @@ class MinimaxService {
       }
 
       final jsonMap = jsonDecode(body) as Map<String, dynamic>;
+
+      // ⚠️ MiniMax 在「模型下线 / 参数非法 / 内容审核」等场景下仍返回 HTTP 200,
+      //    真实原因藏在 body.base_resp 里, 必须显式检查, 否则会被误判成"无内容"。
+      final baseResp = jsonMap['base_resp'] as Map<String, dynamic>?;
+      final statusCode = (baseResp?['status_code'] as num?)?.toInt() ?? 0;
+      if (statusCode != 0) {
+        final statusMsg = (baseResp?['status_msg'] as String? ?? '').trim();
+        throw Exception('大模型接口返回错误 ($statusCode)'
+            '${statusMsg.isEmpty ? '' : ': $statusMsg'}');
+      }
+
       final choices = jsonMap['choices'] as List<dynamic>?;
       if (choices == null || choices.isEmpty) {
         throw Exception('大模型响应未包含有效生成文本 (No choices)');
@@ -387,7 +401,8 @@ class MinimaxService {
         model = (customModel ?? _customModel).trim().isNotEmpty ? (customModel ?? _customModel).trim() : 'gpt-4o-mini';
       } else {
         uri = Uri.parse('https://api.minimax.chat/v1/text/chatcompletion_v2');
-        model = 'abab6.5s-chat';
+        final override = (customModel ?? _customModel).trim();
+        model = override.isNotEmpty ? override : AiConfig.defaultChatModel;
       }
 
       final request = await client.postUrl(uri);
@@ -407,6 +422,23 @@ class MinimaxService {
       final body = await response.transform(utf8.decoder).join();
 
       if (response.statusCode == 200) {
+        // HTTP 200 不代表成功: MiniMax 会把模型下线 / 参数错误等塞进 base_resp
+        try {
+          final okJson = jsonDecode(body);
+          if (okJson is Map) {
+            final okBase = okJson['base_resp'] as Map<String, dynamic>?;
+            final okCode = (okBase?['status_code'] as num?)?.toInt() ?? 0;
+            if (okCode != 0) {
+              final okMsg = (okBase?['status_msg'] as String? ?? '').trim();
+              return {
+                'success': false,
+                'message': '连接失败 ($okCode)'
+                    '${okMsg.isEmpty ? '' : ': $okMsg'}'
+                    ' — 可能是模型代号已下线，请更换模型后重试',
+              };
+            }
+          }
+        } catch (_) {}
         return {'success': true, 'message': '连接成功！大模型服务已就绪！'};
       } else {
         String errDetail = 'HTTP ${response.statusCode}';
@@ -657,8 +689,29 @@ class MinimaxService {
     return text.replaceAll(RegExp(r'\[ACTION:[A-Z_]+\]'), '').trim();
   }
 
+  /// 清洗云端回复: 去掉动作指令标签;
+  /// 若模型只吐了标签导致正文为空, 用一句本地陪伴语兜底, 避免聊天气泡空白。
+  @visibleForTesting
+  String cleanReplyText(String rawReply, String userText) {
+    final clean = _cleanActionTags(rawReply);
+    if (clean.trim().isEmpty) {
+      return _generateLocalCompanionResponse(
+        userText,
+        recordToHistory: false,
+      ).text;
+    }
+    return clean;
+  }
+
   /// 本地智能拟真陪伴引擎 (无 Key / 离线 / 网络异常时无感知兜底)
-  MinimaxResponse _generateLocalCompanionResponse(String input, {String? errorReason}) {
+  ///
+  /// [recordToHistory] 置 false 时只产出文案、不写入对话历史
+  /// (用于"云端只回了动作标签、正文为空"时补一句, 避免出现空气泡)
+  MinimaxResponse _generateLocalCompanionResponse(
+    String input, {
+    String? errorReason,
+    bool recordToHistory = true,
+  }) {
     final lower = input.toLowerCase();
     String reply;
     String? action;
@@ -737,7 +790,9 @@ class MinimaxService {
       reply = list[math.Random().nextInt(list.length)];
     }
 
-    _chatHistory.add(ChatMessage(role: 'assistant', content: reply));
+    if (recordToHistory) {
+      _chatHistory.add(ChatMessage(role: 'assistant', content: reply));
+    }
     return MinimaxResponse(
       text: reply,
       action: action,
