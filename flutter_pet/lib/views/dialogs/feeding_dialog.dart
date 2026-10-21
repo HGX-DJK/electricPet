@@ -70,7 +70,7 @@ class FeedingDialog extends StatelessWidget {
               animation: model,
               builder: (context, _) {
                 final hungerPct = (model.hunger / 100.0).clamp(0.0, 1.0);
-                final isFull = model.hunger >= 95.0;
+                final isFull = model.isFull;
 
                 return Container(
                   padding: const EdgeInsets.symmetric(
@@ -156,9 +156,13 @@ class FeedingDialog extends StatelessWidget {
             const SizedBox(height: PokoSpacing.md),
 
             // 美食佳肴列表 (可连续投喂，上方猫咪实时品尝并塑造独特性格)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 310),
-              child: GridView.builder(
+            AnimatedBuilder(
+              animation: model,
+              builder: (context, _) {
+                final isFull = model.isFull;
+                return ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 310),
+                  child: GridView.builder(
                 shrinkWrap: true,
                 physics: const BouncingScrollPhysics(),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -192,11 +196,14 @@ class FeedingDialog extends StatelessWidget {
                     pColor = PokoPalette.emerald;
                   }
 
-                  return GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      onFeedSelected(food['id'] as String);
-                    },
+                  return AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: isFull ? 0.65 : 1.0,
+                    child: GestureDetector(
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        onFeedSelected(food['id'] as String);
+                      },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: PokoSpacing.sm,
@@ -256,22 +263,34 @@ class FeedingDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: PokoSpacing.sm),
+          );
+        },
+      ),
+      const SizedBox(height: PokoSpacing.sm),
 
-            // 底部温馨提示
-            Center(
-              child: Text(
-                '💡 提示：点击美味可连续投喂，猫咪会在上方大快朵颐哦~',
-                style: TextStyle(
-                  fontSize: PokoFont.caption,
-                  color: t.textMuted,
-                ),
+      // 底部温馨提示
+      AnimatedBuilder(
+        animation: model,
+        builder: (context, _) {
+          final isFull = model.isFull;
+          return Center(
+            child: Text(
+              isFull
+                  ? '🌟 波可已经吃得饱饱的啦~ 摸摸圆滚滚的小肚皮吧！'
+                  : '💡 提示：点击美味可连续投喂，猫咪会在上方大快朵颐哦~',
+              style: TextStyle(
+                fontSize: PokoFont.caption,
+                fontWeight: isFull ? FontWeight.bold : FontWeight.normal,
+                color: isFull ? PokoPalette.emerald : t.textMuted,
               ),
             ),
+          );
+        },
+      ),
           ],
         ),
       ),

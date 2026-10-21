@@ -136,6 +136,33 @@ void main() {
       }
     });
 
+    test('Pet Full Satiety Refusal Mechanism and Hunger Clamping Test', () {
+      final pet = PetModel();
+      pet.hunger = 80.0;
+      expect(pet.isFull, isFalse);
+
+      // Normal feeding when hungry
+      final ok1 = pet.feed('canned_fish', allowWhenFull: false);
+      expect(ok1, isTrue);
+      expect(pet.hunger, greaterThan(80.0));
+
+      // Force pet to full
+      pet.hunger = 100.0;
+      expect(pet.isFull, isTrue);
+
+      // Feeding when full with allowWhenFull: false must be rejected
+      final oldFed = pet.totalFedCount;
+      final ok2 = pet.feed('dried_fish', allowWhenFull: false);
+      expect(ok2, isFalse);
+      expect(pet.totalFedCount, equals(oldFed));
+
+      // With allowWhenFull: true, feeding still succeeds for dev/testing
+      final ok3 = pet.feed('dried_fish', allowWhenFull: true);
+      expect(ok3, isTrue);
+      expect(pet.totalFedCount, equals(oldFed + 1));
+      expect(pet.hunger, equals(100.0));
+    });
+
     test('Gacha Item Buff Description & All 4 Habitat DIY Switching Test', () {
       final pet = PetModel();
       pet.coins = 600;

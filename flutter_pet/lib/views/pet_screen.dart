@@ -946,11 +946,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final foodIcon = _draggingFoodIcon ?? '🐟';
 
     if (dist < 110.0) {
+      if (widget.petModel.isFull) {
+        _vibrate('light');
+        _squishController.forward(from: 0.0);
+        _spawnParticles(petHeadPos, emoji: '😋', count: 3);
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', const Color(0xFFF59E0B));
+        final fullQuotes = [
+          '嗝~ 肚皮已经圆滚滚啦，实在吃不下啦！留着下一顿再吃好不好呀~',
+          '波可的小肚子已经装得满满当当啦，再喂要变成猫猫球啦！',
+          '好饱好满足呀！谢谢主人，等肚子消化一下再喂我吧~',
+        ];
+        _showDialogueBubble(fullQuotes[math.Random().nextInt(fullQuotes.length)], duration: const Duration(seconds: 4), speak: true);
+        setState(() {
+          _draggingFoodPos = null;
+          _lookTargetPos = null;
+        });
+        return;
+      }
+
       // 投喂成功！嗷呜飞扑吞食
       SoundService.playPop();
       _vibrate('heavy');
       _squishController.forward(from: 0.0);
-      widget.petModel.feed(_draggingFoodId ?? 'dried_fish');
+      widget.petModel.feed(_draggingFoodId ?? 'dried_fish', allowWhenFull: false);
       widget.petModel.addIntimacy(intimacyGain);
       _spawnParticles(petHeadPos, emoji: foodIcon, count: 5);
       _spawnParticles(petHeadPos, emoji: '💖', count: 3);
@@ -986,7 +1004,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
 
       setState(() {
-        _showFoodTray = false;
         _draggingFoodPos = null;
         _lookTargetPos = null;
       });
@@ -1846,7 +1863,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 final hungerGain = (food['hunger'] as double).toInt();
                 final expGain = (food['exp'] as double).toInt();
 
-                widget.petModel.feed(foodId);
+                if (widget.petModel.isFull) {
+                  _vibrate('light');
+                  _squishController.forward(from: 0.0);
+                  _spawnParticles(Offset(_petX, _petY - 25), emoji: '😋', count: 3);
+                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', const Color(0xFFF59E0B));
+                  final fullQuotes = [
+                    '嗝~ 肚皮已经圆滚滚啦，实在吃不下啦！留着下一顿再吃好不好呀~',
+                    '波可的小肚子已经装得满满当当啦，再喂要变成猫猫球啦！',
+                    '好饱好满足呀！谢谢主人，等肚子消化一下再喂我吧~',
+                  ];
+                  _showDialogueBubble(fullQuotes[math.Random().nextInt(fullQuotes.length)], duration: const Duration(seconds: 4), speak: true);
+                  return;
+                }
+
+                widget.petModel.feed(foodId, allowWhenFull: false);
                 _vibrate('medium');
 
                 // 触发进食咀嚼动画
@@ -4115,6 +4146,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               else if (_showFoodTray)
                 LiveFeedingDock(
                   isNight: isNight,
+                  currentHunger: widget.petModel.hunger,
+                  isFull: widget.petModel.isFull,
                   foodMenu: PetModel.foodMenu,
                   onFoodTap: (id, name, icon, hunger, intimacyGain) {
                     _draggingFoodId = id;

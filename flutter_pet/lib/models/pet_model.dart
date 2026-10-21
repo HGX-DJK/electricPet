@@ -524,9 +524,13 @@ class PetModel extends ChangeNotifier {
     saveToDisk();
   }
 
-  /// 投喂美食
-  bool feed(String foodId) {
+  /// 是否已完全吃饱 (饱腹度达上限 100%)
+  bool get isFull => hunger >= 100.0;
+
+  /// 投喂美食 (支持防暴食机制，吃饱状态下拒食并给予萌系反馈)
+  bool feed(String foodId, {bool allowWhenFull = true}) {
     if (isSleeping) return false;
+    if (!allowWhenFull && isFull) return false;
     final food = foodMenu.firstWhere((f) => f['id'] == foodId, orElse: () => foodMenu.first);
     hunger = (hunger + (food['hunger'] as double)).clamp(0.0, 100.0);
     mood = (mood + (food['mood'] as double)).clamp(0.0, 100.0);
