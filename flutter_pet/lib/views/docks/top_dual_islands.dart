@@ -17,6 +17,8 @@ class TopDualIslands extends StatelessWidget {
   final bool isNight;
   final Map<String, dynamic> circadianTheme;
   final bool isManualSky;
+  final String ambientMode;
+  final VoidCallback? onAmbientToggle;
   final VoidCallback onIntimacyTap;
   final VoidCallback onSoundToggle;
   final VoidCallback onFootprintsToggle;
@@ -30,6 +32,8 @@ class TopDualIslands extends StatelessWidget {
     required this.isNight,
     required this.circadianTheme,
     required this.isManualSky,
+    this.ambientMode = 'none',
+    this.onAmbientToggle,
     required this.onIntimacyTap,
     required this.onSoundToggle,
     required this.onFootprintsToggle,
@@ -309,6 +313,24 @@ class TopDualIslands extends StatelessWidget {
                     style: const TextStyle(fontSize: 13)),
                 onTap: onSoundToggle,
               ),
+              if (onAmbientToggle != null) ...[
+                const SizedBox(width: PokoSpacing.xs),
+                _toggleButton(
+                  context,
+                  key: const ValueKey('ambient_asmr_toggle_button'),
+                  active: ambientMode != 'none',
+                  activeColor: ambientMode == 'rain'
+                      ? (isNight ? const Color(0xFF0369A1).withValues(alpha: 0.4) : const Color(0xFFE0F2FE))
+                      : (isNight ? const Color(0xFF7E22CE).withValues(alpha: 0.4) : const Color(0xFFF3E8FF)),
+                  child: Text(
+                    ambientMode == 'rain'
+                        ? '🌧️'
+                        : (ambientMode == 'purr' ? '🐱' : '🎵'),
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: onAmbientToggle!,
+                ),
+              ],
               const SizedBox(width: PokoSpacing.xs),
               _toggleButton(
                 context,

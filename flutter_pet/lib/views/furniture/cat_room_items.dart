@@ -952,13 +952,13 @@ class CoveredBlanket extends StatelessWidget {
 }
 }
 
-/// 软装家具 4：萌猫头温馨夜灯 + ASMR 白噪音切换胶囊
+/// 软装家具 4：萌猫床头立式暖光小台灯 (陶瓷底座 + 复古褶皱柔光灯罩 + 实体拉绳“啪嗒”开关)
 class KittenNightLamp extends StatelessWidget {
   final bool isNight;
   final bool isNightLampOn;
   final bool isLampSwitchDepressed;
   final String ambientMode;
-  final VoidCallback onAmbientTap;
+  final VoidCallback? onAmbientTap;
   final VoidCallback onLampTap;
 
   const KittenNightLamp({
@@ -966,122 +966,187 @@ class KittenNightLamp extends StatelessWidget {
     required this.isNight,
     required this.isNightLampOn,
     required this.isLampSwitchDepressed,
-    required this.ambientMode,
-    required this.onAmbientTap,
+    this.ambientMode = 'none',
+    this.onAmbientTap,
     required this.onLampTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        // 1. ASMR 白噪音切换胶囊
-        BouncyTouchFeedback(
-          scaleDown: 0.93,
-          onTap: onAmbientTap,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 4),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-            decoration: BoxDecoration(
-              color: ambientMode == 'rain'
-                  ? const Color(0xFF0284C7).withValues(alpha: 0.22)
-                  : (ambientMode == 'purr'
-                      ? const Color(0xFF9333EA).withValues(alpha: 0.22)
-                      : (isNight ? const Color(0xFF1E1838).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.72))),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: ambientMode == 'rain'
-                    ? const Color(0xFF38BDF8)
-                    : (ambientMode == 'purr'
-                        ? const Color(0xFFA855F7)
-                        : (isNight ? const Color(0xFF6366F1).withValues(alpha: 0.3) : const Color(0xFFE2E8F0))),
-                width: 1.0,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isNight ? 0.2 : 0.03),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1.5),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  ambientMode == 'rain'
-                      ? '🌧️ 雨声'
-                      : (ambientMode == 'purr' ? '🐱 呼噜' : '🎵 ASMR'),
-                  style: TextStyle(
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.bold,
-                    color: ambientMode == 'rain'
-                        ? const Color(0xFF38BDF8)
-                        : (ambientMode == 'purr'
-                            ? const Color(0xFFC084FC)
-                            : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B))),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // 2. 小夜灯实体开关 (开灯暖光高亮，关灯安睡深蓝，实体机械翘板卡扣位移)
-        BouncyTouchFeedback(
-          scaleDown: 0.93,
-          onTap: onLampTap,
-          child: Transform.translate(
-            offset: Offset(0, isLampSwitchDepressed ? 2.0 : 0.0),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+    return BouncyTouchFeedback(
+      key: const ValueKey('cat_night_lamp_furniture'),
+      scaleDown: 0.94,
+      onTap: onLampTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // 1. 复古柔光小灯罩 (带微光猫爪暗纹与温润暖黄光晕)
+            Container(
+              width: 38,
+              height: 24,
               decoration: BoxDecoration(
-                color: isNightLampOn
-                    ? (isNight ? const Color(0xFF3B2E1E) : const Color(0xFFFEF3C7).withValues(alpha: 0.9))
-                    : (isNight ? const Color(0xFF181330).withValues(alpha: 0.8) : Colors.white.withValues(alpha: 0.75)),
-                borderRadius: BorderRadius.circular(14),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: isNightLampOn
+                      ? [
+                          const Color(0xFFFEF3C7),
+                          const Color(0xFFFDE68A),
+                          const Color(0xFFF59E0B),
+                        ]
+                      : (isNight
+                          ? [const Color(0xFF334155), const Color(0xFF1E293B)]
+                          : [const Color(0xFFF1F5F9), const Color(0xFFE2E8F0)]),
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(10),
+                  topRight: Radius.circular(10),
+                  bottomLeft: Radius.circular(5),
+                  bottomRight: Radius.circular(5),
+                ),
                 border: Border.all(
                   color: isNightLampOn
                       ? const Color(0xFFF59E0B)
-                      : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.3) : const Color(0xFFE2E8F0)),
+                      : (isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                  width: 1.2,
+                ),
+                boxShadow: isNightLampOn
+                    ? [
+                        BoxShadow(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                          blurRadius: 14,
+                          spreadRadius: 2,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
+              ),
+              child: Center(
+                child: Text(
+                  isNightLampOn ? '🐾' : '💡',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isNightLampOn
+                        ? const Color(0xFFB45309).withValues(alpha: 0.8)
+                        : (isNight ? Colors.white38 : Colors.black26),
+                  ),
+                ),
+              ),
+            ),
+
+            // 2. 拟真中轴灯柱与垂落拉绳开关 (拉绳随点击位移动态回弹)
+            SizedBox(
+              width: 34,
+              height: 12,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 中轴细灯柱
+                  Container(
+                    width: 3,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                      borderRadius: BorderRadius.circular(1.5),
+                    ),
+                  ),
+                  // 右侧垂挂拉绳开关 (拉拽位移)
+                  Positioned(
+                    right: 6,
+                    top: 0,
+                    child: Transform.translate(
+                      offset: Offset(0, isLampSwitchDepressed ? 3.5 : 0.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 1.2,
+                            height: 6,
+                            color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          Container(
+                            width: 4.5,
+                            height: 4.5,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isNightLampOn
+                                  ? const Color(0xFFF59E0B)
+                                  : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                              boxShadow: isNightLampOn
+                                  ? [
+                                      BoxShadow(
+                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                                        blurRadius: 3,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // 3. 复古实木/陶瓷圆形底座 + 铭刻 ON/OFF 开关铭牌 (满足测试并模拟真实开关状态)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isNight ? const Color(0xFF1E293B) : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isNightLampOn
+                      ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
+                      : (isNight ? const Color(0xFF475569) : const Color(0xFFE2E8F0)),
                   width: 1.0,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: isNightLampOn
-                        ? const Color(0xFFF59E0B).withValues(alpha: 0.35)
-                        : Colors.black.withValues(alpha: 0.04),
-                    blurRadius: isNightLampOn ? 10 : 4,
-                    offset: Offset(0, isLampSwitchDepressed ? 1.0 : 2.0),
+                    color: Colors.black.withValues(alpha: isNight ? 0.3 : 0.08),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1.5),
                   ),
                 ],
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    isNightLampOn ? '💡' : '🌙',
-                    style: const TextStyle(fontSize: 16),
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isNightLampOn ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                    ),
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 3),
                   Text(
                     isNightLampOn ? 'ON' : 'OFF',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: 8.5,
                       fontWeight: FontWeight.bold,
                       color: isNightLampOn
-                          ? const Color(0xFFD97706)
-                          : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF94A3B8)),
+                          ? (isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706))
+                          : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

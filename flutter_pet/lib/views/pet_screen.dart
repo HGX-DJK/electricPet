@@ -3448,10 +3448,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   ),
                 ),
 
-              // 软装家具 4：右侧照明角 · 温馨小夜灯 (置于右侧地板，轻触“啪嗒”开关台灯)
+              // 软装家具 4：右侧照明角 · 床头猫咪小台灯 (置于右侧地板，轻触“啪嗒”拉绳开关台灯)
               Positioned(
-                right: 24.0,
-                top: nestY + 98.0,
+                right: 20.0,
+                top: nestY + 86.0,
                 child: AnimatedOpacity(
                   opacity: _isWardrobeMode ? 0.0 : 1.0,
                   duration: const Duration(milliseconds: 200),
@@ -3461,8 +3461,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       isNight: isNight,
                       isNightLampOn: _isNightLampOn,
                       isLampSwitchDepressed: _isLampSwitchDepressed,
-                      ambientMode: SoundService.ambientMode,
-                      onAmbientTap: _cycleAmbientSound,
                       onLampTap: _onNightLampTap,
                     ),
                   ),
@@ -3521,6 +3519,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   isNight: isNight,
                   circadianTheme: circadian,
                   isManualSky: _skyManualMode != -1,
+                  ambientMode: SoundService.ambientMode,
+                  onAmbientToggle: _cycleAmbientSound,
                   onIntimacyTap: _showIntimacyBondModal,
                   onSoundToggle: () {
                     setState(() {
