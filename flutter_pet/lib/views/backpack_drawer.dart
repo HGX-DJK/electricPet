@@ -184,6 +184,40 @@ class PokoBackpackDrawer extends StatelessWidget {
                     ],
                   ),
                 ),
+                // 4. 全局桌面悬浮宠快捷开关
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onToggleFloating();
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: isNight ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.6),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('📱', style: TextStyle(fontSize: 12)),
+                        SizedBox(width: 3.5),
+                        Text(
+                          '桌面悬浮',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6366F1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
                   child: Container(
