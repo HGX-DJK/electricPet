@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -17,6 +18,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -57,7 +59,7 @@ class FloatingPetService : Service() {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
-        // 1. 尝试以轻量前台常驻服务运行，防系统在后台强杀，同时提供快捷返回小窝的常驻通知
+        // 1. 启动轻量高保活前台常驻服务 (支持 Android 14+ specialUse)，防系统在主应用关闭时强杀/冻结事件分发
         startAsForeground()
 
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -69,20 +71,20 @@ class FloatingPetService : Service() {
 
         val density = resources.displayMetrics.density
         val sizePx = (78 * density).toInt()
+        val (screenWidth, screenHeight) = getScreenDimensions()
 
-        // 2. 初始化悬浮猫咪窗口属性
+        // 2. 初始化悬浮猫咪窗口属性 (采用 FLAG_LAYOUT_NO_LIMITS 与 START 重力，杜绝拖动至边缘时的事件丢失)
         pokoParams = WindowManager.LayoutParams(
             sizePx,
             sizePx,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.LEFT
-            x = (resources.displayMetrics.widthPixels - sizePx - (12 * density).toInt())
-            y = (resources.displayMetrics.heightPixels * 0.45).toInt()
+            gravity = Gravity.TOP or Gravity.START
+            x = (screenWidth - sizePx - (12 * density).toInt()).coerceAtLeast(0)
+            y = (screenHeight * 0.45).toInt()
         }
 
         // 3. 构建原生高精度矢量动画猫咪 View
@@ -100,7 +102,7 @@ class FloatingPetService : Service() {
 
         try {
             windowManager?.addView(pokoView, pokoParams)
-            Toast.makeText(this, "🐾 波可已跃上手机桌面！拖动可自由挪动，轻戳可互动哦~", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🐾 波可已跃上手机桌面！无论App是否关闭均可自由拖动挪移哦~", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
             stopSelf()
@@ -108,12 +110,30 @@ class FloatingPetService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 每次启动或自启重新加固前台服务优先级
+        startAsForeground()
+
         val skinId = intent?.getStringExtra("skinId")
         val petName = intent?.getStringExtra("petName")
         if (!skinId.isNullOrBlank() || !petName.isNullOrBlank()) {
             pokoView?.applyConfig(skinId, petName)
         }
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // 核心：当用户在手机多任务列表中划掉关闭主App时，前台服务依然健壮保持运行，绝不自我杀死，桌面猫咪依然可以自由拖拽！
+    }
+
+    private fun getScreenDimensions(): Pair<Int, Int> {
+        val wm = windowManager ?: getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay?.getRealMetrics(metrics)
+        val w = if (metrics.widthPixels > 0) metrics.widthPixels else resources.displayMetrics.widthPixels
+        val h = if (metrics.heightPixels > 0) metrics.heightPixels else resources.displayMetrics.heightPixels
+        return Pair(w, h)
     }
 
     private fun setupTouchListener(sizePx: Int, density: Float) {
@@ -126,8 +146,7 @@ class FloatingPetService : Service() {
 
         pokoView?.setOnTouchListener { _, event ->
             val params = pokoParams ?: return@setOnTouchListener false
-            val screenWidth = resources.displayMetrics.widthPixels
-            val screenHeight = resources.displayMetrics.heightPixels
+            val (screenWidth, screenHeight) = getScreenDimensions()
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -149,9 +168,9 @@ class FloatingPetService : Service() {
                     }
 
                     // 限制移动在屏幕边界之内，防止被拖离屏幕视野
-                    val maxX = screenWidth - sizePx
-                    val minY = (24 * density).toInt()
-                    val maxY = screenHeight - sizePx - (32 * density).toInt()
+                    val maxX = (screenWidth - sizePx).coerceAtLeast(0)
+                    val minY = (16 * density).toInt()
+                    val maxY = (screenHeight - sizePx - (24 * density).toInt()).coerceAtLeast(minY)
 
                     params.x = (initialX + dx).coerceIn(0, maxX)
                     params.y = (initialY + dy).coerceIn(minY, maxY)
@@ -247,10 +266,10 @@ class FloatingPetService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.LEFT
+            gravity = Gravity.TOP or Gravity.START
         }
 
         bubbleView = bubble
@@ -273,12 +292,12 @@ class FloatingPetService : Service() {
         bubble.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 
         val density = resources.displayMetrics.density
-        val screenWidth = resources.displayMetrics.widthPixels
+        val (screenWidth, _) = getScreenDimensions()
         val bubbleW = bubble.measuredWidth
         val bubbleH = bubble.measuredHeight
         val pokoW = pokoView?.width ?: (78 * density).toInt()
 
-        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), screenWidth - bubbleW - (10 * density).toInt())
+        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
         bParams.y = (pParams.y - bubbleH - (6 * density).toInt()).coerceAtLeast((28 * density).toInt())
 
         if (bubble.parent == null) {
@@ -324,12 +343,12 @@ class FloatingPetService : Service() {
         if (bubble.visibility != View.VISIBLE || bubble.parent == null) return
 
         val density = resources.displayMetrics.density
-        val screenWidth = resources.displayMetrics.widthPixels
+        val (screenWidth, _) = getScreenDimensions()
         val bubbleW = bubble.width.coerceAtLeast((100 * density).toInt())
         val bubbleH = bubble.height.coerceAtLeast((36 * density).toInt())
         val pokoW = pokoView?.width ?: (78 * density).toInt()
 
-        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), screenWidth - bubbleW - (10 * density).toInt())
+        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
         bParams.y = (pParams.y - bubbleH - (6 * density).toInt()).coerceAtLeast((28 * density).toInt())
         try {
             windowManager?.updateViewLayout(bubble, bParams)
@@ -393,8 +412,18 @@ class FloatingPetService : Service() {
                 .build()
 
             try {
-                startForeground(1001, notification)
-            } catch (_: Exception) {}
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    startForeground(
+                        1001,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else {
+                    startForeground(1001, notification)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 

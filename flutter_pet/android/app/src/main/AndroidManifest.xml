@@ -12,9 +12,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
-    <!-- 悬浮窗上层显示权限 -->
+    <!-- 悬浮窗上层显示权限与前台服务权限 (支持 Android 14+ specialUse 与桌面常驻) -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -49,7 +51,13 @@
         </activity>
         <service
             android:name=".FloatingPetService"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Displaying floating pet companion overlay on home screen" />
+        </service>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
