@@ -19,6 +19,7 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.DisplayMetrics
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -49,6 +50,7 @@ class FloatingPetService : Service() {
 
     companion object {
         var isRunning = false
+        const val TAG = "PokoOverlay"
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -73,13 +75,17 @@ class FloatingPetService : Service() {
         val sizePx = (78 * density).toInt()
         val (screenWidth, screenHeight) = getScreenDimensions()
 
-        // 2. 初始化悬浮猫咪窗口属性 (采用 FLAG_LAYOUT_NO_LIMITS 与 START 重力，杜绝拖动至边缘时的事件丢失)
+        // 2. 初始化悬浮猫咪窗口属性
+        //    FLAG_NOT_TOUCH_MODAL : 宠物以外的区域触摸透传给下层应用，避免悬浮窗吞掉整屏点击
+        //    FLAG_LAYOUT_IN_SCREEN: 窗口按物理屏幕坐标系布局，可触达区域(touchable region)计算正确 —— 能拖动的关键
+        //    禁用 FLAG_LAYOUT_NO_LIMITS: 它让窗口脱离屏幕裁剪，Android 10+ 上可触达区域会失效，触摸打不到宠物
         pokoParams = WindowManager.LayoutParams(
             sizePx,
             sizePx,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -143,28 +149,40 @@ class FloatingPetService : Service() {
         var initialTouchX = 0f
         var initialTouchY = 0f
         var isClick = false
+        var hasDragged = false
+        // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
+        var gestureScreenWidth = 0
+        var gestureScreenHeight = 0
 
         pokoView?.setOnTouchListener { _, event ->
             val params = pokoParams ?: return@setOnTouchListener false
-            val (screenWidth, screenHeight) = getScreenDimensions()
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     edgeSnapAnimator?.cancel()
+                    val (sw, sh) = getScreenDimensions()
+                    gestureScreenWidth = sw
+                    gestureScreenHeight = sh
                     initialX = params.x
                     initialY = params.y
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
                     isClick = true
+                    hasDragged = false
                     pokoView?.onDragStateChanged(true)
+                    Log.d(TAG, "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY)")
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    val screenWidth = gestureScreenWidth
+                    val screenHeight = gestureScreenHeight
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
 
-                    if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
+                    if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         isClick = false
+                        hasDragged = true
+                        Log.d(TAG, "进入拖拽 dx=$dx dy=$dy")
                     }
 
                     // 限制移动在屏幕边界之内，防止被拖离屏幕视野
@@ -181,7 +199,10 @@ class FloatingPetService : Service() {
                     try {
                         windowManager?.updateViewLayout(pokoView, params)
                         updateBubblePosition()
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) {
+                        // 之前这里被静默吞掉，导致"宠物按不动/拖不动"完全无从排查
+                        Log.e(TAG, "悬浮窗位置更新失败", e)
+                    }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -200,10 +221,10 @@ class FloatingPetService : Service() {
                             pokoView?.performClick()
                             showSpeechBubble()
                         }
-                    } else {
+                    } else if (hasDragged) {
                         // 拖拽释放：波可自由停留在用户放置的位置！
-                        // 仅当用户拖拽很接近边缘时（< 20dp）轻柔靠边吸附；若放置在屏幕中间任意位置均自由保留
-                        maybeGentleSnapEdge(params, sizePx, density, screenWidth)
+                        // 仅当用户拖拽很接近边缘时（< 10dp）轻柔靠边吸附；若放置在屏幕中间任意位置均自由保留
+                        maybeGentleSnapEdge(params, sizePx, density, gestureScreenWidth)
                     }
                     true
                 }
@@ -213,7 +234,8 @@ class FloatingPetService : Service() {
     }
 
     private fun maybeGentleSnapEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
-        val edgeThreshold = (20 * density).toInt()
+        // 阈值必须小于初始停靠位置(12dp)，否则用户刚拖动一点点就会被吸回原位，表现为"拖不动"
+        val edgeThreshold = (10 * density).toInt()
         val targetX = when {
             params.x < edgeThreshold -> (4 * density).toInt()
             params.x > (screenWidth - sizePx - edgeThreshold) -> screenWidth - sizePx - (4 * density).toInt()
@@ -266,7 +288,7 @@ class FloatingPetService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
