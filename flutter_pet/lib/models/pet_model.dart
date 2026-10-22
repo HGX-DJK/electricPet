@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/backup_service.dart';
+import '../services/overlay_service.dart';
 
 /// 宠物外观皮肤/品种配置
 class SkinConfig {
@@ -620,6 +621,11 @@ class PetModel extends ChangeNotifier {
       skinId = newSkinId;
       notifyListeners();
       saveToDisk();
+      // 实时同步到桌面悬浮宠：所有换品种入口（衣橱弹窗/换装坞）都汇聚到这里，
+      // 悬浮服务未运行时原生侧直接返回 false，不会误启动服务
+      unawaited(
+        OverlayService.updateFloatingPet(skinId: newSkinId, petName: name),
+      );
     }
   }
 
@@ -739,6 +745,10 @@ class PetModel extends ChangeNotifier {
     applyDataMap(data);
     isFreshInstall = false;
     notifyListeners();
+    // 读档后外观可能整体改变（含品种），同步给桌面悬浮宠
+    unawaited(
+      OverlayService.updateFloatingPet(skinId: skinId, petName: name),
+    );
   }
 
   Future<void> saveToDisk() async {

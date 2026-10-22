@@ -21,6 +21,17 @@ class MainActivity: FlutterActivity() {
         setIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // 小窝在前台时让桌面悬浮猫暂时隐身，避免与 App 内的同一只波可重叠成两只
+        FloatingPetService.notifyAppForegroundChanged(true)
+    }
+
+    override fun onPause() {
+        FloatingPetService.notifyAppForegroundChanged(false)
+        super.onPause()
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
@@ -68,6 +79,23 @@ class MainActivity: FlutterActivity() {
                     val intent = Intent(this, FloatingPetService::class.java)
                     stopService(intent)
                     result.success(true)
+                }
+                "updateFloatingPet" -> {
+                    // 悬浮服务运行中时，把最新外观配置推给它实时换品种
+                    if (FloatingPetService.isRunning) {
+                        val intent = Intent(this, FloatingPetService::class.java).apply {
+                            putExtra("skinId", call.argument<String>("skinId"))
+                            putExtra("petName", call.argument<String>("petName"))
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(true)
+                    } else {
+                        result.success(false)
+                    }
                 }
                 "isFloatingServiceRunning" -> {
                     result.success(FloatingPetService.isRunning)

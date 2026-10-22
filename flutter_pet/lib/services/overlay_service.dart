@@ -41,6 +41,20 @@ class OverlayService {
     } catch (_) {}
   }
 
+  /// 把最新的外观配置实时同步给正在运行的桌面悬浮宠（切换品种/改名后立即生效）
+  /// 悬浮服务未运行时返回 false，不会误启动服务
+  static Future<bool> updateFloatingPet({String? skinId, String? petName}) async {
+    try {
+      final bool? res = await _channel.invokeMethod<bool>('updateFloatingPet', {
+        'skinId': skinId,
+        'petName': petName,
+      });
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 检查悬浮窗是否正在运行
   static Future<bool> isRunning() async {
     try {

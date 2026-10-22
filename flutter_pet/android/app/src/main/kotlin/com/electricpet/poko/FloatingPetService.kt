@@ -51,6 +51,21 @@ class FloatingPetService : Service() {
     companion object {
         var isRunning = false
         const val TAG = "PokoOverlay"
+
+        /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
+        @Volatile
+        var isAppForeground: Boolean = false
+
+        /** 当前运行中的服务实例，供主 Activity 前后台切换时即时同步悬浮猫显隐 */
+        @Volatile
+        var instance: FloatingPetService? = null
+
+        /** 主 Activity 前后台切换时调用，驱动悬浮猫显隐 */
+        @JvmStatic
+        fun notifyAppForegroundChanged(foreground: Boolean) {
+            isAppForeground = foreground
+            instance?.applyForegroundVisibility(foreground)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -60,6 +75,7 @@ class FloatingPetService : Service() {
         isRunning = true
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        instance = this
 
         // 1. 启动轻量高保活前台常驻服务 (支持 Android 14+ specialUse)，防系统在主应用关闭时强杀/冻结事件分发
         startAsForeground()
@@ -103,6 +119,11 @@ class FloatingPetService : Service() {
         // 4. 构建桌面悬浮萌言萌语气泡 View
         initSpeechBubble(layoutType, density)
 
+        // 若主 App 正在前台，悬浮猫先隐身，等用户回到桌面再现身，避免两只波可同屏
+        if (isAppForeground) {
+            pokoView?.visibility = View.GONE
+        }
+
         // 5. 绑定触控、拖拽、果冻回弹挤压与自由停驻事件
         setupTouchListener(sizePx, density)
 
@@ -121,9 +142,8 @@ class FloatingPetService : Service() {
 
         val skinId = intent?.getStringExtra("skinId")
         val petName = intent?.getStringExtra("petName")
-        if (!skinId.isNullOrBlank() || !petName.isNullOrBlank()) {
-            pokoView?.applyConfig(skinId, petName)
-        }
+        // 每次启动/推送都同步外观：空值表示保持原样，非空则实时换品种
+        pokoView?.applyConfig(skinId, petName)
         return START_STICKY
     }
 
@@ -233,6 +253,24 @@ class FloatingPetService : Service() {
         }
     }
 
+    /**
+     * 主 App 前台时隐藏悬浮猫（App 内已经渲染了同一只波可），退到后台后自动恢复。
+     * 这样双击桌面悬浮猫打开小窝时，屏幕上不会出现两只重叠的波可。
+     */
+    private fun applyForegroundVisibility(appVisible: Boolean) {
+        val view = pokoView ?: return
+        val target = if (appVisible) View.GONE else View.VISIBLE
+        if (view.visibility == target) return
+        view.visibility = target
+        Log.d(TAG, "悬浮猫显隐切换 appForeground=$appVisible")
+
+        if (appVisible) {
+            // 顺带收掉气泡，避免隐藏后气泡残留在桌面上
+            hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
+            bubbleView?.visibility = View.GONE
+        }
+    }
+
     private fun maybeGentleSnapEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
         // 阈值必须小于初始停靠位置(12dp)，否则用户刚拖动一点点就会被吸回原位，表现为"拖不动"
         val edgeThreshold = (10 * density).toInt()
@@ -298,6 +336,8 @@ class FloatingPetService : Service() {
     }
 
     private fun showSpeechBubble() {
+        // 主 App 在前台时悬浮猫处于隐身状态，此时不弹气泡
+        if (isAppForeground) return
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
         val pParams = pokoParams ?: return
@@ -382,7 +422,14 @@ class FloatingPetService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         if (launchIntent != null) {
-            startActivity(launchIntent)
+            // 先让悬浮猫隐身，避免 Activity 拉起动画期间与 App 内的波可重叠成两只
+            applyForegroundVisibility(true)
+            try {
+                startActivity(launchIntent)
+            } catch (e: Exception) {
+                Log.e(TAG, "拉起主应用失败", e)
+                applyForegroundVisibility(false)
+            }
         }
     }
 
@@ -462,6 +509,7 @@ class FloatingPetService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        instance = null
         edgeSnapAnimator?.cancel()
         hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
 
