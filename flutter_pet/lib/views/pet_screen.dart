@@ -3194,7 +3194,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
+    final rawSize = MediaQuery.of(context).size;
+    final screenSize = Size(
+      rawSize.width > 50 ? rawSize.width : 360.0,
+      rawSize.height > 50 ? rawSize.height : 780.0,
+    );
     _lastScreenSize = screenSize;
 
     // 房间空间黄金分割：
@@ -3219,9 +3223,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final circadian = _getCircadianTheme();
     final isNight = circadian['isNight'] as bool;
     final habitat = widget.petModel.habitat;
-    List<Color> gradientColors = circadian['colors'] as List<Color>;
+    List<Color> gradientColors = (circadian['colors'] as List<Color>?) ?? const [Color(0xFF140F2D), Color(0xFF1D1742)];
+    if (gradientColors.isEmpty) {
+      gradientColors = const [Color(0xFF140F2D), Color(0xFF1D1742)];
+    }
     if (habitat == 'neon_matrix') {
-      gradientColors = const [Color(0xFF020617), Color(0xFF0F172A), Color(0xFF032238)];
+      gradientColors = const [Color(0xFF0A0F1D), Color(0xFF131D36), Color(0xFF032238)];
     } else if (habitat == 'retro_arcade') {
       gradientColors = const [Color(0xFF1E1035), Color(0xFF4C1D95), Color(0xFF831843), Color(0xFFD97706)];
     } else if (habitat == 'summer_beach') {

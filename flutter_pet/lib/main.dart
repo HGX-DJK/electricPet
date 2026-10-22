@@ -6,7 +6,7 @@ import 'models/memo_model.dart';
 import 'theme/poko_theme.dart';
 import 'views/pet_screen.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // 状态栏沉浸透明 (内容延伸到状态栏下方, 由各页面用 SafeArea 让位)
@@ -19,9 +19,29 @@ void main() async {
     ),
   );
 
+  // 容错与防黑屏安全兜底：渲染异常时展示温润萌宠占位，杜绝 Release 模式出现黑屏
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return Material(
+      color: const Color(0xFF1E1B4B),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🐱', style: TextStyle(fontSize: 40)),
+            const SizedBox(height: 12),
+            Text(
+              '波可正在努力苏醒中...',
+              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.8)),
+            ),
+          ],
+        ),
+      ),
+    );
+  };
+
   final petModel = PetModel();
   final memoModel = MemoModel();
-  await Future.wait([petModel.isReady, memoModel.isReady]);
+  // 秒开优化：立即执行 runApp 呈现首帧，杜绝异步 I/O 阻塞导致原生黑屏闪烁；本地存档在后台异步回填
 
   runApp(DesktopElectricPetApp(petModel: petModel, memoModel: memoModel));
 }

@@ -101,7 +101,7 @@ class SolarService {
       return SkyTheme(
         name: '静谧星夜',
         icon: '🌙',
-        colors: const [Color(0xFF0F0E26), Color(0xFF18153E), Color(0xFF221A48)],
+        colors: const [Color(0xFF141133), Color(0xFF1C1844), Color(0xFF271F52)],
         isNight: true,
         greeting: '夜深露重，小星星都眨眼啦，小夜灯暖暖的，晚安好梦哦主人~ 💤🌙',
         phaseName: '静谧星夜',
@@ -126,7 +126,7 @@ class SolarService {
     final tNightFall = sunset + 1.1; // 夜幕完全降临
 
     // 精选天文级连续渐变色标
-    const cDeepNight = [Color(0xFF0A081D), Color(0xFF130E30), Color(0xFF1E1644)];
+    const cDeepNight = [Color(0xFF141133), Color(0xFF1C1844), Color(0xFF271F52)];
     const cDawn = [Color(0xFF241C48), Color(0xFF5B3C68), Color(0xFFC48B9F)];
     const cSunrise = [Color(0xFFFFEDD5), Color(0xFFFEF3C7), Color(0xFFE0F2FE)];
     const cMorning = [Color(0xFFFFFBEB), Color(0xFFF0FDF4), Color(0xFFF8FAFC)];
