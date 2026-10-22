@@ -66,6 +66,7 @@ class MinimaxService {
   String _customModel = '';
   String? _lastError;
   String? _lastAsrError;   // 最近一次语音识别的失败原因 (供 UI 透出, 避免与"没听清"混淆)
+  String? _lastTtsError;   // 最近一次语音合成的失败原因 (供 UI 透出, 避免"没声音"无迹可寻)
   String _voiceId = AiConfig.defaultVoiceId; // 甜美女性音 / 萌系奶音
   int _pitch = AiConfig.defaultPitch;       // 升调呈现幼态甜萌音 (范围 -12 ~ 12)
   double _speed = AiConfig.defaultSpeed;   // 稍快的轻快语速
@@ -83,6 +84,9 @@ class MinimaxService {
 
   /// 最近一次语音识别失败的原因 (null 表示上次识别成功或尚未发起)
   String? get lastAsrError => _lastAsrError;
+
+  /// 最近一次语音合成失败的原因 (null 表示上次合成成功或尚未发起)
+  String? get lastTtsError => _lastTtsError;
 
   String get voiceId => _voiceId;
   int get pitch => _pitch;
@@ -520,22 +524,58 @@ class MinimaxService {
 
       if (response.statusCode != 200) {
         debugPrint('T2A error status: ${response.statusCode}, body: $body');
+        _lastTtsError = '语音合成服务返回 HTTP ${response.statusCode}';
         return null;
       }
 
-      final jsonMap = jsonDecode(body) as Map<String, dynamic>;
-      final data = jsonMap['data'] as Map<String, dynamic>?;
-      final hexAudio = data?['audio'] as String?;
-
-      if (hexAudio != null && hexAudio.isNotEmpty) {
-        return _hexToBytes(hexAudio);
-      }
-      return null;
+      _lastTtsError = null;
+      final audio = parseT2AResponseBody(
+        body,
+        onError: (reason) => _lastTtsError = reason,
+      );
+      return audio;
     } catch (e) {
       debugPrint('T2A exception: $e');
+      _lastTtsError = '语音合成请求失败: ${e.toString().replaceAll("Exception: ", "")}';
       return null;
     } finally {
       client.close();
+    }
+  }
+
+  /// 解析 MiniMax T2A 响应体, 返回合成音频字节 (null 表示失败)。
+  ///
+  /// ⚠️ 与对话接口同款坑: MiniMax 在「参数非法 / 音色不存在 / 权限不足」时
+  ///    依然返回 HTTP 200, 真实原因藏在 body.base_resp 里
+  ///    (实测: pitch 传成 float 就会拿到 status_code 2013)。
+  ///    不显式检查就会变成"语音合成静默失败" —— 用户只听到本地喵叫, 看不到任何原因。
+  /// 解析失败时通过 [onError] 透出真实原因。
+  static Uint8List? parseT2AResponseBody(
+    String body, {
+    void Function(String reason)? onError,
+  }) {
+    try {
+      final jsonMap = jsonDecode(body) as Map<String, dynamic>;
+
+      final baseResp = jsonMap['base_resp'] as Map<String, dynamic>?;
+      final statusCode = (baseResp?['status_code'] as num?)?.toInt() ?? 0;
+      if (statusCode != 0) {
+        final statusMsg = (baseResp?['status_msg'] as String? ?? '').trim();
+        onError?.call('语音合成服务返回错误 ($statusCode)'
+            '${statusMsg.isEmpty ? '' : ': $statusMsg'}');
+        return null;
+      }
+
+      final data = jsonMap['data'] as Map<String, dynamic>?;
+      final hexAudio = data?['audio'] as String?;
+      if (hexAudio != null && hexAudio.isNotEmpty) {
+        return _hexToBytes(hexAudio);
+      }
+      onError?.call('语音合成服务未返回音频数据');
+      return null;
+    } catch (e) {
+      onError?.call('语音合成响应解析失败: $e');
+      return null;
     }
   }
 
@@ -579,13 +619,12 @@ class MinimaxService {
       final body = await response.transform(utf8.decoder).join();
 
       if (response.statusCode == 200) {
-        final jsonMap = jsonDecode(body) as Map<String, dynamic>;
-        final text = jsonMap['text'] as String?;
-        if (text != null && text.trim().isNotEmpty) {
-          return text.trim();
-        }
-        _lastAsrError = '没有识别到有效语音内容';
-        return null;
+        _lastAsrError = null;
+        final text = parseAsrResponseBody(
+          body,
+          onError: (reason) => _lastAsrError = reason,
+        );
+        return text;
       } else {
         _lastAsrError = '语音识别服务返回 HTTP ${response.statusCode}';
         debugPrint('MiniMax ASR error status: ${response.statusCode}, body: $body');
@@ -598,6 +637,39 @@ class MinimaxService {
       return null;
     } finally {
       client.close();
+    }
+  }
+
+  /// 解析 MiniMax ASR 响应体, 返回识别文本 (null 表示失败)。
+  ///
+  /// ⚠️ 同 T2A: HTTP 200 不代表成功, 参数非法 / 音频格式不对时真实原因在 base_resp 里。
+  ///    若不检查, 接口明确拒绝却会被误报成"没有识别到有效语音内容",
+  ///    用户会以为麦克风坏了, 实际是云端拒绝了这次请求。
+  static String? parseAsrResponseBody(
+    String body, {
+    void Function(String reason)? onError,
+  }) {
+    try {
+      final jsonMap = jsonDecode(body) as Map<String, dynamic>;
+
+      final baseResp = jsonMap['base_resp'] as Map<String, dynamic>?;
+      final statusCode = (baseResp?['status_code'] as num?)?.toInt() ?? 0;
+      if (statusCode != 0) {
+        final statusMsg = (baseResp?['status_msg'] as String? ?? '').trim();
+        onError?.call('语音识别服务返回错误 ($statusCode)'
+            '${statusMsg.isEmpty ? '' : ': $statusMsg'}');
+        return null;
+      }
+
+      final text = jsonMap['text'] as String?;
+      if (text != null && text.trim().isNotEmpty) {
+        return text.trim();
+      }
+      onError?.call('没有识别到有效语音内容');
+      return null;
+    } catch (e) {
+      onError?.call('语音识别响应解析失败: $e');
+      return null;
     }
   }
 

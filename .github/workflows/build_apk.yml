@@ -38,10 +38,16 @@ jobs:
         run: |
           chmod +x flutter_pet/android/gradlew
 
+      - name: Run Flutter Analyze
+        run: |
+          cd flutter_pet
+          flutter analyze --no-fatal-infos
+
       - name: Run Flutter Tests
         run: |
           cd flutter_pet
-          flutter test
+          # 串行执行: 并行跑在高负载机器上会因资源竞争随机变红(基线代码同样会红), 串行保证结果可复现
+          flutter test --concurrency=1
 
       - name: Build Release APK
         run: |

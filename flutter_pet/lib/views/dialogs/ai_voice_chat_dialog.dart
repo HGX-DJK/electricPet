@@ -73,6 +73,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   bool _micHeldLongEnough = false;
   /// 按住时长判定计时器
   Timer? _micHoldTimer;
+  /// 小奶音合成失败只提示一次, 避免每条消息都弹 Toast 刷屏
+  bool _ttsErrorNotified = false;
 
   /// 是否处于"等待回复"的忙碌态 (UI 指示条)
   bool get _isBusy => _isSending || _isTranscribing;
@@ -164,7 +166,16 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
         query,
         // 语音合成在服务端后台完成, 到达后再播 —— 文本气泡无需等待 TTS
         onAudioReady: (audio) {
-          if (mounted) _ai.playVoiceResponse(audio);
+          if (!mounted) return;
+          _ai.playVoiceResponse(audio);
+          // 合成失败会静默降级为本地喵叫, 这里把真实原因告诉用户, 避免"没声音"无迹可寻
+          if (audio == null && !_ttsErrorNotified) {
+            final reason = _ai.lastTtsError;
+            if (reason != null && reason.isNotEmpty) {
+              _ttsErrorNotified = true;
+              _showToast('小奶音合成失败：$reason');
+            }
+          }
         },
       );
 
@@ -1386,6 +1397,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                                   await _ai.playVoiceResponse(audio);
                                                 } else {
                                                   SoundService.playMeow(tone: MeowTone.sweet);
+                                                  final reason = _ai.lastTtsError;
+                                                  if (reason != null &&
+                                                      reason.isNotEmpty &&
+                                                      !_ttsErrorNotified) {
+                                                    _ttsErrorNotified = true;
+                                                    _showToast('小奶音合成失败：$reason');
+                                                  }
                                                 }
                                               }
                                               if (mounted) setState(() {});

@@ -19,6 +19,9 @@ void main() {
   late Directory packageRoot;
   late String serviceSource;
   late String activitySource;
+  late String petViewSource;
+  late String overlayChannelKotlin;
+  late String overlayChannelDart;
   late String overlayServiceSource;
   late String petModelSource;
 
@@ -32,6 +35,15 @@ void main() {
       packageRoot,
       'android/app/src/main/kotlin/com/electricpet/poko/MainActivity.kt',
     );
+    petViewSource = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/kotlin/com/electricpet/poko/PokoPetView.kt',
+    );
+    overlayChannelKotlin = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/kotlin/com/electricpet/poko/OverlayChannel.kt',
+    );
+    overlayChannelDart = _readRepoFile(packageRoot, 'lib/services/overlay_channel.dart');
     overlayServiceSource = _readRepoFile(packageRoot, 'lib/services/overlay_service.dart');
     petModelSource = _readRepoFile(packageRoot, 'lib/models/pet_model.dart');
   });
@@ -99,16 +111,16 @@ void main() {
           reason: '缺少 onPause 回调，退出小窝后悬浮猫不会回来');
       expect(activitySource, contains('notifyAppForegroundChanged(true)'));
       expect(activitySource, contains('notifyAppForegroundChanged(false)'));
-      expect(serviceSource, contains('applyForegroundVisibility'),
+      expect(serviceSource, contains('refreshPetVisibility'),
           reason: '服务缺少前后台显隐处理，小窝打开时桌面与 App 内会出现两只波可');
     });
 
     test('主 Activity 必须提供 updateFloatingPet 通道以实时换品种', () {
-      expect(activitySource, contains('"updateFloatingPet"'),
+      expect(activitySource, contains('OverlayChannel.UPDATE_FLOATING_PET'),
           reason: '缺少 updateFloatingPet 方法，App 内换品种后桌面悬浮猫不会变');
-      expect(activitySource, contains('putExtra("skinId"'),
+      expect(activitySource, contains('OverlayChannel.ARG_SKIN_ID'),
           reason: '推送时未携带 skinId，悬浮猫无从换装');
-      expect(activitySource, contains('putExtra("petName"'),
+      expect(activitySource, contains('OverlayChannel.ARG_PET_NAME'),
           reason: '推送时未携带 petName，悬浮猫名字不会更新');
     });
 
@@ -126,7 +138,7 @@ void main() {
     });
 
     test('Dart 侧换品种必须实时同步给桌面悬浮宠', () {
-      expect(overlayServiceSource, contains("'updateFloatingPet'"),
+      expect(overlayServiceSource, contains('OverlayChannel.updateFloatingPet'),
           reason: 'OverlayService 缺少 updateFloatingPet 方法');
 
       // 断言必须落在 setSkin 方法内部，否则读档路径里的同名调用会掩盖换品种路径的缺失
@@ -139,6 +151,85 @@ void main() {
           reason: 'PetModel.setSkin 未同步悬浮宠，切换品种后桌面悬浮猫仍是旧品种');
       expect(setSkin, contains('unawaited('),
           reason: 'setSkin 中的同步调用未使用 unawaited 包裹，会产生未等待的 Future 告警');
+    });
+  });
+
+  group('MethodChannel 协议两端必须逐项一致', () {
+    test('通道名一致', () {
+      final kotlinName = _kotlinConstValue(overlayChannelKotlin, 'NAME');
+      final dartName = _dartConstValue(overlayChannelDart, 'name');
+
+      expect(kotlinName, isNotNull, reason: 'Kotlin 侧未定义通道名常量');
+      expect(dartName, isNotNull, reason: 'Dart 侧未定义通道名常量');
+      expect(dartName, kotlinName, reason: '★ 两端通道名不一致，调用会直接失联');
+    });
+
+    test('方法名常量表完全一致', () {
+      final kotlin = _parseKotlinConstMap(overlayChannelKotlin, 'ALL_METHODS');
+      final dart = _parseDartConstMap(overlayChannelDart, 'allMethods');
+
+      expect(kotlin, isNotEmpty);
+      expect(dart, isNotEmpty);
+      expect(
+        dart.keys.toSet().difference(kotlin.keys.toSet()),
+        isEmpty,
+        reason: '★ Dart 侧多出/缺少方法常量: '
+            '${dart.keys.toSet().difference(kotlin.keys.toSet())}',
+      );
+      expect(
+        kotlin.keys.toSet().difference(dart.keys.toSet()),
+        isEmpty,
+        reason: '★ Kotlin 侧多出/缺少方法常量: '
+            '${kotlin.keys.toSet().difference(dart.keys.toSet())}',
+      );
+      kotlin.forEach((key, value) {
+        expect(dart[key], value, reason: '★ 方法常量 $key 两端取值不一致');
+      });
+    });
+
+    test('参数名常量表完全一致', () {
+      final kotlin = _parseKotlinConstMap(overlayChannelKotlin, 'ALL_ARGS');
+      final dart = _parseDartConstMap(overlayChannelDart, 'allArgs');
+
+      expect(kotlin, isNotEmpty);
+      expect(dart, isNotEmpty);
+      expect(dart.keys.toSet(), kotlin.keys.toSet(), reason: '★ 参数常量集合两端不一致');
+      kotlin.forEach((key, value) {
+        expect(dart[key], value, reason: '★ 参数常量 $key 两端取值不一致');
+      });
+    });
+
+    test('两端服务代码都不得再手写通道名/方法名字面量', () {
+      expect(overlayServiceSource, contains('OverlayChannel.name'),
+          reason: 'OverlayService 应使用共享常量而非手写通道名');
+      expect(overlayServiceSource, isNot(contains("'com.electricpet.poko/overlay'")),
+          reason: 'OverlayService 仍手写通道名字面量');
+      expect(activitySource, contains('OverlayChannel.NAME'),
+          reason: 'MainActivity 应使用共享常量而非手写通道名');
+      expect(activitySource, isNot(contains('"com.electricpet.poko/overlay"')),
+          reason: 'MainActivity 仍手写通道名字面量');
+    });
+  });
+
+  group('通知权限与耗电约束', () {
+    test('Android 13+ 必须在运行时申请通知权限', () {
+      expect(activitySource, contains('OverlayChannel.REQUEST_NOTIFICATION_PERMISSION'),
+          reason: 'MainActivity 缺少通知权限申请分支');
+      expect(activitySource, contains('POST_NOTIFICATIONS'),
+          reason: '未引用 POST_NOTIFICATIONS，Android 13+ 前台服务通知不会显示');
+      expect(activitySource, contains('onRequestPermissionsResult'),
+          reason: '缺少权限结果回调，申请结果无法回传 Dart');
+      expect(overlayServiceSource, contains('requestNotificationPermission'),
+          reason: 'Dart 侧缺少通知权限申请入口');
+    });
+
+    test('悬浮猫不可见时必须停掉动画', () {
+      expect(petViewSource, contains('fun setAnimationEnabled'),
+          reason: 'PokoPetView 缺少动画开关');
+      expect(serviceSource, contains('setAnimationEnabled'),
+          reason: '服务未在悬浮猫隐藏时停掉 60fps 呼吸动画, 属于无谓耗电');
+      expect(serviceSource, contains('ACTION_SCREEN_OFF'),
+          reason: '未监听息屏, 屏幕熄灭后悬浮猫仍在空转');
     });
   });
 }
@@ -200,4 +291,76 @@ int? _intAfter(String source, String marker) {
   final rest = source.substring(start + marker.length);
   final match = RegExp(r'(\d+)').firstMatch(rest);
   return match == null ? null : int.parse(match.group(1)!);
+}
+
+/// 取出 Kotlin 侧 `const val NAME = "值"` 的字面量值。
+String? _kotlinConstValue(String source, String constName) {
+  final match = RegExp('const val $constName\\s*=\\s*"([^"]*)"').firstMatch(source);
+  return match?.group(1);
+}
+
+/// 取出 Dart 侧 `static const String name = '值';` 的字面量值。
+String? _dartConstValue(String source, String fieldName) {
+  final match = RegExp("static const String $fieldName\\s*=\\s*'([^']*)'")
+      .firstMatch(source);
+  return match?.group(1);
+}
+
+/// 解析 Kotlin 侧的 `val XXX: Map<String, String> = mapOf("KEY" to IDENT, ...)`，
+/// 把 IDENT 解析回它声明时的字符串字面量。
+Map<String, String> _parseKotlinConstMap(String source, String mapName) {
+  final consts = <String, String>{};
+  for (final m in RegExp(r'const val (\w+)\s*=\s*"([^"]*)"').allMatches(source)) {
+    consts[m.group(1)!] = m.group(2)!;
+  }
+
+  final marker = 'val $mapName: Map<String, String> = mapOf(';
+  final start = source.indexOf(marker);
+  if (start < 0) {
+    fail('未找到 Kotlin 常量表: $mapName');
+  }
+  final end = source.indexOf(')', start);
+  if (end < 0) {
+    fail('Kotlin 常量表 $mapName 未闭合');
+  }
+  final block = source.substring(start, end);
+
+  final out = <String, String>{};
+  for (final m in RegExp(r'"(\w+)"\s+to\s+(?:"([^"]*)"|(\w+))').allMatches(block)) {
+    final key = m.group(1)!;
+    final literal = m.group(2);
+    final ident = m.group(3);
+    String value;
+    if (literal != null) {
+      value = literal;
+    } else {
+      final resolved = consts[ident!];
+      if (resolved == null) {
+        fail('Kotlin 常量表 $mapName 引用了未声明的常量: $ident');
+      }
+      value = resolved;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/// 解析 Dart 侧的 `static const Map<String, String> xxx = { 'KEY': '值', ... }`。
+Map<String, String> _parseDartConstMap(String source, String mapName) {
+  final marker = 'Map<String, String> $mapName = {';
+  final start = source.indexOf(marker);
+  if (start < 0) {
+    fail('未找到 Dart 常量表: $mapName');
+  }
+  final end = source.indexOf('};', start);
+  if (end < 0) {
+    fail('Dart 常量表 $mapName 未闭合');
+  }
+  final block = source.substring(start, end);
+
+  final out = <String, String>{};
+  for (final m in RegExp(r"'(\w+)'\s*:\s*'([^']*)'").allMatches(block)) {
+    out[m.group(1)!] = m.group(2)!;
+  }
+  return out;
 }

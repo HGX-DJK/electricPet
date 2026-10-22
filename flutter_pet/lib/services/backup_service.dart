@@ -4,11 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
 import '../models/memo_model.dart';
+import 'overlay_channel.dart';
 
 /// 跨平台公用目录静默备份服务 (防卸载丢失数据沉淀)
 /// 针对 Android (Download / Documents) 与 Windows (用户文档目录) 提供免登录沉淀保障
 class BackupService {
-  static const MethodChannel _channel = MethodChannel('com.electricpet.poko/overlay');
+  static const MethodChannel _channel = MethodChannel(OverlayChannel.name);
 
   /// 测试或自定义环境路径重写挂钩
   static String? customBackupDir;

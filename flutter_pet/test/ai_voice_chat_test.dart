@@ -363,4 +363,80 @@ void main() {
       expect(AiConfig.defaultChatModel, isNot('MiniMax-M2'));
     });
   });
+
+  group('语音接口 base_resp 错误透出 (HTTP 200 不代表成功)', () {
+    test('T2A: 参数非法时接口回 200 + base_resp 错误, 必须识别并透出原因', () {
+      String? reason;
+      final bytes = MinimaxService.parseT2AResponseBody(
+        '{"base_resp":{"status_code":2013,"status_msg":"invalid params"},'
+        '"data":{"audio":""}}',
+        onError: (r) => reason = r,
+      );
+
+      expect(bytes, isNull, reason: '接口已明确报错时不应返回音频');
+      expect(reason, isNotNull, reason: '★ 必须透出真实原因, 否则语音合成会变成静默失败');
+      expect(reason, contains('2013'));
+    });
+
+    test('T2A: 正常响应应正确解出音频字节', () {
+      String? reason;
+      final bytes = MinimaxService.parseT2AResponseBody(
+        '{"base_resp":{"status_code":0,"status_msg":"success"},'
+        '"data":{"audio":"0102AB"}}',
+        onError: (r) => reason = r,
+      );
+
+      expect(reason, isNull);
+      expect(bytes, isNotNull);
+      expect(bytes!.length, 3);
+      expect(bytes[0], 1);
+      expect(bytes[2], 171);
+    });
+
+    test('T2A: 200 但没有音频数据时也必须透出原因', () {
+      String? reason;
+      final bytes = MinimaxService.parseT2AResponseBody(
+        '{"base_resp":{"status_code":0,"status_msg":"success"},"data":{}}',
+        onError: (r) => reason = r,
+      );
+
+      expect(bytes, isNull);
+      expect(reason, isNotNull);
+    });
+
+    test('ASR: 接口拒绝时不能误报成"没听清", 必须透出真实原因', () {
+      String? reason;
+      final text = MinimaxService.parseAsrResponseBody(
+        '{"base_resp":{"status_code":1008,"status_msg":"invalid audio format"}}',
+        onError: (r) => reason = r,
+      );
+
+      expect(text, isNull);
+      expect(reason, isNotNull, reason: '★ 云端拒绝不能被说成"没有识别到有效语音内容"');
+      expect(reason, isNot(contains('没有识别到有效语音内容')));
+      expect(reason, contains('1008'));
+    });
+
+    test('ASR: 正常响应应返回识别文本', () {
+      String? reason;
+      final text = MinimaxService.parseAsrResponseBody(
+        '{"base_resp":{"status_code":0,"status_msg":"success"},"text":"  波可陪我玩毛线球  "}',
+        onError: (r) => reason = r,
+      );
+
+      expect(reason, isNull);
+      expect(text, '波可陪我玩毛线球');
+    });
+
+    test('ASR: 真的没有识别到内容时才提示"没听清"', () {
+      String? reason;
+      final text = MinimaxService.parseAsrResponseBody(
+        '{"base_resp":{"status_code":0,"status_msg":"success"},"text":"   "}',
+        onError: (r) => reason = r,
+      );
+
+      expect(text, isNull);
+      expect(reason, contains('没有识别到有效语音内容'));
+    });
+  });
 }

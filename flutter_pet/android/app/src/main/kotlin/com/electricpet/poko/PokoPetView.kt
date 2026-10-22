@@ -226,6 +226,7 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun startIdleAnimation() {
+        idleAnimator?.cancel()
         idleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 2400
             repeatCount = ValueAnimator.INFINITE
@@ -249,6 +250,23 @@ class PokoPetView(context: Context) : View(context) {
             }
         }
         idleAnimator?.start()
+    }
+
+    /**
+     * 动画开关: 悬浮猫看不见时 (小窝在前台 / 屏幕熄灭) 停掉 60fps 呼吸动画与眨眼定时器,
+     * 避免"看不见还在烧电"。前台服务常驻, 这部分功耗完全是无谓支出。
+     */
+    fun setAnimationEnabled(enabled: Boolean) {
+        if (enabled) {
+            if (idleAnimator?.isRunning != true) {
+                startIdleAnimation()
+            }
+            removeCallbacks(blinkRunnable)
+            postDelayed(blinkRunnable, 2500)
+        } else {
+            idleAnimator?.cancel()
+            removeCallbacks(blinkRunnable)
+        }
     }
 
     /**

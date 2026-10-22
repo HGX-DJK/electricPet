@@ -4521,12 +4521,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       await OverlayService.stopFloatingPet();
                       _showDialogueBubble('桌面悬浮宠已收回小窝~ 🐾');
                     } else {
+                      // Android 13+ 需要通知权限, 否则前台服务通知不显示,
+                      // 用户看不到"悬浮宠正在运行"的状态, 点通知回小窝的入口也会失效
+                      final notified =
+                          await OverlayService.requestNotificationPermission();
                       final ok = await OverlayService.startFloatingPet(
                         skinId: widget.petModel.skinId,
                         petName: widget.petModel.name,
                       );
                       if (ok) {
-                        _showDialogueBubble('桌面悬浮宠启动成功！切回手机桌面就能看到波可啦~ ✨');
+                        _showDialogueBubble(
+                          notified
+                              ? '桌面悬浮宠启动成功！切回手机桌面就能看到波可啦~ ✨'
+                              : '桌面悬浮宠启动成功！未授予通知权限，常驻提示可能不显示哦~',
+                        );
                       }
                     }
                     if (ctx.mounted) Navigator.pop(ctx);

@@ -12,9 +12,17 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity: FlutterActivity() {
-    private val CHANNEL = "com.electricpet.poko/overlay"
+    private val CHANNEL = OverlayChannel.NAME
+
+    /** 通知权限申请的结果回调 (Android 13+ 前台服务通知需要) */
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
     override fun getRenderMode(): RenderMode = RenderMode.texture
+
+    private companion object {
+        /** 通知权限申请的 requestCode */
+        const val REQUEST_NOTIFICATION_PERMISSION_CODE = 2002
+    }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -32,19 +40,33 @@ class MainActivity: FlutterActivity() {
         super.onPause()
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION_CODE) {
+            val granted = grantResults.isNotEmpty() &&
+                grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+            pendingNotificationPermissionResult?.success(granted)
+            pendingNotificationPermissionResult = null
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "checkOverlayPermission" -> {
+                OverlayChannel.CHECK_OVERLAY_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         result.success(Settings.canDrawOverlays(this))
                     } else {
                         result.success(true)
                     }
                 }
-                "requestOverlayPermission" -> {
+                OverlayChannel.REQUEST_OVERLAY_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                         val intent = Intent(
                             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -54,7 +76,7 @@ class MainActivity: FlutterActivity() {
                     }
                     result.success(true)
                 }
-                "startFloatingService" -> {
+                OverlayChannel.START_FLOATING_SERVICE -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                         val intent = Intent(
                             Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
@@ -64,8 +86,8 @@ class MainActivity: FlutterActivity() {
                         result.success(false)
                     } else {
                         val intent = Intent(this, FloatingPetService::class.java).apply {
-                            putExtra("skinId", call.argument<String>("skinId"))
-                            putExtra("petName", call.argument<String>("petName"))
+                            putExtra(OverlayChannel.ARG_SKIN_ID, call.argument<String>(OverlayChannel.ARG_SKIN_ID))
+                            putExtra(OverlayChannel.ARG_PET_NAME, call.argument<String>(OverlayChannel.ARG_PET_NAME))
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
@@ -75,17 +97,17 @@ class MainActivity: FlutterActivity() {
                         result.success(true)
                     }
                 }
-                "stopFloatingService" -> {
+                OverlayChannel.STOP_FLOATING_SERVICE -> {
                     val intent = Intent(this, FloatingPetService::class.java)
                     stopService(intent)
                     result.success(true)
                 }
-                "updateFloatingPet" -> {
+                OverlayChannel.UPDATE_FLOATING_PET -> {
                     // 悬浮服务运行中时，把最新外观配置推给它实时换品种
                     if (FloatingPetService.isRunning) {
                         val intent = Intent(this, FloatingPetService::class.java).apply {
-                            putExtra("skinId", call.argument<String>("skinId"))
-                            putExtra("petName", call.argument<String>("petName"))
+                            putExtra(OverlayChannel.ARG_SKIN_ID, call.argument<String>(OverlayChannel.ARG_SKIN_ID))
+                            putExtra(OverlayChannel.ARG_PET_NAME, call.argument<String>(OverlayChannel.ARG_PET_NAME))
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
@@ -97,10 +119,29 @@ class MainActivity: FlutterActivity() {
                         result.success(false)
                     }
                 }
-                "isFloatingServiceRunning" -> {
+                OverlayChannel.REQUEST_NOTIFICATION_PERMISSION -> {
+                    // Android 13+ 必须运行时申请通知权限, 否则前台服务通知不显示,
+                    // 用户看不到"悬浮宠正在运行", 点通知回小窝的入口也会失效
+                    val needsRequest = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                            != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (needsRequest) {
+                        // 上一次申请还没回调就先应答掉, 避免连点时 Dart 侧的 Future 永久挂起
+                        pendingNotificationPermissionResult?.success(false)
+                        // 结果在 onRequestPermissionsResult 里异步回传
+                        pendingNotificationPermissionResult = result
+                        requestPermissions(
+                            arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
+                            REQUEST_NOTIFICATION_PERMISSION_CODE
+                        )
+                    } else {
+                        result.success(true)
+                    }
+                }
+                OverlayChannel.IS_FLOATING_SERVICE_RUNNING -> {
                     result.success(FloatingPetService.isRunning)
                 }
-                "checkStoragePermission" -> {
+                OverlayChannel.CHECK_STORAGE_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         result.success(Environment.isExternalStorageManager())
                     } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -110,7 +151,7 @@ class MainActivity: FlutterActivity() {
                         result.success(true)
                     }
                 }
-                "requestStoragePermission" -> {
+                OverlayChannel.REQUEST_STORAGE_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         if (!Environment.isExternalStorageManager()) {
                             try {
@@ -137,7 +178,7 @@ class MainActivity: FlutterActivity() {
                         result.success(true)
                     }
                 }
-                "writePublicBackup" -> {
+                OverlayChannel.WRITE_PUBLIC_BACKUP -> {
                     val content = call.argument<String>("content") ?: ""
                     var written = false
                     try {
@@ -166,7 +207,7 @@ class MainActivity: FlutterActivity() {
                     }
                     result.success(written)
                 }
-                "readPublicBackup" -> {
+                OverlayChannel.READ_PUBLIC_BACKUP -> {
                     var readContent: String? = null
                     try {
                         val dirs = mutableListOf<File>()
