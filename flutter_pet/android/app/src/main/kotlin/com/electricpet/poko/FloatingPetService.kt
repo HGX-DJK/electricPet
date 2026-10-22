@@ -17,6 +17,8 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
@@ -65,6 +67,16 @@ class FloatingPetService : Service() {
     private var peekAnimator: ValueAnimator? = null
     private var peekingRunnable: Runnable? = null
 
+    // 音频音效系统
+    private var soundPool: SoundPool? = null
+    private var soundMeowId: Int = 0
+    private var soundPurrId: Int = 0
+    private var isSoundEnabled: Boolean = true
+
+    // 长按蓄力深度互动
+    private var isLongPressing: Boolean = false
+    private var longPressRunnable: Runnable? = null
+
     // 自主在桌面边缘漫步溜达定时任务 (支持省电低功耗模式动态降频)
     private val edgeStrollRunnable = object : Runnable {
         override fun run() {
@@ -101,6 +113,9 @@ class FloatingPetService : Service() {
     companion object {
         var isRunning = false
         const val TAG = "PokoOverlay"
+        const val ACTION_NOTIFICATION_PET = "com.electricpet.poko.ACTION_NOTIFICATION_PET"
+        const val ACTION_NOTIFICATION_FEED = "com.electricpet.poko.ACTION_NOTIFICATION_FEED"
+        const val ACTION_NOTIFICATION_STOP = "com.electricpet.poko.ACTION_NOTIFICATION_STOP"
 
         /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
         @Volatile
@@ -173,8 +188,9 @@ class FloatingPetService : Service() {
             facingLeft = !savedDockLeft // 靠右面向左，靠左面向右
         }
 
-        // 4. 构建桌面悬浮萌言萌语气泡 View
+        // 4. 构建桌面悬浮萌言萌语气泡 View 与音效系统
         initSpeechBubble(layoutType, density)
+        initSoundEffects()
 
         // 5. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
         screenOn = isScreenInteractive()
@@ -199,6 +215,21 @@ class FloatingPetService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // 每次启动或自启重新加固前台服务优先级
         startAsForeground()
+
+        when (intent?.action) {
+            ACTION_NOTIFICATION_PET -> {
+                handleNotificationPet()
+                return START_STICKY
+            }
+            ACTION_NOTIFICATION_FEED -> {
+                handleNotificationFeed()
+                return START_STICKY
+            }
+            ACTION_NOTIFICATION_STOP -> {
+                stopSelf()
+                return START_NOT_STICKY
+            }
+        }
 
         val skinId = intent?.getStringExtra("skinId")
         val petName = intent?.getStringExtra("petName")
@@ -261,6 +292,22 @@ class FloatingPetService : Service() {
                     lastRawX = event.rawX
                     isClick = true
                     hasDragged = false
+                    isLongPressing = false
+
+                    // 长按蓄力深度抚摸计时
+                    longPressRunnable?.let { mainHandler.removeCallbacks(it) }
+                    longPressRunnable = Runnable {
+                        if (hasTouchDown && !hasDragged) {
+                            isLongPressing = true
+                            isClick = false
+                            vibrate(45)
+                            playSound("purr")
+                            pokoView?.onPetTapped()
+                            showCustomSpeechBubble("呼噜噜... 被主人长按抚摸好温暖呀，幸福感爆棚！💖✨")
+                        }
+                    }
+                    mainHandler.postDelayed(longPressRunnable!!, 480)
+
                     pokoView?.onDragStateChanged(true)
                     Log.d(TAG, "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY)")
                     true
@@ -279,6 +326,7 @@ class FloatingPetService : Service() {
                     if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         isClick = false
                         hasDragged = true
+                        longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                         Log.d(TAG, "进入拖拽 dx=$dx dy=$dy")
                     }
 
@@ -303,6 +351,7 @@ class FloatingPetService : Service() {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     hasTouchDown = false
+                    longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
                     var releaseVx = 0f
                     velocityTracker?.let { vt ->
@@ -313,6 +362,12 @@ class FloatingPetService : Service() {
                     }
                     velocityTracker = null
 
+                    if (isLongPressing) {
+                        isLongPressing = false
+                        scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
+                        return@setOnTouchListener true
+                    }
+
                     if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
                         val now = System.currentTimeMillis()
                         if (now - lastClickTime < 380) {
@@ -320,9 +375,10 @@ class FloatingPetService : Service() {
                             vibrateDoubleTick()
                             openMainActivity()
                         } else {
-                            // 单击萌宠：轻快微震、果冻 Q 弹挤压物理动画、萌言萌语对话气泡
+                            // 单击萌宠：轻快微震、灵动猫叫、果冻 Q 弹挤压物理动画、萌言萌语对话气泡
                             lastClickTime = now
                             vibrate(30)
+                            playSound("meow")
                             pokoView?.onPetTapped()
                             pokoView?.performClick()
                             showSpeechBubble()
@@ -568,13 +624,15 @@ class FloatingPetService : Service() {
     }
 
     private fun showSpeechBubble() {
-        // 悬浮猫隐身时 (小窝在前台 / 息屏) 不弹气泡
-        if (isAppForeground || !screenOn) return
-        val bubble = bubbleView ?: return
-        val bParams = bubbleParams ?: return
-        val pParams = pokoParams ?: return
-        if (isPeeking) {
-            restoreFromPeeking()
+        val hunger = getSavedHunger()
+        if (hunger < 35 && Math.random() > 0.4) {
+            val hungryQuotes = listOf(
+                "肚子有点咕噜咕噜了喵... 主人，小鱼干在呼唤我~ 🐟",
+                "波可饿瘪肚肚了，可以下拉通知栏喂我吃好吃的嘛~ 🐾",
+                "喵呜~ 想吃小零食了，主人摸摸我或者投喂一下嘛~ ✨"
+            )
+            showCustomSpeechBubble(hungryQuotes.random())
+            return
         }
 
         val action = pokoView?.currentAction
@@ -620,7 +678,20 @@ class FloatingPetService : Service() {
                 "蹭蹭屏幕~ 感觉主人今天超级棒！✨"
             )
         }
-        bubble.text = greetings.random()
+        showCustomSpeechBubble(greetings.random())
+    }
+
+    private fun showCustomSpeechBubble(text: String) {
+        // 悬浮猫隐身时 (小窝在前台 / 息屏) 不弹气泡
+        if (isAppForeground || !screenOn) return
+        val bubble = bubbleView ?: return
+        val bParams = bubbleParams ?: return
+        val pParams = pokoParams ?: return
+        if (isPeeking) {
+            restoreFromPeeking()
+        }
+
+        bubble.text = text
         bubble.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 
         val density = resources.displayMetrics.density
@@ -676,6 +747,88 @@ class FloatingPetService : Service() {
         mainHandler.postDelayed(hideBubbleRunnable!!, 3200)
     }
 
+    private fun handleNotificationPet() {
+        vibrate(30)
+        playSound("meow")
+        pokoView?.onPetTapped()
+        showCustomSpeechBubble("呼噜噜... 收到主人在通知栏的抚摸！💕(ฅ'ω'ฅ)")
+    }
+
+    private fun handleNotificationFeed() {
+        vibrate(35)
+        playSound("purr")
+        pokoView?.onPetTapped()
+        pokoView?.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
+
+        // 双向持久化同步饱食度与亲密度
+        try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val rawJson = prefs.getString("flutter.poko_pet_data", null)
+            if (!rawJson.isNullOrBlank()) {
+                val json = JSONObject(rawJson)
+                val currentHunger = json.optInt("hunger", 80)
+                val currentHappiness = json.optInt("happiness", 80)
+                val currentIntimacy = json.optInt("intimacy", 50)
+
+                val newHunger = (currentHunger + 15).coerceAtMost(100)
+                val newHappiness = (currentHappiness + 10).coerceAtMost(100)
+                val newIntimacy = (currentIntimacy + 5).coerceAtMost(100)
+
+                json.put("hunger", newHunger)
+                json.put("happiness", newHappiness)
+                json.put("intimacy", newIntimacy)
+                prefs.edit().putString("flutter.poko_pet_data", json.toString()).apply()
+            }
+        } catch (_: Exception) {}
+
+        showCustomSpeechBubble("吧唧吧唧~ 收到主人投喂的小鱼干！饱食度+15 🐟✨")
+    }
+
+    private fun getSavedHunger(): Int {
+        return try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val rawJson = prefs.getString("flutter.poko_pet_data", null)
+            if (!rawJson.isNullOrBlank()) {
+                JSONObject(rawJson).optInt("hunger", 80)
+            } else {
+                80
+            }
+        } catch (_: Exception) {
+            80
+        }
+    }
+
+    private fun initSoundEffects() {
+        try {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            soundPool = SoundPool.Builder()
+                .setMaxStreams(2)
+                .setAudioAttributes(audioAttributes)
+                .build()
+
+            try {
+                val afdMeow = assets.openFd("flutter_assets/assets/audio/meow_soft.wav")
+                soundMeowId = soundPool?.load(afdMeow, 1) ?: 0
+            } catch (_: Exception) {}
+
+            try {
+                val afdPurr = assets.openFd("flutter_assets/assets/audio/purr.wav")
+                soundPurrId = soundPool?.load(afdPurr, 1) ?: 0
+            } catch (_: Exception) {}
+        } catch (_: Exception) {}
+    }
+
+    private fun playSound(type: String) {
+        if (!isSoundEnabled || soundPool == null) return
+        val soundId = if (type == "purr") soundPurrId else soundMeowId
+        if (soundId > 0) {
+            soundPool?.play(soundId, 0.7f, 0.7f, 1, 0, 1.0f)
+        }
+    }
+
     private fun updateBubblePosition() {
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
@@ -727,6 +880,7 @@ class FloatingPetService : Service() {
                 val json = JSONObject(rawJson)
                 val skinId = json.optString("skinId", "cat_calico")
                 val name = json.optString("name", "波可")
+                isSoundEnabled = json.optBoolean("enableSound", true)
                 return Pair(skinId, name)
             }
         } catch (e: Exception) {
@@ -926,11 +1080,30 @@ class FloatingPetService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
             )
 
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+            val petIntent = Intent(this, FloatingPetService::class.java).apply {
+                action = ACTION_NOTIFICATION_PET
+            }
+            val pendingPetIntent = PendingIntent.getService(this, 101, petIntent, flags)
+
+            val feedIntent = Intent(this, FloatingPetService::class.java).apply {
+                action = ACTION_NOTIFICATION_FEED
+            }
+            val pendingFeedIntent = PendingIntent.getService(this, 102, feedIntent, flags)
+
+            val stopIntent = Intent(this, FloatingPetService::class.java).apply {
+                action = ACTION_NOTIFICATION_STOP
+            }
+            val pendingStopIntent = PendingIntent.getService(this, 103, stopIntent, flags)
+
             val notification = Notification.Builder(this, channelId)
                 .setContentTitle("波可正在桌面上陪着您~ 🐾")
-                .setContentText("点击返回小窝，双击桌面悬浮猫咪也可快速唤醒！")
+                .setContentText("点击返回小窝，也可在下方快捷互动！")
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)
+                .addAction(Notification.Action.Builder(0, "🐾 摸摸", pendingPetIntent).build())
+                .addAction(Notification.Action.Builder(0, "🐟 喂食", pendingFeedIntent).build())
+                .addAction(Notification.Action.Builder(0, "🏠 收回", pendingStopIntent).build())
                 .setOngoing(true)
                 .build()
 
@@ -978,6 +1151,9 @@ class FloatingPetService : Service() {
         instance = null
         cancelEdgePeeking()
         isPeeking = false
+        longPressRunnable?.let { mainHandler.removeCallbacks(it) }
+        soundPool?.release()
+        soundPool = null
         mainHandler.removeCallbacks(edgeStrollRunnable)
         strollAnimator?.cancel()
         isStrolling = false

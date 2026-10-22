@@ -884,6 +884,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   /// 应用返回前台：无缝唤醒动画与计时器，并精确结算离线时间差
   void _resumeForegroundProcessing() {
+    unawaited(widget.petModel.loadFromDisk());
     if (!_idleAnimController.isAnimating) {
       _idleAnimController.repeat();
     }

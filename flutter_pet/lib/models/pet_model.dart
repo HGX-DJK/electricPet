@@ -766,6 +766,7 @@ class PetModel extends ChangeNotifier {
   Future<void> loadFromDisk() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
       final raw = prefs.getString('poko_pet_data');
       if (raw != null) {
         final data = jsonDecode(raw) as Map<String, dynamic>;
