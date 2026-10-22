@@ -48,7 +48,7 @@ class MainActivity: FlutterActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_NOTIFICATION_PERMISSION_CODE) {
             val granted = grantResults.isNotEmpty() &&
-                grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED
+                (grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED)
             pendingNotificationPermissionResult?.success(granted)
             pendingNotificationPermissionResult = null
         }
@@ -122,9 +122,11 @@ class MainActivity: FlutterActivity() {
                 OverlayChannel.REQUEST_NOTIFICATION_PERMISSION -> {
                     // Android 13+ 必须运行时申请通知权限, 否则前台服务通知不显示,
                     // 用户看不到"悬浮宠正在运行", 点通知回小窝的入口也会失效
-                    val needsRequest = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-                            != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    val needsRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    } else {
+                        false
+                    }
                     if (needsRequest) {
                         // 上一次申请还没回调就先应答掉, 避免连点时 Dart 侧的 Future 永久挂起
                         pendingNotificationPermissionResult?.success(false)
