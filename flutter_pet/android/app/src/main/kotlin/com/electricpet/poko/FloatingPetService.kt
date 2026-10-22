@@ -16,6 +16,7 @@ import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.AudioAttributes
 import android.media.SoundPool
@@ -38,6 +39,7 @@ import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
@@ -54,6 +56,11 @@ class FloatingPetService : Service() {
     private var bubbleParams: WindowManager.LayoutParams? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var hideBubbleRunnable: Runnable? = null
+
+    // 桌面萌宠身旁快捷控制悬浮菜单 (🐾 摸摸 / 🐟 喂食 / 🏠 收回)
+    private var actionMenuView: LinearLayout? = null
+    private var actionMenuParams: WindowManager.LayoutParams? = null
+    private var hideActionMenuRunnable: Runnable? = null
 
     // 双击与触控物理量
     private var lastClickTime: Long = 0
@@ -188,8 +195,9 @@ class FloatingPetService : Service() {
             facingLeft = !savedDockLeft // 靠右面向左，靠左面向右
         }
 
-        // 4. 构建桌面悬浮萌言萌语气泡 View 与音效系统
+        // 4. 构建桌面悬浮萌言萌语气泡 View 与快捷控制菜单、音效系统
         initSpeechBubble(layoutType, density)
+        initActionMenu(layoutType, density)
         initSoundEffects()
 
         // 5. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
@@ -326,6 +334,7 @@ class FloatingPetService : Service() {
                     if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         isClick = false
                         hasDragged = true
+                        hideActionMenu(animated = false)
                         longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                         Log.d(TAG, "进入拖拽 dx=$dx dy=$dy")
                     }
@@ -373,14 +382,20 @@ class FloatingPetService : Service() {
                         if (now - lastClickTime < 380) {
                             // 双击萌宠：更具层次感的双脉冲轻震并极速拉起主应用返回小窝
                             vibrateDoubleTick()
+                            hideActionMenu(animated = false)
                             openMainActivity()
                         } else {
-                            // 单击萌宠：轻快微震、灵动猫叫、果冻 Q 弹挤压物理动画、萌言萌语对话气泡
+                            // 单击萌宠：轻快微震、灵动猫叫、果冻 Q 弹挤压物理动画、萌言萌语对话气泡、并在身旁弹出/收回快捷控制菜单
                             lastClickTime = now
                             vibrate(30)
                             playSound("meow")
                             pokoView?.onPetTapped()
                             pokoView?.performClick()
+                            if (isActionMenuVisible()) {
+                                hideActionMenu()
+                            } else {
+                                showActionMenu()
+                            }
                             showSpeechBubble()
                             scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
                         }
@@ -424,9 +439,10 @@ class FloatingPetService : Service() {
             strollAnimator?.cancel()
             isStrolling = false
             view.stopWalking()
-            // 顺带收掉气泡，避免隐藏后气泡残留在桌面上
+            // 顺带收掉气泡与快捷菜单，避免隐藏后残留在桌面上
             hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
             bubbleView?.visibility = View.GONE
+            hideActionMenu(animated = false)
         }
     }
 
@@ -528,6 +544,9 @@ class FloatingPetService : Service() {
             restoreFromPeeking()
             return
         }
+        if (isActionMenuVisible()) {
+            hideActionMenu(animated = false)
+        }
 
         val density = resources.displayMetrics.density
         val sizePx = (82 * density).toInt()
@@ -621,6 +640,227 @@ class FloatingPetService : Service() {
         }
 
         bubbleView = bubble
+    }
+
+    private fun initActionMenu(layoutType: Int, density: Float) {
+        val menuLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+
+            val bg = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(Color.parseColor("#F8FAFC"))
+                cornerRadius = 18 * density
+                setStroke((1.5f * density).toInt(), Color.parseColor("#FED7AA"))
+            }
+            background = bg
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                elevation = 10 * density
+            }
+
+            val padH = (4 * density).toInt()
+            val padV = (3 * density).toInt()
+            setPadding(padH, padV, padH, padV)
+            visibility = View.GONE
+        }
+
+        fun applyButtonPressEffect(view: View) {
+            view.setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        v.animate().scaleX(0.92f).scaleY(0.92f).setDuration(80).start()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        v.animate().scaleX(1.0f).scaleY(1.0f).setDuration(80).start()
+                    }
+                }
+                false
+            }
+        }
+
+        fun createDivider(): View {
+            return View(this).apply {
+                layoutParams = LinearLayout.LayoutParams((1 * density).toInt(), (14 * density).toInt()).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    val m = (1 * density).toInt()
+                    setMargins(m, 0, m, 0)
+                }
+                setBackgroundColor(Color.parseColor("#E2E8F0"))
+            }
+        }
+
+        val btnPadH = (9 * density).toInt()
+        val btnPadV = (6 * density).toInt()
+
+        val btnPet = TextView(this).apply {
+            text = "🐾 摸摸"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.parseColor("#0F172A"))
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
+            isClickable = true
+            isFocusable = false
+            applyButtonPressEffect(this)
+            setOnClickListener {
+                handleDesktopPet()
+            }
+        }
+
+        val btnFeed = TextView(this).apply {
+            text = "🐟 喂食"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.parseColor("#0284C7"))
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
+            isClickable = true
+            isFocusable = false
+            applyButtonPressEffect(this)
+            setOnClickListener {
+                handleDesktopFeed()
+            }
+        }
+
+        val btnDismiss = TextView(this).apply {
+            text = "🏠 收回"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.parseColor("#EA580C"))
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
+            isClickable = true
+            isFocusable = false
+            applyButtonPressEffect(this)
+            setOnClickListener {
+                handleDesktopDismiss()
+            }
+        }
+
+        menuLayout.addView(btnPet)
+        menuLayout.addView(createDivider())
+        menuLayout.addView(btnFeed)
+        menuLayout.addView(createDivider())
+        menuLayout.addView(btnDismiss)
+
+        actionMenuParams = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            layoutType,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+        }
+
+        actionMenuView = menuLayout
+    }
+
+    private fun isActionMenuVisible(): Boolean {
+        val menu = actionMenuView ?: return false
+        return menu.visibility == View.VISIBLE && menu.parent != null
+    }
+
+    private fun showActionMenu() {
+        if (isAppForeground || !screenOn) return
+        val menu = actionMenuView ?: return
+        val mParams = actionMenuParams ?: return
+        val pParams = pokoParams ?: return
+        if (isPeeking) {
+            restoreFromPeeking()
+        }
+
+        menu.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val density = resources.displayMetrics.density
+        val (screenWidth, screenHeight) = getScreenDimensions()
+        val menuW = menu.measuredWidth.coerceAtLeast((160 * density).toInt())
+        val menuH = menu.measuredHeight.coerceAtLeast((34 * density).toInt())
+        val pokoW = pokoView?.width ?: (82 * density).toInt()
+        val pokoH = pokoView?.height ?: (82 * density).toInt()
+
+        val gap = (6 * density).toInt()
+        val targetX = if (pParams.x < screenWidth / 2) {
+            (pParams.x + pokoW + gap).coerceAtMost(screenWidth - menuW - (4 * density).toInt())
+        } else {
+            (pParams.x - menuW - gap).coerceAtLeast((4 * density).toInt())
+        }
+
+        val preferredY = pParams.y + (pokoH - menuH) / 2
+        val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, menuH)
+        val targetY = preferredY.coerceIn(minY, maxY)
+
+        mParams.x = targetX
+        mParams.y = targetY
+
+        if (menu.parent == null) {
+            try {
+                windowManager?.addView(menu, mParams)
+            } catch (_: Exception) {}
+        } else {
+            try {
+                windowManager?.updateViewLayout(menu, mParams)
+            } catch (_: Exception) {}
+        }
+
+        menu.visibility = View.VISIBLE
+        menu.alpha = 0f
+        menu.scaleX = 0.7f
+        menu.scaleY = 0.7f
+        menu.animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(220)
+            .setInterpolator(OvershootInterpolator(1.2f))
+            .start()
+
+        hideActionMenuRunnable?.let { mainHandler.removeCallbacks(it) }
+        hideActionMenuRunnable = Runnable {
+            hideActionMenu()
+        }
+        mainHandler.postDelayed(hideActionMenuRunnable!!, 3600)
+    }
+
+    private fun hideActionMenu(animated: Boolean = true) {
+        hideActionMenuRunnable?.let { mainHandler.removeCallbacks(it) }
+        val menu = actionMenuView ?: return
+        if (menu.visibility != View.VISIBLE) return
+
+        if (animated) {
+            menu.animate()
+                .alpha(0f)
+                .scaleX(0.75f)
+                .scaleY(0.75f)
+                .setDuration(180)
+                .withEndAction {
+                    menu.visibility = View.GONE
+                }
+                .start()
+        } else {
+            menu.animate().cancel()
+            menu.visibility = View.GONE
+        }
+    }
+
+    private fun handleDesktopPet() {
+        hideActionMenu()
+        vibrate(30)
+        playSound("meow")
+        pokoView?.onPetTapped()
+        pokoView?.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
+        showCustomSpeechBubble("呼噜噜... 收到主人的摸摸啦，好舒服呀~ 🐾💕")
+    }
+
+    private fun handleDesktopFeed() {
+        hideActionMenu()
+        handleNotificationFeed()
+    }
+
+    private fun handleDesktopDismiss() {
+        hideActionMenu(animated = false)
+        vibrate(35)
+        stopSelf()
     }
 
     private fun showSpeechBubble() {
@@ -916,6 +1156,7 @@ class FloatingPetService : Service() {
         super.onConfigurationChanged(newConfig)
         cancelEdgePeeking()
         isPeeking = false
+        hideActionMenu(animated = false)
         val params = pokoParams ?: return
         val view = pokoView ?: return
         view.alpha = 1.0f
@@ -1159,9 +1400,17 @@ class FloatingPetService : Service() {
         isStrolling = false
         edgeSnapAnimator?.cancel()
         hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
+        hideActionMenuRunnable?.let { mainHandler.removeCallbacks(it) }
         try {
             unregisterReceiver(screenReceiver)
         } catch (_: Exception) {}
+
+        actionMenuView?.let {
+            try {
+                windowManager?.removeView(it)
+            } catch (_: Exception) {}
+        }
+        actionMenuView = null
 
         bubbleView?.let {
             try {
