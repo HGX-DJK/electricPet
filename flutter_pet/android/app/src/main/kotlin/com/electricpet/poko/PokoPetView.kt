@@ -129,9 +129,16 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     init {
+        isClickable = true
+        isFocusable = false
         updateColors()
         startIdleAnimation()
         postDelayed(blinkRunnable, 2500)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     fun applyConfig(newSkinId: String?, newPetName: String?) {

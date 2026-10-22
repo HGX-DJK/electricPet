@@ -6,12 +6,20 @@ import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.electricpet.poko/overlay"
+
+    override fun getRenderMode(): RenderMode = RenderMode.texture
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

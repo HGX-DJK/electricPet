@@ -21,6 +21,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.TextView
@@ -74,10 +75,12 @@ class FloatingPetService : Service() {
             sizePx,
             sizePx,
             layoutType,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
             x = (resources.displayMetrics.widthPixels - sizePx - (12 * density).toInt())
             y = (resources.displayMetrics.heightPixels * 0.45).toInt()
         }
@@ -92,7 +95,7 @@ class FloatingPetService : Service() {
         // 4. 构建桌面悬浮萌言萌语气泡 View
         initSpeechBubble(layoutType, density)
 
-        // 5. 绑定触控、拖拽、果冻回弹挤压与智能贴边吸附事件
+        // 5. 绑定触控、拖拽、果冻回弹挤压与自由停驻事件
         setupTouchListener(sizePx, density)
 
         try {
@@ -114,6 +117,7 @@ class FloatingPetService : Service() {
     }
 
     private fun setupTouchListener(sizePx: Int, density: Float) {
+        val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         var initialX = 0
         var initialY = 0
         var initialTouchX = 0f
@@ -122,7 +126,10 @@ class FloatingPetService : Service() {
 
         pokoView?.setOnTouchListener { _, event ->
             val params = pokoParams ?: return@setOnTouchListener false
-            when (event.action) {
+            val screenWidth = resources.displayMetrics.widthPixels
+            val screenHeight = resources.displayMetrics.heightPixels
+
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     edgeSnapAnimator?.cancel()
                     initialX = params.x
@@ -130,27 +137,37 @@ class FloatingPetService : Service() {
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
                     isClick = true
-                    pokoView?.onDragStateChanged(false)
+                    pokoView?.onDragStateChanged(true)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
-                    if (abs(dx) > 10 || abs(dy) > 10) {
+
+                    if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
                         isClick = false
-                        pokoView?.onDragStateChanged(true)
                     }
-                    params.x = initialX + dx
-                    params.y = initialY + dy
+
+                    // 限制移动在屏幕边界之内，防止被拖离屏幕视野
+                    val maxX = screenWidth - sizePx
+                    val minY = (24 * density).toInt()
+                    val maxY = screenHeight - sizePx - (32 * density).toInt()
+
+                    params.x = (initialX + dx).coerceIn(0, maxX)
+                    params.y = (initialY + dy).coerceIn(minY, maxY)
+
+                    // 拖拽时视线随屏幕左右侧自适应（靠左向右看，靠右向左看）
+                    pokoView?.facingLeft = (params.x > screenWidth / 2)
+
                     try {
                         windowManager?.updateViewLayout(pokoView, params)
                         updateBubblePosition()
                     } catch (_: Exception) {}
                     true
                 }
-                MotionEvent.ACTION_UP -> {
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     pokoView?.onDragStateChanged(false)
-                    if (isClick) {
+                    if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
                         val now = System.currentTimeMillis()
                         if (now - lastClickTime < 380) {
                             // 双击萌宠：震动反馈并极速拉起主应用返回小窝
@@ -161,11 +178,13 @@ class FloatingPetService : Service() {
                             lastClickTime = now
                             vibrate(35)
                             pokoView?.onPetTapped()
+                            pokoView?.performClick()
                             showSpeechBubble()
                         }
                     } else {
-                        // 拖拽释放后执行丝滑智能贴边
-                        snapToEdge(sizePx, density)
+                        // 拖拽释放：波可自由停留在用户放置的位置！
+                        // 仅当用户拖拽很接近边缘时（< 20dp）轻柔靠边吸附；若放置在屏幕中间任意位置均自由保留
+                        maybeGentleSnapEdge(params, sizePx, density, screenWidth)
                     }
                     true
                 }
@@ -174,36 +193,22 @@ class FloatingPetService : Service() {
         }
     }
 
-    private fun snapToEdge(sizePx: Int, density: Float) {
-        val params = pokoParams ?: return
-        val screenWidth = resources.displayMetrics.widthPixels
-        val screenHeight = resources.displayMetrics.heightPixels
-
-        val midX = params.x + sizePx / 2
-        val targetX = if (midX < screenWidth / 2) {
-            (4 * density).toInt()
-        } else {
-            screenWidth - sizePx - (4 * density).toInt()
+    private fun maybeGentleSnapEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
+        val edgeThreshold = (20 * density).toInt()
+        val targetX = when {
+            params.x < edgeThreshold -> (4 * density).toInt()
+            params.x > (screenWidth - sizePx - edgeThreshold) -> screenWidth - sizePx - (4 * density).toInt()
+            else -> return // 自由保留在屏幕中间或任意自定义桌面位置，绝不强制拉回边缘！
         }
 
-        // 视线自适应：停靠在右侧面向左，停靠在左侧面向右
-        pokoView?.facingLeft = (targetX > screenWidth / 2)
-
-        val minY = (40 * density).toInt()
-        val maxY = screenHeight - sizePx - (50 * density).toInt()
-        val clampedY = params.y.coerceIn(minY, maxY)
-
         val startX = params.x
-        val startY = params.y
-
         edgeSnapAnimator?.cancel()
         edgeSnapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 260
+            duration = 180
             interpolator = DecelerateInterpolator()
             addUpdateListener { anim ->
                 val f = anim.animatedValue as Float
                 params.x = (startX + (targetX - startX) * f).toInt()
-                params.y = (startY + (clampedY - startY) * f).toInt()
                 try {
                     windowManager?.updateViewLayout(pokoView, params)
                     updateBubblePosition()
@@ -242,10 +247,10 @@ class FloatingPetService : Service() {
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.TOP or Gravity.LEFT
         }
 
         bubbleView = bubble
@@ -333,7 +338,7 @@ class FloatingPetService : Service() {
 
     private fun openMainActivity() {
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
         if (launchIntent != null) {
             startActivity(launchIntent)
@@ -369,7 +374,9 @@ class FloatingPetService : Service() {
                 notificationManager.createNotificationChannel(channel)
             }
 
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
             val pendingIntent = PendingIntent.getActivity(
                 this,
                 0,

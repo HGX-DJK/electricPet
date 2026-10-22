@@ -903,11 +903,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         }
       }
     }
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
       _lastPausedTime = DateTime.now();
       widget.petModel.flushSave();
       widget.memoModel.saveToDisk();
@@ -4527,6 +4530,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       }
                     }
                     if (ctx.mounted) Navigator.pop(ctx);
+                    if (!isRunning && context.mounted && Navigator.canPop(context)) {
+                      Navigator.pop(context);
+                    }
                   },
                 ),
             ],
