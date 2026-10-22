@@ -209,12 +209,41 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     init {
+        setLayerType(LAYER_TYPE_HARDWARE, null)
         isClickable = true
         isFocusable = false
+        initParticlePaths()
         updateColors()
         startIdleAnimation()
         postDelayed(blinkRunnable, 2200)
         postDelayed(autonomousActionRunnable, 4000)
+    }
+
+    private fun initParticlePaths() {
+        heartPath.reset()
+        heartPath.moveTo(0f, 3.5f * density)
+        heartPath.cubicTo(
+            -4.5f * density, -1.5f * density,
+            -4.5f * density, -5.5f * density,
+            0f, -2.5f * density
+        )
+        heartPath.cubicTo(
+            4.5f * density, -5.5f * density,
+            4.5f * density, -1.5f * density,
+            0f, 3.5f * density
+        )
+        heartPath.close()
+
+        starPath.reset()
+        starPath.moveTo(0f, -5f * density)
+        starPath.lineTo(1.5f * density, -1.5f * density)
+        starPath.lineTo(5f * density, 0f)
+        starPath.lineTo(1.5f * density, 1.5f * density)
+        starPath.lineTo(0f, 5f * density)
+        starPath.lineTo(-1.5f * density, 1.5f * density)
+        starPath.lineTo(-5f * density, 0f)
+        starPath.lineTo(-1.5f * density, -1.5f * density)
+        starPath.close()
     }
 
     override fun performClick(): Boolean {
@@ -1340,36 +1369,11 @@ class PokoPetView(context: Context) : View(context) {
                 ParticleType.HEART -> {
                     particlePaint.color = Color.argb((p.alpha * 240).toInt(), 244, 63, 94)
                     particlePaint.style = Paint.Style.FILL
-
-                    heartPath.reset()
-                    heartPath.moveTo(0f, 3.5f * density)
-                    heartPath.cubicTo(
-                        -4.5f * density, -1.5f * density,
-                        -4.5f * density, -5.5f * density,
-                        0f, -2.5f * density
-                    )
-                    heartPath.cubicTo(
-                        4.5f * density, -5.5f * density,
-                        4.5f * density, -1.5f * density,
-                        0f, 3.5f * density
-                    )
-                    heartPath.close()
                     canvas.drawPath(heartPath, particlePaint)
                 }
                 ParticleType.STAR -> {
                     particlePaint.color = Color.argb((p.alpha * 245).toInt(), 250, 204, 21) // 璀璨金黄
                     particlePaint.style = Paint.Style.FILL
-
-                    starPath.reset()
-                    starPath.moveTo(0f, -5f * density)
-                    starPath.lineTo(1.5f * density, -1.5f * density)
-                    starPath.lineTo(5f * density, 0f)
-                    starPath.lineTo(1.5f * density, 1.5f * density)
-                    starPath.lineTo(0f, 5f * density)
-                    starPath.lineTo(-1.5f * density, 1.5f * density)
-                    starPath.lineTo(-5f * density, 0f)
-                    starPath.lineTo(-1.5f * density, -1.5f * density)
-                    starPath.close()
                     canvas.drawPath(starPath, particlePaint)
                 }
                 ParticleType.ZZZ -> {

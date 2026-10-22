@@ -13,6 +13,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -130,6 +131,11 @@ class FloatingPetService : Service() {
         //    FLAG_NOT_TOUCH_MODAL : 宠物以外的区域触摸透传给下层应用，避免悬浮窗吞掉整屏点击
         //    FLAG_LAYOUT_IN_SCREEN: 窗口按物理屏幕坐标系布局，可触达区域(touchable region)计算正确 —— 能拖动的关键
         //    禁用 FLAG_LAYOUT_NO_LIMITS: 它让窗口脱离屏幕裁剪，Android 10+ 上可触达区域会失效，触摸打不到宠物
+        val (savedDockLeft, savedYRatio) = loadSavedDockConfig()
+        val minY = (24 * density).toInt()
+        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        val initialY = (screenHeight * savedYRatio).toInt().coerceIn(minY, maxY)
+
         pokoParams = WindowManager.LayoutParams(
             sizePx,
             sizePx,
@@ -141,14 +147,17 @@ class FloatingPetService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = (screenWidth - sizePx - (12 * density).toInt()).coerceAtLeast(0)
-            y = (screenHeight * 0.45).toInt()
+            if (savedDockLeft) {
+                x = (4 * density).toInt()
+            }
+            y = initialY
         }
 
         // 3. 构建原生高精度矢量动画猫咪 View
         pokoView = PokoPetView(this).apply {
             val (savedSkin, savedName) = loadSavedPetConfig()
             applyConfig(savedSkin, savedName)
-            facingLeft = true // 初始停靠在右侧边缘，面向屏幕内
+            facingLeft = !savedDockLeft // 靠右面向左，靠左面向右
         }
 
         // 4. 构建桌面悬浮萌言萌语气泡 View
@@ -276,13 +285,13 @@ class FloatingPetService : Service() {
                     if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
                         val now = System.currentTimeMillis()
                         if (now - lastClickTime < 380) {
-                            // 双击萌宠：震动反馈并极速拉起主应用返回小窝
-                            vibrate(60)
+                            // 双击萌宠：更具层次感的双脉冲轻震并极速拉起主应用返回小窝
+                            vibrateDoubleTick()
                             openMainActivity()
                         } else {
-                            // 单击萌宠：震动、果冻 Q 弹挤压物理动画、萌言萌语对话气泡
+                            // 单击萌宠：轻快微震、果冻 Q 弹挤压物理动画、萌言萌语对话气泡
                             lastClickTime = now
-                            vibrate(35)
+                            vibrate(30)
                             pokoView?.onPetTapped()
                             pokoView?.performClick()
                             showSpeechBubble()
@@ -387,6 +396,7 @@ class FloatingPetService : Service() {
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     pokoView?.triggerLandingBounce()
+                    saveDockPreference(isLeftHalf, params.y)
                 }
             })
         }
@@ -552,13 +562,20 @@ class FloatingPetService : Service() {
         bubble.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 
         val density = resources.displayMetrics.density
-        val (screenWidth, _) = getScreenDimensions()
+        val (screenWidth, screenHeight) = getScreenDimensions()
         val bubbleW = bubble.measuredWidth
         val bubbleH = bubble.measuredHeight
         val pokoW = pokoView?.width ?: (78 * density).toInt()
 
+        val preferredY = pParams.y - bubbleH - (6 * density).toInt()
+        val minY = (28 * density).toInt()
         bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
-        bParams.y = (pParams.y - bubbleH - (6 * density).toInt()).coerceAtLeast((28 * density).toInt())
+        bParams.y = if (preferredY < minY) {
+            // 贴近屏幕顶部时，气泡智能展示在宠物下方，避免遮挡宠物
+            (pParams.y + pokoW + (6 * density).toInt()).coerceAtMost(screenHeight - bubbleH - (16 * density).toInt())
+        } else {
+            preferredY
+        }
 
         if (bubble.parent == null) {
             try {
@@ -603,13 +620,19 @@ class FloatingPetService : Service() {
         if (bubble.visibility != View.VISIBLE || bubble.parent == null) return
 
         val density = resources.displayMetrics.density
-        val (screenWidth, _) = getScreenDimensions()
+        val (screenWidth, screenHeight) = getScreenDimensions()
         val bubbleW = bubble.width.coerceAtLeast((100 * density).toInt())
         val bubbleH = bubble.height.coerceAtLeast((36 * density).toInt())
         val pokoW = pokoView?.width ?: (78 * density).toInt()
 
+        val preferredY = pParams.y - bubbleH - (6 * density).toInt()
+        val minY = (28 * density).toInt()
         bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
-        bParams.y = (pParams.y - bubbleH - (6 * density).toInt()).coerceAtLeast((28 * density).toInt())
+        bParams.y = if (preferredY < minY) {
+            (pParams.y + pokoW + (6 * density).toInt()).coerceAtMost(screenHeight - bubbleH - (16 * density).toInt())
+        } else {
+            preferredY
+        }
         try {
             windowManager?.updateViewLayout(bubble, bParams)
         } catch (_: Exception) {}
@@ -647,6 +670,51 @@ class FloatingPetService : Service() {
             e.printStackTrace()
         }
         return Pair("cat_calico", "波可")
+    }
+
+    private fun loadSavedDockConfig(): Pair<Boolean, Float> {
+        return try {
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val isLeft = prefs.getBoolean("flutter.poko_dock_left", false)
+            val yRatio = prefs.getFloat("flutter.poko_dock_y_ratio", 0.45f).coerceIn(0.1f, 0.85f)
+            Pair(isLeft, yRatio)
+        } catch (_: Exception) {
+            Pair(false, 0.45f)
+        }
+    }
+
+    private fun saveDockPreference(isLeft: Boolean, currentY: Int) {
+        try {
+            val (_, screenHeight) = getScreenDimensions()
+            val ratio = if (screenHeight > 0) (currentY.toFloat() / screenHeight.toFloat()).coerceIn(0.1f, 0.85f) else 0.45f
+            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putBoolean("flutter.poko_dock_left", isLeft)
+                .putFloat("flutter.poko_dock_y_ratio", ratio)
+                .apply()
+        } catch (_: Exception) {}
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val params = pokoParams ?: return
+        val view = pokoView ?: return
+        val density = resources.displayMetrics.density
+        val sizePx = (82 * density).toInt()
+        val (screenWidth, screenHeight) = getScreenDimensions()
+        val edgeThreshold = (4 * density).toInt()
+
+        // 手机屏幕横竖屏旋转或分屏时，确保宠物始终贴在当前侧边缘并在安全视野内
+        val isLeft = !view.facingLeft
+        params.x = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+        val minY = (24 * density).toInt()
+        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        params.y = params.y.coerceIn(minY, maxY)
+
+        try {
+            windowManager?.updateViewLayout(view, params)
+            updateBubblePosition()
+        } catch (_: Exception) {}
     }
 
     private fun startAsForeground() {
@@ -696,13 +764,25 @@ class FloatingPetService : Service() {
         }
     }
 
-    private fun vibrate(durationMs: Long = 45) {
+    private fun vibrate(durationMs: Long = 30) {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
             @Suppress("DEPRECATION")
             vibrator.vibrate(durationMs)
+        }
+    }
+
+    private fun vibrateDoubleTick() {
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val timings = longArrayOf(0, 30, 50, 45)
+            val amplitudes = intArrayOf(0, 180, 0, 255)
+            vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(longArrayOf(0, 30, 50, 45), -1)
         }
     }
 
