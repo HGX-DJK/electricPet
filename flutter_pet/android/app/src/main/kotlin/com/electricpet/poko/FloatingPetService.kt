@@ -17,6 +17,7 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -29,10 +30,12 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
@@ -56,13 +59,24 @@ class FloatingPetService : Service() {
     private var strollAnimator: ValueAnimator? = null
     private var isStrolling: Boolean = false
 
-    // 自主在桌面边缘漫步溜达定时任务
+    // 边缘半收起探头避让模式状态与调度
+    private var isPeeking: Boolean = false
+    private var hasTouchDown: Boolean = false
+    private var peekAnimator: ValueAnimator? = null
+    private var peekingRunnable: Runnable? = null
+
+    // 自主在桌面边缘漫步溜达定时任务 (支持省电低功耗模式动态降频)
     private val edgeStrollRunnable = object : Runnable {
         override fun run() {
-            if (screenOn && !isAppForeground && !isStrolling && edgeSnapAnimator?.isRunning != true) {
-                maybeStrollAlongEdge()
+            if (screenOn && !isAppForeground && !isStrolling && edgeSnapAnimator?.isRunning != true && !hasTouchDown) {
+                val isLowPower = isLowPowerMode()
+                if (!isLowPower || Math.random() > 0.5) {
+                    maybeStrollAlongEdge()
+                }
             }
-            val nextDelay = (14000L + (Math.random() * 8000).toLong())
+            val baseDelay = if (isLowPowerMode()) 26000L else 14000L
+            val jitter = if (isLowPowerMode()) 12000L else 8000L
+            val nextDelay = (baseDelay + (Math.random() * jitter).toLong())
             mainHandler.postDelayed(this, nextDelay)
         }
     }
@@ -132,8 +146,7 @@ class FloatingPetService : Service() {
         //    FLAG_LAYOUT_IN_SCREEN: 窗口按物理屏幕坐标系布局，可触达区域(touchable region)计算正确 —— 能拖动的关键
         //    禁用 FLAG_LAYOUT_NO_LIMITS: 它让窗口脱离屏幕裁剪，Android 10+ 上可触达区域会失效，触摸打不到宠物
         val (savedDockLeft, savedYRatio) = loadSavedDockConfig()
-        val minY = (24 * density).toInt()
-        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         val initialY = (screenHeight * savedYRatio).toInt().coerceIn(minY, maxY)
 
         pokoParams = WindowManager.LayoutParams(
@@ -172,6 +185,7 @@ class FloatingPetService : Service() {
 
         // 7. 绑定触控、拖拽、果冻回弹挤压与自由停驻事件
         setupTouchListener(sizePx, density)
+        scheduleEdgePeeking(savedDockLeft)
 
         try {
             windowManager?.addView(pokoView, pokoParams)
@@ -217,6 +231,7 @@ class FloatingPetService : Service() {
         var lastRawX = 0f
         var isClick = false
         var hasDragged = false
+        var velocityTracker: VelocityTracker? = null
         // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
         var gestureScreenWidth = 0
         var gestureScreenHeight = 0
@@ -226,6 +241,12 @@ class FloatingPetService : Service() {
 
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    hasTouchDown = true
+                    cancelEdgePeeking()
+                    restoreFromPeeking()
+                    velocityTracker?.recycle()
+                    velocityTracker = VelocityTracker.obtain()
+                    velocityTracker?.addMovement(event)
                     edgeSnapAnimator?.cancel()
                     strollAnimator?.cancel()
                     isStrolling = false
@@ -245,6 +266,7 @@ class FloatingPetService : Service() {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    velocityTracker?.addMovement(event)
                     val screenWidth = gestureScreenWidth
                     val screenHeight = gestureScreenHeight
                     val dx = (event.rawX - initialTouchX).toInt()
@@ -260,10 +282,9 @@ class FloatingPetService : Service() {
                         Log.d(TAG, "进入拖拽 dx=$dx dy=$dy")
                     }
 
-                    // 限制移动在屏幕边界之内，防止被拖离屏幕视野
+                    // 限制移动在屏幕边界之内，动态适应状态栏与手势条避让
                     val maxX = (screenWidth - sizePx).coerceAtLeast(0)
-                    val minY = (16 * density).toInt()
-                    val maxY = (screenHeight - sizePx - (24 * density).toInt()).coerceAtLeast(minY)
+                    val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
 
                     params.x = (initialX + dx).coerceIn(0, maxX)
                     params.y = (initialY + dy).coerceIn(minY, maxY)
@@ -281,7 +302,17 @@ class FloatingPetService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    hasTouchDown = false
                     pokoView?.onDragStateChanged(false)
+                    var releaseVx = 0f
+                    velocityTracker?.let { vt ->
+                        vt.addMovement(event)
+                        vt.computeCurrentVelocity(1000)
+                        releaseVx = vt.xVelocity
+                        vt.recycle()
+                    }
+                    velocityTracker = null
+
                     if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
                         val now = System.currentTimeMillis()
                         if (now - lastClickTime < 380) {
@@ -295,10 +326,11 @@ class FloatingPetService : Service() {
                             pokoView?.onPetTapped()
                             pokoView?.performClick()
                             showSpeechBubble()
+                            scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
                         }
                     } else if (hasDragged) {
                         // 拖拽释放：波可智能自动磁吸滑行贴边并缓冲着陆！
-                        snapToNearestEdge(params, sizePx, density, gestureScreenWidth)
+                        snapToNearestEdge(params, sizePx, density, gestureScreenWidth, releaseVx)
                     }
                     true
                 }
@@ -327,7 +359,11 @@ class FloatingPetService : Service() {
         if (visible) {
             mainHandler.removeCallbacks(edgeStrollRunnable)
             mainHandler.postDelayed(edgeStrollRunnable, 7000)
+            scheduleEdgePeeking(!view.facingLeft)
         } else {
+            cancelEdgePeeking()
+            isPeeking = false
+            view.alpha = 1.0f
             mainHandler.removeCallbacks(edgeStrollRunnable)
             strollAnimator?.cancel()
             isStrolling = false
@@ -363,27 +399,45 @@ class FloatingPetService : Service() {
 
     /**
      * 智能自动磁吸贴边：
-     * 用户松手后，波可平滑磁吸至最近的左/右屏幕边缘，视线朝向屏幕中心，着陆时触发果冻弹性缓冲！
+     * 结合手势释放瞬时加速度 (Fling) 与就近边缘，波可平滑磁吸至屏幕左/右边缘，
+     * 视线朝向屏幕中心，着陆时触发果冻弹性缓冲，并开启闲置半收起避让模式！
      */
-    private fun snapToNearestEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
+    private fun snapToNearestEdge(
+        params: WindowManager.LayoutParams,
+        sizePx: Int,
+        density: Float,
+        screenWidth: Int,
+        releaseVx: Float = 0f
+    ) {
         // 贴边吸附停靠边距
         val edgeThreshold = (4 * density).toInt()
         val centerX = params.x + sizePx / 2
-        val isLeftHalf = centerX < screenWidth / 2
+
+        // 结合手势释放瞬时横向加速度判定目标吸附侧
+        val isLeftHalf = when {
+            releaseVx < -700f -> true
+            releaseVx > 700f -> false
+            else -> centerX < screenWidth / 2
+        }
         val targetX = if (isLeftHalf) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
 
         // 朝向屏幕中心：在左侧面向右边 (facingLeft = false)，在右侧面向左边 (facingLeft = true)
         pokoView?.facingLeft = !isLeftHalf
+        pokoView?.alpha = 1.0f
 
         val startX = params.x
         if (startX == targetX) {
             pokoView?.triggerLandingBounce()
+            saveDockPreference(isLeftHalf, params.y)
+            scheduleEdgePeeking(isLeftHalf)
             return
         }
 
+        val snapDuration = if (abs(releaseVx) > 900f) 190L else 260L
+
         edgeSnapAnimator?.cancel()
         edgeSnapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 260
+            duration = snapDuration
             interpolator = DecelerateInterpolator(1.8f)
             addUpdateListener { anim ->
                 val f = anim.animatedValue as Float
@@ -397,6 +451,7 @@ class FloatingPetService : Service() {
                 override fun onAnimationEnd(animation: Animator) {
                     pokoView?.triggerLandingBounce()
                     saveDockPreference(isLeftHalf, params.y)
+                    scheduleEdgePeeking(isLeftHalf)
                 }
             })
         }
@@ -411,14 +466,17 @@ class FloatingPetService : Service() {
     private fun maybeStrollAlongEdge() {
         val params = pokoParams ?: return
         val view = pokoView ?: return
-        if (view.currentAction != PokoPetView.PetAction.IDLE) return
+        if (view.currentAction != PokoPetView.PetAction.IDLE || hasTouchDown) return
+
+        if (isPeeking) {
+            restoreFromPeeking()
+            return
+        }
 
         val density = resources.displayMetrics.density
         val sizePx = (82 * density).toInt()
         val (_, screenHeight) = getScreenDimensions()
-
-        val minY = (24 * density).toInt()
-        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         val currentY = params.y
 
         // 随机向上或向下溜达 28 ~ 45dp
@@ -460,6 +518,7 @@ class FloatingPetService : Service() {
                 override fun onAnimationEnd(animation: Animator) {
                     isStrolling = false
                     view.stopWalking()
+                    scheduleEdgePeeking(!view.facingLeft)
                 }
                 override fun onAnimationCancel(animation: Animator) {
                     isStrolling = false
@@ -514,6 +573,9 @@ class FloatingPetService : Service() {
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
         val pParams = pokoParams ?: return
+        if (isPeeking) {
+            restoreFromPeeking()
+        }
 
         val action = pokoView?.currentAction
         val greetings = when (action) {
@@ -607,6 +669,7 @@ class FloatingPetService : Service() {
                 .setDuration(220)
                 .withEndAction {
                     bubble.visibility = View.GONE
+                    scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
                 }
                 .start()
         }
@@ -697,8 +760,11 @@ class FloatingPetService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        cancelEdgePeeking()
+        isPeeking = false
         val params = pokoParams ?: return
         val view = pokoView ?: return
+        view.alpha = 1.0f
         val density = resources.displayMetrics.density
         val sizePx = (82 * density).toInt()
         val (screenWidth, screenHeight) = getScreenDimensions()
@@ -707,14 +773,134 @@ class FloatingPetService : Service() {
         // 手机屏幕横竖屏旋转或分屏时，确保宠物始终贴在当前侧边缘并在安全视野内
         val isLeft = !view.facingLeft
         params.x = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
-        val minY = (24 * density).toInt()
-        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         params.y = params.y.coerceIn(minY, maxY)
 
         try {
             windowManager?.updateViewLayout(view, params)
             updateBubblePosition()
         } catch (_: Exception) {}
+
+        scheduleEdgePeeking(isLeft)
+    }
+
+    private fun getSafeVerticalBounds(density: Float, screenHeight: Int, sizePx: Int): Pair<Int, Int> {
+        var topInset = (24 * density).toInt()
+        var bottomInset = (36 * density).toInt()
+
+        // 动态获取系统状态栏真实高度，避让各类挖孔与异形屏
+        val statusResId = resources.getIdentifier("status_bar_height", "dimen", "android")
+        if (statusResId > 0) {
+            val h = resources.getDimensionPixelSize(statusResId)
+            if (h > topInset) topInset = h + (4 * density).toInt()
+        }
+
+        // 动态获取系统底部导航栏/手势条高度
+        val navResId = resources.getIdentifier("navigation_bar_height", "dimen", "android")
+        if (navResId > 0) {
+            val h = resources.getDimensionPixelSize(navResId)
+            if (h > (16 * density).toInt()) bottomInset = h + (8 * density).toInt()
+        }
+
+        val minY = topInset
+        val maxY = (screenHeight - sizePx - bottomInset).coerceAtLeast(minY)
+        return Pair(minY, maxY)
+    }
+
+    private fun isLowPowerMode(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (pm?.isPowerSaveMode == true) return true
+        return try {
+            val batteryIntent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = batteryIntent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryIntent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            if (level > 0 && scale > 0) {
+                (level * 100 / scale) <= 15
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun scheduleEdgePeeking(isLeft: Boolean) {
+        cancelEdgePeeking()
+        if (!screenOn || isAppForeground) return
+
+        peekingRunnable = Runnable {
+            if (!screenOn || isAppForeground || isStrolling || hasTouchDown) return@Runnable
+            val params = pokoParams ?: return@Runnable
+            val view = pokoView ?: return@Runnable
+            val (screenWidth, _) = getScreenDimensions()
+            val density = resources.displayMetrics.density
+            val sizePx = (82 * density).toInt()
+
+            val startX = params.x
+            // 向屏幕边缘外侧避让收纳 32%，露出大头与双耳探头张望
+            val peekTargetX = if (isLeft) {
+                (-sizePx * 0.32f).toInt()
+            } else {
+                (screenWidth - sizePx * 0.68f).toInt()
+            }
+
+            peekAnimator?.cancel()
+            peekAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 380
+                interpolator = DecelerateInterpolator()
+                addUpdateListener { anim ->
+                    val f = anim.animatedValue as Float
+                    params.x = (startX + (peekTargetX - startX) * f).toInt()
+                    view.alpha = 1.0f - f * 0.32f // 半透明淡化至 0.68f
+                    try {
+                        windowManager?.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
+                }
+                addListener(object : AnimatorListenerAdapter() {
+                    override fun onAnimationEnd(animation: Animator) {
+                        isPeeking = true
+                    }
+                })
+            }
+            peekAnimator?.start()
+        }
+        mainHandler.postDelayed(peekingRunnable!!, 5500)
+    }
+
+    private fun cancelEdgePeeking() {
+        peekingRunnable?.let { mainHandler.removeCallbacks(it) }
+        peekingRunnable = null
+        peekAnimator?.cancel()
+    }
+
+    private fun restoreFromPeeking() {
+        cancelEdgePeeking()
+        val view = pokoView ?: return
+        val params = pokoParams ?: return
+        view.alpha = 1.0f
+
+        if (isPeeking) {
+            isPeeking = false
+            val density = resources.displayMetrics.density
+            val sizePx = (82 * density).toInt()
+            val (screenWidth, _) = getScreenDimensions()
+            val edgeThreshold = (4 * density).toInt()
+            val isLeft = !view.facingLeft
+            val targetX = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+
+            val startX = params.x
+            ValueAnimator.ofFloat(0f, 1f).apply {
+                duration = 200
+                interpolator = OvershootInterpolator(1.8f)
+                addUpdateListener { anim ->
+                    val f = anim.animatedValue as Float
+                    params.x = (startX + (targetX - startX) * f).toInt()
+                    try {
+                        windowManager?.updateViewLayout(view, params)
+                    } catch (_: Exception) {}
+                }
+            }.start()
+        }
     }
 
     private fun startAsForeground() {
@@ -790,6 +976,8 @@ class FloatingPetService : Service() {
         super.onDestroy()
         isRunning = false
         instance = null
+        cancelEdgePeeking()
+        isPeeking = false
         mainHandler.removeCallbacks(edgeStrollRunnable)
         strollAnimator?.cancel()
         isStrolling = false
