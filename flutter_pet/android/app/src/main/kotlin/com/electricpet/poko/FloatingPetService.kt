@@ -108,7 +108,7 @@ class FloatingPetService : Service() {
         }
 
         val density = resources.displayMetrics.density
-        val sizePx = (78 * density).toInt()
+        val sizePx = (82 * density).toInt()
         val (screenWidth, screenHeight) = getScreenDimensions()
 
         // 2. 初始化悬浮猫咪窗口属性
@@ -190,6 +190,7 @@ class FloatingPetService : Service() {
         var initialY = 0
         var initialTouchX = 0f
         var initialTouchY = 0f
+        var lastRawX = 0f
         var isClick = false
         var hasDragged = false
         // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
@@ -209,6 +210,7 @@ class FloatingPetService : Service() {
                     initialY = params.y
                     initialTouchX = event.rawX
                     initialTouchY = event.rawY
+                    lastRawX = event.rawX
                     isClick = true
                     hasDragged = false
                     pokoView?.onDragStateChanged(true)
@@ -220,6 +222,10 @@ class FloatingPetService : Service() {
                     val screenHeight = gestureScreenHeight
                     val dx = (event.rawX - initialTouchX).toInt()
                     val dy = (event.rawY - initialTouchY).toInt()
+
+                    val vx = event.rawX - lastRawX
+                    lastRawX = event.rawX
+                    pokoView?.updateDragVelocity(vx)
 
                     if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         isClick = false
@@ -393,14 +399,41 @@ class FloatingPetService : Service() {
         val bParams = bubbleParams ?: return
         val pParams = pokoParams ?: return
 
-        val greetings = listOf(
-            "喵呜~ 主人，波可随时在屏幕边陪着你呢！(ฅ'ω'ฅ)",
-            "咕噜咕噜... 戳戳小肚腩好舒服~ 💕",
-            "主人看屏幕累了吗？眨眨眼喝口水休息一下吧！✨",
-            "双击我可以快速打开小窝哦！🐾",
-            "今天也是元气满满的一天，波可最喜欢主人啦！🌸",
-            "蹭蹭屏幕~ 感觉主人今天超级棒！✨"
-        )
+        val action = pokoView?.currentAction
+        val greetings = when (action) {
+            PokoPetView.PetAction.STRETCH -> listOf(
+                "喵呼~ 舒舒服服伸个大懒腰，浑身充满力量！(ฅ'ω'ฅ)",
+                "呼哇~ 打个甜甜的大哈欠，主人也活动一下身体嘛~ ✨"
+            )
+            PokoPetView.PetAction.WASH_FACE -> listOf(
+                "舔爪爪洗脸中... 今天波可也是屏幕前最靓的猫猫！🐾",
+                "认真洗脸搓耳朵~ 感觉今天会发生好事呢！🌸"
+            )
+            PokoPetView.PetAction.HEAD_TILT -> listOf(
+                "歪头好奇萌看~ 主人正在手机上忙什么神奇的大事呀？(o.o)",
+                "眨眨眼~ 歪着脑袋看主人，感觉主人更帅气/漂亮啦！💕"
+            )
+            PokoPetView.PetAction.HAPPY_BOUNCE -> listOf(
+                "原地欢脱小蹦跳！见到主人心情超级大好！✨(≧∇≦)",
+                "开心蹦跶~ 传递元气小星星，主人接住啦！🌟"
+            )
+            PokoPetView.PetAction.KNEADING -> listOf(
+                "呼噜呼噜... 软糯小爪踩踩奶，好舒服好安心呀~ 🐾",
+                "在主人桌面上踏踏步，送你一整天的软绵绵治愈~ 💕"
+            )
+            PokoPetView.PetAction.SLEEPY -> listOf(
+                "困困打个小瞌睡... 趴在桌角眯一会儿，Zzz...",
+                "小脑袋一点一点... 梦里也有好多小鱼干和主人呢~ 🐟"
+            )
+            else -> listOf(
+                "喵呜~ 主人，波可随时在屏幕边陪着你呢！(ฅ'ω'ฅ)",
+                "咕噜咕噜... 戳戳小肚腩好舒服~ 💕",
+                "主人看屏幕累了吗？眨眨眼喝口水休息一下吧！✨",
+                "双击我可以快速打开小窝哦！🐾",
+                "今天也是元气满满的一天，波可最喜欢主人啦！🌸",
+                "蹭蹭屏幕~ 感觉主人今天超级棒！✨"
+            )
+        }
         bubble.text = greetings.random()
         bubble.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 

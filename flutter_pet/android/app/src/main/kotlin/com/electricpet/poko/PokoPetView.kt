@@ -7,21 +7,29 @@ import android.content.Context
 import android.graphics.*
 import android.view.View
 import android.view.animation.DecelerateInterpolator
+import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import java.util.Random
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * 桌面悬浮萌宠 · 波可 (Poko) 原生矢量动效渲染 View
- * 具备灵动机体呼吸、猫尾轻摇、周期自然眨眼、戳戳果冻 Q 弹挤压物理、双向屏幕视线自适应与爱心气泡粒子
+ * 桌面悬浮萌宠 · 波可 (Poko) 终极高活力原生矢量动效渲染 View
+ *
+ * 核心动效矩阵：
+ * 1. 自主萌趣行为状态机：伸懒腰打哈欠、洗脸舔爪、歪头萌看、原地小跳步、踩奶踏踏、困困瞌睡冒 Zzz
+ * 2. 悬空物理拖拽：拎起后颈皮、小短腿自然悬空蹬爪、惯性物理摆动、松手果冻回弹着陆缓冲
+ * 3. 丰富微表情：水灵大眼睛、开怀眯眼笑 (^ ‿ ^)、伸懒腰紧闭眼 (> ‿ <)、瞌睡平闭 (-- ‿ --)、拎起呆萌大圆眼 (o . o)
+ * 4. 多重粒子生态：治愈红粉爱心、梦幻漂浮 Zzz 气泡、欢快金光星芒
+ * 5. 全面性能优化：对象池复用，onDraw 零内存分配，支持无损暂停省电
  */
 class PokoPetView(context: Context) : View(context) {
 
     private val density = resources.displayMetrics.density
     private val random = Random()
 
-    // 皮肤与外观配置
+    // ---------- 皮肤与外观配置 ----------
     var skinId: String = "cat_calico"
         set(value) {
             field = value
@@ -40,13 +48,38 @@ class PokoPetView(context: Context) : View(context) {
             }
         }
 
-    // 颜色系统
-    private var primaryColor: Int = Color.parseColor("#FED7AA")
-    private var secondaryColor: Int = Color.parseColor("#EA580C")
-    private var eyeColor: Int = Color.parseColor("#10B981")
-    private var darkPatchColor: Int = Color.parseColor("#334155")
+    // ---------- 动作与表情枚举 ----------
+    enum class PetAction {
+        IDLE,         // 待机呼吸 (起伏呼吸、尾巴轻摇、耳朵微动)
+        STRETCH,      // 伸大懒腰打哈欠 (前爪探伸、身躯拉长、猫嘴大张、抖抖毛)
+        WASH_FACE,    // 洗脸舔爪爪 (右爪抬起至脸颊、吐小粉舌舔舔、轻柔揉脸3次)
+        HEAD_TILT,    // 歪头好奇萌看 (大头倾斜16°、眼珠子灵动机灵转动)
+        HAPPY_BOUNCE, // 快乐小跳步 (原地欢脱连蹦两下、尾巴高翘甩动、金星迸发)
+        KNEADING,     // 软糯踩奶踏踏 (左右前爪交替轻踩、身躯软糯左右微晃)
+        SLEEPY,       // 困困打瞌睡 (小脑袋一点一点、深层慢呼吸、缓缓升起Zzz气泡)
+        DRAGGING,     // 拎起悬空 (身体纵向拉长、四爪悬空扑腾乱蹬、惯性倾斜)
+        PETTED        // 抚摸享受 (Q弹果冻回弹、双眼眯成月牙笑、大量爱心喷发)
+    }
 
-    // 动画状态量
+    enum class EyeMood {
+        NORMAL,       // 晶莹明亮大眸子
+        HAPPY_SMILE,  // 欢快弯弯月牙眯眯笑 (^ ‿ ^)
+        SLEEPY,       // 困困安详平闭眼 (-- ‿ --)
+        SQUINT_YAWN,  // 伸懒腰用力紧闭眼 (> ‿ <)
+        WIDE_SURPRISE // 拎起悬空圆溜溜大眼 (o . o)
+    }
+
+    enum class MouthState {
+        NORMAL_OMEGA, // 治愈经典 ω 小猫嘴
+        YAWN_OPEN,    // 伸懒腰大张嘴打哈欠
+        BLEP_TONGUE,  // 吐露小粉舌 (舔爪/卖萌)
+        HAPPY_OPEN    // 开心大嘴欢呼
+    }
+
+    var currentAction: PetAction = PetAction.IDLE
+        private set
+
+    // ---------- 动画状态量与骨骼参数 ----------
     private var breathY: Float = 0f
     private var scaleXVal: Float = 1f
     private var scaleYVal: Float = 1f
@@ -55,26 +88,54 @@ class PokoPetView(context: Context) : View(context) {
     private var isBlinking: Boolean = false
     private var isDragging: Boolean = false
 
+    // 头部变换
+    private var headTiltAngle: Float = 0f
+    private var headOffsetY: Float = 0f
+    private var pupilOffsetX: Float = 0f
+    private var pupilOffsetY: Float = 0f
+
+    // 爪爪动态偏移 (洗脸、踩奶、伸懒腰、悬空乱蹬)
+    private var leftPawOffsetX: Float = 0f
+    private var leftPawOffsetY: Float = 0f
+    private var rightPawOffsetX: Float = 0f
+    private var rightPawOffsetY: Float = 0f
+
+    // 身体起伏与跳跃
+    private var jumpOffsetY: Float = 0f
+    private var bodyStretchX: Float = 1f
+    private var bodyStretchY: Float = 1f
+    private var bodyLeanAngle: Float = 0f
+
     // 触控果冻回弹挤压形变
     private var squishScaleX: Float = 1f
     private var squishScaleY: Float = 1f
-    private var squishAnimator: ValueAnimator? = null
 
-    // 待机呼吸循环动画
+    // 表情状态
+    private var eyeMood: EyeMood = EyeMood.NORMAL
+    private var mouthState: MouthState = MouthState.NORMAL_OMEGA
+
+    // 动画运行器
     private var idleAnimator: ValueAnimator? = null
+    private var currentActionAnimator: ValueAnimator? = null
+    private var squishAnimator: ValueAnimator? = null
+    private var isAnimationEnabled: Boolean = true
 
-    // 爱心粒子系统
-    private val hearts = mutableListOf<HeartParticle>()
-    private val heartPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    // 粒子系统 (爱心 + 梦幻 Zzz + 金星芒)
+    private val particles = mutableListOf<Particle>()
 
-    // 画笔缓存池
+    // ---------- 颜色系统 ----------
+    private var primaryColor: Int = Color.parseColor("#FED7AA")
+    private var secondaryColor: Int = Color.parseColor("#EA580C")
+    private var eyeColor: Int = Color.parseColor("#10B981")
+    private var darkPatchColor: Int = Color.parseColor("#334155")
+
+    // ---------- 画笔与路径缓存 (严格避免 onDraw 分配内存) ----------
     private val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val headPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bellyPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val earPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val innerEarPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val blushPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val eyePaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val irisPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val pupilPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val sparklePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
@@ -87,6 +148,7 @@ class PokoPetView(context: Context) : View(context) {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
     }
+    private val tonguePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FB7185") }
     private val whiskerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
@@ -100,8 +162,12 @@ class PokoPetView(context: Context) : View(context) {
         strokeCap = Paint.Cap.ROUND
     }
     private val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val textParticlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        textAlign = Paint.Align.CENTER
+    }
 
-    // 路径缓存
     private val earPath = Path()
     private val innerEarPath = Path()
     private val nosePath = Path()
@@ -110,11 +176,12 @@ class PokoPetView(context: Context) : View(context) {
     private val patchPath = Path()
     private val eyePath = Path()
     private val heartPath = Path()
+    private val starPath = Path()
 
     // 眨眼定时调度
     private val blinkRunnable = object : Runnable {
         override fun run() {
-            if (!isDragging) {
+            if (!isDragging && currentAction == PetAction.IDLE && eyeMood == EyeMood.NORMAL) {
                 isBlinking = true
                 invalidate()
                 postDelayed({
@@ -122,9 +189,19 @@ class PokoPetView(context: Context) : View(context) {
                     invalidate()
                 }, 160)
             }
-            // 每隔 2.8 ~ 4.8 秒眨一次眼
-            val nextDelay = (2800 + random.nextInt(2000)).toLong()
+            val nextDelay = (2800 + random.nextInt(2200)).toLong()
             postDelayed(this, nextDelay)
+        }
+    }
+
+    // 自主随机动作调度器 (每隔 5~9 秒自动演绎一个超级生动的猫咪日常动作)
+    private val autonomousActionRunnable = object : Runnable {
+        override fun run() {
+            if (isAnimationEnabled && !isDragging && currentAction == PetAction.IDLE) {
+                triggerRandomAutonomousAction()
+            }
+            val nextInterval = (5200 + random.nextInt(3800)).toLong()
+            postDelayed(this, nextInterval)
         }
     }
 
@@ -133,7 +210,8 @@ class PokoPetView(context: Context) : View(context) {
         isFocusable = false
         updateColors()
         startIdleAnimation()
-        postDelayed(blinkRunnable, 2500)
+        postDelayed(blinkRunnable, 2200)
+        postDelayed(autonomousActionRunnable, 4000)
     }
 
     override fun performClick(): Boolean {
@@ -153,70 +231,60 @@ class PokoPetView(context: Context) : View(context) {
     private fun updateColors() {
         when (skinId) {
             "cat_calico" -> {
-                // 中华三花：柔润暖白身躯、日系软杏与暖灰斑块、碧玉明眸
                 primaryColor = Color.parseColor("#FFFDF8")
                 secondaryColor = Color.parseColor("#FF9E7D")
                 darkPatchColor = Color.parseColor("#475569")
                 eyeColor = Color.parseColor("#10B981")
             }
             "cat_golden_shaded" -> {
-                // 金渐层英短：暖金杏桃渐变被毛、祖母绿宝石眸
                 primaryColor = Color.parseColor("#FED7AA")
                 secondaryColor = Color.parseColor("#D97706")
                 darkPatchColor = Color.parseColor("#92400E")
                 eyeColor = Color.parseColor("#059669")
             }
             "cat_orange" -> {
-                // 中华大橘：阳光大暖炉、活力蜜橙斑纹、琥珀明眸
                 primaryColor = Color.parseColor("#FED7AA")
                 secondaryColor = Color.parseColor("#EA580C")
                 darkPatchColor = Color.parseColor("#C2410C")
                 eyeColor = Color.parseColor("#FBBF24")
             }
             "cat_british_blue" -> {
-                // 经典蓝胖子：英短蓝灰缎面、琥珀金圆眼
                 primaryColor = Color.parseColor("#64748B")
                 secondaryColor = Color.parseColor("#475569")
                 darkPatchColor = Color.parseColor("#334155")
                 eyeColor = Color.parseColor("#F59E0B")
             }
             "cat_ragdoll" -> {
-                // 海蓝双色布偶：仙女雪白、银蓝八字面罩、海蓝宝石眸
                 primaryColor = Color.parseColor("#FFFDF8")
                 secondaryColor = Color.parseColor("#8E9AAF")
                 darkPatchColor = Color.parseColor("#64748B")
                 eyeColor = Color.parseColor("#0284C7")
             }
             "cat_tuxedo" -> {
-                // 警长奶牛猫：帅气燕尾黑、雪白衬衫领、亮金眼眸
                 primaryColor = Color.parseColor("#1E293B")
                 secondaryColor = Color.parseColor("#FFFFFF")
                 darkPatchColor = Color.parseColor("#0F172A")
                 eyeColor = Color.parseColor("#FACC15")
             }
             "cat_siamese" -> {
-                // 暹罗猫：焦糖拿铁重点色、天青蓝双眸
                 primaryColor = Color.parseColor("#FAF5EF")
                 secondaryColor = Color.parseColor("#5C3D2E")
                 darkPatchColor = Color.parseColor("#3E2723")
                 eyeColor = Color.parseColor("#38BDF8")
             }
             "cat_black" -> {
-                // 暗夜玄猫：玄夜黑曜石、星火澄澈明眸
                 primaryColor = Color.parseColor("#0F172A")
                 secondaryColor = Color.parseColor("#1E293B")
                 darkPatchColor = Color.parseColor("#020617")
                 eyeColor = Color.parseColor("#FACC15")
             }
             "cat_sakura_peach" -> {
-                // 樱花蜜桃粉晶猫：梦幻仙境蜜桃粉、玫瑰星芒眸
                 primaryColor = Color.parseColor("#FFF0F5")
                 secondaryColor = Color.parseColor("#F472B6")
                 darkPatchColor = Color.parseColor("#FB7185")
                 eyeColor = Color.parseColor("#FB7185")
             }
             else -> {
-                // 默认经典暖金波可
                 primaryColor = Color.parseColor("#FED7AA")
                 secondaryColor = Color.parseColor("#EA580C")
                 darkPatchColor = Color.parseColor("#C2410C")
@@ -225,26 +293,35 @@ class PokoPetView(context: Context) : View(context) {
         }
     }
 
+    // ---------- 核心待机基础动画 ----------
     private fun startIdleAnimation() {
         idleAnimator?.cancel()
         idleAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 2400
+            duration = 2200
             repeatCount = ValueAnimator.INFINITE
             interpolator = DecelerateInterpolator()
             addUpdateListener { anim ->
+                if (currentAction != PetAction.IDLE && currentAction != PetAction.DRAGGING) return@addUpdateListener
+
                 val f = anim.animatedValue as Float
                 val rad = (f * 2.0 * Math.PI).toFloat()
 
-                // 生物有机起伏与呼吸骨骼微缩放
-                breathY = sin(rad) * 2.4f * density
-                scaleXVal = 1f - sin(rad) * 0.016f
-                scaleYVal = 1f + sin(rad) * 0.022f
-
-                // 尾巴波浪涟漪摆动
-                tailAngle = sin(rad * 1.5f) * 14f
-
-                // 周期轻微动耳
-                earTwitch = if (sin(rad * 3f) > 0.85f) sin(rad * 18f) * 3f else 0f
+                if (currentAction == PetAction.IDLE) {
+                    // 大幅度有生命感的有机呼吸与骨骼微缩放
+                    breathY = sin(rad) * 3.8f * density
+                    scaleXVal = 1f - sin(rad) * 0.038f
+                    scaleYVal = 1f + sin(rad) * 0.048f
+                    // 柔和优雅的猫尾波浪甩尾
+                    tailAngle = sin(rad * 1.4f) * 20f
+                    // 周期机灵轻抖耳朵
+                    earTwitch = if (sin(rad * 3f) > 0.88f) sin(rad * 20f) * 4.5f * density else 0f
+                } else if (currentAction == PetAction.DRAGGING) {
+                    // 悬空时四肢轻轻蹬踩扑腾
+                    val paddleRad = (f * 4.0 * Math.PI).toFloat()
+                    leftPawOffsetY = sin(paddleRad) * 4.5f * density
+                    rightPawOffsetY = -sin(paddleRad) * 4.5f * density
+                    tailAngle = -18f + sin(paddleRad * 0.5f) * 10f
+                }
 
                 invalidate()
             }
@@ -252,43 +329,320 @@ class PokoPetView(context: Context) : View(context) {
         idleAnimator?.start()
     }
 
-    /**
-     * 动画开关: 悬浮猫看不见时 (小窝在前台 / 屏幕熄灭) 停掉 60fps 呼吸动画与眨眼定时器,
-     * 避免"看不见还在烧电"。前台服务常驻, 这部分功耗完全是无谓支出。
-     */
-    fun setAnimationEnabled(enabled: Boolean) {
-        if (enabled) {
-            if (idleAnimator?.isRunning != true) {
-                startIdleAnimation()
-            }
-            removeCallbacks(blinkRunnable)
-            postDelayed(blinkRunnable, 2500)
-        } else {
-            idleAnimator?.cancel()
-            removeCallbacks(blinkRunnable)
+    // ---------- 自主萌宠行为状态机 ----------
+    private fun triggerRandomAutonomousAction() {
+        val actions = listOf(
+            PetAction.STRETCH,       // 伸懒腰打哈欠
+            PetAction.WASH_FACE,     // 洗脸舔爪
+            PetAction.HEAD_TILT,     // 歪头萌看
+            PetAction.HAPPY_BOUNCE,  // 快乐小跳步
+            PetAction.KNEADING,      // 踩奶踏踏
+            PetAction.SLEEPY         // 困困瞌睡冒 Zzz
+        )
+        val selected = actions[random.nextInt(actions.size)]
+        executeAction(selected)
+    }
+
+    fun executeAction(action: PetAction) {
+        if (isDragging) return
+        currentActionAnimator?.cancel()
+        currentAction = action
+
+        when (action) {
+            PetAction.STRETCH -> performStretchAction()
+            PetAction.WASH_FACE -> performWashFaceAction()
+            PetAction.HEAD_TILT -> performHeadTiltAction()
+            PetAction.HAPPY_BOUNCE -> performHappyBounceAction()
+            PetAction.KNEADING -> performKneadingAction()
+            PetAction.SLEEPY -> performSleepyAction()
+            else -> resetToIdleState()
         }
     }
 
-    /**
-     * 响应用户点击/抚摸：触发果冻 Q 弹物理挤压、爱心粒子迸发与开心眯眼笑
-     */
+    /** 1. 伸懒腰打哈欠：前爪向前深探、身体舒展拉长、猫嘴大张、用力眯眼、抖抖身子 */
+    private fun performStretchAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2600
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                when {
+                    p < 0.25f -> { // 向前下俯舒展探爪
+                        val sub = p / 0.25f
+                        bodyStretchX = 1f + sub * 0.16f
+                        bodyStretchY = 1f - sub * 0.14f
+                        leftPawOffsetY = sub * 7.5f * density
+                        rightPawOffsetY = sub * 7.5f * density
+                        headOffsetY = sub * 4.5f * density
+                        tailAngle = sub * 32f
+                        eyeMood = EyeMood.SQUINT_YAWN
+                        mouthState = MouthState.NORMAL_OMEGA
+                    }
+                    p < 0.70f -> { // 张开小嘴打大哈欠~ 身体微抖舒缓
+                        bodyStretchX = 1.16f
+                        bodyStretchY = 0.86f
+                        leftPawOffsetY = 7.5f * density
+                        rightPawOffsetY = 7.5f * density
+                        headOffsetY = 4.5f * density
+                        tailAngle = 32f + sin((p - 0.25f) * 40f) * 6f
+                        eyeMood = EyeMood.SQUINT_YAWN
+                        mouthState = MouthState.YAWN_OPEN
+                    }
+                    else -> { // 收回懒腰，恢复饱满精神
+                        val sub = (p - 0.70f) / 0.30f
+                        bodyStretchX = 1.16f - sub * 0.16f
+                        bodyStretchY = 0.86f + sub * 0.14f
+                        leftPawOffsetY = (1f - sub) * 7.5f * density
+                        rightPawOffsetY = (1f - sub) * 7.5f * density
+                        headOffsetY = (1f - sub) * 4.5f * density
+                        tailAngle = (1f - sub) * 32f
+                        eyeMood = if (sub > 0.7f) EyeMood.NORMAL else EyeMood.HAPPY_SMILE
+                        mouthState = MouthState.NORMAL_OMEGA
+                    }
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    /** 2. 洗脸舔爪：右爪抬起至嘴边、吐小粉舌舔舔、揉脸揉耳3次 */
+    private fun performWashFaceAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2700
+            interpolator = LinearInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                when {
+                    p < 0.20f -> { // 右爪抬起至嘴角
+                        val sub = p / 0.20f
+                        rightPawOffsetX = -sub * 5f * density
+                        rightPawOffsetY = -sub * 16f * density
+                        headTiltAngle = sub * 6f
+                        mouthState = MouthState.BLEP_TONGUE
+                        eyeMood = EyeMood.HAPPY_SMILE
+                    }
+                    p < 0.80f -> { // 绕脸颊揉圆洗脸 3 次
+                        val cycleRad = ((p - 0.20f) / 0.60f * 6.0 * Math.PI).toFloat()
+                        rightPawOffsetX = -5f * density + sin(cycleRad) * 4.5f * density
+                        rightPawOffsetY = -16f * density + cos(cycleRad) * 4.5f * density
+                        headTiltAngle = 6f + sin(cycleRad) * 3f
+                        mouthState = if (sin(cycleRad) > 0.3f) MouthState.BLEP_TONGUE else MouthState.NORMAL_OMEGA
+                        eyeMood = EyeMood.HAPPY_SMILE
+                    }
+                    else -> { // 放下爪子回原位
+                        val sub = (p - 0.80f) / 0.20f
+                        rightPawOffsetX = -5f * density * (1f - sub)
+                        rightPawOffsetY = -16f * density * (1f - sub)
+                        headTiltAngle = 6f * (1f - sub)
+                        mouthState = MouthState.NORMAL_OMEGA
+                        eyeMood = EyeMood.NORMAL
+                    }
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    /** 3. 歪头萌看：大脑袋倾斜18°、大眼珠机灵左右转动看主人 */
+    private fun performHeadTiltAction() {
+        val tiltSign = if (random.nextBoolean()) 1f else -1f
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2200
+            interpolator = OvershootInterpolator(1.4f)
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                when {
+                    p < 0.25f -> { // 歪头
+                        val sub = p / 0.25f
+                        headTiltAngle = sub * 18f * tiltSign
+                        pupilOffsetX = sub * 3.5f * density * tiltSign
+                        pupilOffsetY = -sub * 1.5f * density
+                        earTwitch = sub * 5f * density
+                        eyeMood = EyeMood.NORMAL
+                    }
+                    p < 0.75f -> { // 定住好奇注视，眼珠灵动微动
+                        headTiltAngle = 18f * tiltSign
+                        pupilOffsetX = 3.5f * density * tiltSign + sin((p - 0.25f) * 20f) * 1.2f * density
+                        pupilOffsetY = -1.5f * density
+                        earTwitch = 5f * density
+                        eyeMood = EyeMood.NORMAL
+                    }
+                    else -> { // 回正
+                        val sub = (p - 0.75f) / 0.25f
+                        headTiltAngle = (1f - sub) * 18f * tiltSign
+                        pupilOffsetX = (1f - sub) * 3.5f * density * tiltSign
+                        pupilOffsetY = (1f - sub) * -1.5f * density
+                        earTwitch = (1f - sub) * 5f * density
+                    }
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    /** 4. 快乐小跳步：双脚离地欢快蹦跳两下，金星芒粒子迸发 */
+    private fun performHappyBounceAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2000
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                // 两次蹦跳周期
+                val bounceRad = (p * 4.0 * Math.PI).toFloat()
+                val jumpF = sin(bounceRad).coerceAtLeast(0f)
+                jumpOffsetY = -jumpF * 14f * density
+
+                if (jumpF > 0.05f) {
+                    bodyStretchX = 0.92f
+                    bodyStretchY = 1.12f
+                    eyeMood = EyeMood.HAPPY_SMILE
+                    tailAngle = sin(bounceRad * 2f) * 38f
+                } else {
+                    bodyStretchX = 1.08f
+                    bodyStretchY = 0.94f
+                    eyeMood = EyeMood.HAPPY_SMILE
+                    tailAngle = 10f
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: Animator) {
+                    spawnStars()
+                }
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    /** 5. 软糯踩奶：左右前爪交替踏步，身躯软糯左右晃动 */
+    private fun performKneadingAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2400
+            interpolator = LinearInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                val kneadRad = (p * 6.0 * Math.PI).toFloat()
+                leftPawOffsetY = sin(kneadRad) * 4.5f * density
+                rightPawOffsetY = -sin(kneadRad) * 4.5f * density
+                bodyLeanAngle = sin(kneadRad * 0.5f) * 4f
+                eyeMood = EyeMood.HAPPY_SMILE
+                mouthState = MouthState.NORMAL_OMEGA
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    /** 6. 困困打瞌睡：双眼安详闭合，身体变扁，缓缓升起 Zzz 气泡 */
+    private fun performSleepyAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 3400
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                when {
+                    p < 0.20f -> { // 慢慢耷拉脑袋闭眼
+                        val sub = p / 0.20f
+                        eyeMood = EyeMood.SLEEPY
+                        headOffsetY = sub * 4f * density
+                        bodyStretchY = 1f - sub * 0.08f
+                        bodyStretchX = 1f + sub * 0.08f
+                    }
+                    p < 0.85f -> { // 深度睡眠，平稳深呼吸
+                        eyeMood = EyeMood.SLEEPY
+                        headOffsetY = 4f * density + sin(p * 20f) * 1.5f * density
+                        bodyStretchY = 0.92f
+                        bodyStretchX = 1.08f
+                    }
+                    else -> { // 慢慢醒来
+                        val sub = (p - 0.85f) / 0.15f
+                        eyeMood = if (sub > 0.5f) EyeMood.NORMAL else EyeMood.SLEEPY
+                        headOffsetY = 4f * density * (1f - sub)
+                        bodyStretchY = 0.92f + sub * 0.08f
+                        bodyStretchX = 1.08f - sub * 0.08f
+                    }
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: Animator) {
+                    spawnZzzParticles()
+                }
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    private fun resetToIdleState() {
+        currentAction = PetAction.IDLE
+        headTiltAngle = 0f
+        headOffsetY = 0f
+        pupilOffsetX = 0f
+        pupilOffsetY = 0f
+        leftPawOffsetX = 0f
+        leftPawOffsetY = 0f
+        rightPawOffsetX = 0f
+        rightPawOffsetY = 0f
+        jumpOffsetY = 0f
+        bodyStretchX = 1f
+        bodyStretchY = 1f
+        bodyLeanAngle = 0f
+        eyeMood = EyeMood.NORMAL
+        mouthState = MouthState.NORMAL_OMEGA
+        invalidate()
+    }
+
+    // ---------- 触控抚摸与果冻物理 ----------
     fun onPetTapped() {
+        currentActionAnimator?.cancel()
+        currentAction = PetAction.PETTED
         squishAnimator?.cancel()
 
         // 阶段一：受力瞬间横向挤压膨胀、纵向压扁
-        val squishDown = ValueAnimator.ofFloat(1f, 1.20f).apply {
+        val squishDown = ValueAnimator.ofFloat(1f, 1.25f).apply {
             duration = 90
             addUpdateListener {
                 squishScaleX = it.animatedValue as Float
                 squishScaleY = 2f - squishScaleX
+                eyeMood = EyeMood.HAPPY_SMILE
+                mouthState = MouthState.BLEP_TONGUE
                 invalidate()
             }
         }
 
         // 阶段二：释放瞬间 Overshoot 弹性回弹缓冲
-        val squishBounce = ValueAnimator.ofFloat(1.20f, 1f).apply {
-            duration = 340
-            interpolator = OvershootInterpolator(2.4f)
+        val squishBounce = ValueAnimator.ofFloat(1.25f, 1f).apply {
+            duration = 380
+            interpolator = OvershootInterpolator(2.8f)
             addUpdateListener {
                 squishScaleX = it.animatedValue as Float
                 squishScaleY = 2f - squishScaleX
@@ -301,49 +655,130 @@ class PokoPetView(context: Context) : View(context) {
                 squishBounce.start()
             }
         })
+        squishBounce.addListener(object : AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: Animator) {
+                resetToIdleState()
+            }
+        })
         squishDown.start()
 
-        // 喷发 2~3 颗治愈粉嫩爱心
+        // 喷发治愈爱心粒子
         spawnHearts()
-
-        // 触碰享受眯眯笑眼
-        isBlinking = true
-        postDelayed({
-            isBlinking = false
-            invalidate()
-        }, 450)
     }
 
-    /**
-     * 拖动状态感知：拎起时身体微微拉长，放下时平缓归位
-     */
+    // ---------- 拖拽拎起悬空物理系统 ----------
     fun onDragStateChanged(dragging: Boolean) {
         if (isDragging != dragging) {
             isDragging = dragging
+            currentActionAnimator?.cancel()
+
             if (dragging) {
-                squishScaleX = 0.94f
-                squishScaleY = 1.08f
+                currentAction = PetAction.DRAGGING
+                eyeMood = EyeMood.WIDE_SURPRISE
+                mouthState = MouthState.NORMAL_OMEGA
+                bodyStretchX = 0.88f
+                bodyStretchY = 1.16f
+                tailAngle = -18f
             } else {
-                squishScaleX = 1f
-                squishScaleY = 1f
+                // 放手瞬间触发果冻落地缓冲回弹！
+                triggerLandingBounce()
             }
             invalidate()
         }
     }
 
+    fun updateDragVelocity(vx: Float) {
+        if (!isDragging) return
+        bodyLeanAngle = (vx * 0.12f).coerceIn(-22f, 22f)
+        invalidate()
+    }
+
+    private fun triggerLandingBounce() {
+        val landAnim = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 360
+            interpolator = OvershootInterpolator(2.4f)
+            addUpdateListener { anim ->
+                val f = anim.animatedValue as Float
+                // 先压缩压扁、后弹性归位
+                val compression = sin(f * Math.PI.toFloat())
+                bodyStretchX = 1f + compression * 0.18f
+                bodyStretchY = 1f - compression * 0.18f
+                jumpOffsetY = 0f
+                bodyLeanAngle = 0f
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    resetToIdleState()
+                }
+            })
+        }
+        landAnim.start()
+        spawnHearts()
+    }
+
+    fun setAnimationEnabled(enabled: Boolean) {
+        isAnimationEnabled = enabled
+        if (enabled) {
+            if (idleAnimator?.isRunning != true) {
+                startIdleAnimation()
+            }
+            removeCallbacks(blinkRunnable)
+            postDelayed(blinkRunnable, 2200)
+            removeCallbacks(autonomousActionRunnable)
+            postDelayed(autonomousActionRunnable, 3500)
+        } else {
+            idleAnimator?.cancel()
+            currentActionAnimator?.cancel()
+            squishAnimator?.cancel()
+            removeCallbacks(blinkRunnable)
+            removeCallbacks(autonomousActionRunnable)
+            particles.clear()
+        }
+    }
+
+    // ---------- 粒子生成生态 ----------
     private fun spawnHearts() {
         val cx = width / 2f
         val cy = height * 0.35f
         for (i in 0..2) {
-            val offsetX = (random.nextFloat() - 0.5f) * 24f * density
-            val speedX = (random.nextFloat() - 0.5f) * 1.5f * density
-            val speedY = -(2.5f + random.nextFloat() * 2.0f) * density
-            val scale = 0.8f + random.nextFloat() * 0.5f
-            hearts.add(HeartParticle(cx + offsetX, cy, speedX, speedY, scale, 1f))
+            val offsetX = (random.nextFloat() - 0.5f) * 26f * density
+            val speedX = (random.nextFloat() - 0.5f) * 1.8f * density
+            val speedY = -(2.8f + random.nextFloat() * 2.2f) * density
+            val scale = 0.85f + random.nextFloat() * 0.55f
+            particles.add(Particle(ParticleType.HEART, cx + offsetX, cy, speedX, speedY, scale, 1f))
         }
         invalidate()
     }
 
+    private fun spawnStars() {
+        val cx = width / 2f
+        val cy = height * 0.40f
+        for (i in 0..3) {
+            val angle = random.nextFloat() * 2.0 * Math.PI
+            val speed = (2.0f + random.nextFloat() * 2.5f) * density
+            val speedX = (cos(angle) * speed).toFloat()
+            val speedY = (sin(angle) * speed - 1.5f * density).toFloat()
+            val scale = 0.7f + random.nextFloat() * 0.5f
+            particles.add(Particle(ParticleType.STAR, cx, cy, speedX, speedY, scale, 1f))
+        }
+        invalidate()
+    }
+
+    private fun spawnZzzParticles() {
+        val cx = width / 2f + 16f * density
+        val cy = height * 0.28f
+        for (i in 0..2) {
+            val delayY = i * 8f * density
+            val speedX = (0.5f + random.nextFloat() * 0.4f) * density
+            val speedY = -(1.2f + random.nextFloat() * 0.8f) * density
+            val scale = 0.7f + i * 0.25f
+            particles.add(Particle(ParticleType.ZZZ, cx, cy - delayY, speedX, speedY, scale, 1f, text = if (i == 2) "Z" else "z"))
+        }
+        invalidate()
+    }
+
+    // ---------- 绘制核心管线 ----------
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val size = MeasureSpec.getSize(widthMeasureSpec)
         setMeasuredDimension(size, size)
@@ -358,46 +793,49 @@ class PokoPetView(context: Context) : View(context) {
 
         canvas.save()
 
-        // 1. 边缘依附镜像翻转 (贴在右侧时面向屏幕左侧内景)
+        // 1. 边缘停驻朝向镜像 (贴在屏幕右边缘时面向内测左方)
         if (facingLeft) {
             canvas.scale(-1f, 1f, w / 2f, h / 2f)
         }
 
         val cx = w / 2f
-        val cy = h * 0.53f
+        val cy = h * 0.53f + jumpOffsetY
 
-        // 2. 呼吸与骨骼形变坐标变换
-        canvas.save()
-        canvas.translate(cx, cy + breathY)
-        canvas.scale(scaleXVal * squishScaleX, scaleYVal * squishScaleY)
-        canvas.translate(-cx, -cy)
-
-        // 3. 独立柔和地面环境阴影
-        shadowPaint.color = Color.argb(28, 15, 23, 42)
+        // 2. 独立物理环境阴影 (跳跃或悬空时阴影变小虚化)
+        val shadowScale = (1f + jumpOffsetY / (30f * density)).coerceIn(0.4f, 1.2f)
+        val shadowAlpha = (28 * shadowScale).toInt().coerceIn(6, 35)
+        shadowPaint.color = Color.argb(shadowAlpha, 15, 23, 42)
         canvas.drawOval(
-            cx - 24f * density,
-            cy + 22f * density,
-            cx + 24f * density,
-            cy + 30f * density,
+            cx - 24f * density * shadowScale,
+            h * 0.53f + 22f * density,
+            cx + 24f * density * shadowScale,
+            h * 0.53f + 29f * density,
             shadowPaint
         )
 
-        // 4. 灵动猫尾 (位于身体后层摇曳)
+        // 3. 骨骼与动作形变坐标变换
+        canvas.save()
+        canvas.translate(cx, cy + breathY)
+        canvas.rotate(bodyLeanAngle)
+        canvas.scale(scaleXVal * squishScaleX * bodyStretchX, scaleYVal * squishScaleY * bodyStretchY)
+        canvas.translate(-cx, -cy)
+
+        // 4. 灵动猫尾 (位于身体后侧摇曳)
         drawTail(canvas, cx, cy)
 
         // 5. 浑圆身躯与腹部花纹
         drawBody(canvas, cx, cy)
 
-        // 6. 呆萌大头与俏皮双耳
+        // 6. 呆萌大头与动态歪头/眨眼/双耳
         drawHead(canvas, cx, cy)
 
-        // 7. 肉嘟嘟前爪
+        // 7. 灵巧动态肉爪 (洗脸/踩奶/悬空乱蹬/伸懒腰)
         drawPaws(canvas, cx, cy)
 
-        canvas.restore() // 恢复呼吸与形变矩阵
+        canvas.restore() // 恢复身体变换
 
-        // 8. 绘制漂浮上升的爱心粒子
-        drawHearts(canvas)
+        // 8. 绘制漂浮上升的粒子群 (爱心 / 闪烁星芒 / 梦幻 Zzz)
+        drawParticles(canvas)
 
         canvas.restore() // 恢复朝向矩阵
     }
@@ -406,8 +844,8 @@ class PokoPetView(context: Context) : View(context) {
         val tailBaseX = cx + 13f * density
         val tailBaseY = cy + 12f * density
         val angleRad = (tailAngle * Math.PI / 180.0).toFloat()
-        val tailTipX = cx + 25f * density + sin(angleRad) * 11f * density
-        val tailTipY = cy - 13f * density + cos(angleRad) * 4f * density
+        val tailTipX = cx + 25f * density + sin(angleRad) * 13f * density
+        val tailTipY = cy - 13f * density + cos(angleRad) * 5f * density
 
         tailPath.reset()
         tailPath.moveTo(tailBaseX, tailBaseY)
@@ -418,17 +856,17 @@ class PokoPetView(context: Context) : View(context) {
         )
 
         tailPaint.color = if (skinId == "cat_siamese") secondaryColor else primaryColor
-        tailPaint.strokeWidth = 7f * density
+        tailPaint.strokeWidth = 7.5f * density
         canvas.drawPath(tailPath, tailPaint)
 
-        // 尾尖重点色小绒球
+        // 尾尖绒球
         val tipColor = when (skinId) {
             "cat_tuxedo" -> Color.WHITE
             "cat_calico", "cat_ragdoll", "cat_siamese" -> secondaryColor
             else -> primaryColor
         }
         val tipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = tipColor }
-        canvas.drawCircle(tailTipX, tailTipY, 4.2f * density, tipPaint)
+        canvas.drawCircle(tailTipX, tailTipY, 4.4f * density, tipPaint)
     }
 
     private fun drawBody(canvas: Canvas, cx: Float, cy: Float) {
@@ -436,8 +874,8 @@ class PokoPetView(context: Context) : View(context) {
 
         // 3D 渐变体积光影
         bodyPaint.shader = RadialGradient(
-            cx - 6f * density, cy - 2f * density, 32f * density,
-            lightenColor(primaryColor, 0.18f), primaryColor, Shader.TileMode.CLAMP
+            cx - 6f * density, cy - 2f * density, 34f * density,
+            lightenColor(primaryColor, 0.20f), primaryColor, Shader.TileMode.CLAMP
         )
         canvas.drawOval(bodyRect, bodyPaint)
 
@@ -446,7 +884,7 @@ class PokoPetView(context: Context) : View(context) {
         bellyPaint.color = Color.parseColor("#FFFDF8")
         canvas.drawOval(bellyRect, bellyPaint)
 
-        // 品种专属斑纹 (三花 / 橘猫)
+        // 品种专属斑纹 (三花斑块 / 橘猫虎斑)
         if (skinId == "cat_calico") {
             val patchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = secondaryColor }
             canvas.drawOval(
@@ -473,9 +911,15 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun drawHead(canvas: Canvas, cx: Float, cy: Float) {
-        val headY = cy - 10f * density
+        val headY = cy - 10f * density + headOffsetY
         val headW = 27f * density
         val headH = 21f * density
+
+        // 歪头动作坐标系
+        canvas.save()
+        if (headTiltAngle != 0f) {
+            canvas.rotate(headTiltAngle, cx, headY)
+        }
 
         // 1. 双耳 (位于头部后侧)
         drawEars(canvas, cx, headY)
@@ -484,11 +928,11 @@ class PokoPetView(context: Context) : View(context) {
         val headRect = RectF(cx - headW, headY - headH, cx + headW, headY + headH)
         headPaint.shader = RadialGradient(
             cx - 5f * density, headY - 6f * density, 34f * density,
-            lightenColor(primaryColor, 0.20f), primaryColor, Shader.TileMode.CLAMP
+            lightenColor(primaryColor, 0.22f), primaryColor, Shader.TileMode.CLAMP
         )
         canvas.drawOval(headRect, headPaint)
 
-        // 额头斑纹 (三花/美短/橘猫额头活力 M 纹)
+        // 额头斑纹
         if (skinId == "cat_calico") {
             patchPath.reset()
             patchPath.moveTo(cx + 5f * density, headY - 20f * density)
@@ -497,7 +941,6 @@ class PokoPetView(context: Context) : View(context) {
             val patchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = secondaryColor }
             canvas.drawPath(patchPath, patchPaint)
         } else if (skinId == "cat_tuxedo") {
-            // 奶牛开脸八字白面罩
             val blazePath = Path().apply {
                 moveTo(cx, headY - 14f * density)
                 lineTo(cx - 7f * density, headY + 5f * density)
@@ -508,7 +951,8 @@ class PokoPetView(context: Context) : View(context) {
         }
 
         // 3. 粉嫩腮红
-        blushPaint.color = if (squishScaleX > 1.05f) Color.argb(130, 251, 113, 133) else Color.argb(75, 251, 113, 133)
+        val blushAlpha = if (eyeMood == EyeMood.HAPPY_SMILE || squishScaleX > 1.05f) 140 else 80
+        blushPaint.color = Color.argb(blushAlpha, 251, 113, 133)
         canvas.drawOval(
             RectF(cx - 19f * density, headY + 2f * density, cx - 11f * density, headY + 8f * density),
             blushPaint
@@ -518,14 +962,16 @@ class PokoPetView(context: Context) : View(context) {
             blushPaint
         )
 
-        // 4. 水灵大眼与眨眼
+        // 4. 水灵大眼与丰富表情
         drawEyes(canvas, cx, headY)
 
-        // 5. 心形小肉鼻与治愈 ω 猫嘴
+        // 5. 心形小肉鼻与治愈猫嘴
         drawNoseAndMouth(canvas, cx, headY)
 
         // 6. 柔和触须
         drawWhiskers(canvas, cx, headY)
+
+        canvas.restore() // 恢复歪头旋转
     }
 
     private fun drawEars(canvas: Canvas, cx: Float, headY: Float) {
@@ -569,43 +1015,99 @@ class PokoPetView(context: Context) : View(context) {
         val leftEyeX = cx - 11f * density
         val rightEyeX = cx + 11f * density
 
-        if (isBlinking || squishScaleX > 1.05f) {
-            // 开心眯眯笑眼 ⌒ ⌒
-            smileEyePaint.color = Color.parseColor("#1E293B")
-            smileEyePaint.strokeWidth = 2.4f * density
+        val effectiveMood = when {
+            isBlinking -> EyeMood.HAPPY_SMILE
+            squishScaleX > 1.05f -> EyeMood.HAPPY_SMILE
+            else -> eyeMood
+        }
 
-            eyePath.reset()
-            eyePath.moveTo(leftEyeX - 4.5f * density, eyeY)
-            eyePath.quadTo(leftEyeX, eyeY - 4f * density, leftEyeX + 4.5f * density, eyeY)
-            canvas.drawPath(eyePath, smileEyePaint)
+        when (effectiveMood) {
+            EyeMood.HAPPY_SMILE -> {
+                // 开心欢畅月牙笑眼 ⌒ ⌒
+                smileEyePaint.color = Color.parseColor("#1E293B")
+                smileEyePaint.strokeWidth = 2.4f * density
 
-            eyePath.reset()
-            eyePath.moveTo(rightEyeX - 4.5f * density, eyeY)
-            eyePath.quadTo(rightEyeX, eyeY - 4f * density, rightEyeX + 4.5f * density, eyeY)
-            canvas.drawPath(eyePath, smileEyePaint)
-        } else {
-            // 晶莹璀璨大眼球
-            val eyeRadiusW = 4.6f * density
-            val eyeRadiusH = 5.8f * density
+                eyePath.reset()
+                eyePath.moveTo(leftEyeX - 4.5f * density, eyeY)
+                eyePath.quadTo(leftEyeX, eyeY - 4.5f * density, leftEyeX + 4.5f * density, eyeY)
+                canvas.drawPath(eyePath, smileEyePaint)
 
-            for (eyeX in listOf(leftEyeX, rightEyeX)) {
-                // 虹膜底色
-                irisPaint.color = eyeColor
-                canvas.drawOval(
-                    RectF(eyeX - eyeRadiusW, eyeY - eyeRadiusH, eyeX + eyeRadiusW, eyeY + eyeRadiusH),
-                    irisPaint
-                )
+                eyePath.reset()
+                eyePath.moveTo(rightEyeX - 4.5f * density, eyeY)
+                eyePath.quadTo(rightEyeX, eyeY - 4.5f * density, rightEyeX + 4.5f * density, eyeY)
+                canvas.drawPath(eyePath, smileEyePaint)
+            }
+            EyeMood.SLEEPY -> {
+                // 困困安详平闭眼 ── ──
+                smileEyePaint.color = Color.parseColor("#334155")
+                smileEyePaint.strokeWidth = 2.0f * density
 
-                // 黑曜石巨瞳
-                pupilPaint.color = Color.parseColor("#070B14")
-                canvas.drawOval(
-                    RectF(eyeX - 3.0f * density, eyeY - 4.5f * density, eyeX + 3.0f * density, eyeY + 4.5f * density),
-                    pupilPaint
-                )
+                canvas.drawLine(leftEyeX - 4.2f * density, eyeY, leftEyeX + 4.2f * density, eyeY, smileEyePaint)
+                canvas.drawLine(rightEyeX - 4.2f * density, eyeY, rightEyeX + 4.2f * density, eyeY, smileEyePaint)
+            }
+            EyeMood.SQUINT_YAWN -> {
+                // 伸懒腰紧闭双眼 > <
+                smileEyePaint.color = Color.parseColor("#1E293B")
+                smileEyePaint.strokeWidth = 2.2f * density
 
-                // 双重高光星芒
-                canvas.drawCircle(eyeX - 1.4f * density, eyeY - 2.0f * density, 1.6f * density, sparklePaint)
-                canvas.drawCircle(eyeX + 1.5f * density, eyeY + 1.6f * density, 0.9f * density, sparklePaint)
+                // 左眼 >
+                eyePath.reset()
+                eyePath.moveTo(leftEyeX - 3.8f * density, eyeY - 3f * density)
+                eyePath.lineTo(leftEyeX + 2.5f * density, eyeY)
+                eyePath.lineTo(leftEyeX - 3.8f * density, eyeY + 3f * density)
+                canvas.drawPath(eyePath, smileEyePaint)
+
+                // 右眼 <
+                eyePath.reset()
+                eyePath.moveTo(rightEyeX + 3.8f * density, eyeY - 3f * density)
+                eyePath.lineTo(rightEyeX - 2.5f * density, eyeY)
+                eyePath.lineTo(rightEyeX + 3.8f * density, eyeY + 3f * density)
+                canvas.drawPath(eyePath, smileEyePaint)
+            }
+            EyeMood.WIDE_SURPRISE -> {
+                // 拎起悬空呆萌圆溜溜大眼 (o . o)
+                val eyeRadius = 6.2f * density
+                for (eyeX in listOf(leftEyeX, rightEyeX)) {
+                    irisPaint.color = eyeColor
+                    canvas.drawCircle(eyeX, eyeY, eyeRadius, irisPaint)
+
+                    // 巨型黑曜石圆瞳
+                    pupilPaint.color = Color.parseColor("#070B14")
+                    canvas.drawCircle(eyeX, eyeY, 4.6f * density, pupilPaint)
+
+                    // 闪耀高光
+                    canvas.drawCircle(eyeX - 1.8f * density, eyeY - 1.8f * density, 1.8f * density, sparklePaint)
+                    canvas.drawCircle(eyeX + 1.8f * density, eyeY + 1.8f * density, 1.0f * density, sparklePaint)
+                }
+            }
+            EyeMood.NORMAL -> {
+                // 晶莹璀璨大眼球，随注视偏移动态对焦
+                val eyeRadiusW = 4.6f * density
+                val eyeRadiusH = 5.8f * density
+
+                for (eyeX in listOf(leftEyeX, rightEyeX)) {
+                    irisPaint.color = eyeColor
+                    canvas.drawOval(
+                        RectF(eyeX - eyeRadiusW, eyeY - eyeRadiusH, eyeX + eyeRadiusW, eyeY + eyeRadiusH),
+                        irisPaint
+                    )
+
+                    // 黑曜石瞳孔 (带注视偏移)
+                    pupilPaint.color = Color.parseColor("#070B14")
+                    canvas.drawOval(
+                        RectF(
+                            eyeX - 3.0f * density + pupilOffsetX,
+                            eyeY - 4.5f * density + pupilOffsetY,
+                            eyeX + 3.0f * density + pupilOffsetX,
+                            eyeY + 4.5f * density + pupilOffsetY
+                        ),
+                        pupilPaint
+                    )
+
+                    // 双重高光星芒
+                    canvas.drawCircle(eyeX - 1.4f * density, eyeY - 2.0f * density, 1.6f * density, sparklePaint)
+                    canvas.drawCircle(eyeX + 1.5f * density, eyeY + 1.6f * density, 0.9f * density, sparklePaint)
+                }
             }
         }
     }
@@ -622,7 +1124,47 @@ class PokoPetView(context: Context) : View(context) {
         nosePaint.color = Color.parseColor("#FB7185")
         canvas.drawPath(nosePath, nosePaint)
 
-        // 治愈微笑嘴 ω
+        // 嘴部与舌头形态
+        when (mouthState) {
+            MouthState.YAWN_OPEN -> {
+                // 打哈欠大张嘴：深粉嫩大口腔 + 柔和舌头
+                val mouthRect = RectF(cx - 4.8f * density, noseY + 2.5f * density, cx + 4.8f * density, noseY + 10f * density)
+                val innerMouthPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E11D48") }
+                canvas.drawOval(mouthRect, innerMouthPaint)
+                canvas.drawOval(
+                    RectF(cx - 3f * density, noseY + 6.5f * density, cx + 3f * density, noseY + 10.5f * density),
+                    tonguePaint
+                )
+            }
+            MouthState.BLEP_TONGUE -> {
+                // 治愈 ω 嘴 + 萌吐舌尖 (Blep)
+                drawOmegaMouth(canvas, cx, noseY)
+                canvas.drawOval(
+                    RectF(cx - 2.4f * density, noseY + 4.2f * density, cx + 2.4f * density, noseY + 8.2f * density),
+                    tonguePaint
+                )
+            }
+            MouthState.HAPPY_OPEN -> {
+                // 开心欢笑微张口
+                val smileRect = RectF(cx - 4.2f * density, noseY + 2.8f * density, cx + 4.2f * density, noseY + 8f * density)
+                val happyMouth = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F43F5E") }
+                canvas.drawOval(smileRect, happyMouth)
+            }
+            MouthState.NORMAL_OMEGA -> {
+                // 经典治愈微笑嘴 ω
+                drawOmegaMouth(canvas, cx, noseY)
+                // 触碰挤压时微露粉舌
+                if (squishScaleX > 1.05f) {
+                    canvas.drawOval(
+                        RectF(cx - 2.2f * density, noseY + 4.2f * density, cx + 2.2f * density, noseY + 7.8f * density),
+                        tonguePaint
+                    )
+                }
+            }
+        }
+    }
+
+    private fun drawOmegaMouth(canvas: Canvas, cx: Float, noseY: Float) {
         mouthPaint.color = Color.parseColor("#334155")
         mouthPaint.strokeWidth = 1.4f * density
 
@@ -633,15 +1175,6 @@ class PokoPetView(context: Context) : View(context) {
         mouthPath.moveTo(cx, noseY + 4.0f * density)
         mouthPath.quadTo(cx + 3.2f * density, noseY + 7.0f * density, cx + 6.2f * density, noseY + 4.8f * density)
         canvas.drawPath(mouthPath, mouthPaint)
-
-        // 触碰挤压时吐露粉色舌尖 (Blep)
-        if (squishScaleX > 1.05f) {
-            val tonguePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#FB7185") }
-            canvas.drawOval(
-                RectF(cx - 2f * density, noseY + 4.2f * density, cx + 2f * density, noseY + 7.5f * density),
-                tonguePaint
-            )
-        }
     }
 
     private fun drawWhiskers(canvas: Canvas, cx: Float, headY: Float) {
@@ -651,7 +1184,7 @@ class PokoPetView(context: Context) : View(context) {
 
         val baseNoseY = headY + 3.5f * density
 
-        // 左侧 3 根优雅微垂胡须
+        // 左侧 3 根微垂胡须
         canvas.drawLine(cx - 7f * density, baseNoseY + 0.5f * density, cx - 21f * density, baseNoseY - 2f * density, whiskerPaint)
         canvas.drawLine(cx - 7f * density, baseNoseY + 2.5f * density, cx - 23f * density, baseNoseY + 3f * density, whiskerPaint)
         canvas.drawLine(cx - 7f * density, baseNoseY + 4.5f * density, cx - 20f * density, baseNoseY + 8f * density, whiskerPaint)
@@ -667,65 +1200,93 @@ class PokoPetView(context: Context) : View(context) {
         pawBorderPaint.color = Color.argb(26, 0, 0, 0)
         pawBorderPaint.strokeWidth = 1.0f * density
 
-        val pawW = 5.5f * density
-        val pawH = 4.2f * density
-        val pawY = cy + 22f * density
+        val pawW = 5.6f * density
+        val pawH = 4.3f * density
+        val basePawY = cy + 22f * density
 
-        // 左爪
-        val leftPaw = RectF(cx - 15f * density, pawY - pawH, cx - 4f * density, pawY + pawH)
-        canvas.drawOval(leftPaw, pawPaint)
-        canvas.drawOval(leftPaw, pawBorderPaint)
-        canvas.drawLine(cx - 9.5f * density, pawY - 0.5f * density, cx - 9.5f * density, pawY + pawH, pawBorderPaint)
+        // 动态计算左爪位置 (支持洗脸/踩奶/伸懒腰/悬空乱蹬)
+        val leftX = cx - 9.5f * density + leftPawOffsetX
+        val leftY = basePawY + leftPawOffsetY
+        val leftRect = RectF(leftX - pawW, leftY - pawH, leftX + pawW, leftY + pawH)
+        canvas.drawOval(leftRect, pawPaint)
+        canvas.drawOval(leftRect, pawBorderPaint)
+        canvas.drawLine(leftX, leftY - 0.5f * density, leftX, leftY + pawH, pawBorderPaint)
 
-        // 右爪
-        val rightPaw = RectF(cx + 4f * density, pawY - pawH, cx + 15f * density, pawY + pawH)
-        canvas.drawOval(rightPaw, pawPaint)
-        canvas.drawOval(rightPaw, pawBorderPaint)
-        canvas.drawLine(cx + 9.5f * density, pawY - 0.5f * density, cx + 9.5f * density, pawY + pawH, pawBorderPaint)
+        // 动态计算右爪位置
+        val rightX = cx + 9.5f * density + rightPawOffsetX
+        val rightY = basePawY + rightPawOffsetY
+        val rightRect = RectF(rightX - pawW, rightY - pawH, rightX + pawW, rightY + pawH)
+        canvas.drawOval(rightRect, pawPaint)
+        canvas.drawOval(rightRect, pawBorderPaint)
+        canvas.drawLine(rightX, rightY - 0.5f * density, rightX, rightY + pawH, pawBorderPaint)
     }
 
-    private fun drawHearts(canvas: Canvas) {
-        if (hearts.isEmpty()) return
+    // ---------- 多元粒子系统绘制 (爱心 + 梦幻 Zzz + 金星芒) ----------
+    private fun drawParticles(canvas: Canvas) {
+        if (particles.isEmpty()) return
 
-        val it = hearts.iterator()
+        val it = particles.iterator()
         while (it.hasNext()) {
-            val h = it.next()
-            h.x += h.vx
-            h.y += h.vy
-            h.alpha -= 0.032f
+            val p = it.next()
+            p.x += p.vx
+            p.y += p.vy
+            p.alpha -= p.fadeSpeed
 
-            if (h.alpha <= 0f) {
+            if (p.alpha <= 0f) {
                 it.remove()
                 continue
             }
 
             canvas.save()
-            canvas.translate(h.x, h.y)
-            canvas.scale(h.scale, h.scale)
+            canvas.translate(p.x, p.y)
+            canvas.scale(p.scale, p.scale)
 
-            heartPaint.color = Color.argb((h.alpha * 240).toInt(), 244, 63, 94)
-            heartPaint.style = Paint.Style.FILL
+            when (p.type) {
+                ParticleType.HEART -> {
+                    particlePaint.color = Color.argb((p.alpha * 240).toInt(), 244, 63, 94)
+                    particlePaint.style = Paint.Style.FILL
 
-            heartPath.reset()
-            heartPath.moveTo(0f, 3.5f * density)
-            heartPath.cubicTo(
-                -4.5f * density, -1.5f * density,
-                -4.5f * density, -5.5f * density,
-                0f, -2.5f * density
-            )
-            heartPath.cubicTo(
-                4.5f * density, -5.5f * density,
-                4.5f * density, -1.5f * density,
-                0f, 3.5f * density
-            )
-            heartPath.close()
-            canvas.drawPath(heartPath, heartPaint)
+                    heartPath.reset()
+                    heartPath.moveTo(0f, 3.5f * density)
+                    heartPath.cubicTo(
+                        -4.5f * density, -1.5f * density,
+                        -4.5f * density, -5.5f * density,
+                        0f, -2.5f * density
+                    )
+                    heartPath.cubicTo(
+                        4.5f * density, -5.5f * density,
+                        4.5f * density, -1.5f * density,
+                        0f, 3.5f * density
+                    )
+                    heartPath.close()
+                    canvas.drawPath(heartPath, particlePaint)
+                }
+                ParticleType.STAR -> {
+                    particlePaint.color = Color.argb((p.alpha * 245).toInt(), 250, 204, 21) // 璀璨金黄
+                    particlePaint.style = Paint.Style.FILL
 
+                    starPath.reset()
+                    starPath.moveTo(0f, -5f * density)
+                    starPath.lineTo(1.5f * density, -1.5f * density)
+                    starPath.lineTo(5f * density, 0f)
+                    starPath.lineTo(1.5f * density, 1.5f * density)
+                    starPath.lineTo(0f, 5f * density)
+                    starPath.lineTo(-1.5f * density, 1.5f * density)
+                    starPath.lineTo(-5f * density, 0f)
+                    starPath.lineTo(-1.5f * density, -1.5f * density)
+                    starPath.close()
+                    canvas.drawPath(starPath, particlePaint)
+                }
+                ParticleType.ZZZ -> {
+                    textParticlePaint.color = Color.argb((p.alpha * 220).toInt(), 96, 165, 250) // 治愈天青蓝
+                    textParticlePaint.textSize = 13f * density * p.scale
+                    canvas.drawText(p.text, 0f, 0f, textParticlePaint)
+                }
+            }
             canvas.restore()
         }
 
-        // 保持粒子刷新
-        if (hearts.isNotEmpty()) {
+        if (particles.isNotEmpty()) {
             postInvalidateOnAnimation()
         }
     }
@@ -733,8 +1294,10 @@ class PokoPetView(context: Context) : View(context) {
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         idleAnimator?.cancel()
+        currentActionAnimator?.cancel()
         squishAnimator?.cancel()
         removeCallbacks(blinkRunnable)
+        removeCallbacks(autonomousActionRunnable)
     }
 
     private fun lightenColor(color: Int, amount: Float): Int {
@@ -747,12 +1310,17 @@ class PokoPetView(context: Context) : View(context) {
         return Color.argb(Color.alpha(color), nr, ng, nb)
     }
 
-    private data class HeartParticle(
+    private enum class ParticleType { HEART, STAR, ZZZ }
+
+    private data class Particle(
+        val type: ParticleType,
         var x: Float,
         var y: Float,
         var vx: Float,
         var vy: Float,
         var scale: Float,
-        var alpha: Float
+        var alpha: Float,
+        val fadeSpeed: Float = 0.028f,
+        val text: String = "z"
     )
 }
