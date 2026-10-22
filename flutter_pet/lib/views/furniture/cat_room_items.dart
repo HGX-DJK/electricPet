@@ -643,7 +643,8 @@ class CatRugBed extends StatelessWidget {
       top: nestY + 12.0,
       width: rugWidth,
       height: rugHeight,
-      child: GestureDetector(
+      child: RepaintBoundary(
+        child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Stack(
@@ -702,7 +703,8 @@ class CatRugBed extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

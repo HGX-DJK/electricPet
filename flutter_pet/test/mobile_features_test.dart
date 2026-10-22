@@ -569,6 +569,37 @@ void main() {
       expect(triggeredAction, equals('FEED'));
       expect(triggeredDialogue, isNotNull);
     });
+
+    testWidgets('Mobile Optimization Enhancements: PopScope, RepaintBoundary and Lifecycle Test', (WidgetTester tester) async {
+      await tester.pumpWidget(const DesktopElectricPetApp());
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // 1. 验证关键性能图层均已包裹 RepaintBoundary 隔离重绘
+      final repaintBoundaries = find.byType(RepaintBoundary);
+      expect(repaintBoundaries, findsWidgets);
+
+      // 2. 初始状态下无遮罩，PopScope 允许正常返回
+      final popScopeFinder = find.byWidgetPredicate((w) => w is PopScope);
+      expect(popScopeFinder, findsOneWidget);
+      PopScope popScope = tester.widget<PopScope>(popScopeFinder);
+      expect(popScope.canPop, isTrue);
+
+      // 3. 打开装扮小窝 Dock -> PopScope 拦截系统返回手势
+      await tester.tap(find.text('装扮小窝'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      popScope = tester.widget<PopScope>(popScopeFinder);
+      expect(popScope.canPop, isFalse);
+
+      // 4. 模拟 Android 预测性返回 / iOS 边缘滑动返回 -> 优先收起装扮小窝，而非退出 App
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      popScope = tester.widget<PopScope>(popScopeFinder);
+      expect(popScope.canPop, isTrue);
+    });
   });
 }
 

@@ -619,6 +619,9 @@ class MinimaxService {
     file.delete().then((_) {}).catchError((_) {});
   }
 
+  /// 是否正在播放小奶音语音
+  bool get isVoicePlaying => voicePlayer.state == PlayerState.playing;
+
   /// 播放合成的语音音频；优先写入系统临时文件通过底层原生文件描述符播放 (彻底避免 Android MediaPlayer BytesSource 错误 -38)，若失败回退 BytesSource
   Future<void> playVoiceResponse(Uint8List? audioBytes) async {
     if (audioBytes != null && audioBytes.isNotEmpty) {

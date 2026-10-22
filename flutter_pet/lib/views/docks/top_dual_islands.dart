@@ -564,11 +564,13 @@ class TopDualIslands extends StatelessWidget {
       key: key,
       scaleDown: 0.88,
       onTap: onTap,
-      child: Container(
-        width: 27,
-        height: 25,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 2.5),
+        child: Container(
+          width: 28,
+          height: 25,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
           color: active
               ? (activeAccent ?? PokoPalette.indigo)
                   .withValues(alpha: isNight ? 0.30 : 0.14)
@@ -595,6 +597,7 @@ class TopDualIslands extends StatelessWidget {
               : null,
         ),
         child: child,
+        ),
       ),
     );
 

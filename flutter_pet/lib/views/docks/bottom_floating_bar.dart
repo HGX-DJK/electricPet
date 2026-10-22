@@ -48,8 +48,9 @@ class BottomFloatingBar extends StatelessWidget {
             ),
           );
         },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
+        child: RepaintBoundary(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
             final double maxWidth = constraints.maxWidth;
             // 响应式间距阶梯：宽屏舒展展开，标准屏舒适通透，超窄屏精巧自适应
             final bool isLargeScreen = maxWidth >= 380;
@@ -164,7 +165,8 @@ class BottomFloatingBar extends StatelessWidget {
           },
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

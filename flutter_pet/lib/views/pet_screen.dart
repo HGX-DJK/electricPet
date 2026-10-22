@@ -301,7 +301,29 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)), weight: 30),
     ]).animate(_squishController);
 
+    // 监听 PetModel 属性变更
+    widget.petModel.addListener(_onModelUpdated);
+
+    // 启动初始对话 (根据当前真实时段问候)
+    final circadian = _getCircadianTheme();
+    _showDialogueBubble(circadian['greeting'] as String, speak: true);
+
+    // 方案 B：首启/重装后历史档案自动感知与一键继承探测，并预热高频小奶音
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkHeritageBackupOnLaunch();
+      MinimaxService.instance.prewarmCommonVoices();
+    });
+
     // 粒子飞升与物理帧驱动定时器 (60fps)
+    _startParticleTimer();
+
+    // 状态自然衰减与自言自语及自主微动作定时器
+    _startDecayTimer();
+  }
+
+  /// 启动粒子飞升与物理帧驱动定时器
+  void _startParticleTimer() {
+    _particleTimer?.cancel();
     _particleTimer = Timer.periodic(const Duration(milliseconds: 24), (timer) {
       bool needRepaint = false;
       if (_particles.isNotEmpty) {
@@ -541,8 +563,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         setState(() {});
       }
     });
+  }
 
-    // 状态自然衰减与自言自语及自主微动作定时器
+  /// 启动状态自然衰减与自言自语及自主微动作定时器
+  void _startDecayTimer() {
+    _decayTimer?.cancel();
     _decayTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       widget.petModel.tickDecay(1.0);
       _checkAutoDialogue();
@@ -557,19 +582,6 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       } else {
         _idleSeconds = 0;
       }
-    });
-
-    // 监听 PetModel 属性变更
-    widget.petModel.addListener(_onModelUpdated);
-
-    // 启动初始对话 (根据当前真实时段问候)
-    final circadian = _getCircadianTheme();
-    _showDialogueBubble(circadian['greeting'] as String, speak: true);
-
-    // 方案 B：首启/重装后历史档案自动感知与一键继承探测，并预热高频小奶音
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkHeritageBackupOnLaunch();
-      MinimaxService.instance.prewarmCommonVoices();
     });
   }
 
@@ -857,14 +869,53 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
   }
 
+  DateTime? _lastPausedTime;
+
+  /// 移动端节能模式：应用退到后台时深度暂停高频计时器与动效，降低 CPU/GPU 占用与电量消耗
+  void _pauseBackgroundProcessing() {
+    _idleAnimController.stop();
+    _particleTimer?.cancel();
+    _particleTimer = null;
+    _decayTimer?.cancel();
+    _decayTimer = null;
+    _idleActionTimer?.cancel();
+    _idleActionTimer = null;
+  }
+
+  /// 应用返回前台：无缝唤醒动画与计时器，并精确结算离线时间差
+  void _resumeForegroundProcessing() {
+    if (!_idleAnimController.isAnimating) {
+      _idleAnimController.repeat();
+    }
+    _startParticleTimer();
+    _startDecayTimer();
+
+    if (_lastPausedTime != null) {
+      final offlineSeconds = DateTime.now().difference(_lastPausedTime!).inSeconds;
+      _lastPausedTime = null;
+      if (offlineSeconds > 0) {
+        // 离线状态平滑结算 (最多结算 12 小时 = 43200 秒)
+        final effectiveSeconds = math.min(offlineSeconds, 43200);
+        widget.petModel.tickDecay(effectiveSeconds.toDouble());
+        if (effectiveSeconds >= 60 && mounted) {
+          final mins = effectiveSeconds ~/ 60;
+          _showDialogueBubble('波可刚才打了个小盹，已经过去 $mins 分钟啦~ 🐾', duration: const Duration(seconds: 4));
+        }
+      }
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      _lastPausedTime = DateTime.now();
       widget.petModel.flushSave();
       widget.memoModel.saveToDisk();
       SensorService.stopListening();
+      _pauseBackgroundProcessing();
     } else if (state == AppLifecycleState.resumed) {
       SensorService.startListening();
+      _resumeForegroundProcessing();
     }
   }
 
@@ -3190,7 +3241,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _yarnInitialized = true;
     }
 
-    return Scaffold(
+    final bool hasActiveOverlay = _isWardrobeMode || _isActionMode || _showFoodTray || _isLaserMode;
+
+    return PopScope(
+      canPop: !hasActiveOverlay,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleSystemBack();
+      },
+      child: Scaffold(
       body: Listener(
         onPointerDown: (event) => _onBackgroundPointerDown(event.position, screenSize),
         onPointerHover: (event) => _onPointerHoverOrMove(event.position),
@@ -3292,10 +3351,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 right: 0,
                 bottom: 0,
                 child: IgnorePointer(
-                  child: HabitatFlooring(
-                    habitat: habitat,
-                    isNight: isNight,
-                    idleAnimation: _idleAnimController,
+                  child: RepaintBoundary(
+                    child: HabitatFlooring(
+                      habitat: habitat,
+                      isNight: isNight,
+                      idleAnimation: _idleAnimController,
+                    ),
                   ),
                 ),
               ),
@@ -3477,10 +3538,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               if (_footprints.isNotEmpty)
                 Positioned.fill(
                   child: IgnorePointer(
-                    child: CustomPaint(
-                      painter: FootprintPainter(
-                        _footprints,
-                        habitat: widget.petModel.habitat,
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: FootprintPainter(
+                          _footprints,
+                          habitat: widget.petModel.habitat,
+                        ),
                       ),
                     ),
                   ),
@@ -3491,39 +3554,41 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 top: 10,
                 left: 14,
                 right: 14,
-                child: TopDualIslands(
-                  petModel: widget.petModel,
-                  screenSize: screenSize,
-                  isNight: isNight,
-                  circadianTheme: circadian,
-                  isManualSky: _skyManualMode != -1,
-                  ambientMode: SoundService.ambientMode,
-                  onAmbientToggle: _cycleAmbientSound,
-                  onIntimacyTap: _showIntimacyBondModal,
-                  onSoundToggle: () {
-                    setState(() {
-                      SoundService.soundEnabled = !SoundService.soundEnabled;
-                    });
-                    if (SoundService.soundEnabled) {
-                      _showDialogueBubble('波可的声音已开启啦！🐾', speak: true);
-                    }
-                  },
-                  onFootprintsToggle: () {
-                    setState(() {
-                      widget.petModel.toggleFootprints();
-                      if (!widget.petModel.enableFootprints) {
-                        _footprints.clear();
+                child: RepaintBoundary(
+                  child: TopDualIslands(
+                    petModel: widget.petModel,
+                    screenSize: screenSize,
+                    isNight: isNight,
+                    circadianTheme: circadian,
+                    isManualSky: _skyManualMode != -1,
+                    ambientMode: SoundService.ambientMode,
+                    onAmbientToggle: _cycleAmbientSound,
+                    onIntimacyTap: _showIntimacyBondModal,
+                    onSoundToggle: () {
+                      setState(() {
+                        SoundService.soundEnabled = !SoundService.soundEnabled;
+                      });
+                      if (SoundService.soundEnabled) {
+                        _showDialogueBubble('波可的声音已开启啦！🐾', speak: true);
                       }
-                    });
-                    _vibrate('light');
-                    _showDialogueBubble(
-                      widget.petModel.enableFootprints
-                          ? '已开启温润小猫肉垫爪印~ 🐾'
-                          : '已收起爪印，保持地板纯净洁白✨',
-                      duration: const Duration(seconds: 3),
-                    );
-                  },
-                  onSkyRhythmToggle: _cycleSkyTheme,
+                    },
+                    onFootprintsToggle: () {
+                      setState(() {
+                        widget.petModel.toggleFootprints();
+                        if (!widget.petModel.enableFootprints) {
+                          _footprints.clear();
+                        }
+                      });
+                      _vibrate('light');
+                      _showDialogueBubble(
+                        widget.petModel.enableFootprints
+                            ? '已开启温润小猫肉垫爪印~ 🐾'
+                            : '已收起爪印，保持地板纯净洁白✨',
+                        duration: const Duration(seconds: 3),
+                      );
+                    },
+                    onSkyRhythmToggle: _cycleSkyTheme,
+                  ),
                 ),
               ),
 
@@ -3748,7 +3813,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   duration: const Duration(milliseconds: 200),
                   child: IgnorePointer(
                     ignoring: _isWardrobeMode,
-                    child: CatDiningStation(
+                    child: RepaintBoundary(
+                      child: CatDiningStation(
                       isNight: isNight,
                       isHungry: widget.petModel.hunger < 50,
                       showFoodTray: _showFoodTray,
@@ -3811,6 +3877,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     ),
                   ),
                 ),
+              ),
               ),
 
               // 暖绒舒睡圆垫小被子 (随呼吸起伏，支持盖被被与掀被被微互动，换装模式自动淡出)
@@ -4340,7 +4407,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         ),
       ),
     ),
-  );
+  ),
+);
+  }
+
+  /// 响应系统物理返回键或边缘侧滑返回手势 (优先收起前台展开的交互抽屉或托盘，防误退 App)
+  void _handleSystemBack() {
+    _vibrate('light');
+    if (_showFoodTray) {
+      setState(() => _showFoodTray = false);
+    } else if (_isWardrobeMode) {
+      setState(() => _isWardrobeMode = false);
+    } else if (_isActionMode) {
+      setState(() => _isActionMode = false);
+    } else if (_isLaserMode) {
+      _stopLaserChase();
+    }
   }
 
   Future<void> _handleFloatingTap() async {

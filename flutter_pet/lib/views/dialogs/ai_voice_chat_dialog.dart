@@ -1365,14 +1365,19 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                     ),
                                     if (!isUser) ...[
                                       const SizedBox(height: PokoSpacing.xs),
-                                      // 小奶音重播: 收成一枚圆形图标, 保持气泡干净
+                                      // 小奶音重播与轻触打断: 收成一枚圆形图标, 保持气泡干净
                                       Align(
                                         alignment: Alignment.centerRight,
                                         child: Tooltip(
-                                          message: '重播小奶音',
+                                          message: _ai.isVoicePlaying ? '点击停止播放' : '重播小奶音',
                                           child: GestureDetector(
                                             onTap: () async {
                                               HapticService.light();
+                                              if (_ai.isVoicePlaying) {
+                                                await _ai.stopVoice();
+                                                if (mounted) setState(() {});
+                                                return;
+                                              }
                                               if (msg.audioBytes != null && msg.audioBytes!.isNotEmpty) {
                                                 await _ai.playVoiceResponse(msg.audioBytes);
                                               } else {
@@ -1383,19 +1388,20 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                                   SoundService.playMeow(tone: MeowTone.sweet);
                                                 }
                                               }
+                                              if (mounted) setState(() {});
                                             },
                                             child: Container(
                                               width: 26,
                                               height: 26,
                                               decoration: BoxDecoration(
-                                                color: t.accentSoft,
+                                                color: _ai.isVoicePlaying ? PokoPalette.rose.withValues(alpha: 0.2) : t.accentSoft,
                                                 shape: BoxShape.circle,
                                               ),
                                               alignment: Alignment.center,
                                               child: Icon(
-                                                Icons.volume_up_rounded,
+                                                _ai.isVoicePlaying ? Icons.stop_rounded : Icons.volume_up_rounded,
                                                 size: 14,
-                                                color: t.accent,
+                                                color: _ai.isVoicePlaying ? PokoPalette.rose : t.accent,
                                               ),
                                             ),
                                           ),
