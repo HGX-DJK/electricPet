@@ -4518,7 +4518,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       await OverlayService.stopFloatingPet();
                       _showDialogueBubble('桌面悬浮宠已收回小窝~ 🐾');
                     } else {
-                      final ok = await OverlayService.startFloatingPet();
+                      final ok = await OverlayService.startFloatingPet(
+                        skinId: widget.petModel.skinId,
+                        petName: widget.petModel.name,
+                      );
                       if (ok) {
                         _showDialogueBubble('桌面悬浮宠启动成功！切回手机桌面就能看到波可啦~ ✨');
                       }

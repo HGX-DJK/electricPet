@@ -22,9 +22,12 @@ class OverlayService {
   }
 
   /// 开启全局桌面悬浮宠
-  static Future<bool> startFloatingPet() async {
+  static Future<bool> startFloatingPet({String? skinId, String? petName}) async {
     try {
-      final bool res = await _channel.invokeMethod('startFloatingService');
+      final bool res = await _channel.invokeMethod('startFloatingService', {
+        'skinId': skinId,
+        'petName': petName,
+      });
       return res;
     } catch (_) {
       return false;

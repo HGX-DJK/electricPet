@@ -44,7 +44,10 @@ class MainActivity: FlutterActivity() {
                         startActivity(intent)
                         result.success(false)
                     } else {
-                        val intent = Intent(this, FloatingPetService::class.java)
+                        val intent = Intent(this, FloatingPetService::class.java).apply {
+                            putExtra("skinId", call.argument<String>("skinId"))
+                            putExtra("petName", call.argument<String>("petName"))
+                        }
                         startService(intent)
                         result.success(true)
                     }
