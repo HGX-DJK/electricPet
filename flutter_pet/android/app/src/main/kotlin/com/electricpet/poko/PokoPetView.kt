@@ -57,6 +57,8 @@ class PokoPetView(context: Context) : View(context) {
         HAPPY_BOUNCE, // 快乐小跳步 (原地欢脱连蹦两下、尾巴高翘甩动、金星迸发)
         KNEADING,     // 软糯踩奶踏踏 (左右前爪交替轻踩、身躯软糯左右微晃)
         SLEEPY,       // 困困打瞌睡 (小脑袋一点一点、深层慢呼吸、缓缓升起Zzz气泡)
+        SPIN_TAIL,    // 追尾巴原地打转 (360°旋转转圈圈、尾巴弯折翘起、星芒四射)
+        WALKING,      // 桌面边缘小碎步漫步 (四爪交替踏步、轻快身躯微颠、小尾巴轻摆)
         DRAGGING,     // 拎起悬空 (身体纵向拉长、四爪悬空扑腾乱蹬、惯性倾斜)
         PETTED        // 抚摸享受 (Q弹果冻回弹、双眼眯成月牙笑、大量爱心喷发)
     }
@@ -105,6 +107,7 @@ class PokoPetView(context: Context) : View(context) {
     private var bodyStretchX: Float = 1f
     private var bodyStretchY: Float = 1f
     private var bodyLeanAngle: Float = 0f
+    private var spinAngle: Float = 0f
 
     // 触控果冻回弹挤压形变
     private var squishScaleX: Float = 1f
@@ -337,7 +340,8 @@ class PokoPetView(context: Context) : View(context) {
             PetAction.HEAD_TILT,     // 歪头萌看
             PetAction.HAPPY_BOUNCE,  // 快乐小跳步
             PetAction.KNEADING,      // 踩奶踏踏
-            PetAction.SLEEPY         // 困困瞌睡冒 Zzz
+            PetAction.SLEEPY,        // 困困瞌睡冒 Zzz
+            PetAction.SPIN_TAIL      // 追尾巴转圈打转
         )
         val selected = actions[random.nextInt(actions.size)]
         executeAction(selected)
@@ -355,6 +359,7 @@ class PokoPetView(context: Context) : View(context) {
             PetAction.HAPPY_BOUNCE -> performHappyBounceAction()
             PetAction.KNEADING -> performKneadingAction()
             PetAction.SLEEPY -> performSleepyAction()
+            PetAction.SPIN_TAIL -> performSpinTailAction()
             else -> resetToIdleState()
         }
     }
@@ -602,6 +607,95 @@ class PokoPetView(context: Context) : View(context) {
         currentActionAnimator?.start()
     }
 
+    /** 7. 追尾巴原地打转转：两圈 360° 欢乐高速旋转，尾巴兴奋高翘，小爪蹬步，金星迸发 */
+    private fun performSpinTailAction() {
+        currentActionAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 2400
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val p = anim.animatedValue as Float
+                when {
+                    p < 0.15f -> { // 准备起转：小猫盯向尾巴，身体微曲
+                        val sub = p / 0.15f
+                        spinAngle = sub * 25f
+                        tailAngle = sub * 40f
+                        eyeMood = EyeMood.WIDE_SURPRISE
+                        mouthState = MouthState.NORMAL_OMEGA
+                        headTiltAngle = -sub * 12f
+                    }
+                    p < 0.75f -> { // 连续两圈高速转圈圈 (25° -> 720°)！
+                        val sub = (p - 0.15f) / 0.60f
+                        spinAngle = 25f + sub * 695f
+                        tailAngle = 40f + sin(sub * 20f) * 15f
+                        // 爪子快速交替踏动
+                        leftPawOffsetY = sin(sub * 30f) * 4f * density
+                        rightPawOffsetY = -sin(sub * 30f) * 4f * density
+                        eyeMood = EyeMood.HAPPY_SMILE
+                        mouthState = MouthState.BLEP_TONGUE
+                    }
+                    p < 0.90f -> { // 转完停下，微有眩晕晃头 (摇摇晃晃)
+                        val sub = (p - 0.75f) / 0.15f
+                        spinAngle = 720f
+                        headTiltAngle = sin(sub * 16f) * (8f * (1f - sub))
+                        leftPawOffsetY = 0f
+                        rightPawOffsetY = 0f
+                        eyeMood = EyeMood.WIDE_SURPRISE
+                        mouthState = MouthState.BLEP_TONGUE
+                    }
+                    else -> { // 恢复常态
+                        val sub = (p - 0.90f) / 0.10f
+                        spinAngle = 0f
+                        headTiltAngle = 0f
+                        eyeMood = EyeMood.NORMAL
+                        mouthState = MouthState.NORMAL_OMEGA
+                        tailAngle = (1f - sub) * 20f
+                    }
+                }
+                invalidate()
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationStart(animation: Animator) {
+                    spawnStars()
+                }
+                override fun onAnimationEnd(animation: Animator) {
+                    spinAngle = 0f
+                    resetToIdleState()
+                }
+            })
+        }
+        currentActionAnimator?.start()
+    }
+
+    // ---------- 边缘漫步走动接口 ----------
+    fun startWalking() {
+        if (isDragging) return
+        currentActionAnimator?.cancel()
+        currentAction = PetAction.WALKING
+        eyeMood = EyeMood.NORMAL
+        mouthState = MouthState.NORMAL_OMEGA
+    }
+
+    fun updateWalkingStep(progress: Float) {
+        if (currentAction != PetAction.WALKING) return
+        val rad = (progress * 6.0 * Math.PI).toFloat()
+        // 前爪交替迈步踏动
+        leftPawOffsetY = sin(rad) * 4.5f * density
+        rightPawOffsetY = -sin(rad) * 4.5f * density
+        // 身体轻快微颠跳步
+        jumpOffsetY = -abs(sin(rad)) * 2.8f * density
+        // 身体小幅度欢快左右微摆
+        bodyLeanAngle = sin(rad * 0.5f) * 4f
+        // 尾巴随步子有节奏左右微甩
+        tailAngle = sin(rad * 0.7f) * 16f
+        invalidate()
+    }
+
+    fun stopWalking() {
+        if (currentAction == PetAction.WALKING) {
+            resetToIdleState()
+        }
+    }
+
     private fun resetToIdleState() {
         currentAction = PetAction.IDLE
         headTiltAngle = 0f
@@ -616,6 +710,7 @@ class PokoPetView(context: Context) : View(context) {
         bodyStretchX = 1f
         bodyStretchY = 1f
         bodyLeanAngle = 0f
+        spinAngle = 0f
         eyeMood = EyeMood.NORMAL
         mouthState = MouthState.NORMAL_OMEGA
         invalidate()
@@ -693,7 +788,7 @@ class PokoPetView(context: Context) : View(context) {
         invalidate()
     }
 
-    private fun triggerLandingBounce() {
+    fun triggerLandingBounce() {
         val landAnim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 360
             interpolator = OvershootInterpolator(2.4f)
@@ -816,7 +911,7 @@ class PokoPetView(context: Context) : View(context) {
         // 3. 骨骼与动作形变坐标变换
         canvas.save()
         canvas.translate(cx, cy + breathY)
-        canvas.rotate(bodyLeanAngle)
+        canvas.rotate(bodyLeanAngle + spinAngle)
         canvas.scale(scaleXVal * squishScaleX * bodyStretchX, scaleYVal * squishScaleY * bodyStretchY)
         canvas.translate(-cx, -cy)
 

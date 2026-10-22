@@ -1,5 +1,7 @@
 package com.electricpet.poko
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.app.Notification
 import android.app.NotificationChannel
@@ -50,6 +52,19 @@ class FloatingPetService : Service() {
     // 双击与触控物理量
     private var lastClickTime: Long = 0
     private var edgeSnapAnimator: ValueAnimator? = null
+    private var strollAnimator: ValueAnimator? = null
+    private var isStrolling: Boolean = false
+
+    // 自主在桌面边缘漫步溜达定时任务
+    private val edgeStrollRunnable = object : Runnable {
+        override fun run() {
+            if (screenOn && !isAppForeground && !isStrolling && edgeSnapAnimator?.isRunning != true) {
+                maybeStrollAlongEdge()
+            }
+            val nextDelay = (14000L + (Math.random() * 8000).toLong())
+            mainHandler.postDelayed(this, nextDelay)
+        }
+    }
 
     // 屏幕点亮状态: 息屏时悬浮猫不可见, 顺带停掉动画省电
     private var screenOn = true
@@ -203,6 +218,9 @@ class FloatingPetService : Service() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     edgeSnapAnimator?.cancel()
+                    strollAnimator?.cancel()
+                    isStrolling = false
+                    pokoView?.stopWalking()
                     val (sw, sh) = getScreenDimensions()
                     gestureScreenWidth = sw
                     gestureScreenHeight = sh
@@ -270,9 +288,8 @@ class FloatingPetService : Service() {
                             showSpeechBubble()
                         }
                     } else if (hasDragged) {
-                        // 拖拽释放：波可自由停留在用户放置的位置！
-                        // 仅当用户拖拽很接近边缘时（< 10dp）轻柔靠边吸附；若放置在屏幕中间任意位置均自由保留
-                        maybeGentleSnapEdge(params, sizePx, density, gestureScreenWidth)
+                        // 拖拽释放：波可智能自动磁吸滑行贴边并缓冲着陆！
+                        snapToNearestEdge(params, sizePx, density, gestureScreenWidth)
                     }
                     true
                 }
@@ -298,7 +315,14 @@ class FloatingPetService : Service() {
         }
         view.setAnimationEnabled(visible)
 
-        if (!visible) {
+        if (visible) {
+            mainHandler.removeCallbacks(edgeStrollRunnable)
+            mainHandler.postDelayed(edgeStrollRunnable, 7000)
+        } else {
+            mainHandler.removeCallbacks(edgeStrollRunnable)
+            strollAnimator?.cancel()
+            isStrolling = false
+            view.stopWalking()
             // 顺带收掉气泡，避免隐藏后气泡残留在桌面上
             hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
             bubbleView?.visibility = View.GONE
@@ -328,20 +352,30 @@ class FloatingPetService : Service() {
         return pm.isInteractive
     }
 
-    private fun maybeGentleSnapEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
-        // 阈值必须小于初始停靠位置(12dp)，否则用户刚拖动一点点就会被吸回原位，表现为"拖不动"
-        val edgeThreshold = (10 * density).toInt()
-        val targetX = when {
-            params.x < edgeThreshold -> (4 * density).toInt()
-            params.x > (screenWidth - sizePx - edgeThreshold) -> screenWidth - sizePx - (4 * density).toInt()
-            else -> return // 自由保留在屏幕中间或任意自定义桌面位置，绝不强制拉回边缘！
-        }
+    /**
+     * 智能自动磁吸贴边：
+     * 用户松手后，波可平滑磁吸至最近的左/右屏幕边缘，视线朝向屏幕中心，着陆时触发果冻弹性缓冲！
+     */
+    private fun snapToNearestEdge(params: WindowManager.LayoutParams, sizePx: Int, density: Float, screenWidth: Int) {
+        // 贴边吸附停靠边距
+        val edgeThreshold = (4 * density).toInt()
+        val centerX = params.x + sizePx / 2
+        val isLeftHalf = centerX < screenWidth / 2
+        val targetX = if (isLeftHalf) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+
+        // 朝向屏幕中心：在左侧面向右边 (facingLeft = false)，在右侧面向左边 (facingLeft = true)
+        pokoView?.facingLeft = !isLeftHalf
 
         val startX = params.x
+        if (startX == targetX) {
+            pokoView?.triggerLandingBounce()
+            return
+        }
+
         edgeSnapAnimator?.cancel()
         edgeSnapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 180
-            interpolator = DecelerateInterpolator()
+            duration = 260
+            interpolator = DecelerateInterpolator(1.8f)
             addUpdateListener { anim ->
                 val f = anim.animatedValue as Float
                 params.x = (startX + (targetX - startX) * f).toInt()
@@ -350,8 +384,80 @@ class FloatingPetService : Service() {
                     updateBubblePosition()
                 } catch (_: Exception) {}
             }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    pokoView?.triggerLandingBounce()
+                }
+            })
         }
         edgeSnapAnimator?.start()
+    }
+
+    /**
+     * 自主在桌面屏幕边缘小步溜达漫步：
+     * 每隔十余秒，猫咪在停靠边缘自主向上或向下挪步小步漫步 28~45dp，
+     * 伴随真实小肉爪交替踏步与轻快身躯微颠，为桌面带来灵动生机！
+     */
+    private fun maybeStrollAlongEdge() {
+        val params = pokoParams ?: return
+        val view = pokoView ?: return
+        if (view.currentAction != PokoPetView.PetAction.IDLE) return
+
+        val density = resources.displayMetrics.density
+        val sizePx = (82 * density).toInt()
+        val (_, screenHeight) = getScreenDimensions()
+
+        val minY = (24 * density).toInt()
+        val maxY = (screenHeight - sizePx - (36 * density).toInt()).coerceAtLeast(minY)
+        val currentY = params.y
+
+        // 随机向上或向下溜达 28 ~ 45dp
+        val strollDistance = ((28 + Math.random() * 17) * density).toInt()
+        val moveDown = if (currentY - strollDistance < minY) {
+            true
+        } else if (currentY + strollDistance > maxY) {
+            false
+        } else {
+            Math.random() > 0.5
+        }
+
+        val targetY = if (moveDown) {
+            (currentY + strollDistance).coerceAtMost(maxY)
+        } else {
+            (currentY - strollDistance).coerceAtLeast(minY)
+        }
+
+        if (abs(targetY - currentY) < (6 * density).toInt()) return
+
+        val startY = currentY
+        isStrolling = true
+        view.startWalking()
+
+        strollAnimator?.cancel()
+        strollAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1500
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { anim ->
+                val f = anim.animatedValue as Float
+                params.y = (startY + (targetY - startY) * f).toInt()
+                view.updateWalkingStep(f)
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                    updateBubblePosition()
+                } catch (_: Exception) {}
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    isStrolling = false
+                    view.stopWalking()
+                }
+                override fun onAnimationCancel(animation: Animator) {
+                    isStrolling = false
+                    view.stopWalking()
+                }
+            })
+        }
+        strollAnimator?.start()
     }
 
     private fun initSpeechBubble(layoutType: Int, density: Float) {
@@ -424,6 +530,14 @@ class FloatingPetService : Service() {
             PokoPetView.PetAction.SLEEPY -> listOf(
                 "困困打个小瞌睡... 趴在桌角眯一会儿，Zzz...",
                 "小脑袋一点一点... 梦里也有好多小鱼干和主人呢~ 🐟"
+            )
+            PokoPetView.PetAction.SPIN_TAIL -> listOf(
+                "呜哇！我的小尾巴别跑呀~ 追尾巴转圈圈中！(≧∇≦)ﾉ🌀",
+                "原地 360 度打转转！哎呀呀... 转得有点晕呼呼了喵~ ⭐"
+            )
+            PokoPetView.PetAction.WALKING -> listOf(
+                "踩着小碎步在屏幕边缘溜达溜达~ 巡视主人的手机领地！🐾",
+                "吧唧吧唧踏步漫步中... 散步有益身体健康喵~ ✨"
             )
             else -> listOf(
                 "喵呜~ 主人，波可随时在屏幕边陪着你呢！(ฅ'ω'ฅ)",
@@ -596,6 +710,9 @@ class FloatingPetService : Service() {
         super.onDestroy()
         isRunning = false
         instance = null
+        mainHandler.removeCallbacks(edgeStrollRunnable)
+        strollAnimator?.cancel()
+        isStrolling = false
         edgeSnapAnimator?.cancel()
         hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
         try {
