@@ -105,6 +105,15 @@ class FloatingPetService : Service() {
     private var isLongPressing: Boolean = false
     private var longPressRunnable: Runnable? = null
 
+    // ---------- 双指手势：捏合缩放大小 / 旋转翻朝向 ----------
+    // 这些必须是类成员：手势状态要跨 ACTION_POINTER_DOWN / MOVE / POINTER_UP 多次回调，
+    // 而处理函数 handlePinchGesture() 是独立成员函数，读不到 setupTouchListener 的局部变量。
+    private var isPinching: Boolean = false
+    private var pinchStartDistance: Float = 0f
+    private var pinchStartSizeDp: Int = DEFAULT_PET_SIZE_DP
+    private var pinchStartAngle: Float = 0f
+    private var pinchStartFacingLeft: Boolean = false
+
     // ---------- 悬浮宠设置 (大小 / 透明度 / 行为开关) ----------
     private var overlayType: Int = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
     private var petSizeDp: Int = DEFAULT_PET_SIZE_DP
@@ -463,12 +472,9 @@ class FloatingPetService : Service() {
         // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
         var gestureScreenWidth = 0
         var gestureScreenHeight = 0
-        // 双指手势：捏合缩放大小 / 旋转翻朝向
-        var isPinching = false
-        var pinchStartDistance = 0f
-        var pinchStartSizeDp = petSizeDp
-        var pinchStartAngle = 0f
-        var pinchStartFacingLeft = false
+        // 注意：双指手势的基线数据（isPinching / pinchStart*）是类成员，
+        // 因为 handlePinchGesture() 是独立成员函数，读不到这里的局部变量。
+        // 曾经把这几个状态写成局部变量，导致 CI 编译报 Unresolved reference。
 
         pokoView?.setOnTouchListener { _, event ->
             val params = pokoParams ?: return@setOnTouchListener false

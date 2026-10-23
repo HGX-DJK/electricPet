@@ -161,7 +161,7 @@ class MainActivity: FlutterActivity() {
                     val current = FloatingPetService.readSettings(this)
                     val updated = current.copy(
                         sizeDp = (raw[OverlayChannel.ARG_SETTING_SIZE_DP] as? Number)?.toInt() ?: current.sizeDp,
-                        opacity = (raw[OverlayChannel.ARG_SETTING_OPACITY] as? Number)?.toDouble() ?: current.opacity,
+                        opacity = (raw[OverlayChannel.ARG_SETTING_OPACITY] as? Number)?.toFloat() ?: current.opacity,
                         peeking = raw[OverlayChannel.ARG_SETTING_PEEKING] as? Boolean ?: current.peeking,
                         strolling = raw[OverlayChannel.ARG_SETTING_STROLLING] as? Boolean ?: current.strolling,
                         autoChat = raw[OverlayChannel.ARG_SETTING_AUTO_CHAT] as? Boolean ?: current.autoChat,

@@ -579,6 +579,112 @@ void main() {
     });
   });
 
+  group('原生编译期作用域守护：成员函数不得引用别的函数的局部变量', () {
+    test('检测器本身必须有效：能识别人造的作用域越界样本', () {
+      // 自验证：如果检测器逻辑写坏了（比如成员函数一个都识别不出来），
+      // 上面的用例会永远"全绿"而形同虚设。这里用人造样本验证它真的会报警。
+      const sample = '''
+class Demo {
+    private var memberCounter: Int = 0
+
+    private fun setupTouchListener() {
+        var sharedFlag = 0f
+        var otherLocal = 1
+        memberCounter += 1
+        println(sharedFlag)
+    }
+
+    private fun handleSomewhereElse() {
+        memberCounter += 1
+        println(sharedFlag)
+    }
+}
+''';
+      final problems = _findScopeViolations(sample);
+
+      expect(
+        problems.any((p) => p.contains('sharedFlag')),
+        isTrue,
+        reason: '检测器应报出 sharedFlag：它在 setupTouchListener() 里是局部变量，'
+            'handleSomewhereElse() 这个成员函数取不到',
+      );
+      expect(
+        problems.any((p) => p.contains('otherLocal')),
+        isFalse,
+        reason: '未被别的函数引用的局部变量不应误报',
+      );
+      expect(
+        problems.any((p) => p.contains('memberCounter')),
+        isFalse,
+        reason: '类成员变量不是局部变量，不应被当成作用域越界',
+      );
+    });
+
+    test('成员函数解析必须真的解析出了函数（防止检测器空转）', () {
+      expect(_memberFunctions(serviceSource).length, greaterThan(20),
+          reason: 'FloatingPetService 成员函数解析结果异常，检测器可能空转');
+      expect(_memberFunctions(petViewSource).length, greaterThan(10),
+          reason: 'PokoPetView 成员函数解析结果异常，检测器可能空转');
+      expect(
+        _memberFunctions(serviceSource).map((f) => f.name),
+        containsAll(<String>['setupTouchListener', 'handlePinchGesture']),
+        reason: '关键成员函数没被解析出来，检测器覆盖不到真实场景',
+      );
+    });
+
+    test('跨函数引用的状态字段必须是类成员，不能是某个函数里的局部变量', () {
+      // 历史事故：pinchStartDistance / pinchStartSizeDp / pinchStartAngle /
+      // pinchStartFacingLeft 曾被写成 setupTouchListener() 里的局部变量，
+      // 而 handlePinchGesture() 是独立的成员函数，取不到它们 ——
+      // CI 上报 Unresolved reference，release 包直接构建失败。
+      // 本用例用结构化规则机械扫描所有 .kt 文件，防止同类问题再次溜过去。
+      final problems = <String>[];
+
+      for (final source in <String>[serviceSource, activitySource, petViewSource]) {
+        for (final p in _findScopeViolations(source)) {
+          problems.add('${_fileOf(source)}: $p');
+        }
+      }
+
+      expect(
+        problems,
+        isEmpty,
+        reason: '发现跨函数引用局部变量的问题（会直接导致 CI 编译失败）：\n'
+            '${problems.join('\n')}',
+      );
+    });
+
+    test('双指手势的状态字段必须提升为类成员', () {
+      for (final field in <String>[
+        'isPinching',
+        'pinchStartDistance',
+        'pinchStartSizeDp',
+        'pinchStartAngle',
+        'pinchStartFacingLeft',
+      ]) {
+        expect(
+          serviceSource,
+          contains(RegExp('^\\s*private var $field\\b', multiLine: true)),
+          reason: '`$field` 必须是类成员变量（private var），'
+              '否则成员函数 handlePinchGesture() 取不到，CI 编译会失败',
+        );
+      }
+    });
+
+    test('设置项 opacity 两侧类型必须都是 Float（不能混用 Double）', () {
+      // OverlaySettings.opacity 是 Float；
+      // MainActivity 若用 toDouble() 赋值会报
+      // "Argument type mismatch: actual type is 'Number & Comparable<*>', but 'Float' was expected"
+      expect(serviceSource, contains('val opacity: Float'),
+          reason: '原生 OverlaySettings.opacity 必须是 Float');
+      expect(activitySource, contains('ARG_SETTING_OPACITY] as? Number)?.toFloat()'),
+          reason: 'MainActivity 回填 opacity 必须用 toFloat()，'
+              '用 toDouble() 会与 Float 字段类型冲突导致 CI 编译失败');
+      expect(activitySource, isNot(contains('ARG_SETTING_OPACITY] as? Number)?.toDouble()')),
+          reason: 'opacity 回填不能使用 toDouble()，与 Float 字段类型不匹配');
+    });
+  });
+
   group('通知权限与耗电约束', () {
     test('Android 13+ 必须在运行时申请通知权限', () {
       expect(activitySource, contains('OverlayChannel.REQUEST_NOTIFICATION_PERMISSION'),
@@ -648,6 +754,327 @@ String _between(String source, String from, String to) {
     fail('未找到片段终点: $to');
   }
   return source.substring(start, end);
+}
+
+// ---------------------------------------------------------------------------
+// 编译期作用域检查用的 Kotlin 源码解析
+//
+// 目的：捕捉「把跨函数共享的状态写成某个函数里的局部变量」这类问题。
+// 这种代码在本机没有 android.jar 时会被 kotlinc 的噪音淹没，
+// 只有到了 CI（那里有完整 SDK）才会以 Unresolved reference 的形式炸出来，
+// 一次就要搭上一轮 6 分钟的构建时间。
+// ---------------------------------------------------------------------------
+
+/// 一个成员级函数（缩进 4 空格，即类体直接持有的函数）
+class _MemberFunction {
+  final String name;
+  final String signature;
+  final String body;
+
+  const _MemberFunction(this.name, this.signature, this.body);
+}
+
+/// Kotlin 关键字与内建类型名：出现在引用里也不算「跨函数引用」
+const Set<String> _kotlinKeywords = <String>{
+  'as', 'break', 'class', 'continue', 'do', 'else', 'false', 'for', 'fun', 'if',
+  'in', 'interface', 'is', 'null', 'object', 'package', 'return', 'super',
+  'this', 'throw', 'true', 'try', 'typealias', 'typeof', 'val', 'var', 'when',
+  'while', 'by', 'catch', 'constructor', 'delegate', 'dynamic', 'field',
+  'file', 'finally', 'get', 'import', 'init', 'param', 'property', 'receiver',
+  'set', 'setparam', 'where', 'actual', 'abstract', 'annotation', 'companion',
+  'const', 'crossinline', 'data', 'enum', 'expect', 'external', 'final',
+  'infix', 'inline', 'inner', 'internal', 'lateinit', 'noinline', 'open',
+  'operator', 'out', 'override', 'private', 'protected', 'public', 'reified',
+  'sealed', 'suspend', 'tailrec', 'vararg', 'it',
+};
+
+/// 解析出源码里的所有成员级函数（类体直接持有的函数，缩进 4 空格）
+List<_MemberFunction> _memberFunctions(String source) {
+  final lines = source.split('\n');
+  final result = <_MemberFunction>[];
+
+  // 成员函数声明行：恰好 4 个空格缩进 + fun 名字
+  final declRe = RegExp(r'^ {4}(?:private |public |internal |protected |override |open |final |suspend )*fun\s+([A-Za-z_]\w*)\s*\(');
+
+  for (var i = 0; i < lines.length; i++) {
+    final m = declRe.firstMatch(lines[i]);
+    if (m == null) continue;
+
+    final name = m.group(1)!;
+    // 签名：从声明行到右括号（可能跨行）
+    final signature = _collectSignature(lines, i);
+    // 函数体：签名结束后的第一个 `{` 到与之匹配的 `}`
+    final body = _collectBody(lines, i + signature.split('\n').length - 1);
+
+    result.add(_MemberFunction(name, signature, body));
+  }
+  return result;
+}
+
+/// 从第 [start] 行开始收集函数签名（到括号配平为止）
+String _collectSignature(List<String> lines, int start) {
+  final buf = <String>[];
+  var depth = 0;
+  var started = false;
+  for (var i = start; i < lines.length; i++) {
+    buf.add(lines[i]);
+    for (final ch in lines[i].split('')) {
+      if (ch == '(') {
+        depth++;
+        started = true;
+      } else if (ch == ')') {
+        depth--;
+      }
+    }
+    if (started && depth <= 0) break;
+  }
+  return buf.join('\n');
+}
+
+/// 从第 [start] 行开始收集函数体（按大括号配平）
+String _collectBody(List<String> lines, int start) {
+  final buf = <String>[];
+  var depth = 0;
+  var begun = false;
+  for (var i = start; i < lines.length; i++) {
+    buf.add(lines[i]);
+    for (final ch in lines[i].split('')) {
+      if (ch == '{') {
+        depth++;
+        begun = true;
+      } else if (ch == '}') {
+        depth--;
+      }
+    }
+    if (begun && depth <= 0) break;
+  }
+  return buf.join('\n');
+}
+
+/// 剔除字符串字面量与注释，只留下真正的代码。
+///
+/// 必要性：日志文案里出现的裸词（例如 `"... sizePx=$petSizePx"`）会被
+/// 朴素的标识符扫描当成"代码引用"，从而把检测器变成一堆误报的噪音源。
+String _stripLiteralsAndComments(String source) {
+  var out = StringBuffer();
+  var i = 0;
+  final n = source.length;
+
+  while (i < n) {
+    final ch = source[i];
+
+    // 三引号字符串
+    if (source.startsWith('"""', i)) {
+      final end = source.indexOf('"""', i + 3);
+      i = end < 0 ? n : end + 3;
+      out.write(' ');
+      continue;
+    }
+
+    // 普通字符串
+    if (ch == '"') {
+      i++;
+      while (i < n) {
+        if (source[i] == r'\' && i + 1 < n) {
+          i += 2;
+          continue;
+        }
+        if (source[i] == '"') {
+          i++;
+          break;
+        }
+        if (source[i] == '\n') {
+          // 保留换行，否则会把字符串前后两行黏成一行，
+          // 导致"行首赋值"这类按行匹配的规则失效
+          out.write('\n');
+          i++;
+          break;
+        }
+        i++;
+      }
+      out.write(' ');
+      continue;
+    }
+
+    // 行注释
+    if (source.startsWith('//', i)) {
+      final end = source.indexOf('\n', i);
+      i = end < 0 ? n : end;
+      out.write(' ');
+      continue;
+    }
+
+    // 块注释
+    if (source.startsWith('/*', i)) {
+      final end = source.indexOf('*/', i + 2);
+      i = end < 0 ? n : end + 2;
+      out.write(' ');
+      continue;
+    }
+
+    out.write(ch);
+    i++;
+  }
+  return out.toString();
+}
+
+/// 函数体里声明的局部变量名（val / var，含解构声明 `val (a, b) = ...`）
+Set<String> _declaredLocals(String body) {
+  final names = <String>{};
+  final code = _stripLiteralsAndComments(body);
+
+  // 普通声明：val x = ...
+  for (final m in RegExp(r'\b(?:var|val)\s+([A-Za-z_]\w*)').allMatches(code)) {
+    names.add(m.group(1)!);
+  }
+  // 解构声明：val (a, b) = ...
+  for (final m in RegExp(r'\b(?:var|val)\s*\(([^)]*)\)').allMatches(code)) {
+    for (final part in m.group(1)!.split(',')) {
+      final n = part.trim().split(':').first.trim();
+      // `_` 是解构通配符，不是真正的变量名
+      if (n == '_') continue;
+      if (RegExp(r'^[A-Za-z_]\w*$').hasMatch(n)) names.add(n);
+    }
+  }
+  return names;
+}
+
+/// 语句级赋值的目标名（`x = ...` / `x += ...`）
+///
+/// 用于区分"读取"与"写入"：在 `apply {}` 里写 `flags = ...` 是给隐式接收者
+/// 的属性赋值，不是给局部变量赋值，不能算作"跨函数引用局部变量"。
+Set<String> _assignedNames(String body) {
+  final code = _stripLiteralsAndComments(body);
+  return RegExp(r'^\s*([A-Za-z_]\w*)\s*(?:[+\-*/%|&^]=|\?\?=|=)(?!=)', multiLine: true)
+      .allMatches(code)
+      .map((m) => m.group(1)!)
+      .toSet();
+}
+
+/// 函数签名里的参数名
+Set<String> _declaredParameters(String signature) {
+  final open = signature.indexOf('(');
+  final close = signature.lastIndexOf(')');
+  if (open < 0 || close <= open) return <String>{};
+  final params = signature.substring(open + 1, close);
+  final names = <String>{};
+  for (final part in params.split(',')) {
+    final m = RegExp(r'([A-Za-z_]\w*)\s*(?::\s*[^=,]+)?\s*$').firstMatch(part.trim());
+    if (m != null) {
+      final n = m.group(1)!;
+      // 排除 "name: Type = default" 里的 default 表达式残留
+      if (!_kotlinKeywords.contains(n)) names.add(n);
+    }
+  }
+  return names;
+}
+
+/// 函数体里引用到的标识符（排除成员访问 `a.b` / `a?.b`、关键字与字符串字面量）
+Set<String> _referencedNames(String body) {
+  final re = RegExp(r'(?<![.?\w])([A-Za-z_]\w*)');
+  final names = <String>{};
+  final code = _stripLiteralsAndComments(body);
+  for (final m in re.allMatches(code)) {
+    final n = m.group(1)!;
+    if (_kotlinKeywords.contains(n)) continue;
+    names.add(n);
+  }
+  return names;
+}
+
+/// 类成员级声明的名字（类体直接持有，或位于 companion object 中）
+///
+/// 关键：Kotlin 里 `memberCounter += 1` 这种"裸名字"和局部变量在语法上完全一样，
+/// 光看引用点无法区分二者。唯一的判据是这个名字在类成员作用域里有没有声明过。
+/// 所以必须先算出成员声明集合，才能判断一个跨函数引用到底是不是作用域 bug。
+Set<String> _memberScopeDeclarations(String source) {
+  final names = <String>{};
+  final code = _stripLiteralsAndComments(source);
+  final propRe = RegExp(
+    r'^\s+(?:private |public |internal |protected |override |open |final |suspend |const |lateinit |vararg |@\w+ )*'
+    r'(?:var|val)\s+([A-Za-z_]\w*)',
+  );
+  final funRe = RegExp(
+    r'^\s+(?:private |public |internal |protected |override |open |final |suspend )*'
+    r'fun\s+([A-Za-z_]\w*)',
+  );
+
+  // 块类型栈：'class' 表示类体/伴生对象体，'fun' 表示函数体
+  // 只用深度不够 —— 类体(depth 1) 与函数体(depth 2) 深度上无法区分，
+  // 但成员变量只可能出现在前者。
+  final stack = <String>[];
+
+  for (final raw in code.split('\n')) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+
+    final inMemberScope = stack.isEmpty || stack.last == 'class';
+
+    if (inMemberScope) {
+      final p = propRe.firstMatch(raw);
+      if (p != null) {
+        names.add(p.group(1)!);
+      } else {
+        final f = funRe.firstMatch(raw);
+        if (f != null) {
+          names.add(f.group(1)!);
+        }
+      }
+    }
+
+    final opens = '{'.allMatches(line).length;
+    final closes = '}'.allMatches(line).length;
+    if (opens > 0) {
+      final kind = RegExp(r'\bfun\b').hasMatch(line) ? 'fun' : 'class';
+      for (var k = 0; k < opens; k++) {
+        stack.add(kind);
+      }
+    }
+    for (var k = 0; k < closes; k++) {
+      if (stack.isNotEmpty) stack.removeLast();
+    }
+  }
+  return names;
+}
+
+/// 扫描一个 Kotlin 文件，找出"局部变量被别的成员函数引用"的作用域越界问题。
+///
+/// 这类问题编译期必然报 Unresolved reference，是 release 包构建失败的直接原因。
+List<String> _findScopeViolations(String source) {
+  final problems = <String>[];
+  final functions = _memberFunctions(source);
+  final memberNames = _memberScopeDeclarations(source);
+
+  for (final fn in functions) {
+    for (final local in _declaredLocals(fn.body)) {
+      // 名字在类成员里声明过 => 它本来就是成员变量，不是局部变量
+      if (memberNames.contains(local)) continue;
+
+      for (final other in functions) {
+        if (other.name == fn.name) continue;
+        // 对方自己声明了同名变量/参数 => 互不影响
+        if (_declaredLocals(other.body).contains(local)) continue;
+        if (_declaredParameters(other.signature).contains(local)) continue;
+        if (!_referencedNames(other.body).contains(local)) continue;
+        // 只在"读取"场景报警：在 apply {} 里写 `flags = ...` 是给隐式接收者
+        // 的属性赋值，不是跨函数引用局部变量
+        if (_assignedNames(other.body).contains(local)) continue;
+
+        problems.add(
+          '局部变量 `$local` 声明在 ${fn.name}() 里，却被 ${other.name}() 引用 —— '
+          '跨函数作用域不可见，编译期会报 Unresolved reference',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/// 仅用于报错信息里的文件名
+String _fileOf(String source) {
+  if (source.contains('PokoPetView')) return 'PokoPetView.kt';
+  if (source.contains('MainActivity')) return 'MainActivity.kt';
+  return 'FloatingPetService.kt';
 }
 
 /// 取出形如 `val edgeThreshold = (10 * density)` 中紧跟左括号后的整数。
