@@ -1926,7 +1926,10 @@ class FloatingPetService : Service() {
     /** 把夜间配色应用到悬浮猫 */
     private fun applyNightMode(enabled: Boolean) {
         isNightMode = enabled
-        pokoView?.setNightMode(enabled)
+        // 注意：这里直接赋值属性，而不是调 view.setNightMode(enabled) ——
+        // PokoPetView 的 public 属性 isNightMode 的隐式 setter 就是 setNightMode，
+        // 那边不能再定义同名函数（JVM 签名会撞车）。
+        pokoView?.isNightMode = enabled
     }
 
     /** 接收 App 推送的昼夜状态 */

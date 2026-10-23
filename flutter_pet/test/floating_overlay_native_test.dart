@@ -638,6 +638,166 @@ class Sample(context: Context) {
     });
   });
 
+  group('Kotlin JVM 签名冲突：同类成员的隐式访问器不得与函数撞车', () {
+    test('每个 Kotlin 文件里都不能出现同类成员的 JVM 签名冲突', () {
+      // 背景：CI 报过
+      //   Platform declaration clash: ... (setNightMode(Z)V)
+      // 原因：public 属性 `isNightMode` 的隐式 setter 的 JVM 签名就是
+      // setNightMode(Z)V（Kotlin 会剥掉 is 前缀），和手写的
+      // `fun setNightMode(enabled: Boolean)` 完全撞车。
+      //
+      // 这类错误属于编译器 backend 阶段的问题 —— 本机缺 android.jar 时
+      // frontend 阶段就已经报了一千多条 unresolved，根本走不到 backend，
+      // 所以本地 kotlinc 永远看不到它，只能靠 CI 炸出来。
+      //
+      // 规则（与 Kotlin/JVM 编译器 backend 对齐）：
+      //   - public var isFoo -> 隐式 setter 叫 setFoo
+      //   - public var foo   -> 隐式 setter 叫 setFoo
+      //   - public val foo   -> 隐式 getter 叫 getFoo
+      //   - private 成员与 public 成员同名【不会】冲突（Kotlin 只在同可见性时报）
+      //   - 只在同一个类内部比较（嵌套类、companion object 各自成域）
+      final problems = <String>[];
+      for (final source in <String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+      ]) {
+        problems.addAll(_findJvmSignatureClashes(source));
+      }
+
+      expect(
+        problems,
+        isEmpty,
+        reason: '发现 JVM 签名冲突（会直接导致 CI 编译失败）：\n'
+            '${problems.join('\n')}',
+      );
+    });
+
+    test('冲突检测器本身必须有效：能识别人造冲突样本', () {
+      const clash = '''
+class Clashy {
+    var isNightMode: Boolean = false
+    fun setNightMode(enabled: Boolean) {
+        isNightMode = enabled
+    }
+}
+''';
+      expect(
+        _findJvmSignatureClashes(clash).any((p) => p.contains('setNightMode')),
+        isTrue,
+        reason: '检测器应报出 public var isNightMode 与 fun setNightMode 的冲突',
+      );
+
+      // getter 撞 getter 同样会炸
+      const getterClash = '''
+class ClashyGetter {
+    val petName: String = "x"
+    fun getPetName(): String = petName
+}
+''';
+      expect(
+        _findJvmSignatureClashes(getterClash).any((p) => p.contains('getPetName')),
+        isTrue,
+        reason: '检测器应报出 public val petName 的隐式 getter 与 fun getPetName 的冲突',
+      );
+    });
+
+    test('冲突检测器不得误报：private / 类型不同 / 跨类 都不算冲突', () {
+      const safe = '''
+class Safe1 {
+    var isNightMode: Boolean = false
+    private fun setNightMode(enabled: Boolean) {
+        isNightMode = enabled
+    }
+}
+class Safe2 {
+    private var isAnimationEnabled: Boolean = true
+    fun setAnimationEnabled(enabled: Boolean) {
+        isAnimationEnabled = enabled
+    }
+}
+class Safe3 {
+    var nightMode: Boolean = false
+    fun setNightMode(label: String) {
+    }
+}
+class Safe4 {
+    var currentAction: Int = 0
+    inner class Inner {
+        fun setCurrentAction(action: Int) {
+        }
+    }
+}
+class Safe5 {
+    var isNightMode: Boolean = false
+}
+class Safe6 {
+    fun setNightMode(enabled: Boolean) {
+    }
+}
+''';
+      expect(
+        _findJvmSignatureClashes(safe),
+        isEmpty,
+        reason: 'private 成员、参数类型不同、跨类同名 都不构成 Platform declaration clash，'
+            '检测器不应误报',
+      );
+    });
+
+    test('检测器覆盖率自检：必须真的扫到了真实的类与成员', () {
+      // 目的：防止检测器因为正则失效而"扫不出任何东西 -> 报 0 问题 -> 假通过"。
+      // 一旦覆盖率掉下来，这条用例会红。
+      final classes = <String, _KotlinClassInfo>{};
+      var totalProps = 0;
+      var totalFuns = 0;
+      for (final source in <String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+      ]) {
+        for (final c in _scanKotlinClasses(source)) {
+          classes[c.name] = c;
+          totalProps += c.props.length;
+          totalFuns += c.funs.length;
+        }
+      }
+
+      expect(classes.keys, contains('PokoPetView'),
+          reason: '应扫到 PokoPetView');
+      expect(classes.keys, contains('FloatingPetService'),
+          reason: '应扫到 FloatingPetService');
+      expect(classes.keys, contains('OverlayChannel'),
+          reason: '应扫到 OverlayChannel');
+      expect(classes.keys, contains('MainActivity'),
+          reason: '应扫到 MainActivity');
+      expect(classes.keys, contains('FloatingPetService.Companion'),
+          reason: '应扫到 companion object —— 它的成员同样是 JVM 成员，必须参与冲突检查');
+
+      final view = classes['PokoPetView']!;
+      expect(view.props.map((p) => p.name), contains('isNightMode'),
+          reason: 'PokoPetView 的 isNightMode 属性必须被扫到');
+      expect(view.props.map((p) => p.name), contains('skinId'));
+      expect(view.funs.map((f) => f.name), contains('setAnimationEnabled'));
+      expect(view.funs.map((f) => f.name), contains('applyConfig'));
+
+      final service = classes['FloatingPetService']!;
+      expect(service.props.map((p) => p.name), contains('petSizeDp'));
+      expect(service.funs.map((f) => f.name), contains('applyNightModeFromApp'));
+
+      final companion = classes['FloatingPetService.Companion']!;
+      expect(companion.funs.map((f) => f.name), contains('readSettings'),
+          reason: 'companion 里的函数必须被扫到');
+      expect(companion.props.map((p) => p.name), contains('isAppForeground'));
+
+      expect(totalProps, greaterThan(200),
+          reason: '属性扫描量明显偏低（当前 $totalProps），检测器可能已经失效');
+      expect(totalFuns, greaterThan(80),
+          reason: '函数扫描量明显偏低（当前 $totalFuns），检测器可能已经失效');
+    });
+  });
+
   group('状态系统：字段名 / 衰减速率 / 时间戳约定必须两端一致', () {
     test('心情字段必须是 mood，绝不能再用 happiness', () {
       // 历史事故：原生侧读写 "happiness"，而 Dart 侧 PetModel 用的是 "mood"，
@@ -1096,6 +1256,439 @@ List<String> _findMissingImports(String source, Set<String> declaredNames) {
     problems.add(name);
   }
   return problems.map((n) => '缺少 import: $n').toList();
+}
+
+/// Kotlin 源里的一个属性（含主构造函数的 val/var 参数）
+class _KotlinProp {
+  final String name;
+  final String type;
+  final String visibility;
+  final bool isVar;
+
+  const _KotlinProp(this.name, this.type, this.visibility, this.isVar);
+}
+
+/// Kotlin 源里的一个函数
+class _KotlinFun {
+  final String name;
+  final List<String> paramTypes;
+  final String returnType;
+  final String visibility;
+
+  const _KotlinFun(this.name, this.paramTypes, this.returnType, this.visibility);
+}
+
+/// Kotlin 源里的一个类（含嵌套类 / companion object）
+class _KotlinClassInfo {
+  final String name;
+  final List<_KotlinProp> props = <_KotlinProp>[];
+  final List<_KotlinFun> funs = <_KotlinFun>[];
+
+  _KotlinClassInfo(this.name);
+}
+
+/// 一个 JVM 签名条目：描述 + Kotlin 可见性
+class _JvmSigEntry {
+  final String description;
+  final String visibility;
+
+  const _JvmSigEntry(this.description, this.visibility);
+}
+
+/// class / object / interface 声明
+/// group(1) = 可见性，group(2) = 类名
+final RegExp _kotlinClassDeclRegex = RegExp(
+  r'^(?:@\w+(?:\([^)]*\))?\s+)*'
+  r'(public|private|internal|protected)?\s*'
+  r'(?:(?:data|enum|sealed|annotation|value|open|abstract|inner|expect|actual)\s+)*'
+  r'(?:class|object|interface)\s+'
+  r'([A-Za-z_]\w*)',
+);
+
+/// 匿名 companion object 声明（group(1) = 可见性）
+final RegExp _kotlinCompanionDeclRegex = RegExp(
+  r'^(?:@\w+(?:\([^)]*\))?\s+)*'
+  r'(public|private|internal|protected)?\s*'
+  r'(?:(?:data|enum|sealed|annotation|value|open|abstract|inner|expect|actual)\s+)*'
+  r'companion\s+object\b',
+);
+
+/// 成员声明前的修饰词前缀（可见性 / override / 注解 ...），group(1) = 修饰词串
+final RegExp _kotlinMemberPrefixRegex = RegExp(
+  r'^((?:(?:@\w+(?:\([^)]*\))?\s+)'
+  r'|(?:(?:public|private|internal|protected|override|open|final|suspend|inline|operator|'
+  r'infix|tailrec|external|lateinit|const|abstract|expect|actual|companion|data|enum|sealed|'
+  r'annotation|value|inner|vararg|crossinline|noinline)\s+))*)',
+);
+
+/// Kotlin 原始类型 -> JVM 原始类型描述符
+const Map<String, String> _kotlinPrimitiveDescriptors = <String, String>{
+  'Boolean': 'Z',
+  'Int': 'I',
+  'Long': 'J',
+  'Float': 'F',
+  'Double': 'D',
+  'Char': 'C',
+  'Short': 'S',
+  'Byte': 'B',
+};
+
+/// Kotlin 原始数组类型
+const Map<String, String> _kotlinArrayPrimitives = <String, String>{
+  'IntArray': 'I',
+  'FloatArray': 'F',
+  'BooleanArray': 'Z',
+  'LongArray': 'J',
+  'DoubleArray': 'D',
+  'ByteArray': 'B',
+  'CharArray': 'C',
+  'ShortArray': 'S',
+};
+
+/// 常见 Kotlin 引用类型 -> JVM 内部类名
+const Map<String, String> _kotlinStdlibJvmNames = <String, String>{
+  'String': 'java/lang/String',
+  'Any': 'java/lang/Object',
+  'Nothing': 'java/lang/Object',
+  'List': 'java/util/List',
+  'MutableList': 'java/util/List',
+  'ArrayList': 'java/util/ArrayList',
+  'Map': 'java/util/Map',
+  'MutableMap': 'java/util/Map',
+  'HashMap': 'java/util/HashMap',
+  'Set': 'java/util/Set',
+  'MutableSet': 'java/util/Set',
+  'HashSet': 'java/util/HashSet',
+  'Pair': 'kotlin/Pair',
+  'Triple': 'kotlin/Triple',
+};
+
+/// Kotlin 类型 -> JVM 擦除描述符
+String _eraseJvmType(String rawType) {
+  var t = rawType.trim();
+  if (t.isEmpty) return '?';
+  t = t.replaceAll(RegExp(r'@\w+(\.[\w.]+)?(\([^)]*\))?'), ' ').trim();
+  t = t.replaceAll('?', '');
+  t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
+  t = t.replaceFirst(RegExp(r'^(out|in)\s+'), '').trim();
+  if (t.contains('->')) return 'Lkotlin/jvm/functions/FunctionN;';
+  if (t.contains('<')) {
+    return _eraseJvmType(t.substring(0, t.indexOf('<')));
+  }
+  final prim = _kotlinPrimitiveDescriptors[t];
+  if (prim != null) return prim;
+  if (t == 'Unit') return 'V';
+  final arr = _kotlinArrayPrimitives[t];
+  if (arr != null) return '[$arr';
+  final std = _kotlinStdlibJvmNames[t];
+  if (std != null) return 'L$std;';
+  final simple = t.contains('.') ? t.split('.').last : t;
+  return 'L$simple;';
+}
+
+/// Kotlin 属性的隐式 setter 名：
+///   isNightMode -> setNightMode（Kotlin 会剥掉 is 前缀）
+///   nightMode   -> setNightMode
+String _implicitSetterName(String propName) {
+  if (propName.length > 2 &&
+      propName.startsWith('is') &&
+      propName[2] == propName[2].toUpperCase()) {
+    return 'set${propName.substring(2)}';
+  }
+  return 'set${propName[0].toUpperCase()}${propName.substring(1)}';
+}
+
+/// 属性生成的 JVM 方法：[jvmName, descriptor, 描述]
+List<List<Object>> _accessorDescriptors(
+  String propName,
+  String type,
+  bool isVar,
+) {
+  final out = <List<Object>>[];
+  final erased = _eraseJvmType(type);
+  final isBoolean = erased == 'Z';
+  final hasIsPrefix = propName.length > 2 &&
+      propName.startsWith('is') &&
+      propName[2] == propName[2].toUpperCase();
+
+  var getterName = 'get${propName[0].toUpperCase()}${propName.substring(1)}';
+  if (isBoolean && hasIsPrefix) {
+    // Boolean 的 is 前缀属性，getter 保留 isX
+    getterName = propName;
+  }
+  out.add(<Object>[getterName, '()$erased', 'public 属性 `$propName` 的隐式 getter']);
+  if (isVar) {
+    out.add(<Object>[
+      _implicitSetterName(propName),
+      '($erased)V',
+      'public 属性 `$propName` 的隐式 setter',
+    ]);
+  }
+  return out;
+}
+
+/// 函数返回的 JVM 描述符：(参数类型...)返回类型
+String _funJvmDescriptor(List<String> paramTypes, String returnType) {
+  final ps = paramTypes.map(_eraseJvmType).join(',');
+  return '($ps)${_eraseJvmType(returnType)}';
+}
+
+int _countChar(String s, String ch) {
+  var n = 0;
+  for (var i = 0; i < s.length; i++) {
+    if (s[i] == ch) n++;
+  }
+  return n;
+}
+
+/// 按顶层分隔符切分（括号 / 尖括号 / 方括号内的逗号不算）
+List<String> _splitTopLevel(String s, String sep) {
+  final out = <String>[];
+  var depth = 0;
+  var cur = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    final ch = s[i];
+    if (ch == '(' || ch == '<' || ch == '[') {
+      depth++;
+    } else if (ch == ')' || ch == '>' || ch == ']') {
+      depth = depth > 0 ? depth - 1 : 0;
+    }
+    if (ch == sep && depth == 0) {
+      out.add(cur.toString());
+      cur = StringBuffer();
+    } else {
+      cur.write(ch);
+    }
+  }
+  out.add(cur.toString());
+  return out;
+}
+
+/// 返回与 openIdx 处 '(' 配对的 ')' 下标；找不到返回 -1
+int _matchParen(String s, int openIdx) {
+  var depth = 0;
+  for (var i = openIdx; i < s.length; i++) {
+    if (s[i] == '(') {
+      depth++;
+    } else if (s[i] == ')') {
+      depth--;
+      if (depth == 0) return i;
+    }
+  }
+  return -1;
+}
+
+/// 从初始化表达式粗略推断类型：Foo(...) -> Foo；否则 Any
+String _inferKotlinType(String? init) {
+  if (init == null) return 'Any';
+  final m = RegExp(r'^([A-Z]\w*)\s*\(').firstMatch(init.trim());
+  return m != null ? m.group(1)! : 'Any';
+}
+
+/// 主构造函数里的 val/var 参数也是属性
+List<_KotlinProp> _primaryCtorProps(
+  String code,
+  List<String> lines,
+  int lineIndex,
+  int nameEndInLine,
+) {
+  var offset = 0;
+  for (var k = 0; k < lineIndex; k++) {
+    offset += lines[k].length + 1;
+  }
+  final openIdx = code.indexOf('(', offset + nameEndInLine);
+  if (openIdx < 0) return const <_KotlinProp>[];
+  final closeIdx = _matchParen(code, openIdx);
+  if (closeIdx < 0) return const <_KotlinProp>[];
+
+  final out = <_KotlinProp>[];
+  for (final raw in _splitTopLevel(code.substring(openIdx + 1, closeIdx), ',')) {
+    final p = raw.trim();
+    final m = RegExp(
+      r'^(?:@\w+(?:\([^)]*\))?\s+)*(val|var)\s+([A-Za-z_]\w*)'
+      r'\s*(?::\s*(.+?))?(?:\s*=.*)?$',
+    ).firstMatch(p);
+    if (m != null) {
+      out.add(_KotlinProp(
+        m.group(2)!,
+        (m.group(3) ?? 'Any').trim(),
+        'public',
+        true,
+      ));
+    }
+  }
+  return out;
+}
+
+/// 从一行源码里抽出属性 / 函数，塞进所属类
+void _collectKotlinMember(String line, _KotlinClassInfo cls) {
+  if (line.isEmpty || line.startsWith('//') || line.startsWith('*')) return;
+
+  final pm = _kotlinMemberPrefixRegex.firstMatch(line);
+  if (pm == null) return;
+  final mods = pm.group(1) ?? '';
+  var vis = 'public';
+  for (final w in const <String>['public', 'private', 'internal', 'protected']) {
+    if (RegExp('\\b$w\\b').hasMatch(mods)) vis = w;
+  }
+
+  final rest = line.substring(pm.end).trim();
+  if (rest.isEmpty) return;
+  final kw = rest.split(RegExp(r'\s+')).first;
+
+  if (kw == 'var' || kw == 'val') {
+    final m = RegExp(
+      r'^(var|val)\s+([A-Za-z_]\w*)\s*(?::\s*(.+?))?(?:\s*=\s*(.*))?$',
+    ).firstMatch(rest);
+    if (m == null) return;
+    var type = (m.group(3) ?? '').trim();
+    if (type.isEmpty) type = _inferKotlinType(m.group(4));
+    cls.props.add(_KotlinProp(m.group(2)!, type, vis, m.group(1) == 'var'));
+    return;
+  }
+
+  if (kw != 'fun') return;
+
+  // 扩展函数（带接收者）不属于宿主类的成员
+  if (RegExp(r'^fun\s+(?:<[^>]*>\s*)?[A-Za-z_]\w*\.[A-Za-z_]\w*\s*\(')
+      .hasMatch(rest)) {
+    return;
+  }
+
+  final nameMatch =
+      RegExp(r'^fun\s+(?:<[^>]*>\s*)?([A-Za-z_]\w*)\s*\(').firstMatch(rest);
+  if (nameMatch == null) return;
+  final name = nameMatch.group(1)!;
+  final openIdx = rest.indexOf('(', nameMatch.start);
+  final closeIdx = _matchParen(rest, openIdx);
+  if (closeIdx < 0) return;
+
+  final params = rest.substring(openIdx + 1, closeIdx);
+  final after = rest.substring(closeIdx + 1).trim();
+  var ret = 'Unit';
+  final retMatch = RegExp(r'^:\s*([^=]+?)\s*(?:=|\{|$)').firstMatch(after);
+  if (retMatch != null) ret = retMatch.group(1)!.trim();
+
+  final types = <String>[];
+  if (params.trim().isNotEmpty) {
+    for (final p in _splitTopLevel(params, ',')) {
+      final pt = RegExp(
+        r'^\s*(?:@\w+(?:\([^)]*\))?\s*)*(?:vararg\s+)?'
+        r'(?:[A-Za-z_]\w*\s*:\s*)?(.+?)\s*(?:=.*)?$',
+      ).firstMatch(p);
+      if (pt != null) types.add(pt.group(1)!.trim());
+    }
+  }
+  cls.funs.add(_KotlinFun(name, types, ret, vis));
+}
+
+/// 扫描 Kotlin 源码里所有类（含嵌套类 / companion object）及其成员
+List<_KotlinClassInfo> _scanKotlinClasses(String source) {
+  final code = _stripLiteralsAndComments(source);
+  final lines = code.split('\n');
+
+  // 每行"开始前"的花括号深度
+  final depthBefore = <int>[];
+  var d = 0;
+  for (final l in lines) {
+    depthBefore.add(d);
+    d += _countChar(l, '{') - _countChar(l, '}');
+  }
+
+  final classes = <_KotlinClassInfo>[];
+  // 基础深度 -> 该深度上声明的类名（用于给嵌套类 / companion 命名）
+  final classAtBaseDepth = <int, String>{};
+
+  for (var i = 0; i < lines.length; i++) {
+    final trimmed = lines[i].trim();
+
+    // 匿名 companion object —— 它的成员也是一个独立的 JVM 类（Owner$Companion）
+    final companionMatch = _kotlinCompanionDeclRegex.firstMatch(trimmed);
+    if (companionMatch != null) {
+      final base = depthBefore[i];
+      final owner = classAtBaseDepth[base - 1] ?? 'Companion';
+      final cls = _KotlinClassInfo('$owner.Companion');
+      final bodyEnd = _classBodyEnd(lines, depthBefore, i, base);
+      for (var k = i + 1; k <= bodyEnd; k++) {
+        if (depthBefore[k] != base + 1) continue;
+        _collectKotlinMember(lines[k].trim(), cls);
+      }
+      classes.add(cls);
+      continue;
+    }
+
+    final m = _kotlinClassDeclRegex.firstMatch(trimmed);
+    if (m == null) continue;
+    final base = depthBefore[i];
+    classAtBaseDepth[base] = m.group(2)!;
+
+    final cls = _KotlinClassInfo(m.group(2)!);
+    cls.props.addAll(_primaryCtorProps(code, lines, i, m.end));
+    final bodyEnd = _classBodyEnd(lines, depthBefore, i, base);
+    for (var k = i + 1; k <= bodyEnd; k++) {
+      if (depthBefore[k] != base + 1) continue;
+      _collectKotlinMember(lines[k].trim(), cls);
+    }
+    classes.add(cls);
+  }
+  return classes;
+}
+
+/// 类体结束行：从声明行之后起，最后一个"开始前深度 > base"的行
+int _classBodyEnd(List<String> lines, List<int> depthBefore, int declLine, int base) {
+  var bodyEnd = declLine;
+  for (var j = declLine + 1; j < lines.length && depthBefore[j] > base; j++) {
+    bodyEnd = j;
+  }
+  return bodyEnd;
+}
+
+/// 找出 Kotlin 文件里同类成员之间的 JVM 签名冲突（Platform declaration clash）。
+///
+/// 规则（与 Kotlin/JVM 编译器 backend 对齐）：
+///   - 只比较**同一个类**内部（嵌套类、companion object 各自成域）；
+///   - public / internal 之间会冲突，private 与非 private 不冲突；
+///   - public var isFoo 的隐式 setter 是 setFoo(Boolean)，
+///     public var foo 的隐式 setter 是 setFoo(T)，
+///     public val 的隐式 getter 是 getFoo()；
+///   - 函数 f(a: A): R 的签名是 f(A)R。
+List<String> _findJvmSignatureClashes(String source) {
+  final classes = _scanKotlinClasses(source);
+
+  final problems = <String>[];
+  for (final cls in classes) {
+    final sigs = <String, List<_JvmSigEntry>>{};
+
+    void put(String jvmName, String descriptor, String desc, String vis) {
+      sigs
+          .putIfAbsent('$jvmName$descriptor', () => <_JvmSigEntry>[])
+          .add(_JvmSigEntry('$desc（$jvmName$descriptor）', vis));
+    }
+
+    for (final p in cls.props) {
+      for (final a in _accessorDescriptors(p.name, p.type, p.isVar)) {
+        put(a[0] as String, a[1] as String, a[2] as String, p.visibility);
+      }
+    }
+    for (final f in cls.funs) {
+      final desc = _funJvmDescriptor(f.paramTypes, f.returnType);
+      put(f.name, desc, 'public 函数 `${f.name}`', f.visibility);
+    }
+
+    for (final entry in sigs.entries) {
+      if (entry.value.length < 2) continue;
+      final nonPrivate = entry.value
+          .where((e) => e.visibility == 'public' || e.visibility == 'internal')
+          .toList();
+      if (nonPrivate.length < 2) continue;
+      problems.add(
+        '${cls.name}: ${nonPrivate.map((e) => e.description).join(' 与 ')} '
+        'JVM 签名相同 —— 会报 Platform declaration clash',
+      );
+    }
+  }
+
+  return problems;
 }
 
 /// 截取以 [marker] 开头的那一对括号内的内容（按括号配平查找）。

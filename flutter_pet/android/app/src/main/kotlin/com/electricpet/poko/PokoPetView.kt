@@ -190,6 +190,12 @@ class PokoPetView(context: Context) : View(context) {
      *
      * 之前桌面上的波可永远是白天配色，深夜亮在深色桌面上格外刺眼；
      * 现在由服务层把 App 算好的昼夜状态推过来。
+     *
+     * ⚠️ 这里刻意**没有**再写一个 `fun setNightMode(enabled: Boolean)`：
+     * public 属性 `isNightMode` 的隐式 setter 的 JVM 签名就是 `setNightMode(Z)V`，
+     * 和手写的同名函数完全撞车，编译期会报
+     * "Platform declaration clash: ... have the same JVM signature (setNightMode(Z)V)"。
+     * 外部直接 `view.isNightMode = true` 即可。
      */
     var isNightMode: Boolean = false
         set(value) {
@@ -199,11 +205,6 @@ class PokoPetView(context: Context) : View(context) {
                 invalidate()
             }
         }
-
-    /** 切换夜间配色 */
-    fun setNightMode(enabled: Boolean) {
-        isNightMode = enabled
-    }
 
     // 动画运行器
     private var idleAnimator: ValueAnimator? = null
