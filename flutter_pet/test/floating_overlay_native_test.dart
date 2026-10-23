@@ -1240,7 +1240,7 @@ class Safe6 {
           reason: '系统栏避让边距没有缓存');
     });
 
-    test('夜间模式必须两端都能传，且能改配色', () {
+    test('昼夜状态必须两端都能传', () {
       expect(overlayChannelKotlin, contains('const val ARG_NIGHT_MODE'),
           reason: '原生侧缺少昼夜状态参数');
       expect(overlayChannelDart, contains('argNightMode'),
@@ -1251,8 +1251,6 @@ class Safe6 {
           reason: '服务没有接收 App 推送的昼夜状态');
       expect(petViewSource, contains('var isNightMode: Boolean = false'),
           reason: '悬浮猫没有夜间模式开关');
-      expect(petViewSource, contains('private fun applyNightTint('),
-          reason: '夜间模式没有对应的配色变换');
     });
 
     test('悬浮宠必须提供无障碍描述', () {
@@ -1260,6 +1258,146 @@ class Safe6 {
           reason: '悬浮宠没有 contentDescription，TalkBack 读不到它');
       expect(serviceSource, contains('IMPORTANT_FOR_ACCESSIBILITY_YES'),
           reason: '悬浮宠没有声明无障碍重要性');
+    });
+  });
+
+  group('桌面悬浮猫与 App 内的猫必须是同一只', () {
+    test('双端皮肤色表必须逐项一致', () {
+      // 背景：原生侧 updateColors() 里原本只覆盖 10 个品种，
+      // 剩下 5 个（银渐层/缅因/美短/临清狮子/雪球白）全部落到 else 默认橘猫配色，
+      // 用户在 App 里换完装，桌面上却变成了一只橘猫。
+      //
+      // 这里把两张表逐项比对，任何一边新增/改色而另一边忘了同步，CI 立刻变红。
+      final dartSkins = _parseDartSkinTable(petModelSource);
+      final kotlinSkins = _parseKotlinSkinPalette(petViewSource);
+
+      expect(dartSkins.length, greaterThanOrEqualTo(14),
+          reason: 'Dart 端皮肤表解析结果异常，检测器可能空转');
+      expect(kotlinSkins.length, greaterThanOrEqualTo(14),
+          reason: '原生端皮肤表解析结果异常，检测器可能空转');
+
+      final dartIds = dartSkins.keys.toSet();
+      final kotlinIds = kotlinSkins.keys.toSet();
+      expect(kotlinIds, dartIds,
+          reason: '两端的品种集合不一致 —— '
+              '原生多出：${kotlinIds.difference(dartIds)}，'
+              '原生缺少：${dartIds.difference(kotlinIds)}');
+
+      for (final id in dartIds) {
+        expect(kotlinSkins[id], dartSkins[id],
+            reason: '品种 $id 的配色两端不一致：'
+                'App=${dartSkins[id]}，桌面=${kotlinSkins[id]}');
+      }
+    });
+
+    test('双端皮肤色表解析器必须有效（防止检测器静默退化）', () {
+      final dartSkins = _parseDartSkinTable(petModelSource);
+      final kotlinSkins = _parseKotlinSkinPalette(petViewSource);
+
+      expect(dartSkins.containsKey('cat_ragdoll'), isTrue,
+          reason: 'Dart 端皮肤表解析失效');
+      expect(dartSkins['cat_ragdoll'], ['FFFDF8', '8E9AAF', '0284C7'],
+          reason: 'Dart 端皮肤表解析结果不对');
+      expect(kotlinSkins.containsKey('cat_ragdoll'), isTrue,
+          reason: '原生端皮肤表解析失效');
+      expect(kotlinSkins['cat_ragdoll'], ['FFFDF8', '8E9AAF', '0284C7'],
+          reason: '原生端皮肤表解析结果不对');
+
+      // 人造样本：解析器必须真的能读出跨行 / 带注释的表
+      const fake = '''
+  "cat_demo" -> SkinPalette(
+      Color.parseColor("#112233"),
+      Color.parseColor("#445566"),
+      Color.parseColor("#778899"),
+      Color.parseColor("#AABBCC"),
+  )
+''';
+      final parsed = _parseKotlinSkinPalette(fake);
+      expect(parsed['cat_demo'], ['112233', '445566', 'AABBCC'],
+          reason: '原生端皮肤表解析器对跨行样本失效');
+    });
+
+    test('夜间不得改动猫的毛色', () {
+      // 用户反馈："到晚上桌面悬浮猫的颜色渲染不太对，和 App 内的不太统一"。
+      // 根因：原生侧在夜间给毛色压了一层"月光滤镜"（×0.72 / 0.74 / 0.86），
+      // 而 App 里的猫用的就是皮肤原色（lib/renderers/pet_painter.dart 从不套夜间滤镜），
+      // 于是同一只白猫，App 里雪白、桌面上是暗黄灰。
+      //
+      // 这是一条**反向**守护：只要有人再给本体色加滤镜，CI 立刻变红。
+      expect(petViewSource, isNot(contains('applyNightTint')),
+          reason: '桌面悬浮猫不允许在夜间给毛色套滤镜：'
+              'App 里的猫用的是皮肤原色，桌面这边必须一致');
+      expect(petViewSource, isNot(contains('blendTowardGray')),
+          reason: '桌面悬浮猫不允许"脏了毛色发灰"：App 里的猫不这么画，'
+              '"脏了"由状态徽标（🧼）表达');
+
+      final updateColorsBody = _braceBlock(petViewSource, 'private fun updateColors()');
+      expect(updateColorsBody, isNot(contains('* 0.')),
+          reason: 'updateColors() 里出现了颜色系数，说明有人在本体色上加滤镜');
+      expect(updateColorsBody, contains('skinPaletteOf(skinId)'),
+          reason: '猫本体色应当直接取自皮肤配色表');
+    });
+
+    test('昼夜边界必须两端贯通：桌面端自己按太阳节律判昼夜', () {
+      expect(overlayChannelKotlin, contains('const val ARG_DAY_START_MINUTE'),
+          reason: '原生侧缺少昼夜边界参数');
+      expect(overlayChannelKotlin, contains('const val ARG_NIGHT_START_MINUTE'),
+          reason: '原生侧缺少昼夜边界参数');
+      expect(overlayChannelDart, contains('argDayStartMinute'),
+          reason: 'Dart 侧缺少昼夜边界参数');
+      expect(overlayChannelDart, contains('argNightStartMinute'),
+          reason: 'Dart 侧缺少昼夜边界参数');
+      expect(activitySource, contains('OverlayChannel.ARG_DAY_START_MINUTE'),
+          reason: 'MainActivity 没有把昼夜边界传给服务');
+      expect(activitySource, contains('OverlayChannel.ARG_NIGHT_START_MINUTE'),
+          reason: 'MainActivity 没有把昼夜边界传给服务');
+      expect(serviceSource, contains('appDayStartMinute'),
+          reason: '服务没有保存 App 推来的昼夜边界');
+      expect(serviceSource, contains('currentMinuteOfDay()'),
+          reason: '服务没有按当前本地时间自己判断昼夜');
+    });
+
+    test('重点色品种必须有招牌色块', () {
+      final headFn =
+          _memberFunctions(petViewSource).firstWhere((f) => f.name == 'drawHead');
+      for (final breed in <String>[
+        'cat_ragdoll',
+        'cat_siamese',
+        'cat_american_tabby',
+        'cat_maine_coon',
+      ]) {
+        expect(headFn.body, contains(breed),
+            reason: 'drawHead() 里没有 $breed 的招牌色块，桌面猫认不出品种');
+      }
+
+      final earsFn =
+          _memberFunctions(petViewSource).firstWhere((f) => f.name == 'drawEars');
+      expect(earsFn.body, contains('cat_ragdoll'),
+          reason: 'drawEars() 里没有布偶猫：重点色猫的耳背要用重点色');
+      expect(earsFn.body, contains('isPointCat'),
+          reason: 'drawEars() 缺少"重点色猫"判断');
+
+      // 尾巴尖重点色：App 端有 7 个品种用辅助色，桌面端必须一致
+      final tailFn =
+          _memberFunctions(petViewSource).firstWhere((f) => f.name == 'drawTail');
+      for (final breed in <String>[
+        'cat_siamese',
+        'cat_ragdoll',
+        'cat_calico',
+        'cat_golden_shaded',
+        'cat_silver_shaded',
+        'cat_maine_coon',
+        'cat_sakura_peach',
+      ]) {
+        expect(tailFn.body, contains(breed),
+            reason: 'drawTail() 的尾尖重点色少了 $breed，桌面猫和 App 里的猫对不上');
+      }
+
+      // 临清狮子猫是金银异瞳
+      final eyesFn =
+          _memberFunctions(petViewSource).firstWhere((f) => f.name == 'drawEyes');
+      expect(eyesFn.body, contains('cat_persian_white'),
+          reason: 'drawEyes() 没有处理临清狮子猫的金银异瞳');
     });
   });
 
@@ -2012,7 +2150,7 @@ List<_KotlinClassInfo> _scanKotlinClasses(String source) {
       final bodyEnd = _classBodyEnd(lines, depthBefore, i, base);
       for (var k = i + 1; k <= bodyEnd; k++) {
         if (depthBefore[k] != base + 1) continue;
-        _collectKotlinMember(lines[k].trim(), cls);
+        _collectKotlinMember(_logicalMemberLine(lines, k), cls);
       }
       classes.add(cls);
       continue;
@@ -2028,11 +2166,46 @@ List<_KotlinClassInfo> _scanKotlinClasses(String source) {
     final bodyEnd = _classBodyEnd(lines, depthBefore, i, base);
     for (var k = i + 1; k <= bodyEnd; k++) {
       if (depthBefore[k] != base + 1) continue;
-      _collectKotlinMember(lines[k].trim(), cls);
+      _collectKotlinMember(_logicalMemberLine(lines, k), cls);
     }
     classes.add(cls);
   }
   return classes;
+}
+
+/// 取第 [k] 行起、括号配平后的"逻辑成员声明"（支持跨行函数签名）。
+///
+/// 背景：函数签名写成跨行多行时，单行解析会因为括号没配平而**静默跳过整个函数**，
+/// JVM 签名冲突检测就等于给它开了后门 —— 恰好是本守护最该拦住的那类错误。
+/// 所以这里把跨行签名拼回一行再交给 [_collectKotlinMember]。
+String _logicalMemberLine(List<String> lines, int k) {
+  final first = lines[k].trim();
+  // 只有函数声明需要拼行；属性声明跨行的情况不在本检测器的关注范围内
+  if (!RegExp(r'\bfun\b').hasMatch(first)) return first;
+
+  final buf = StringBuffer(first);
+  var depth = _parenDepth(buf.toString());
+  var j = k + 1;
+  while (depth > 0 && j < lines.length) {
+    buf.write(' ');
+    buf.write(lines[j].trim());
+    depth = _parenDepth(buf.toString());
+    j++;
+  }
+  return buf.toString();
+}
+
+/// 一段文本里未闭合的圆括号数量（正数为还剩几个左括号没闭合）
+int _parenDepth(String text) {
+  var depth = 0;
+  for (final ch in text.split('')) {
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+    }
+  }
+  return depth;
 }
 
 /// 类体结束行：从声明行之后起，最后一个"开始前深度 > base"的行
@@ -2160,6 +2333,62 @@ Map<String, double> _extractDecayRates(String source, {required bool dart}) {
     }
   }
   return rates;
+}
+
+/// 解析 Dart 端 `PetModel.availableSkins` 的皮肤配色表。
+///
+/// 返回 品种 id -> [主体色, 辅助色, 眼睛色]（大写十六进制，不含 0x 前缀）。
+Map<String, List<String>> _parseDartSkinTable(String source) {
+  final out = <String, List<String>>{};
+  // 以条目起点切分：'cat_xxx': SkinConfig(
+  final chunks = source.split(RegExp(r"'cat_[a-z_]+':\s*SkinConfig\("));
+  for (var i = 1; i < chunks.length; i++) {
+    final chunk = chunks[i];
+    final idM = RegExp(r"id:\s*'(cat_[a-z_]+)'").firstMatch(chunk);
+    final pM = RegExp(r'primaryColor:\s*0x([0-9A-Fa-f]{8})').firstMatch(chunk);
+    final sM =
+        RegExp(r'secondaryColor:\s*0x([0-9A-Fa-f]{8})').firstMatch(chunk);
+    final eM = RegExp(r'eyeColor:\s*0x([0-9A-Fa-f]{8})').firstMatch(chunk);
+    if (idM == null || pM == null || sM == null || eM == null) continue;
+    out[idM.group(1)!] = <String>[
+      pM.group(1)!.substring(2).toUpperCase(),
+      sM.group(1)!.substring(2).toUpperCase(),
+      eM.group(1)!.substring(2).toUpperCase(),
+    ];
+  }
+  return out;
+}
+
+/// 解析 Kotlin 端 `skinPaletteOf()` 的皮肤配色表。
+///
+/// 表项形如：
+/// ```
+/// "cat_ragdoll" -> SkinPalette(
+///     Color.parseColor("#FFFDF8"),  // 主体色
+///     Color.parseColor("#8E9AAF"),  // 辅助色
+///     Color.parseColor("#64748B"),  // 深色斑块（原生侧独有）
+///     Color.parseColor("#0284C7"),  // 眼睛色
+/// )
+/// ```
+///
+/// 返回 品种 id -> [主体色, 辅助色, 眼睛色]，与 [_parseDartSkinTable] 同构。
+Map<String, List<String>> _parseKotlinSkinPalette(String source) {
+  final out = <String, List<String>>{};
+  final declRe = RegExp(r'"(cat_[a-z_]+)"\s*->\s*SkinPalette\(');
+  for (final m in declRe.allMatches(source)) {
+    final openIdx = source.indexOf('(', m.end - 1);
+    if (openIdx < 0) continue;
+    final closeIdx = _matchParen(source, openIdx);
+    if (closeIdx < 0) continue;
+    final body = source.substring(openIdx + 1, closeIdx);
+    final colors = RegExp(r'#([0-9A-Fa-f]{6})')
+        .allMatches(body)
+        .map((c) => c.group(1)!.toUpperCase())
+        .toList();
+    if (colors.length != 4) continue;
+    out[m.group(1)!] = <String>[colors[0], colors[1], colors[3]];
+  }
+  return out;
 }
 
 /// 截取某个 WindowManager.LayoutParams 构造调用的参数区（含 flags 段）。

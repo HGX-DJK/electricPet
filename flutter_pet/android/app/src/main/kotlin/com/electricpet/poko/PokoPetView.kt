@@ -178,14 +178,17 @@ class PokoPetView(context: Context) : View(context) {
             field = value.coerceIn(0, 100)
         }
 
-    /** 洁净度 0~100：偏低时看起来邋遢（毛色发灰） */
+    /**
+     * 洁净度 0~100。
+     *
+     * 只用来决定**状态徽标**（🧼 脏了），不再改毛色 ——
+     * App 里的猫毛色不随洁净度变化，桌面这边跟着改就会两边长得不一样。
+     */
     var cleanlinessLevel: Int = 80
         set(value) {
             val clamped = value.coerceIn(0, 100)
             if (field != clamped) {
                 field = clamped
-                // 毛色会随洁净度变化，需要重算配色
-                updateColors()
                 invalidate()
             }
         }
@@ -284,10 +287,13 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     /**
-     * 夜间配色：跟 App 的昼夜节律保持一致。
+     * 夜间模式：跟 App 的昼夜节律保持一致。
      *
-     * 之前桌面上的波可永远是白天配色，深夜亮在深色桌面上格外刺眼；
-     * 现在由服务层把 App 算好的昼夜状态推过来。
+     * ⚠️ 这里**只影响瞳孔**（夜里瞳孔自然舒张，和 App 里的猫一致），
+     * **绝不能改猫的毛色**：App 里的猫用的就是皮肤原色
+     * （见 `lib/renderers/pet_painter.dart`，夜间只影响瞳孔舒张，不动毛色），
+     * 桌面这边要是再压一层"月光滤镜"，同一只猫在两个地方就会长得不一样。
+     * 昼夜差异应该落在 **UI 配件**（气泡 / 快捷菜单）上，由服务层负责。
      *
      * ⚠️ 这里刻意**没有**再写一个 `fun setNightMode(enabled: Boolean)`：
      * public 属性 `isNightMode` 的隐式 setter 的 JVM 签名就是 `setNightMode(Z)V`，
@@ -299,7 +305,6 @@ class PokoPetView(context: Context) : View(context) {
         set(value) {
             if (field != value) {
                 field = value
-                updateColors()
                 invalidate()
             }
         }
@@ -374,6 +379,7 @@ class PokoPetView(context: Context) : View(context) {
     private val heartPath = Path()
     private val starPath = Path()
     private val blazePath = Path()
+    private val stripePath = Path()
 
     // ---------- onDraw 零分配补充 ----------
     //
@@ -393,6 +399,7 @@ class PokoPetView(context: Context) : View(context) {
     private val mouthRect = RectF()
     private val tongueRect = RectF()
     private val pawRect = RectF()
+    private val maskRect = RectF()
 
     /** 绘制过程中复用的画笔 */
     private val tipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -435,6 +442,14 @@ class PokoPetView(context: Context) : View(context) {
     private val colorHappyMouth = 0xFFF43F5E.toInt()
     private val colorWhiskerLight = 0xFFF1F5F9.toInt()
     private val colorWhiskerGrey = 0x8094A3B8.toInt()
+    // 三花猫一耳橘一耳黑（与 App 端 pet_painter.dart 的三花耳一致）
+    private val colorCalicoEarLeft = 0xFFE28743.toInt()
+    private val colorCalicoEarRight = 0xFF1E293B.toInt()
+    // 暹罗猫耳内是深褐渐变（App 端 createInnerEarPaint(isSiamese: true)）
+    private val colorInnerEarSiamese = 0xFF5D4037.toInt()
+    // 临清狮子猫的金银异瞳（左金右蓝，App 端 pet_painter.dart 里有同样的覆盖）
+    private val colorPersianEyeLeft = 0xFFF59E0B.toInt()
+    private val colorPersianEyeRight = 0xFF0284C7.toInt()
 
     // 眨眼定时调度
     private val blinkRunnable = object : Runnable {
@@ -515,109 +530,125 @@ class PokoPetView(context: Context) : View(context) {
         }
     }
 
-    private fun updateColors() {
-        when (skinId) {
-            "cat_calico" -> {
-                primaryColor = Color.parseColor("#FFFDF8")
-                secondaryColor = Color.parseColor("#FF9E7D")
-                darkPatchColor = Color.parseColor("#475569")
-                eyeColor = Color.parseColor("#10B981")
-            }
-            "cat_golden_shaded" -> {
-                primaryColor = Color.parseColor("#FED7AA")
-                secondaryColor = Color.parseColor("#D97706")
-                darkPatchColor = Color.parseColor("#92400E")
-                eyeColor = Color.parseColor("#059669")
-            }
-            "cat_orange" -> {
-                primaryColor = Color.parseColor("#FED7AA")
-                secondaryColor = Color.parseColor("#EA580C")
-                darkPatchColor = Color.parseColor("#C2410C")
-                eyeColor = Color.parseColor("#FBBF24")
-            }
-            "cat_british_blue" -> {
-                primaryColor = Color.parseColor("#64748B")
-                secondaryColor = Color.parseColor("#475569")
-                darkPatchColor = Color.parseColor("#334155")
-                eyeColor = Color.parseColor("#F59E0B")
-            }
-            "cat_ragdoll" -> {
-                primaryColor = Color.parseColor("#FFFDF8")
-                secondaryColor = Color.parseColor("#8E9AAF")
-                darkPatchColor = Color.parseColor("#64748B")
-                eyeColor = Color.parseColor("#0284C7")
-            }
-            "cat_tuxedo" -> {
-                primaryColor = Color.parseColor("#1E293B")
-                secondaryColor = Color.parseColor("#FFFFFF")
-                darkPatchColor = Color.parseColor("#0F172A")
-                eyeColor = Color.parseColor("#FACC15")
-            }
-            "cat_siamese" -> {
-                primaryColor = Color.parseColor("#FAF5EF")
-                secondaryColor = Color.parseColor("#5C3D2E")
-                darkPatchColor = Color.parseColor("#3E2723")
-                eyeColor = Color.parseColor("#38BDF8")
-            }
-            "cat_black" -> {
-                primaryColor = Color.parseColor("#0F172A")
-                secondaryColor = Color.parseColor("#1E293B")
-                darkPatchColor = Color.parseColor("#020617")
-                eyeColor = Color.parseColor("#FACC15")
-            }
-            "cat_sakura_peach" -> {
-                primaryColor = Color.parseColor("#FFF0F5")
-                secondaryColor = Color.parseColor("#F472B6")
-                darkPatchColor = Color.parseColor("#FB7185")
-                eyeColor = Color.parseColor("#FB7185")
-            }
-            else -> {
-                primaryColor = Color.parseColor("#FED7AA")
-                secondaryColor = Color.parseColor("#EA580C")
-                darkPatchColor = Color.parseColor("#C2410C")
-                eyeColor = Color.parseColor("#10B981")
-            }
-        }
+    /**
+     * 皮肤配色：主体色 / 辅助色 / 深色斑块 / 眼睛色。
+     *
+     * ⚠️ 这张表和 Dart 端的 `PetModel.availableSkins` 是**同一份数据的两个副本**，
+     * 必须逐项对齐 —— 否则桌面上这只猫和 App 里那只猫会长得不一样。
+     * 守护测试 `flutter_pet/test/floating_overlay_native_test.dart` 里有一条
+     * 「双端皮肤色表必须逐项一致」负责把这条约束钉死。
+     */
+    private data class SkinPalette(
+        val primary: Int,
+        val secondary: Int,
+        val darkPatch: Int,
+        val eye: Int,
+    )
 
-        // 夜间：加一层"月光"滤镜（压暗 + 偏冷），深夜桌面不至于刺眼
-        if (isNightMode) {
-            primaryColor = applyNightTint(primaryColor)
-            secondaryColor = applyNightTint(secondaryColor)
-            darkPatchColor = applyNightTint(darkPatchColor)
-            eyeColor = applyNightTint(eyeColor)
-        }
-
-        // 脏了：毛色发灰（洁净度越低越明显）
-        if (cleanlinessLevel < 70) {
-            val dirt = (70 - cleanlinessLevel) / 70f * 0.30f
-            primaryColor = blendTowardGray(primaryColor, dirt)
-            secondaryColor = blendTowardGray(secondaryColor, dirt)
-        }
-    }
-
-    /** 月光滤镜：压暗并把蓝色通道抬高 */
-    private fun applyNightTint(color: Int): Int {
-        val a = Color.alpha(color)
-        val r = (Color.red(color) * 0.72f).toInt().coerceIn(0, 255)
-        val g = (Color.green(color) * 0.74f).toInt().coerceIn(0, 255)
-        val b = (Color.blue(color) * 0.86f).toInt().coerceIn(0, 255)
-        return Color.argb(a, r, g, b)
-    }
-
-    /** 把颜色朝灰色混合 [ratio]（0=原样，1=全灰） */
-    private fun blendTowardGray(color: Int, ratio: Float): Int {
-        val t = ratio.coerceIn(0f, 1f)
-        val a = Color.alpha(color)
-        val r = Color.red(color)
-        val g = Color.green(color)
-        val b = Color.blue(color)
-        val gray = (r * 0.3f + g * 0.59f + b * 0.11f).toInt()
-        return Color.argb(
-            a,
-            (r + (gray - r) * t).toInt().coerceIn(0, 255),
-            (g + (gray - g) * t).toInt().coerceIn(0, 255),
-            (b + (gray - b) * t).toInt().coerceIn(0, 255),
+    private fun skinPaletteOf(id: String): SkinPalette = when (id) {
+        "cat_golden_shaded" -> SkinPalette(
+            Color.parseColor("#FED7AA"),
+            Color.parseColor("#D97706"),
+            Color.parseColor("#92400E"),
+            Color.parseColor("#059669"),
         )
+        "cat_silver_shaded" -> SkinPalette(
+            Color.parseColor("#F8FAFC"),
+            Color.parseColor("#94A3B8"),
+            Color.parseColor("#475569"),
+            Color.parseColor("#0D9488"),
+        )
+        "cat_ragdoll" -> SkinPalette(
+            Color.parseColor("#FFFDF8"),
+            Color.parseColor("#8E9AAF"),
+            Color.parseColor("#64748B"),
+            Color.parseColor("#0284C7"),
+        )
+        "cat_tuxedo" -> SkinPalette(
+            Color.parseColor("#1E293B"),
+            Color.parseColor("#FFFFFF"),
+            Color.parseColor("#0F172A"),
+            Color.parseColor("#FACC15"),
+        )
+        "cat_maine_coon" -> SkinPalette(
+            Color.parseColor("#D7CCC8"),
+            Color.parseColor("#4E342E"),
+            Color.parseColor("#3E2723"),
+            Color.parseColor("#EAB308"),
+        )
+        "cat_sakura_peach" -> SkinPalette(
+            Color.parseColor("#FFF0F5"),
+            Color.parseColor("#F472B6"),
+            Color.parseColor("#FB7185"),
+            Color.parseColor("#FB7185"),
+        )
+        "cat_british_blue" -> SkinPalette(
+            Color.parseColor("#64748B"),
+            Color.parseColor("#475569"),
+            Color.parseColor("#334155"),
+            Color.parseColor("#F59E0B"),
+        )
+        "cat_american_tabby" -> SkinPalette(
+            Color.parseColor("#E2E8F0"),
+            Color.parseColor("#334155"),
+            Color.parseColor("#1E293B"),
+            Color.parseColor("#10B981"),
+        )
+        "cat_orange" -> SkinPalette(
+            Color.parseColor("#FED7AA"),
+            Color.parseColor("#EA580C"),
+            Color.parseColor("#C2410C"),
+            Color.parseColor("#FBBF24"),
+        )
+        "cat_calico" -> SkinPalette(
+            Color.parseColor("#FFFFFF"),
+            Color.parseColor("#FF9E7D"),
+            Color.parseColor("#64748B"),
+            Color.parseColor("#10B981"),
+        )
+        "cat_persian_white" -> SkinPalette(
+            Color.parseColor("#FFFFFF"),
+            Color.parseColor("#F1F5F9"),
+            Color.parseColor("#CBD5E1"),
+            Color.parseColor("#06B6D4"),
+        )
+        "cat_white" -> SkinPalette(
+            Color.parseColor("#FFFFFF"),
+            Color.parseColor("#F1F5F9"),
+            Color.parseColor("#CBD5E1"),
+            Color.parseColor("#06B6D4"),
+        )
+        "cat_siamese" -> SkinPalette(
+            Color.parseColor("#FAF5EF"),
+            Color.parseColor("#5C3D2E"),
+            Color.parseColor("#3E2723"),
+            Color.parseColor("#38BDF8"),
+        )
+        "cat_black" -> SkinPalette(
+            Color.parseColor("#0F172A"),
+            Color.parseColor("#1E293B"),
+            Color.parseColor("#020617"),
+            Color.parseColor("#FACC15"),
+        )
+        // 兜底与 Dart 端保持一致：`availableSkins[skinId] ?? availableSkins['cat_calico']`
+        else -> skinPaletteOf("cat_calico")
+    }
+
+    /**
+     * 重算猫本体配色。
+     *
+     * ⚠️ 这里**故意不做任何滤镜**（既没有"月光滤镜"，也没有"脏了发灰"）：
+     * App 里的猫用的就是皮肤原色（见 `lib/renderers/pet_painter.dart`），
+     * 桌面这边多加一层滤镜，同一只猫在两个地方就会长得不一样。
+     * "脏了"这件事由**状态徽标**（🧼 紫色圆徽）负责表达，
+     * "饿了 / 困了"同理 —— 状态可视化集中在徽标上，毛色只管品种。
+     */
+    private fun updateColors() {
+        val palette = skinPaletteOf(skinId)
+        primaryColor = palette.primary
+        secondaryColor = palette.secondary
+        darkPatchColor = palette.darkPatch
+        eyeColor = palette.eye
     }
 
     // ---------- 核心待机基础动画 ----------
@@ -1534,10 +1565,12 @@ class PokoPetView(context: Context) : View(context) {
         tailPaint.strokeWidth = 7.5f * density
         canvas.drawPath(tailPath, tailPaint)
 
-        // 尾尖绒球
+        // 尾尖绒球（与 App 端 pet_painter.dart 的 tipCol 判定保持一致）
         val tipColor = when (skinId) {
             "cat_tuxedo" -> Color.WHITE
-            "cat_calico", "cat_ragdoll", "cat_siamese" -> secondaryColor
+            // App 端写死樱花猫尾尖为 #F472B6，正好就是它的辅助色
+            "cat_siamese", "cat_ragdoll", "cat_calico", "cat_golden_shaded",
+            "cat_silver_shaded", "cat_maine_coon", "cat_sakura_peach" -> secondaryColor
             else -> primaryColor
         }
         tipPaint.color = tipColor
@@ -1644,6 +1677,77 @@ class PokoPetView(context: Context) : View(context) {
             blazePath.close()
             blazePaint.color = Color.WHITE
             canvas.drawPath(blazePath, blazePaint)
+        } else if (skinId == "cat_ragdoll") {
+            // 布偶猫经典海蓝双色八字开脸面罩（对齐 App 端 pet_painter.dart）
+            // 坐标由 App 端（头宽 136）按 ~0.39 比例换算到桌面端（头半宽 27）
+            patchPaint.color = withAlpha(secondaryColor, 224)
+            patchPath.reset()
+            patchPath.moveTo(cx - 2.3f * density, headY - 16.4f * density)
+            patchPath.lineTo(cx - 17.9f * density, headY - 9.4f * density)
+            patchPath.quadTo(cx - 21.1f * density, headY + 4.7f * density, cx - 12.5f * density, headY + 12.5f * density)
+            patchPath.quadTo(cx - 7.9f * density, headY + 6.2f * density, cx - 5.5f * density, headY - 3.1f * density)
+            patchPath.close()
+            canvas.drawPath(patchPath, patchPaint)
+
+            patchPath.reset()
+            patchPath.moveTo(cx + 2.3f * density, headY - 16.4f * density)
+            patchPath.lineTo(cx + 17.9f * density, headY - 9.4f * density)
+            patchPath.quadTo(cx + 21.1f * density, headY + 4.7f * density, cx + 12.5f * density, headY + 12.5f * density)
+            patchPath.quadTo(cx + 7.9f * density, headY + 6.2f * density, cx + 5.5f * density, headY - 3.1f * density)
+            patchPath.close()
+            canvas.drawPath(patchPath, patchPaint)
+        } else if (skinId == "cat_siamese") {
+            // 暹罗猫经典重点色面罩（对齐 App 端 pet_painter.dart）
+            patchPaint.color = withAlpha(secondaryColor, 230)
+            maskRect.set(
+                cx - 10.9f * density, headY - 5.5f * density,
+                cx + 10.9f * density, headY + 11.7f * density
+            )
+            canvas.drawOval(maskRect, patchPaint)
+        } else if (skinId == "cat_american_tabby") {
+            // 美短银虎斑额头经典 M 纹与脸颊鱼骨斑纹（对齐 App 端 pet_painter.dart）
+            stripePaint.color = secondaryColor
+            stripePaint.strokeWidth = 1.2f * density
+            stripePath.reset()
+            stripePath.moveTo(cx - 5.9f * density, headY - 14.0f * density)
+            stripePath.lineTo(cx - 3.1f * density, headY - 17.2f * density)
+            stripePath.lineTo(cx, headY - 14.4f * density)
+            stripePath.lineTo(cx + 3.1f * density, headY - 17.2f * density)
+            stripePath.lineTo(cx + 5.9f * density, headY - 14.0f * density)
+            canvas.drawPath(stripePath, stripePaint)
+
+            canvas.drawLine(
+                cx - 11.7f * density, headY + 0.8f * density,
+                cx - 18.7f * density, headY - 0.4f * density, stripePaint
+            )
+            canvas.drawLine(
+                cx - 10.9f * density, headY + 3.5f * density,
+                cx - 17.6f * density, headY + 3.1f * density, stripePaint
+            )
+            canvas.drawLine(
+                cx + 11.7f * density, headY + 0.8f * density,
+                cx + 18.7f * density, headY - 0.4f * density, stripePaint
+            )
+            canvas.drawLine(
+                cx + 10.9f * density, headY + 3.5f * density,
+                cx + 17.6f * density, headY + 3.1f * density, stripePaint
+            )
+        } else if (skinId == "cat_maine_coon") {
+            // 缅因猫额头虎斑纹（对齐 App 端 pet_painter.dart）
+            stripePaint.color = secondaryColor
+            stripePaint.strokeWidth = 1.25f * density
+            canvas.drawLine(
+                cx - 4.7f * density, headY - 16.4f * density,
+                cx - 1.6f * density, headY - 10.1f * density, stripePaint
+            )
+            canvas.drawLine(
+                cx, headY - 17.6f * density,
+                cx, headY - 9.8f * density, stripePaint
+            )
+            canvas.drawLine(
+                cx + 4.7f * density, headY - 16.4f * density,
+                cx + 1.6f * density, headY - 10.1f * density, stripePaint
+            )
         }
 
         // 3. 粉嫩腮红
@@ -1673,9 +1777,27 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun drawEars(canvas: Canvas, cx: Float, headY: Float) {
-        val earBaseColor = if (skinId == "cat_siamese") secondaryColor else primaryColor
-        earPaint.color = earBaseColor
-        innerEarPaint.color = colorInnerEar
+        // 耳背配色与 App 端对齐（lib/renderers/pet_painter.dart 的 _drawEars）：
+        //   重点色猫（布偶 / 暹罗）耳背是重点色；三花猫一耳橘一耳黑；其余用主体色
+        val isPointCat = skinId == "cat_ragdoll" || skinId == "cat_siamese"
+        val leftEarColor: Int
+        val rightEarColor: Int
+        when {
+            skinId == "cat_calico" -> {
+                leftEarColor = colorCalicoEarLeft
+                rightEarColor = colorCalicoEarRight
+            }
+            isPointCat -> {
+                leftEarColor = secondaryColor
+                rightEarColor = secondaryColor
+            }
+            else -> {
+                leftEarColor = primaryColor
+                rightEarColor = primaryColor
+            }
+        }
+        earPaint.color = leftEarColor
+        innerEarPaint.color = if (skinId == "cat_siamese") colorInnerEarSiamese else colorInnerEar
 
         // 左耳
         earPath.reset()
@@ -1693,6 +1815,7 @@ class PokoPetView(context: Context) : View(context) {
         canvas.drawPath(innerEarPath, innerEarPaint)
 
         // 右耳
+        earPaint.color = rightEarColor
         earPath.reset()
         earPath.moveTo(cx + 22f * density, headY - 7f * density)
         earPath.lineTo(cx + 19f * density + earTwitch, headY - 25f * density)
@@ -1790,7 +1913,12 @@ class PokoPetView(context: Context) : View(context) {
                 eyeXs[1] = rightEyeX
                 for (i in 0 until 2) {
                     val eyeX = eyeXs[i]
-                    irisPaint.color = eyeColor
+                    // 临清狮子猫是金银异瞳（左金右蓝），与 App 端一致
+                    irisPaint.color = if (skinId == "cat_persian_white") {
+                        if (i == 0) colorPersianEyeLeft else colorPersianEyeRight
+                    } else {
+                        eyeColor
+                    }
                     eyeRect.set(
                         eyeX - eyeRadiusW, eyeY - eyeRadiusH,
                         eyeX + eyeRadiusW, eyeY + eyeRadiusH
@@ -1799,13 +1927,21 @@ class PokoPetView(context: Context) : View(context) {
 
                     // 黑曜石瞳孔 (带注视偏移)
                     pupilPaint.color = colorPupil
-                    pupilRect.set(
-                        eyeX - 3.0f * density + pupilOffsetX,
-                        eyeY - 4.5f * density + pupilOffsetY,
-                        eyeX + 3.0f * density + pupilOffsetX,
-                        eyeY + 4.5f * density + pupilOffsetY
-                    )
-                    canvas.drawOval(pupilRect, pupilPaint)
+                    if (isNightMode) {
+                        // 夜里瞳孔自然舒张成大圆瞳（与 App 端夜间 isDilated 的观感对齐）
+                        canvas.drawCircle(
+                            eyeX + pupilOffsetX, eyeY + pupilOffsetY,
+                            4.1f * density, pupilPaint
+                        )
+                    } else {
+                        pupilRect.set(
+                            eyeX - 3.0f * density + pupilOffsetX,
+                            eyeY - 4.5f * density + pupilOffsetY,
+                            eyeX + 3.0f * density + pupilOffsetX,
+                            eyeY + 4.5f * density + pupilOffsetY
+                        )
+                        canvas.drawOval(pupilRect, pupilPaint)
+                    }
 
                     // 双重高光星芒
                     canvas.drawCircle(eyeX - 1.4f * density, eyeY - 2.0f * density, 1.6f * density, sparklePaint)
@@ -1986,6 +2122,15 @@ class PokoPetView(context: Context) : View(context) {
         removeCallbacks(blinkRunnable)
         removeCallbacks(autonomousActionRunnable)
     }
+
+    /** 给颜色套一个透明度（0~255），不改变色相 */
+    private fun withAlpha(color: Int, alpha: Int): Int =
+        Color.argb(
+            alpha.coerceIn(0, 255),
+            Color.red(color),
+            Color.green(color),
+            Color.blue(color),
+        )
 
     private fun lightenColor(color: Int, amount: Float): Int {
         val r = Color.red(color)

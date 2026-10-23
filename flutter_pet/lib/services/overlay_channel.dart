@@ -67,6 +67,16 @@ class OverlayChannel {
   /// 昼夜状态：App 按真实太阳节律算好后推给桌面悬浮宠
   static const String argNightMode = 'nightMode';
 
+  /// 白天的起始时刻（当天第几分钟）。
+  ///
+  /// 桌面端拿它和当前本地时间比一比，就能自己判断"现在是白天还是夜里"，
+  /// 即使 App 被杀掉，桌面上的昼夜也依然跟着太阳走。
+  /// -1 表示"不适用，按推送的昼夜布尔值为准"（手动切换光影模式时）。
+  static const String argDayStartMinute = 'dayStartMinute';
+
+  /// 夜间的起始时刻（当天第几分钟），语义同上
+  static const String argNightStartMinute = 'nightStartMinute';
+
   /// 设置项集合
   static const String argSettings = 'settings';
 
@@ -103,6 +113,8 @@ class OverlayChannel {
     'ARG_SKIN_ID': 'skinId',
     'ARG_PET_NAME': 'petName',
     'ARG_NIGHT_MODE': 'nightMode',
+    'ARG_DAY_START_MINUTE': 'dayStartMinute',
+    'ARG_NIGHT_START_MINUTE': 'nightStartMinute',
     'ARG_SETTINGS': 'settings',
     'ARG_SETTING_SIZE_DP': 'sizeDp',
     'ARG_SETTING_OPACITY': 'opacity',

@@ -39,6 +39,7 @@ import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
@@ -46,6 +47,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONObject
+import java.util.Calendar
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.exp
@@ -83,6 +85,41 @@ class FloatingPetService : Service() {
     private var hideActionMenuRunnable: Runnable? = null
     /** 菜单窗口当前是否已挂载到 WindowManager（用显式标记判断，避免依赖 View.parent 的回收时机） */
     private var isActionMenuAttached: Boolean = false
+
+    // ---------- 悬浮窗 UI 配件的昼夜配色 ----------
+
+    /**
+     * 气泡 / 快捷菜单的配色常量。
+     *
+     * ⚠️ 昼夜切换**只作用在 UI 配件上**（气泡、快捷菜单），**绝不能改猫本体**：
+     * App 里的猫本体永远是皮肤原色（见 `lib/renderers/pet_painter.dart`），
+     * 桌面这边要是再给毛色压一层滤镜，同一只猫在两个地方就会长得不一样。
+     *
+     * 夜间配色与 App 内的夜间弹层同源（深靛底 0xFF1E1B4B / 浅字 / 靛紫描边）。
+     */
+    private val chromeDayBg = 0xFFFFFFFF.toInt()
+    private val chromeDayMenuBg = 0xFFF8FAFC.toInt()
+    private val chromeDayText = 0xFF0F172A.toInt()
+    private val chromeDayStroke = 0xFFFED7AA.toInt()
+    private val chromeDayDivider = 0xFFE2E8F0.toInt()
+
+    private val chromeNightBg = 0xFF1E1B4B.toInt()
+    private val chromeNightText = 0xFFE2E8F0.toInt()
+    private val chromeNightStroke = 0xFF4C4585.toInt()
+    private val chromeNightDivider = 0xFF332D73.toInt()
+
+    // 四个菜单按钮的日/夜配色（夜间保留身份色相，只是提亮到深底上仍然可读）
+    private val chromeBtnPetDay = 0xFF0F172A.toInt()
+    private val chromeBtnFeedDay = 0xFF0284C7.toInt()
+    private val chromeBtnHomeDay = 0xFF7C3AED.toInt()
+    private val chromeBtnDismissDay = 0xFFEA580C.toInt()
+    private val chromeBtnPetNight = 0xFFCBD5E1.toInt()
+    private val chromeBtnFeedNight = 0xFF38BDF8.toInt()
+    private val chromeBtnHomeNight = 0xFFA78BFA.toInt()
+    private val chromeBtnDismissNight = 0xFFFB923C.toInt()
+
+    /** 菜单里的分隔线，夜间要换颜色 */
+    private val chromeDividers = mutableListOf<View>()
 
     // 双击与触控物理量
     private var lastClickTime: Long = 0
@@ -583,8 +620,13 @@ class FloatingPetService : Service() {
         pokoView?.applyConfig(skinId, petName)
 
         // 昼夜状态：App 按真实太阳节律算好后推过来，桌面猫跟着换配色
+        // 边界（当天第几分钟）用来让桌面端在 App 被杀掉时也能自己判断昼夜
         if (intent?.hasExtra(OverlayChannel.ARG_NIGHT_MODE) == true) {
-            applyNightModeFromApp(intent.getBooleanExtra(OverlayChannel.ARG_NIGHT_MODE, false))
+            applyNightModeFromApp(
+                intent.getBooleanExtra(OverlayChannel.ARG_NIGHT_MODE, false),
+                intent.getIntExtra(OverlayChannel.ARG_DAY_START_MINUTE, -1),
+                intent.getIntExtra(OverlayChannel.ARG_NIGHT_START_MINUTE, -1),
+            )
         }
         return START_STICKY
     }
@@ -1362,7 +1404,7 @@ class FloatingPetService : Service() {
 
     private fun initSpeechBubble(layoutType: Int, density: Float) {
         val bubble = TextView(this).apply {
-            setTextColor(Color.parseColor("#0F172A"))
+            setTextColor(chromeDayText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             val padH = (12 * density).toInt()
             val padV = (8 * density).toInt()
@@ -1376,9 +1418,9 @@ class FloatingPetService : Service() {
 
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(Color.WHITE)
+                setColor(chromeDayBg)
                 cornerRadius = 14 * density
-                setStroke((1.5f * density).toInt(), Color.parseColor("#FED7AA"))
+                setStroke((1.5f * density).toInt(), chromeDayStroke)
             }
             background = bg
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1417,9 +1459,9 @@ class FloatingPetService : Service() {
 
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
-                setColor(Color.parseColor("#F8FAFC"))
+                setColor(chromeDayMenuBg)
                 cornerRadius = 18 * density
-                setStroke((1.5f * density).toInt(), Color.parseColor("#FED7AA"))
+                setStroke((1.5f * density).toInt(), chromeDayStroke)
             }
             background = bg
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -1453,7 +1495,9 @@ class FloatingPetService : Service() {
                     val m = (1 * density).toInt()
                     setMargins(m, 0, m, 0)
                 }
-                setBackgroundColor(Color.parseColor("#E2E8F0"))
+                setBackgroundColor(chromeDayDivider)
+                // 登记一下，夜间切换时要一起换色
+                chromeDividers.add(this)
             }
         }
 
@@ -1463,7 +1507,7 @@ class FloatingPetService : Service() {
         val btnPet = TextView(this).apply {
             text = "🐾 摸摸"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(Color.parseColor("#0F172A"))
+            setTextColor(chromeBtnPetDay)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
@@ -1478,7 +1522,7 @@ class FloatingPetService : Service() {
         val btnFeed = TextView(this).apply {
             text = "🐟 喂食"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(Color.parseColor("#0284C7"))
+            setTextColor(chromeBtnFeedDay)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
@@ -1494,7 +1538,7 @@ class FloatingPetService : Service() {
         val btnHome = TextView(this).apply {
             text = "🏠 小窝"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(Color.parseColor("#7C3AED"))
+            setTextColor(chromeBtnHomeDay)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
@@ -1509,7 +1553,7 @@ class FloatingPetService : Service() {
         val btnDismiss = TextView(this).apply {
             text = "🗂 收起"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setTextColor(Color.parseColor("#EA580C"))
+            setTextColor(chromeBtnDismissDay)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setPadding(btnPadH, btnPadV, btnPadH, btnPadV)
@@ -2196,22 +2240,46 @@ class FloatingPetService : Service() {
         else -> "有点想主人了…今天都不理我，是不是把我忘了呀… 🥺"
     }
 
-    // ---------- 夜间模式 ----------
+    // ---------- 昼夜模式 ----------
 
     /** App 推送过来的昼夜状态（null 表示还没收到过推送） */
     private var appNightMode: Boolean? = null
 
-    /** 当前是否处于夜间配色 */
+    /**
+     * App 推送过来的昼夜边界（当天第几分钟）。
+     *
+     * dayStartMinute   —— 白天的起始（日出前 0.6 小时，破晓晨曦）
+     * nightStartMinute —— 夜间的起始（日落后 0.5 小时，暮色四合）
+     *
+     * 这两个边界来自 App 的真实太阳天文算法（SolarService），
+     * 桌面这边只负责"拿当前时间比一比"，**不重复实现天文算法**，
+     * 这样即使 App 被杀掉，桌面上的昼夜也依然跟着太阳走。
+     *
+     * 手动切换光影模式（破晓/晴空/晚霞/星夜）时 App 会推 -1，
+     * 表示"以推送的昼夜布尔值为准"。
+     *
+     * 用"分钟数"而不是"小时小数"传，是为了躲开 Flutter Double →
+     * Bundle 的类型坑（Double 存进去，`getFloatExtra` 只会静默返回默认值）。
+     */
+    private var appDayStartMinute: Int = -1
+    private var appNightStartMinute: Int = -1
+
+    /** 当前是否处于夜间 */
     private var isNightMode: Boolean = false
 
     /**
      * 判定当前该不该用夜间配色。
      *
-     * 优先用 App 推送的值 —— App 内部按真实太阳节律（SolarService）算昼夜，
-     * 比系统深色模式准得多；还没收到过推送时退回系统深色模式，
-     * 保证深夜桌面上不至于亮得刺眼。
+     * 优先级：
+     * 1. App 推来的日出/日落边界 + 当前本地时间 → 最准，跟真实太阳一致
+     * 2. App 推来的昼夜布尔值（手动切换光影模式时用这个）
+     * 3. 系统深色模式（App 从来没接管过时的兜底）
      */
     private fun resolveNightMode(): Boolean {
+        if (appDayStartMinute >= 0 && appNightStartMinute >= 0) {
+            val minuteOfDay = currentMinuteOfDay()
+            return minuteOfDay >= appNightStartMinute || minuteOfDay < appDayStartMinute
+        }
         appNightMode?.let { return it }
         return try {
             val uiMode = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
@@ -2221,19 +2289,103 @@ class FloatingPetService : Service() {
         }
     }
 
-    /** 把夜间配色应用到悬浮猫 */
+    /** 当前本地时间在当天的第几分钟（0 ~ 1439） */
+    private fun currentMinuteOfDay(): Int {
+        val calendar = Calendar.getInstance()
+        return calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+    }
+
+    /** 把夜间配色应用到悬浮窗 */
     private fun applyNightMode(enabled: Boolean) {
         isNightMode = enabled
         // 注意：这里直接赋值属性，而不是调 view.setNightMode(enabled) ——
         // PokoPetView 的 public 属性 isNightMode 的隐式 setter 就是 setNightMode，
         // 那边不能再定义同名函数（JVM 签名会撞车）。
+        //
+        // 夜间在猫身上**只影响瞳孔**（夜里瞳孔自然舒张，与 App 一致），
+        // 毛色一律保持皮肤原色 —— 同一个 App 里，桌面的猫和窝里的猫必须一模一样。
         pokoView?.isNightMode = enabled
+        applyNightChrome(enabled)
     }
 
-    /** 接收 App 推送的昼夜状态 */
-    fun applyNightModeFromApp(enabled: Boolean) {
+    /**
+     * 把悬浮窗的 UI 配件（气泡 / 快捷菜单）按昼夜切换配色。
+     *
+     * ⚠️ 这里**只改配件、不改猫本体**：App 里的猫本体永远是皮肤原色，
+     * 桌面这边也必须一样，否则同一只猫在两个地方会长得不一样。
+     * 夜间配色与 App 内的夜间弹层同源（深靛底 0xFF1E1B4B + 浅字 + 靛紫描边）。
+     */
+    private fun applyNightChrome(enabled: Boolean) {
+        val density = resources.displayMetrics.density
+        // 变量名刻意加 Color 后缀：太通用的名字（bg / text / stroke）很容易和
+        // 别的函数里的局部变量撞名，守护测试会当成"跨函数引用局部变量"而报警。
+        val bgColor = if (enabled) chromeNightBg else chromeDayBg
+        val textColor = if (enabled) chromeNightText else chromeDayText
+        val strokeColor = if (enabled) chromeNightStroke else chromeDayStroke
+        val dividerColor = if (enabled) chromeNightDivider else chromeDayDivider
+
+        // 注意 lambda 参数名也不能和别的函数里的局部变量重名
+        bubbleView?.let { bubbleTarget ->
+            bubbleTarget.setTextColor(textColor)
+            bubbleTarget.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(bgColor)
+                cornerRadius = 14 * density
+                setStroke((1.5f * density).toInt(), strokeColor)
+            }
+        }
+
+        actionMenuView?.let { menuTarget ->
+            menuTarget.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(if (enabled) chromeNightBg else chromeDayMenuBg)
+                cornerRadius = 18 * density
+                setStroke((1.5f * density).toInt(), strokeColor)
+            }
+            applyChromeTextColor(menuTarget)
+            chromeDividers.forEach { it.setBackgroundColor(dividerColor) }
+        }
+    }
+
+    /**
+     * 遍历菜单子树，把按钮文字在"日间配色 ↔ 夜间配色"之间来回切换。
+     *
+     * 用的是**对合映射**（日→夜、夜→日），所以反复切换不会跑偏。
+     */
+    private fun applyChromeTextColor(root: View) {
+        if (root is TextView) {
+            root.setTextColor(chromeTextColorFor(root.currentTextColor))
+        }
+        if (root is ViewGroup) {
+            for (i in 0 until root.childCount) {
+                applyChromeTextColor(root.getChildAt(i))
+            }
+        }
+    }
+
+    /** 日夜文字色对合映射 */
+    private fun chromeTextColorFor(color: Int): Int = when (color) {
+        chromeBtnPetDay -> chromeBtnPetNight
+        chromeBtnFeedDay -> chromeBtnFeedNight
+        chromeBtnHomeDay -> chromeBtnHomeNight
+        chromeBtnDismissDay -> chromeBtnDismissNight
+        chromeBtnPetNight -> chromeBtnPetDay
+        chromeBtnFeedNight -> chromeBtnFeedDay
+        chromeBtnHomeNight -> chromeBtnHomeDay
+        chromeBtnDismissNight -> chromeBtnDismissDay
+        else -> color
+    }
+
+    /** 接收 App 推送的昼夜状态（以及可选的日出/日落边界，单位：当天第几分钟） */
+    fun applyNightModeFromApp(
+        enabled: Boolean,
+        dayStartMinute: Int = -1,
+        nightStartMinute: Int = -1,
+    ) {
         appNightMode = enabled
-        applyNightMode(enabled)
+        appDayStartMinute = dayStartMinute
+        appNightStartMinute = nightStartMinute
+        applyNightMode(resolveNightMode())
     }
 
     /**

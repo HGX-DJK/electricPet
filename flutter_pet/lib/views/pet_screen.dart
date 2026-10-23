@@ -590,15 +590,41 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 上次推送给桌面悬浮宠的昼夜状态（只有变了才推，避免无谓的通道调用）
   bool? _pushedNightMode;
 
+  /// 上次推送给桌面悬浮宠的昼夜边界（当天第几分钟）。
+  /// 日出日落每天都在挪，所以边界漂了也要重新推一次。
+  int? _pushedDayStartMinute;
+  int? _pushedNightStartMinute;
+
   /// 把昼夜状态同步给桌面悬浮宠。
   ///
   /// App 内部按真实太阳节律（SolarService）算昼夜，比系统深色模式准得多；
   /// 桌面上的波可据此切换夜间配色，深夜亮在深色桌面上不至于刺眼。
+  ///
+  /// 同时把日出/日落边界也推过去：桌面端拿到边界就能自己按太阳判断昼夜，
+  /// 即使 App 被杀掉也不会退回"系统深色模式"那种粗略判定，
+  /// 桌面上和 App 里的昼夜就永远一致。
   void _syncNightModeToOverlay() {
-    final isNight = _isNightMode;
-    if (_pushedNightMode == isNight) return;
+    final theme = _getCircadianTheme();
+    final isNight = theme['isNight'] as bool;
+    final dayStart = theme['dayStartMinute'] as int;
+    final nightStart = theme['nightStartMinute'] as int;
+
+    // 边界每天都在挪，漂超过 2 分钟就重新推一次
+    final boundaryDrifted =
+        (dayStart - (_pushedDayStartMinute ?? dayStart)).abs() > 2 ||
+        (nightStart - (_pushedNightStartMinute ?? nightStart)).abs() > 2;
+    if (_pushedNightMode == isNight && !boundaryDrifted) return;
+
     _pushedNightMode = isNight;
-    unawaited(OverlayService.updateFloatingPet(nightMode: isNight));
+    _pushedDayStartMinute = dayStart;
+    _pushedNightStartMinute = nightStart;
+    unawaited(
+      OverlayService.updateFloatingPet(
+        nightMode: isNight,
+        dayStartMinute: dayStart,
+        nightStartMinute: nightStart,
+      ),
+    );
   }
 
   /// 首启/重装后探测公共存储中的历史档案并呼出继承弹窗 (防卸载丢失)
@@ -2788,6 +2814,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       'phaseName': theme.phaseName,
       'solarTimes': theme.solarTimes,
       'isManual': theme.isManual,
+      'dayStartMinute': theme.dayStartMinute,
+      'nightStartMinute': theme.nightStartMinute,
     };
   }
 
@@ -4584,6 +4612,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         skinId: widget.petModel.skinId,
                         petName: widget.petModel.name,
                         nightMode: _isNightMode,
+                        dayStartMinute:
+                            _getCircadianTheme()['dayStartMinute'] as int,
+                        nightStartMinute:
+                            _getCircadianTheme()['nightStartMinute'] as int,
                       );
                       if (ok) {
                         _showDialogueBubble(

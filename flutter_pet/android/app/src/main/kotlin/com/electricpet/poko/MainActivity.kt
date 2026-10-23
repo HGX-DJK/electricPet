@@ -93,6 +93,13 @@ class MainActivity: FlutterActivity() {
                             call.argument<Boolean>(OverlayChannel.ARG_NIGHT_MODE)?.let {
                                 putExtra(OverlayChannel.ARG_NIGHT_MODE, it)
                             }
+                            // 昼夜边界（当天第几分钟）：桌面端靠它自己判断昼夜，App 被杀掉也不跑偏
+                            call.argument<Int>(OverlayChannel.ARG_DAY_START_MINUTE)?.let {
+                                putExtra(OverlayChannel.ARG_DAY_START_MINUTE, it)
+                            }
+                            call.argument<Int>(OverlayChannel.ARG_NIGHT_START_MINUTE)?.let {
+                                putExtra(OverlayChannel.ARG_NIGHT_START_MINUTE, it)
+                            }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
@@ -116,6 +123,13 @@ class MainActivity: FlutterActivity() {
                             // 昼夜状态：App 按真实太阳节律算好后推过来，桌面猫跟着换配色
                             call.argument<Boolean>(OverlayChannel.ARG_NIGHT_MODE)?.let {
                                 putExtra(OverlayChannel.ARG_NIGHT_MODE, it)
+                            }
+                            // 昼夜边界（当天第几分钟）：桌面端靠它自己判断昼夜，App 被杀掉也不跑偏
+                            call.argument<Int>(OverlayChannel.ARG_DAY_START_MINUTE)?.let {
+                                putExtra(OverlayChannel.ARG_DAY_START_MINUTE, it)
+                            }
+                            call.argument<Int>(OverlayChannel.ARG_NIGHT_START_MINUTE)?.let {
+                                putExtra(OverlayChannel.ARG_NIGHT_START_MINUTE, it)
                             }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

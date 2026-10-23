@@ -229,6 +229,10 @@ class SolarService {
       phaseName: phaseName,
       solarTimes: solar,
       isManual: false,
+      // 昼夜边界（当天第几分钟）：推给桌面悬浮宠，
+      // 它就能在 App 被杀掉的时候自己按太阳节律判断昼夜
+      dayStartMinute: (tDawnStart * 60).round(),
+      nightStartMinute: (tDusk * 60).round(),
     );
   }
 
@@ -271,6 +275,15 @@ class SkyTheme {
   final SolarTimes solarTimes;
   final bool isManual;
 
+  /// 白天的起始时刻（当天第几分钟）。
+  ///
+  /// 推给桌面悬浮宠后，它就能在 App 被杀掉的时候自己按太阳节律判断昼夜。
+  /// 手动切换光影模式时为 -1，表示"以昼夜布尔值为准"。
+  final int dayStartMinute;
+
+  /// 夜间的起始时刻（当天第几分钟），语义同上。
+  final int nightStartMinute;
+
   const SkyTheme({
     required this.name,
     required this.icon,
@@ -280,5 +293,7 @@ class SkyTheme {
     required this.phaseName,
     required this.solarTimes,
     required this.isManual,
+    this.dayStartMinute = -1,
+    this.nightStartMinute = -1,
   });
 }

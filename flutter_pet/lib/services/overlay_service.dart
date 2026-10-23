@@ -41,16 +41,23 @@ class OverlayService {
   ///
   /// [nightMode] 是 App 按真实太阳节律算出来的昼夜状态，
   /// 传过去可以让桌面上的波可一开始就配上对应的夜间/日间配色。
+  ///
+  /// [dayStartMinute] / [nightStartMinute] 是昼夜边界（当天第几分钟），
+  /// 桌面端靠它自己按太阳节律判断昼夜，App 被杀掉也不会跑偏。
   static Future<bool> startFloatingPet({
     String? skinId,
     String? petName,
     bool? nightMode,
+    int? dayStartMinute,
+    int? nightStartMinute,
   }) async {
     try {
       final bool res = await _channel.invokeMethod(OverlayChannel.startFloatingService, {
         OverlayChannel.argSkinId: skinId,
         OverlayChannel.argPetName: petName,
         OverlayChannel.argNightMode: nightMode,
+        OverlayChannel.argDayStartMinute: dayStartMinute,
+        OverlayChannel.argNightStartMinute: nightStartMinute,
       });
       return res;
     } catch (_) {
@@ -70,10 +77,15 @@ class OverlayService {
   ///
   /// [nightMode] 是 App 按真实太阳节律算出来的昼夜状态：
   /// 桌面上的波可据此切换夜间配色，深夜不再亮得刺眼。
+  ///
+  /// [dayStartMinute] / [nightStartMinute] 是昼夜边界（当天第几分钟），
+  /// 桌面端靠它自己按太阳节律判断昼夜，App 被杀掉也不会跑偏。
   static Future<bool> updateFloatingPet({
     String? skinId,
     String? petName,
     bool? nightMode,
+    int? dayStartMinute,
+    int? nightStartMinute,
   }) async {
     try {
       final bool? res = await _channel.invokeMethod<bool>(
@@ -82,6 +94,8 @@ class OverlayService {
           OverlayChannel.argSkinId: skinId,
           OverlayChannel.argPetName: petName,
           OverlayChannel.argNightMode: nightMode,
+          OverlayChannel.argDayStartMinute: dayStartMinute,
+          OverlayChannel.argNightStartMinute: nightStartMinute,
         },
       );
       return res ?? false;
