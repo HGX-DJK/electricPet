@@ -122,6 +122,12 @@ class FloatingPetService : Service() {
     companion object {
         var isRunning = false
         const val TAG = "PokoOverlay"
+
+        /**
+         * 拖拽修复版本标记：启动日志会带上它，
+         * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
+         */
+        const val DRAG_FIX_VERSION = "drag-fix-v2"
         const val ACTION_NOTIFICATION_PET = "com.electricpet.poko.ACTION_NOTIFICATION_PET"
         const val ACTION_NOTIFICATION_FEED = "com.electricpet.poko.ACTION_NOTIFICATION_FEED"
         const val ACTION_NOTIFICATION_STOP = "com.electricpet.poko.ACTION_NOTIFICATION_STOP"
@@ -220,7 +226,8 @@ class FloatingPetService : Service() {
 
         try {
             windowManager?.addView(pokoView, pokoParams)
-            Toast.makeText(this, "🐾 波可已跃上手机桌面！无论App是否关闭均可自由拖动挪移哦~", Toast.LENGTH_SHORT).show()
+            Log.i(TAG, "悬浮宠服务启动 · 拖拽修复版 $DRAG_FIX_VERSION")
+            Toast.makeText(this, "🐾 波可已跃上手机桌面！(v2) 自由拖动挪移哦~", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
             stopSelf()
@@ -277,6 +284,8 @@ class FloatingPetService : Service() {
         var lastRawX = 0f
         var isClick = false
         var hasDragged = false
+        // 单次手势只打一条移动日志，便于用一条 logcat 判定"跟手了没有"
+        var hasLoggedMove = false
         var velocityTracker: VelocityTracker? = null
         // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
         var gestureScreenWidth = 0
@@ -289,8 +298,8 @@ class FloatingPetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     hasTouchDown = true
                     cancelEdgePeeking()
-                    // 按下瞬间直接归位（不走动画），保证下面采集到的 initialX/initialY
-                    // 就是宠物真实的落点，不会与归位动画抢写 params.x 而在起手时跳变
+                    // 按下瞬间立即完全露出（只复位绘制偏移，窗口坐标一动不动），
+                    // 保证下面采集到的 initialX/initialY 就是宠物真实落点
                     restoreFromPeeking(animated = false)
                     velocityTracker?.recycle()
                     velocityTracker = VelocityTracker.obtain()
@@ -309,6 +318,7 @@ class FloatingPetService : Service() {
                     lastRawX = event.rawX
                     isClick = true
                     hasDragged = false
+                    hasLoggedMove = false
                     isLongPressing = false
 
                     // 长按蓄力深度抚摸计时
@@ -326,7 +336,11 @@ class FloatingPetService : Service() {
                     mainHandler.postDelayed(longPressRunnable!!, 480)
 
                     pokoView?.onDragStateChanged(true)
-                    Log.d(TAG, "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY)")
+                    Log.d(
+                        TAG,
+                        "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY) " +
+                            "peekOffset=${pokoView?.peekOffsetX} sizePx=$sizePx"
+                    )
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -365,9 +379,29 @@ class FloatingPetService : Service() {
                         // 之前这里被静默吞掉，导致"宠物按不动/拖不动"完全无从排查
                         Log.e(TAG, "悬浮窗位置更新失败", e)
                     }
+
+                    if (!hasLoggedMove) {
+                        hasLoggedMove = true
+                        Log.d(
+                            TAG,
+                            "首次移动 dx=$dx dy=$dy -> 窗口位置 x=${params.x} y=${params.y} " +
+                                "(初始 win=($initialX, $initialY))"
+                        )
+                    }
                     true
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_CANCEL -> {
+                    // 系统中断手势（来电、通知栏下拉、系统导航手势）时绝不能当成松手处理，
+                    // 否则宠物会被误判为"拖拽结束"而吸附回边缘，看起来又像拖不动
+                    hasTouchDown = false
+                    longPressRunnable?.let { mainHandler.removeCallbacks(it) }
+                    pokoView?.onDragStateChanged(false)
+                    velocityTracker?.recycle()
+                    velocityTracker = null
+                    Log.w(TAG, "拖拽被系统中断 (ACTION_CANCEL)，波可保持原地不动")
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
                     hasTouchDown = false
                     longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
@@ -390,7 +424,7 @@ class FloatingPetService : Service() {
                         }
                     }
 
-                    if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
+                    if (isClick) {
                         val now = System.currentTimeMillis()
                         if (now - lastClickTime < 380) {
                             // 双击萌宠：更具层次感的双脉冲轻震并极速拉起主应用返回小窝
@@ -448,6 +482,7 @@ class FloatingPetService : Service() {
             cancelEdgePeeking()
             isPeeking = false
             view.alpha = 1.0f
+            view.peekOffsetX = 0f
             mainHandler.removeCallbacks(edgeStrollRunnable)
             strollAnimator?.cancel()
             isStrolling = false
@@ -1241,6 +1276,7 @@ class FloatingPetService : Service() {
         val params = pokoParams ?: return
         val view = pokoView ?: return
         view.alpha = 1.0f
+        view.peekOffsetX = 0f
         val density = resources.displayMetrics.density
         val sizePx = (82 * density).toInt()
         val (screenWidth, screenHeight) = getScreenDimensions()
@@ -1322,14 +1358,24 @@ class FloatingPetService : Service() {
             val (screenWidth, _) = getScreenDimensions()
             val density = resources.displayMetrics.density
             val sizePx = (82 * density).toInt()
+            val edgeThreshold = (4 * density).toInt()
 
-            val startX = params.x
-            // 向屏幕边缘外侧避让收纳 32%，露出大头与双耳探头张望
-            val peekTargetX = if (isLeft) {
-                (-sizePx * 0.32f).toInt()
+            // 探头前先把窗口贴到对应边缘；探头过程只靠"窗口内绘制偏移"完成，窗口不再移动
+            val dockedX = if (isLeft) {
+                edgeThreshold
             } else {
-                (screenWidth - sizePx * 0.68f).toInt()
+                (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
             }
+            if (params.x != dockedX) {
+                params.x = dockedX
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                } catch (_: Exception) {}
+            }
+
+            // 向屏幕边缘外侧避让收纳 32%：左侧边缘向左藏、右侧边缘向右藏
+            // 偏移发生在绘制层，窗口坐标不变 —— 拖拽起点与手指位移始终一一对应
+            val peekOffset = if (isLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)
 
             peekAnimator?.cancel()
             peekAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -1337,11 +1383,8 @@ class FloatingPetService : Service() {
                 interpolator = DecelerateInterpolator()
                 addUpdateListener { anim ->
                     val f = anim.animatedValue as Float
-                    params.x = (startX + (peekTargetX - startX) * f).toInt()
-                    view.alpha = 1.0f - f * 0.32f // 半透明淡化至 0.68f
-                    try {
-                        windowManager?.updateViewLayout(view, params)
-                    } catch (_: Exception) {}
+                    view.peekOffsetX = peekOffset * f
+                    view.alpha = 1f - f * 0.32f // 半透明淡化至 0.68f
                 }
                 addListener(object : AnimatorListenerAdapter() {
                     // Android 在 cancel() 时会先回调 onAnimationCancel 再回调 onAnimationEnd，
@@ -1382,47 +1425,35 @@ class FloatingPetService : Service() {
     /**
      * 从探头状态恢复完整可见。
      *
-     * @param animated false 表示立即归位（手指按下的瞬间使用）：
-     *   归位动画会逐帧改写 params.x，与拖拽的"params.x = initialX + dx"互相覆盖，
-     *   导致宠物起手时在"边缘 ↔ 手指"之间来回跳，表现为按不住、拖不动。
+     * 只复位"绘制偏移"，**绝不移动窗口**：
+     * 移动窗口会让拖拽起始坐标落到屏幕之外，被坐标钳制钉死在边缘，表现为拖不动。
+     *
+     * @param animated false 表示立即完全露出（手指按下的瞬间使用）
      */
     private fun restoreFromPeeking(animated: Boolean = true) {
         cancelEdgePeeking()
         val view = pokoView ?: return
-        val params = pokoParams ?: return
         view.alpha = 1.0f
 
-        if (isPeeking) {
-            isPeeking = false
-            val density = resources.displayMetrics.density
-            val sizePx = (82 * density).toInt()
-            val (screenWidth, _) = getScreenDimensions()
-            val edgeThreshold = (4 * density).toInt()
-            val isLeft = !view.facingLeft
-            val targetX = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+        if (!isPeeking) return
+        isPeeking = false
 
-            val startX = params.x
-            if (!animated) {
-                // 立即归位，不再启动动画与拖拽抢写窗口坐标
-                params.x = targetX
-                try {
-                    windowManager?.updateViewLayout(view, params)
-                } catch (_: Exception) {}
-                return
-            }
+        val currentOffset = view.peekOffsetX
+        if (currentOffset == 0f) return
 
-            ValueAnimator.ofFloat(0f, 1f).apply {
-                duration = 200
-                interpolator = OvershootInterpolator(1.8f)
-                addUpdateListener { anim ->
-                    val f = anim.animatedValue as Float
-                    params.x = (startX + (targetX - startX) * f).toInt()
-                    try {
-                        windowManager?.updateViewLayout(view, params)
-                    } catch (_: Exception) {}
-                }
-            }.start()
+        if (!animated) {
+            // 立即完全露出：仅复位绘制偏移，窗口坐标一动不动
+            view.peekOffsetX = 0f
+            return
         }
+
+        ValueAnimator.ofFloat(currentOffset, 0f).apply {
+            duration = 200
+            interpolator = OvershootInterpolator(1.8f)
+            addUpdateListener { anim ->
+                view.peekOffsetX = anim.animatedValue as Float
+            }
+        }.start()
     }
 
     private fun startAsForeground() {

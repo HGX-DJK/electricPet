@@ -122,7 +122,7 @@ void main() {
     test('拖拽释放必须走自由落位逻辑，而不是无条件磁吸贴边', () {
       final upBranch = _between(
         serviceSource,
-        'MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->',
+        'MotionEvent.ACTION_UP -> {',
         'private fun refreshPetVisibility',
       );
 
@@ -186,11 +186,65 @@ void main() {
       final longPressBranch = _between(
         serviceSource,
         'if (isLongPressing) {',
-        'if (isClick && event.actionMasked',
+        'if (isClick) {',
       );
 
       expect(longPressBranch, contains('if (!hasDragged)'),
           reason: '长按分支必须只在「完全没有拖动」时才吞掉释放；否则「先按住半秒再拖」与「快速拖」结果不一致');
+    });
+
+    test('探头避让只能改绘制偏移，绝不能移动窗口', () {
+      final peekBlock = _between(
+        serviceSource,
+        'private fun scheduleEdgePeeking',
+        'private fun isPetDockedAtEdge',
+      );
+
+      expect(peekBlock, contains('view.peekOffsetX = peekOffset * f'),
+          reason: '探头必须通过窗口内的绘制偏移实现');
+      expect(peekBlock, isNot(contains('peekTargetX')),
+          reason: '旧实现靠移动窗口做探头，窗口 x 会落到屏幕之外，'
+              '而拖拽坐标钳制范围是 [0, screenWidth - sizePx]，'
+              '拖拽起始坐标被钉死在边缘 —— 这正是「宠物拖不动」的根因');
+      expect(petViewSource, contains('var peekOffsetX: Float'),
+          reason: 'PokoPetView 缺少探头绘制偏移属性');
+      expect(petViewSource, contains('canvas.translate(peekOffsetX, 0f)'),
+          reason: '绘制管线未应用探头偏移');
+    });
+
+    test('从探头恢复时不得移动窗口', () {
+      final restoreBlock = _between(
+        serviceSource,
+        'private fun restoreFromPeeking',
+        'private fun startAsForeground',
+      );
+
+      expect(restoreBlock, isNot(contains('params.x =')),
+          reason: '恢复可见时移动窗口会让拖拽起点落到屏幕外并被坐标钳制，宠物被钉死在边缘');
+      expect(restoreBlock, contains('view.peekOffsetX = 0f'),
+          reason: '恢复可见应复位绘制偏移而不是搬动窗口');
+    });
+
+    test('系统中断手势 (ACTION_CANCEL) 不得当成松手处理', () {
+      // 只看宠物自身的触摸监听器：菜单按钮里的 UP/CANCEL 合并写法是合法的
+      final petTouchBlock = _between(
+        serviceSource,
+        'private fun setupTouchListener',
+        'private fun refreshPetVisibility',
+      );
+
+      expect(petTouchBlock, contains('MotionEvent.ACTION_CANCEL ->'),
+          reason: '缺少独立的 ACTION_CANCEL 分支');
+      expect(petTouchBlock, isNot(contains('MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->')),
+          reason: 'ACTION_CANCEL 与 ACTION_UP 必须分开处理，否则系统中断手势时'
+              '宠物会被误判为拖拽结束而吸附回边缘，看起来又像拖不动');
+    });
+
+    test('服务启动必须打印拖拽修复版本标记', () {
+      expect(serviceSource, contains('const val DRAG_FIX_VERSION'),
+          reason: '缺少版本标记，无法确认用户手机上装的是否是包含拖拽修复的新包');
+      expect(serviceSource, contains('Log.i(TAG, "悬浮宠服务启动 · 拖拽修复版 \$DRAG_FIX_VERSION")'),
+          reason: '启动日志未打印版本标记');
     });
   });
 

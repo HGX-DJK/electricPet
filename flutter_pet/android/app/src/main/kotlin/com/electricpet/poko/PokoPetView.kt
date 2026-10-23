@@ -48,6 +48,24 @@ class PokoPetView(context: Context) : View(context) {
             }
         }
 
+    // ---------- 探头避让：窗口内绘制偏移 ----------
+    /**
+     * 探头时的绘制横向偏移（像素）。
+     *
+     * 探头只通过"在窗口内部平移绘制内容"实现，**窗口本身绝不移动**。
+     * 原因：一旦用移动窗口的方式做探头，窗口的 x 会落到屏幕之外，
+     * 而拖拽的坐标钳制范围是 [0, screenWidth - sizePx]，
+     * 于是拖拽起始坐标被钳制回屏幕边缘，宠物在边缘"钉死"不动 —— 表现为拖不动。
+     * 改为绘制偏移后，窗口始终在屏幕内，拖拽起点与手指位移始终一一对应。
+     */
+    var peekOffsetX: Float = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
     // ---------- 动作与表情枚举 ----------
     enum class PetAction {
         IDLE,         // 待机呼吸 (起伏呼吸、尾巴轻摇、耳朵微动)
@@ -916,6 +934,11 @@ class PokoPetView(context: Context) : View(context) {
         if (w <= 0 || h <= 0) return
 
         canvas.save()
+
+        // 0. 探头避让：只在窗口内部平移绘制内容，窗口位置保持不变（保证拖拽坐标稳定）
+        if (peekOffsetX != 0f) {
+            canvas.translate(peekOffsetX, 0f)
+        }
 
         // 1. 边缘停驻朝向镜像 (贴在屏幕右边缘时面向内测左方)
         if (facingLeft) {
