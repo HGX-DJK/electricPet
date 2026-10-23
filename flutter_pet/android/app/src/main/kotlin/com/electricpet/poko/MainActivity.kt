@@ -143,6 +143,40 @@ class MainActivity: FlutterActivity() {
                 OverlayChannel.IS_FLOATING_SERVICE_RUNNING -> {
                     result.success(FloatingPetService.isRunning)
                 }
+                OverlayChannel.GET_OVERLAY_SETTINGS -> {
+                    val s = FloatingPetService.readSettings(this)
+                    result.success(
+                        mapOf(
+                            OverlayChannel.ARG_SETTING_SIZE_DP to s.sizeDp,
+                            OverlayChannel.ARG_SETTING_OPACITY to s.opacity.toDouble(),
+                            OverlayChannel.ARG_SETTING_PEEKING to s.peeking,
+                            OverlayChannel.ARG_SETTING_STROLLING to s.strolling,
+                            OverlayChannel.ARG_SETTING_AUTO_CHAT to s.autoChat,
+                            OverlayChannel.ARG_SETTING_EDGE_SNAP to s.edgeSnap,
+                        )
+                    )
+                }
+                OverlayChannel.UPDATE_OVERLAY_SETTINGS -> {
+                    val raw = call.argument<Map<String, Any?>>(OverlayChannel.ARG_SETTINGS) ?: emptyMap()
+                    val current = FloatingPetService.readSettings(this)
+                    val updated = current.copy(
+                        sizeDp = (raw[OverlayChannel.ARG_SETTING_SIZE_DP] as? Number)?.toInt() ?: current.sizeDp,
+                        opacity = (raw[OverlayChannel.ARG_SETTING_OPACITY] as? Number)?.toDouble() ?: current.opacity,
+                        peeking = raw[OverlayChannel.ARG_SETTING_PEEKING] as? Boolean ?: current.peeking,
+                        strolling = raw[OverlayChannel.ARG_SETTING_STROLLING] as? Boolean ?: current.strolling,
+                        autoChat = raw[OverlayChannel.ARG_SETTING_AUTO_CHAT] as? Boolean ?: current.autoChat,
+                        edgeSnap = raw[OverlayChannel.ARG_SETTING_EDGE_SNAP] as? Boolean ?: current.edgeSnap,
+                    )
+                    val service = FloatingPetService.instance
+                    if (service != null) {
+                        // 服务正在运行：立刻生效
+                        service.applySettingsFromChannel(updated)
+                    } else {
+                        // 服务没运行：先持久化，下次启动自动套用
+                        FloatingPetService.writeSettings(this, updated)
+                    }
+                    result.success(true)
+                }
                 OverlayChannel.CHECK_STORAGE_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         result.success(Environment.isExternalStorageManager())

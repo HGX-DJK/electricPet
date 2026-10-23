@@ -35,6 +35,7 @@ import 'docks/cyber_gacha_fab.dart';
 import '../services/backup_service.dart';
 import 'dialogs/heritage_backup_dialog.dart';
 import 'dialogs/ai_voice_chat_dialog.dart';
+import 'dialogs/floating_pet_settings_sheet.dart';
 
 /// 触摸产生的飘浮爱心与星光特效粒子
 class _Particle {
@@ -4461,9 +4462,23 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               children: [
                 Text(
                   hasPermission
-                      ? '✅ 系统悬浮窗权限已就绪！\n开启后波可将突破 App 边界，常驻在手机桌面、微信、浏览器等任意应用的最上层，随时随地陪伴您。\n💡 按住波可拖动即可挪到屏幕任意位置，轻戳跟你说话，双击回到小窝。\n🐾 打开小窝时桌面波可会暂时隐身，回桌面自动出现，不会同时出现两只。'
+                      ? '✅ 系统悬浮窗权限已就绪！\n开启后波可将突破 App 边界，常驻在手机桌面、微信、浏览器等任意应用的最上层，随时随地陪伴您。\n💡 按住波可拖动即可挪到屏幕任意位置，轻戳跟你说话，双击逗它转圈。\n🐾 打开小窝时桌面波可会暂时隐身，回桌面自动出现，不会同时出现两只。'
                       : '⚠️ 尚未开启“显示在其他应用上层”权限。\n请先点击下方按钮前往系统设置开启悬浮窗权限，方可在手机桌面上显示波可。',
                   style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFEA580C),
+                    side: const BorderSide(color: Color(0xFFFED7AA)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: const Text('悬浮宠设置'),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    FloatingPetSettingsSheet.show(context, isNight: _isNightMode);
+                  },
                 ),
                 const SizedBox(height: 14),
                 if (hasPermission)

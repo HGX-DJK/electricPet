@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../models/overlay_settings.dart';
 import 'overlay_channel.dart';
 
 /// Android 原生悬浮窗与系统交互通道服务
@@ -79,6 +80,32 @@ class OverlayService {
       final bool running =
           await _channel.invokeMethod(OverlayChannel.isFloatingServiceRunning);
       return running;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 读取桌面悬浮宠设置（悬浮服务未运行时也能读取已保存的设置）
+  static Future<OverlaySettings> getSettings() async {
+    try {
+      final Map<Object?, Object?>? raw =
+          await _channel.invokeMethod<Map<Object?, Object?>>(
+        OverlayChannel.getOverlaySettings,
+      );
+      return OverlaySettings.fromMap(raw ?? const <Object?, Object?>{});
+    } catch (_) {
+      return const OverlaySettings();
+    }
+  }
+
+  /// 更新桌面悬浮宠设置（服务运行中会立即生效，未运行则下次启动套用）
+  static Future<bool> updateSettings(OverlaySettings settings) async {
+    try {
+      final bool? res = await _channel.invokeMethod<bool>(
+        OverlayChannel.updateOverlaySettings,
+        {OverlayChannel.argSettings: settings.toMap()},
+      );
+      return res ?? false;
     } catch (_) {
       return false;
     }

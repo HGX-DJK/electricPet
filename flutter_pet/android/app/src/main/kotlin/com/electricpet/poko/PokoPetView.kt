@@ -12,7 +12,9 @@ import android.view.animation.OvershootInterpolator
 import java.util.Random
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 /**
  * 桌面悬浮萌宠 · 波可 (Poko) 终极高活力原生矢量动效渲染 View
@@ -26,8 +28,17 @@ import kotlin.math.sin
  */
 class PokoPetView(context: Context) : View(context) {
 
-    private val density = resources.displayMetrics.density
+    private val baseDensity = resources.displayMetrics.density
     private val random = Random()
+
+    /**
+     * 悬浮宠尺寸缩放系数：窗口尺寸变化时整套矢量绘制按比例缩放，
+     * 让"大小"设置真正生效（否则窗口变大了，猫还是原来那么大）。
+     */
+    private var sizeScale: Float = 1f
+
+    /** 绘制用密度：跟随窗口尺寸缩放，所有绘制常量都以它为基准 */
+    private val density: Float get() = baseDensity * sizeScale
 
     // ---------- 皮肤与外观配置 ----------
     var skinId: String = "cat_calico"
@@ -134,6 +145,27 @@ class PokoPetView(context: Context) : View(context) {
     // 表情状态
     private var eyeMood: EyeMood = EyeMood.NORMAL
     private var mouthState: MouthState = MouthState.NORMAL_OMEGA
+
+    // ---------- 视线跟随 ----------
+    /** 注视目标（视图坐标，通常是用户指尖位置）；null 表示当前没有注视目标 */
+    private var gazeTargetX: Float? = null
+    private var gazeTargetY: Float? = null
+    /** 眼珠实际偏移量：由注视目标缓动得到，最终叠加到瞳孔位置 */
+    private var gazeOffsetX: Float = 0f
+    private var gazeOffsetY: Float = 0f
+
+    // ---------- 状态感知 ----------
+    /** 饱食度 0~100：偏低时自主行为更常"找食物"、表情更委屈 */
+    var hungerLevel: Int = 80
+        set(value) {
+            field = value.coerceIn(0, 100)
+        }
+
+    /** 心情值 0~100：偏高时自主动作更活泼 */
+    var happinessLevel: Int = 80
+        set(value) {
+            field = value.coerceIn(0, 100)
+        }
 
     // 动画运行器
     private var idleAnimator: ValueAnimator? = null
@@ -365,6 +397,8 @@ class PokoPetView(context: Context) : View(context) {
                     tailAngle = sin(rad * 1.4f) * 20f
                     // 周期机灵轻抖耳朵
                     earTwitch = if (sin(rad * 3f) > 0.88f) sin(rad * 20f) * 4.5f * density else 0f
+                    // 视线跟随：指尖靠近时眼珠悄悄转过去
+                    updateGaze()
                 } else if (currentAction == PetAction.DRAGGING) {
                     // 悬空时四肢轻轻蹬踩扑腾
                     val paddleRad = (f * 4.0 * Math.PI).toFloat()
@@ -390,7 +424,13 @@ class PokoPetView(context: Context) : View(context) {
             PetAction.SLEEPY,        // 困困瞌睡冒 Zzz
             PetAction.SPIN_TAIL      // 追尾巴转圈打转
         )
-        val selected = actions[random.nextInt(actions.size)]
+        // 状态驱动：饿了更常东张西望找吃的；心情好则多来点活泼动作
+        val selected = when {
+            hungerLevel < 35 && random.nextInt(100) < 45 -> PetAction.HEAD_TILT
+            happinessLevel >= 70 && random.nextInt(100) < 40 ->
+                if (random.nextBoolean()) PetAction.HAPPY_BOUNCE else PetAction.SPIN_TAIL
+            else -> actions[random.nextInt(actions.size)]
+        }
         executeAction(selected)
     }
 
@@ -767,6 +807,16 @@ class PokoPetView(context: Context) : View(context) {
     fun onPetTapped() {
         currentActionAnimator?.cancel()
         currentAction = PetAction.PETTED
+        playSquish()
+        // 喷发治愈爱心粒子
+        spawnHearts()
+    }
+
+    /**
+     * 果冻挤压回弹：受力瞬间横向膨胀、释放 Overshoot 弹性归位。
+     * @param happyFace 是否强制切换到开心眯眼表情（炸毛等反应需要保留自己的表情）
+     */
+    private fun playSquish(happyFace: Boolean = true) {
         squishAnimator?.cancel()
 
         // 阶段一：受力瞬间横向挤压膨胀、纵向压扁
@@ -775,8 +825,10 @@ class PokoPetView(context: Context) : View(context) {
             addUpdateListener {
                 squishScaleX = it.animatedValue as Float
                 squishScaleY = 2f - squishScaleX
-                eyeMood = EyeMood.HAPPY_SMILE
-                mouthState = MouthState.BLEP_TONGUE
+                if (happyFace) {
+                    eyeMood = EyeMood.HAPPY_SMILE
+                    mouthState = MouthState.BLEP_TONGUE
+                }
                 invalidate()
             }
         }
@@ -803,9 +855,153 @@ class PokoPetView(context: Context) : View(context) {
             }
         })
         squishDown.start()
+    }
 
-        // 喷发治愈爱心粒子
-        spawnHearts()
+    // ---------- 分区触摸反馈 ----------
+    /** 触摸命中的身体分区 */
+    enum class TouchZone { HEAD, BODY, TAIL, PAW, NONE }
+
+    /**
+     * 依据绘制几何做分区命中判定：头 / 身 / 尾 / 爪 四区。
+     * 命中区域与 [drawHead] / [drawBody] / [drawTail] / [drawPaws] 使用的坐标完全一致，
+     * 所以"摸到哪儿"和"看到哪儿"永远对得上。
+     */
+    fun hitTest(x: Float, y: Float): TouchZone {
+        if (width <= 0 || height <= 0) return TouchZone.NONE
+        val cx = width / 2f
+        val cy = height * 0.53f + jumpOffsetY
+        // 画面被朝向镜像翻转过，命中判定必须跟着一起翻，否则摸左边会摸到尾巴
+        val lx = if (facingLeft) 2f * cx - x else x
+
+        val headY = cy - 10f * density + headOffsetY
+        val headW = 27f * density
+        val headH = 21f * density
+
+        // 尾巴：身体右后方的尾巴
+        val tailX = cx + 13f * density
+        val tailY = cy + 12f * density
+        if (abs(lx - tailX) < 20f * density && abs(y - tailY) < 18f * density) {
+            return TouchZone.TAIL
+        }
+
+        // 爪子：身体底部左右两只小肉爪
+        val pawY = cy + 22f * density
+        val onLeftPaw = abs(lx - (cx - 9.5f * density)) < 8f * density
+        val onRightPaw = abs(lx - (cx + 9.5f * density)) < 8f * density
+        if (abs(y - pawY) < 9f * density && (onLeftPaw || onRightPaw)) {
+            return TouchZone.PAW
+        }
+
+        // 大头
+        if (abs(lx - cx) < headW && abs(y - headY) < headH) {
+            return TouchZone.HEAD
+        }
+
+        // 躯干
+        if (abs(lx - cx) < 24f * density && y > cy - 6f * density && y < cy + 25f * density) {
+            return TouchZone.BODY
+        }
+
+        return TouchZone.NONE
+    }
+
+    /**
+     * 按命中分区播放差异化反应：
+     * 摸头 = 眯眼撒娇、摸身 = 蹭手、摸尾 = 炸毛、戳爪 = 缩爪。
+     * 让"点一下"从单一反馈变成有层次的小互动。
+     *
+     * @return 是否命中了有效分区
+     */
+    fun reactToTouch(zone: TouchZone): Boolean {
+        when (zone) {
+            TouchZone.HEAD -> {
+                eyeMood = EyeMood.HAPPY_SMILE
+                mouthState = MouthState.BLEP_TONGUE
+                headTiltAngle = 6f
+                playSquish()
+                spawnHearts()
+                return true
+            }
+            TouchZone.BODY -> {
+                eyeMood = EyeMood.HAPPY_SMILE
+                mouthState = MouthState.NORMAL_OMEGA
+                bodyLeanAngle = 7f
+                playSquish()
+                spawnHearts()
+                return true
+            }
+            TouchZone.TAIL -> {
+                // 炸毛：耳朵后压、尾巴猛甩、瞳孔放大
+                earTwitch = -5f * density
+                eyeMood = EyeMood.WIDE_SURPRISE
+                mouthState = MouthState.NORMAL_OMEGA
+                tailAngle = -30f
+                playSquish(happyFace = false)
+                return true
+            }
+            TouchZone.PAW -> {
+                eyeMood = EyeMood.WIDE_SURPRISE
+                mouthState = MouthState.BLEP_TONGUE
+                leftPawOffsetY = 7f * density
+                rightPawOffsetY = 7f * density
+                playSquish(happyFace = false)
+                return true
+            }
+            TouchZone.NONE -> return false
+        }
+    }
+
+    // ---------- 视线跟随 ----------
+    /**
+     * 让猫眼珠看向指定的视图坐标（通常是指尖位置）。
+     * 这是"这只猫是活的"感知成本最低的一招：直接复用已有的瞳孔偏移量。
+     */
+    fun setGazeTarget(x: Float, y: Float) {
+        gazeTargetX = x
+        gazeTargetY = y
+    }
+
+    /** 移开注视目标，眼珠缓缓回正 */
+    fun clearGazeTarget() {
+        gazeTargetX = null
+        gazeTargetY = null
+    }
+
+    /**
+     * 视线跟随解算：把眼珠朝注视目标缓动，最大偏移 ±3.5dp；没有目标时缓慢回正。
+     * 只在待机状态下生效，避免与歪头等主动作抢瞳孔。
+     */
+    private fun updateGaze() {
+        val targetX = gazeTargetX
+        val targetY = gazeTargetY
+        val desiredX: Float
+        val desiredY: Float
+        if (targetX == null || targetY == null || width <= 0) {
+            desiredX = 0f
+            desiredY = 0f
+        } else {
+            val cx = width / 2f
+            val cy = height * 0.53f + jumpOffsetY
+            val headY = cy - 10f * density + headOffsetY
+            val eyeY = headY - 2.5f * density
+            val dx = targetX - cx
+            val dy = targetY - eyeY
+            val dist = sqrt(dx * dx + dy * dy)
+            if (dist < 0.01f) {
+                desiredX = 0f
+                desiredY = 0f
+            } else {
+                val maxOffset = 3.5f * density
+                // 距离越远眼珠转得越满，超过一定距离后不再继续加大
+                val reach = (dist / (26f * density)).coerceAtMost(1f)
+                desiredX = (dx / dist) * maxOffset * reach
+                desiredY = (dy / dist) * maxOffset * reach * 0.6f
+            }
+        }
+        gazeOffsetX += (desiredX - gazeOffsetX) * 0.16f
+        gazeOffsetY += (desiredY - gazeOffsetY) * 0.16f
+        pupilOffsetX += (gazeOffsetX - pupilOffsetX) * 0.35f
+        pupilOffsetY += (gazeOffsetY - pupilOffsetY) * 0.35f
     }
 
     // ---------- 拖拽拎起悬空物理系统 ----------
@@ -924,6 +1120,15 @@ class PokoPetView(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val size = MeasureSpec.getSize(widthMeasureSpec)
         setMeasuredDimension(size, size)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        // 窗口尺寸变化（大小设置 / 双指缩放）后重算缩放系数并重建粒子路径
+        val design = 82f * baseDensity
+        sizeScale = if (design > 0f) (min(w, h) / design).coerceIn(0.5f, 2.2f) else 1f
+        initParticlePaths()
+        invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {

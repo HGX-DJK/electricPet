@@ -64,11 +64,15 @@ void main() {
           reason: 'FLAG_LAYOUT_NO_LIMITS 会让窗口脱离屏幕裁剪，Android 10+ 上触摸命中失效，正是拖不动的根因');
     });
 
-    test('萌言萌语气泡窗口必须不可触摸，避免遮挡宠物与底层应用', () {
+    test('萌言萌语气泡窗口可点击回小窝，但不能吞掉宠物与底层应用的点击', () {
       final bubbleWindow = _layoutParamsBlock(serviceSource, 'bubbleParams = WindowManager.LayoutParams(');
 
-      expect(bubbleWindow, contains('FLAG_NOT_TOUCHABLE'),
-          reason: '气泡若可触摸会挡住宠物点击，也会吞掉底层应用的点击');
+      expect(bubbleWindow, contains('FLAG_NOT_TOUCH_MODAL'),
+          reason: '气泡必须透传窗口外的触摸，否则会挡住宠物与底层应用');
+      expect(bubbleWindow, isNot(contains('FLAG_NOT_TOUCHABLE')),
+          reason: '气泡需要可点（点一下回小窝），FLAG_NOT_TOUCHABLE 会让它收不到点击');
+      expect(serviceSource, contains('setOnClickListener'),
+          reason: '气泡未绑定点击事件');
       expect(bubbleWindow, isNot(contains('FLAG_LAYOUT_NO_LIMITS')),
           reason: '气泡同样不应脱离屏幕裁剪，否则位置计算与实际显示会错位');
     });
@@ -113,7 +117,7 @@ void main() {
         'private fun isDockedAtEdge',
       );
 
-      expect(settle, contains('if (!isDockedAtEdge('),
+      expect(settle, contains('if (!enableEdgeSnap || !isDockedAtEdge('),
           reason: '松手时必须先判断是否靠近边缘；未靠近时应原地停留，不能强制拉回屏幕边');
       expect(settle, contains('saveDockPreference(isLeftHalf, params.x, params.y)'),
           reason: '自由停留时必须保存当前落点，否则重启后又被拽回边缘');
@@ -243,8 +247,10 @@ void main() {
     test('服务启动必须打印拖拽修复版本标记', () {
       expect(serviceSource, contains('const val DRAG_FIX_VERSION'),
           reason: '缺少版本标记，无法确认用户手机上装的是否是包含拖拽修复的新包');
-      expect(serviceSource, contains('Log.i(TAG, "悬浮宠服务启动 · 拖拽修复版 \$DRAG_FIX_VERSION")'),
+      expect(serviceSource, contains('Log.i(TAG, "悬浮宠服务启动'),
           reason: '启动日志未打印版本标记');
+      expect(serviceSource, contains(r'$DRAG_FIX_VERSION'),
+          reason: '启动日志没有带上版本标记值');
     });
   });
 
@@ -261,6 +267,207 @@ void main() {
           reason: '缺少移除菜单窗口的逻辑');
       expect(serviceSource, contains('isActionMenuAttached = false'),
           reason: '菜单窗口移除后未复位挂载标记，重复 addView 会抛异常被静默吞掉，菜单再也不出现');
+    });
+  });
+
+  group('交互增强：分区触摸 / 视线跟随 / 物理手感', () {
+    test('分区触摸必须按头 / 身 / 尾 / 爪给出不同反应', () {
+      expect(petViewSource, contains('enum class TouchZone { HEAD, BODY, TAIL, PAW, NONE }'),
+          reason: '缺少身体分区枚举');
+      expect(petViewSource, contains('fun hitTest(x: Float, y: Float): TouchZone'),
+          reason: '缺少分区命中判定');
+      expect(petViewSource, contains('fun reactToTouch(zone: TouchZone): Boolean'),
+          reason: '缺少分区反应');
+      expect(serviceSource, contains('private fun handleZoneTap(touchX: Float, touchY: Float)'),
+          reason: '服务层未按分区派发单击');
+      expect(serviceSource, contains('pokoView?.hitTest(touchX, touchY)'),
+          reason: '单击未使用视图局部坐标做命中判定');
+    });
+
+    test('视线跟随必须复用已有瞳孔偏移，且只在待机时生效', () {
+      expect(petViewSource, contains('fun setGazeTarget(x: Float, y: Float)'),
+          reason: '缺少视线目标设置');
+      expect(petViewSource, contains('fun clearGazeTarget()'),
+          reason: '缺少视线目标清除');
+      expect(petViewSource, contains('private fun updateGaze()'),
+          reason: '缺少视线缓动解算');
+      expect(petViewSource, contains('updateGaze()'),
+          reason: '视线解算未接入待机动画');
+    });
+
+    test('拎起悬空必须等到真正开始拖动才触发', () {
+      final downBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_DOWN ->',
+        'MotionEvent.ACTION_POINTER_DOWN ->',
+      );
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_CANCEL ->',
+      );
+
+      expect(downBranch, isNot(contains('onDragStateChanged(true)')),
+          reason: '按下就切"拎起"会让单击出现拎起-落地的抽搐');
+      expect(moveBranch, contains('onDragStateChanged(true)'),
+          reason: '超过拖拽阈值后必须切到拎起悬空');
+    });
+
+    test('松手必须有惯性滑行，不能瞬间停住', () {
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP ->',
+        'else -> false',
+      );
+
+      expect(serviceSource, contains('private fun flingAndSettle('),
+          reason: '缺少惯性滑行实现');
+      expect(upBranch, contains('flingAndSettle('),
+          reason: '松手未走惯性滑行');
+      expect(serviceSource, contains('import kotlin.math.exp'),
+          reason: '惯性滑行缺少摩擦模型所需的 exp');
+    });
+
+    test('双指手势必须支持缩放大小与旋转翻面', () {
+      final pointerDown = _between(
+        serviceSource,
+        'MotionEvent.ACTION_POINTER_DOWN ->',
+        'MotionEvent.ACTION_POINTER_UP ->',
+      );
+
+      expect(pointerDown, contains('pointerDistance(event)'),
+          reason: '缺少双指距离计算');
+      expect(serviceSource, contains('private fun handlePinchGesture(event: MotionEvent)'),
+          reason: '缺少双指手势处理');
+      expect(serviceSource, contains('applyOverlaySettings(settings)'),
+          reason: '双指缩放后尺寸没有真正应用');
+    });
+
+    test('拖出屏幕的部分只能用绘制偏移表现，窗口不得越界', () {
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_CANCEL ->',
+      );
+
+      expect(moveBranch, contains('pokoView?.peekOffsetX = overflow.toFloat()'),
+          reason: '边缘溢出必须走绘制偏移');
+      expect(moveBranch, contains('params.x = wantedX.coerceIn(0, maxX)'),
+          reason: '窗口坐标必须始终被钳制在屏幕内，否则会重现拖不动的老问题');
+    });
+
+    test('拖拽溢出偏移必须在滑行与落位时收回，否则宠物会歪在窗口旁', () {
+      final flingBlock = _between(
+        serviceSource,
+        'private fun flingAndSettle(',
+        'private fun handlePinchGesture(',
+      );
+      final settleBlock = _between(
+        serviceSource,
+        'private fun settleAfterDrag(',
+        'private fun isDockedAtEdge(',
+      );
+
+      expect(serviceSource, contains('private fun animatePeekOffsetBack('),
+          reason: '缺少溢出偏移回收实现');
+      expect(flingBlock, contains('startPeek * (1f - f)'),
+          reason: '惯性滑行过程中偏移没有同步收回，宠物与窗口会错位');
+      expect(settleBlock, contains('animatePeekOffsetBack()'),
+          reason: '落位时未回收拖拽溢出偏移，宠物会歪在窗口旁边像掉出屏幕');
+    });
+
+    test('双击不再拉起主应用，回小窝入口改到快捷菜单', () {
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP ->',
+        'else -> false',
+      );
+
+      expect(upBranch, isNot(contains('openMainActivity()')),
+          reason: '双击应该用来逗猫，不该抢走手势把用户拉出 App');
+      expect(serviceSource, contains('private fun handleDesktopHome()'),
+          reason: '缺少回小窝的菜单入口');
+    });
+  });
+
+  group('玩法闭环：投喂小游戏 / 状态驱动 / 主动搭话', () {
+    test('小鱼干必须靠拖到嘴边才结算，拖偏要扑空', () {
+      expect(serviceSource, contains('private fun startFeedingGame()'),
+          reason: '缺少投喂小游戏入口');
+      expect(serviceSource, contains('private fun resolveFeeding('),
+          reason: '缺少投喂结算判定');
+      expect(serviceSource, contains('private fun removeFoodWindow()'),
+          reason: '小鱼干窗口用完必须移除');
+      expect(serviceSource, contains('private fun applyFeeding(hungerDelta: Int)'),
+          reason: '喂食结算没有统一入口');
+    });
+
+    test('饱食度与心情必须驱动表情与自主行为', () {
+      expect(petViewSource, contains('var hungerLevel: Int = 80'),
+          reason: '悬浮猫缺少饱食度状态');
+      expect(petViewSource, contains('var happinessLevel: Int = 80'),
+          reason: '悬浮猫缺少心情状态');
+      expect(serviceSource, contains('private fun syncPetMood()'),
+          reason: '缺少状态同步');
+      expect(serviceSource, contains('pokoView?.hungerLevel = hunger'),
+          reason: '饱食度未同步给悬浮猫');
+    });
+
+    test('主动搭话必须有时间阈值，且可被设置关闭', () {
+      final autoChatBlock = _between(
+        serviceSource,
+        'private val autoChatRunnable = object : Runnable',
+        'private fun autoChatLine()',
+      );
+
+      expect(serviceSource, contains('const val AUTO_CHAT_IDLE_MS'),
+          reason: '缺少主动搭话的空闲阈值');
+      expect(autoChatBlock, contains('enableAutoChat'),
+          reason: '主动搭话没有被设置开关管控');
+      expect(autoChatBlock, contains('AUTO_CHAT_IDLE_MS'),
+          reason: '主动搭话没有按空闲时长判定');
+    });
+  });
+
+  group('悬浮宠设置：协议 / 存储 / 应用 / 面板', () {
+    test('设置协议两端必须都提供读与写方法', () {
+      expect(overlayChannelKotlin, contains('const val GET_OVERLAY_SETTINGS'),
+          reason: 'Kotlin 侧缺少读取设置的协议常量');
+      expect(overlayChannelKotlin, contains('const val UPDATE_OVERLAY_SETTINGS'),
+          reason: 'Kotlin 侧缺少更新设置的协议常量');
+      expect(overlayChannelDart, contains("'GET_OVERLAY_SETTINGS': 'getOverlaySettings'"),
+          reason: 'Dart 侧缺少读取设置的协议常量');
+      expect(overlayChannelDart, contains("'UPDATE_OVERLAY_SETTINGS': 'updateOverlaySettings'"),
+          reason: 'Dart 侧缺少更新设置的协议常量');
+      expect(activitySource, contains('OverlayChannel.GET_OVERLAY_SETTINGS'),
+          reason: 'MainActivity 未处理读取设置');
+      expect(activitySource, contains('OverlayChannel.UPDATE_OVERLAY_SETTINGS'),
+          reason: 'MainActivity 未处理更新设置');
+    });
+
+    test('设置必须落到共享存储，服务未运行时也要保存下来', () {
+      expect(serviceSource, contains('data class OverlaySettings('),
+          reason: '缺少设置结构体');
+      expect(serviceSource, contains('fun readSettings(context: Context): OverlaySettings'),
+          reason: '缺少跨组件读取设置的入口');
+      expect(serviceSource, contains('fun writeSettings(context: Context, settings: OverlaySettings)'),
+          reason: '缺少跨组件写入设置的入口');
+      expect(serviceSource, contains('fun applySettingsFromChannel(settings: OverlaySettings)'),
+          reason: '服务运行中无法实时套用设置');
+    });
+
+    test('尺寸设置必须真正作用到绘制上', () {
+      expect(petViewSource, contains('private val density: Float get() = baseDensity * sizeScale'),
+          reason: '绘制密度没有跟随窗口尺寸缩放，改大小只会让猫原地不动');
+      expect(petViewSource, contains('override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int)'),
+          reason: '窗口尺寸变化后没有重算缩放系数');
+    });
+
+    test('Dart 侧必须提供设置读取与写入接口', () {
+      expect(overlayServiceSource, contains('static Future<OverlaySettings> getSettings()'),
+          reason: 'Dart 侧缺少读取设置接口');
+      expect(overlayServiceSource, contains('static Future<bool> updateSettings('),
+          reason: 'Dart 侧缺少更新设置接口');
     });
   });
 

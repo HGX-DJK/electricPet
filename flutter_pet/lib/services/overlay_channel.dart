@@ -47,6 +47,12 @@ class OverlayChannel {
   /// 读取公共存储备份
   static const String readPublicBackup = 'readPublicBackup';
 
+  /// 读取桌面悬浮宠设置 (大小 / 透明度 / 行为开关)
+  static const String getOverlaySettings = 'getOverlaySettings';
+
+  /// 更新桌面悬浮宠设置 (服务运行中会立即生效)
+  static const String updateOverlaySettings = 'updateOverlaySettings';
+
   // ---------- 参数名 ----------
 
   /// 皮肤 / 品种 ID
@@ -54,6 +60,17 @@ class OverlayChannel {
 
   /// 宠物名字
   static const String argPetName = 'petName';
+
+  /// 设置项集合
+  static const String argSettings = 'settings';
+
+  // ---------- 设置项字段名 (与原生 OverlaySettings 字段一一对应) ----------
+  static const String argSettingSizeDp = 'sizeDp';
+  static const String argSettingOpacity = 'opacity';
+  static const String argSettingPeeking = 'peeking';
+  static const String argSettingStrolling = 'strolling';
+  static const String argSettingAutoChat = 'autoChat';
+  static const String argSettingEdgeSnap = 'edgeSnap';
 
   // ---------- 供守护测试比对的完整清单 ----------
 
@@ -70,11 +87,20 @@ class OverlayChannel {
     'REQUEST_STORAGE_PERMISSION': 'requestStoragePermission',
     'WRITE_PUBLIC_BACKUP': 'writePublicBackup',
     'READ_PUBLIC_BACKUP': 'readPublicBackup',
+    'GET_OVERLAY_SETTINGS': 'getOverlaySettings',
+    'UPDATE_OVERLAY_SETTINGS': 'updateOverlaySettings',
   };
 
   /// 全部参数名 (常量名 -> 参数名)，必须与 Kotlin 侧 `OverlayChannel.ALL_ARGS` 逐项一致
   static const Map<String, String> allArgs = {
     'ARG_SKIN_ID': 'skinId',
     'ARG_PET_NAME': 'petName',
+    'ARG_SETTINGS': 'settings',
+    'ARG_SETTING_SIZE_DP': 'sizeDp',
+    'ARG_SETTING_OPACITY': 'opacity',
+    'ARG_SETTING_PEEKING': 'peeking',
+    'ARG_SETTING_STROLLING': 'strolling',
+    'ARG_SETTING_AUTO_CHAT': 'autoChat',
+    'ARG_SETTING_EDGE_SNAP': 'edgeSnap',
   };
 }

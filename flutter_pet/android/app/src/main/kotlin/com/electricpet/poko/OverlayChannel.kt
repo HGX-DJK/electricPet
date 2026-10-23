@@ -50,6 +50,12 @@ object OverlayChannel {
     /** 读取公共存储备份 */
     const val READ_PUBLIC_BACKUP = "readPublicBackup"
 
+    /** 读取桌面悬浮宠设置 (大小 / 透明度 / 行为开关) */
+    const val GET_OVERLAY_SETTINGS = "getOverlaySettings"
+
+    /** 更新桌面悬浮宠设置 (服务运行中会立即生效) */
+    const val UPDATE_OVERLAY_SETTINGS = "updateOverlaySettings"
+
     // ---------- 参数名 ----------
 
     /** 皮肤 / 品种 ID */
@@ -57,6 +63,17 @@ object OverlayChannel {
 
     /** 宠物名字 */
     const val ARG_PET_NAME = "petName"
+
+    /** 设置项集合 */
+    const val ARG_SETTINGS = "settings"
+
+    // ---------- 设置项字段名 (与 Dart 端 OverlaySettings 字段一一对应) ----------
+    const val ARG_SETTING_SIZE_DP = "sizeDp"
+    const val ARG_SETTING_OPACITY = "opacity"
+    const val ARG_SETTING_PEEKING = "peeking"
+    const val ARG_SETTING_STROLLING = "strolling"
+    const val ARG_SETTING_AUTO_CHAT = "autoChat"
+    const val ARG_SETTING_EDGE_SNAP = "edgeSnap"
 
     // ---------- 供守护测试比对的完整清单 ----------
 
@@ -76,6 +93,8 @@ object OverlayChannel {
         "REQUEST_STORAGE_PERMISSION" to REQUEST_STORAGE_PERMISSION,
         "WRITE_PUBLIC_BACKUP" to WRITE_PUBLIC_BACKUP,
         "READ_PUBLIC_BACKUP" to READ_PUBLIC_BACKUP,
+        "GET_OVERLAY_SETTINGS" to GET_OVERLAY_SETTINGS,
+        "UPDATE_OVERLAY_SETTINGS" to UPDATE_OVERLAY_SETTINGS,
     )
 
     /**
@@ -85,5 +104,12 @@ object OverlayChannel {
     val ALL_ARGS: Map<String, String> = mapOf(
         "ARG_SKIN_ID" to ARG_SKIN_ID,
         "ARG_PET_NAME" to ARG_PET_NAME,
+        "ARG_SETTINGS" to ARG_SETTINGS,
+        "ARG_SETTING_SIZE_DP" to ARG_SETTING_SIZE_DP,
+        "ARG_SETTING_OPACITY" to ARG_SETTING_OPACITY,
+        "ARG_SETTING_PEEKING" to ARG_SETTING_PEEKING,
+        "ARG_SETTING_STROLLING" to ARG_SETTING_STROLLING,
+        "ARG_SETTING_AUTO_CHAT" to ARG_SETTING_AUTO_CHAT,
+        "ARG_SETTING_EDGE_SNAP" to ARG_SETTING_EDGE_SNAP,
     )
 }
