@@ -88,6 +88,10 @@ class MainActivity: FlutterActivity() {
                         val intent = Intent(this, FloatingPetService::class.java).apply {
                             putExtra(OverlayChannel.ARG_SKIN_ID, call.argument<String>(OverlayChannel.ARG_SKIN_ID))
                             putExtra(OverlayChannel.ARG_PET_NAME, call.argument<String>(OverlayChannel.ARG_PET_NAME))
+                            // 昼夜状态：App 按真实太阳节律算好后推过来，桌面猫一开始就配上对应配色
+                            call.argument<Boolean>(OverlayChannel.ARG_NIGHT_MODE)?.let {
+                                putExtra(OverlayChannel.ARG_NIGHT_MODE, it)
+                            }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
@@ -108,6 +112,10 @@ class MainActivity: FlutterActivity() {
                         val intent = Intent(this, FloatingPetService::class.java).apply {
                             putExtra(OverlayChannel.ARG_SKIN_ID, call.argument<String>(OverlayChannel.ARG_SKIN_ID))
                             putExtra(OverlayChannel.ARG_PET_NAME, call.argument<String>(OverlayChannel.ARG_PET_NAME))
+                            // 昼夜状态：App 按真实太阳节律算好后推过来，桌面猫跟着换配色
+                            call.argument<Boolean>(OverlayChannel.ARG_NIGHT_MODE)?.let {
+                                putExtra(OverlayChannel.ARG_NIGHT_MODE, it)
+                            }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)

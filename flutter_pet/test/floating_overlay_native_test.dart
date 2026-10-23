@@ -407,10 +407,14 @@ void main() {
           reason: '悬浮猫缺少饱食度状态');
       expect(petViewSource, contains('var happinessLevel: Int = 80'),
           reason: '悬浮猫缺少心情状态');
+      expect(petViewSource, contains('var energyLevel: Int = 80'),
+          reason: '悬浮猫缺少体力状态');
       expect(serviceSource, contains('private fun syncPetMood()'),
           reason: '缺少状态同步');
-      expect(serviceSource, contains('pokoView?.hungerLevel = hunger'),
+      expect(serviceSource, contains('view.hungerLevel = state.hunger'),
           reason: '饱食度未同步给悬浮猫');
+      expect(serviceSource, contains('view.happinessLevel = state.mood'),
+          reason: '心情未同步给悬浮猫');
     });
 
     test('主动搭话必须有时间阈值，且可被设置关闭', () {
@@ -579,6 +583,208 @@ void main() {
     });
   });
 
+  group('Kotlin import 完整性：漏 import 只有 CI 能发现', () {
+    test('用到的类型必须都有对应 import（缺 import 会让 CI 编译失败）', () {
+      // 背景：本机没有 android.jar，kotlinc 会把 android.* 全部报成 unresolved，
+      // 于是"少写一行 import"这类错误在本地完全看不出来 —— 上一次 CI 就是这样炸的：
+      //   Unresolved reference 'SharedPreferences'.
+      // 本用例做一次静态 import 审计，把这类错误挡在 CI 之前。
+      final declared = _projectDeclaredNames(<String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+      ]);
+
+      final problems = <String>[];
+      for (final source in <String>[serviceSource, activitySource, petViewSource]) {
+        problems.addAll(_findMissingImports(source, declared));
+      }
+
+      expect(
+        problems,
+        isEmpty,
+        reason: '发现缺少 import 的类型（会直接导致 CI 编译失败）：\n'
+            '${problems.join('\n')}',
+      );
+    });
+
+    test('import 审计器本身必须有效：能识别人造漏 import 的样本', () {
+      const sample = '''
+package com.example
+
+import android.content.Context
+import android.view.View
+
+class Sample(context: Context) {
+    fun build() {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> }
+        val v = View(context)
+    }
+}
+''';
+      final problems = _findMissingImports(sample, <String>{});
+
+      expect(
+        problems.any((p) => p.contains('SharedPreferences')),
+        isTrue,
+        reason: '审计器应报出漏 import 的 SharedPreferences',
+      );
+      expect(
+        problems.any((p) => p.contains('Context') || p.contains('View')),
+        isFalse,
+        reason: '已正确 import 的类型不应误报',
+      );
+    });
+  });
+
+  group('状态系统：字段名 / 衰减速率 / 时间戳约定必须两端一致', () {
+    test('心情字段必须是 mood，绝不能再用 happiness', () {
+      // 历史事故：原生侧读写 "happiness"，而 Dart 侧 PetModel 用的是 "mood"，
+      // 桌面猫永远读到兜底值，App 里喂食涨的心情它也完全感知不到。
+      expect(petModelSource, contains("'mood': mood"),
+          reason: 'Dart 侧状态字段是 mood');
+      expect(petModelSource, isNot(contains("'happiness'")),
+          reason: 'Dart 侧不应出现 happiness 字段');
+      // 注意：允许出现 json.remove("happiness") —— 那是清理旧版本留下的垃圾 key
+      expect(serviceSource, isNot(contains('optInt("happiness"')),
+          reason: '原生侧不得再读取 happiness —— 它不是 Dart 侧认识的 key');
+      expect(serviceSource, isNot(contains('optDouble("happiness"')),
+          reason: '原生侧不得再读取 happiness —— 它不是 Dart 侧认识的 key');
+      expect(serviceSource, isNot(contains('put("happiness"')),
+          reason: '原生侧不得再写入 happiness —— 会凭空多一个 App 不认的存档字段');
+      expect(serviceSource, contains('"mood"'),
+          reason: '原生侧必须读写真实的 mood 字段');
+    });
+
+    test('状态衰减速率两端必须逐项一致', () {
+      final dartRates = _extractDecayRates(petModelSource, dart: true);
+      final kotlinRates = _extractDecayRates(serviceSource, dart: false);
+
+      expect(dartRates, isNotEmpty, reason: 'Dart 侧未找到衰减速率表');
+      expect(kotlinRates.keys.toSet(), dartRates.keys.toSet(),
+          reason: '两端的衰减字段集合不一致：'
+              'Dart=${dartRates.keys.toList()} Kotlin=${kotlinRates.keys.toList()}');
+      for (final key in dartRates.keys) {
+        expect(kotlinRates[key], closeTo(dartRates[key]!, 0.0001),
+            reason: '衰减速率 `$key` 两端不一致，'
+                'App 里和桌面上的波可会算出不同的状态');
+      }
+    });
+
+    test('状态快照时间戳 stateSavedAt 两端必须成对出现', () {
+      // 约定：谁写盘谁盖时间戳，读取方按 (now - stateSavedAt) 补算，
+      // 这样同一段时间只会被扣一次。
+      expect(petModelSource, contains("'stateSavedAt': stateSavedAt"),
+          reason: 'Dart 侧存档缺少 stateSavedAt');
+      expect(petModelSource, contains('stateSavedAt = DateTime.now().millisecondsSinceEpoch'),
+          reason: 'Dart 侧写盘时没有盖时间戳');
+      expect(serviceSource, contains('json.optLong("stateSavedAt"'),
+          reason: '原生侧没有按 stateSavedAt 计算流逝时间');
+      expect(serviceSource, contains('json.put("stateSavedAt"'),
+          reason: '原生侧写盘时没有盖时间戳');
+    });
+
+    test('状态必须真的随时间衰减，且 App 关着也生效', () {
+      // 旧实现只在 pet_screen 的前台定时器里 tickDecay，App 一关状态就冻结，
+      // 桌面悬浮宠的「饿了找食」在真实场景下等于从来没发生过。
+      expect(serviceSource, contains('private fun elapsedDecaySeconds('),
+          reason: '原生侧缺少按时间戳结算流逝时长的能力');
+      expect(serviceSource, contains('private fun decayedValue('),
+          reason: '原生侧缺少按流逝时间补算状态值的能力');
+      expect(petModelSource, contains('double applyOfflineDecay()'),
+          reason: 'Dart 侧缺少离线补算');
+    });
+
+    test('存档变更必须能实时通知原生侧', () {
+      expect(serviceSource, contains('SharedPreferences.OnSharedPreferenceChangeListener'),
+          reason: '缺少存档变更监听，App 里喂完桌面猫要等 60 秒才反应过来');
+      expect(serviceSource, contains('registerPetDataListener()'),
+          reason: '服务启动时没有注册存档监听');
+      expect(serviceSource, contains('unregisterPetDataListener()'),
+          reason: '服务销毁时没有注销监听，会泄漏');
+    });
+  });
+
+  group('绘制性能：onDraw 不得每帧分配对象', () {
+    test('绘制路径里不得现 new RectF / Paint / Path', () {
+      // 待机动画 60fps 常驻，每帧 new 十几个 RectF + 七八个 Paint
+      // 等于每秒制造几百个临时对象，纯浪费。
+      final drawBlock = _between(
+        petViewSource,
+        'private fun drawTail(',
+        'override fun onDetachedFromWindow()',
+      );
+
+      expect(drawBlock, isNot(contains('RectF(')),
+          reason: '绘制路径里现 new RectF，应改为复用成员矩形 + set()');
+      expect(drawBlock, isNot(contains('Paint(Paint.ANTI_ALIAS_FLAG)')),
+          reason: '绘制路径里现 new Paint，应改为复用成员画笔');
+      expect(drawBlock, isNot(contains('Path()')),
+          reason: '绘制路径里现 new Path，应改为复用成员路径');
+      expect(drawBlock, isNot(contains('listOf(')),
+          reason: '绘制路径里现 new listOf，应改为复用数组或展开写');
+      expect(drawBlock, isNot(contains('Color.parseColor(')),
+          reason: '绘制路径里每帧解析颜色字符串，应改为预解析的颜色常量');
+    });
+
+    test('渐变 shader 必须缓存，不能每帧重建 native 对象', () {
+      final drawBlock = _between(
+        petViewSource,
+        'private fun drawTail(',
+        'override fun onDetachedFromWindow()',
+      );
+
+      expect(petViewSource, contains('private var bodyShader: RadialGradient?'),
+          reason: '身体渐变没有缓存，RadialGradient 是 native 对象，每帧重建很贵');
+      expect(petViewSource, contains('setLocalMatrix(shaderMatrix)'),
+          reason: '渐变位置变化应靠 local matrix 平移，而不是重建 shader');
+      expect(drawBlock, contains('bodyShader == null'),
+          reason: 'bodyShader 缺少「颜色/半径变了才重建」的判定');
+    });
+  });
+
+  group('屏幕适配与夜间模式', () {
+    test('屏幕尺寸必须缓存，并用 maximumWindowMetrics 取真实尺寸', () {
+      expect(serviceSource, contains('private var cachedScreenWidth: Int = 0'),
+          reason: '屏幕尺寸没有缓存，拖拽时每帧都要问系统');
+      expect(serviceSource, contains('maximumWindowMetrics'),
+          reason: 'API 30+ 应使用 maximumWindowMetrics，'
+              'defaultDisplay.getRealMetrics 在分屏/折叠屏下会拿到错误尺寸');
+      expect(serviceSource, contains('private fun invalidateScreenCache()'),
+          reason: '屏幕配置变化后缓存没有失效');
+    });
+
+    test('系统栏避让边距必须缓存，不能每帧做资源表查找', () {
+      expect(serviceSource, contains('private fun refreshSafeInsets()'),
+          reason: '缺少系统栏避让边距的缓存刷新');
+      expect(serviceSource, contains('private var safeTopInset: Int = 0'),
+          reason: '系统栏避让边距没有缓存');
+    });
+
+    test('夜间模式必须两端都能传，且能改配色', () {
+      expect(overlayChannelKotlin, contains('const val ARG_NIGHT_MODE'),
+          reason: '原生侧缺少昼夜状态参数');
+      expect(overlayChannelDart, contains('argNightMode'),
+          reason: 'Dart 侧缺少昼夜状态参数');
+      expect(activitySource, contains('OverlayChannel.ARG_NIGHT_MODE'),
+          reason: 'MainActivity 没有把昼夜状态传给服务');
+      expect(serviceSource, contains('fun applyNightModeFromApp('),
+          reason: '服务没有接收 App 推送的昼夜状态');
+      expect(petViewSource, contains('var isNightMode: Boolean = false'),
+          reason: '悬浮猫没有夜间模式开关');
+      expect(petViewSource, contains('private fun applyNightTint('),
+          reason: '夜间模式没有对应的配色变换');
+    });
+
+    test('悬浮宠必须提供无障碍描述', () {
+      expect(serviceSource, contains('contentDescription'),
+          reason: '悬浮宠没有 contentDescription，TalkBack 读不到它');
+      expect(serviceSource, contains('IMPORTANT_FOR_ACCESSIBILITY_YES'),
+          reason: '悬浮宠没有声明无障碍重要性');
+    });
+  });
+
   group('原生编译期作用域守护：成员函数不得引用别的函数的局部变量', () {
     test('检测器本身必须有效：能识别人造的作用域越界样本', () {
       // 自验证：如果检测器逻辑写坏了（比如成员函数一个都识别不出来），
@@ -729,6 +935,237 @@ String _readRepoFile(Directory root, String relativePath) {
     fail('未找到仓库文件: $relativePath');
   }
   return file.readAsStringSync();
+}
+
+// ---------------------------------------------------------------------------
+// Kotlin import 审计
+//
+// 动机：本机没有 android.jar，kotlinc 会把 android.* 全部报成 unresolved，
+// 于是"少写一行 import"在本地完全看不出来，只能等 CI 炸出来。
+// 一次 CI 往返 6 分钟，这种错误必须提前拦下。
+// ---------------------------------------------------------------------------
+
+/// 项目内声明过的名字（类 / 属性 / 函数 / 枚举项等），这些不需要 import
+Set<String> _projectDeclaredNames(List<String> sources) {
+  final names = <String>{};
+  final patterns = <RegExp>[
+    RegExp(r'\b(?:private |public |internal |protected |override |open |final |abstract |sealed |data |enum |inner |annotation |value |companion )*'
+        r'(?:class|object|interface)\s+([A-Za-z_]\w*)'),
+    RegExp(r'\b(?:const |lateinit |override |private |public |internal |protected |open |final )*'
+        r'(?:var|val)\s+([A-Za-z_]\w*)'),
+    RegExp(r'\bfun\s+(?:<[^>]*>\s*)?([A-Za-z_]\w*)\s*\('),
+    RegExp(r'\btypealias\s+([A-Za-z_]\w*)'),
+  ];
+  for (final source in sources) {
+    final code = _stripLiteralsAndComments(source);
+    for (final pat in patterns) {
+      for (final m in pat.allMatches(code)) {
+        final n = m.group(1);
+        if (n != null) names.add(n);
+      }
+    }
+    // 枚举项：enum class X { HEAD, BODY, ... }
+    for (final m in RegExp(r'\benum\s+class\s+[A-Za-z_]\w*\s*\{([^}]*)\}')
+        .allMatches(code)) {
+      for (final entry in m.group(1)!.split(',')) {
+        final n = entry.trim().split('(').first.trim();
+        if (RegExp(r'^[A-Za-z_]\w*$').hasMatch(n)) names.add(n);
+      }
+    }
+  }
+  return names;
+}
+
+/// 明确无需 import 的名字：java.lang / kotlin 内建
+const Set<String> _kotlinBuiltinNames = <String>{
+  'Any', 'Nothing', 'Unit', 'Array', 'Boolean', 'Byte', 'Short', 'Int', 'Long',
+  'Float', 'Double', 'Char', 'String', 'CharSequence', 'Number', 'Comparable',
+  'Throwable', 'Exception', 'RuntimeException', 'Error', 'IllegalArgumentException',
+  'IllegalStateException', 'NullPointerException', 'IndexOutOfBoundsException',
+  'ClassCastException', 'UnsupportedOperationException', 'NumberFormatException',
+  'Override', 'Deprecated', 'Suppress', 'SafeVarargs', 'FunctionalInterface',
+  'JvmStatic', 'JvmField', 'JvmOverloads', 'JvmName', 'Volatile', 'Synchronized',
+  'Object', 'Math', 'System', 'Integer', 'Character', 'Thread', 'Runnable',
+  'Iterable', 'Iterator', 'Pair', 'Triple', 'Result', 'Regex', 'Enum',
+  'Annotation', 'Function', 'StringBuilder', 'List', 'MutableList', 'Set',
+  'MutableSet', 'Map', 'MutableMap', 'IntArray', 'FloatArray', 'DoubleArray',
+  'BooleanArray', 'CharArray', 'LongArray', 'ShortArray', 'ByteArray',
+  'ArrayList', 'HashMap', 'HashSet', 'LinkedHashMap', 'LinkedHashSet', 'Random',
+  'UUID', 'Date', 'Timer', 'TimerTask', 'Objects', 'Collections', 'Arrays',
+  'Locale', 'Scanner', 'Comparator', 'Queue', 'Deque', 'Optional', 'StringBuffer',
+  'OptIn', 'RequiresOptIn', 'JvmInline', 'SuppressWarnings',
+  // 下面这几个是"不用 import 也能用"的：
+  'R',            // Android 自动生成的资源类，同包可见
+  'Charsets',     // kotlin.text.Charsets，kotlin 默认导入
+  'START_STICKY', // android.app.Service 的继承成员
+  'START_NOT_STICKY',
+  'LAYER_TYPE_HARDWARE', // android.view.View 的继承常量
+  'MeasureSpec',          // android.view.View 的嵌套类（View 子类内可直接用）
+};
+
+/// 通配符导入包内已知可用���类型（只列本项目真正会用到的，宁可宽松也别误报）
+const Map<String, Set<String>> _wildcardPackageMembers = <String, Set<String>>{
+  'android.graphics': <String>{
+    'Canvas', 'Color', 'Paint', 'Path', 'Rect', 'RectF', 'Point', 'PointF',
+    'Matrix', 'Shader', 'RadialGradient', 'LinearGradient', 'SweepGradient',
+    'ComposeShader', 'PorterDuff', 'PorterDuffXfermode', 'Xfermode',
+    'Typeface', 'Bitmap', 'BitmapFactory', 'BlurMaskFilter', 'DashPathEffect',
+    'PaintFlags', 'PathEffect', 'PathMeasure', 'RoundRect', 'Picture',
+  },
+  'android.view': <String>{
+    'View', 'ViewGroup', 'MotionEvent', 'VelocityTracker', 'ViewConfiguration',
+    'WindowManager', 'Gravity', 'HapticFeedbackConstants', 'SurfaceView',
+    'SurfaceHolder', 'TextureView', 'ViewOutlineProvider', 'LayoutInflater',
+    'KeyEvent', 'Menu', 'MenuItem', 'Window', 'WindowInsets',
+    'Display', 'AccessibilityNodeInfo', 'ActionProvider', 'ActionMode',
+  },
+  'android.widget': <String>{
+    'TextView', 'LinearLayout', 'ImageView', 'Button', 'EditText', 'FrameLayout',
+    'ScrollView', 'Toast', 'ProgressBar', 'ImageButton', 'Space', 'GridLayout',
+    'RelativeLayout', 'HorizontalScrollView', 'ViewFlipper', 'TextClock',
+  },
+  'android.util': <String>{
+    'DisplayMetrics', 'Log', 'TypedValue', 'AttributeSet', 'SparseArray',
+    'Base64', 'Size', 'SizeF', 'Pair', 'JsonReader', 'JsonWriter', 'JsonToken',
+  },
+  'android.os': <String>{
+    'Bundle', 'Handler', 'Looper', 'Build', 'PowerManager', 'Vibrator',
+    'VibrationEffect', 'BatteryManager', 'SystemClock', 'Environment',
+    'Parcelable', 'StatFs', 'Process', 'UserManager', 'Message', 'AsyncTask',
+  },
+  'java.util': <String>{
+    'List', 'Map', 'Set', 'ArrayList', 'HashMap', 'HashSet', 'Random', 'UUID',
+    'Date', 'Timer', 'TimerTask', 'Objects', 'Collections', 'Arrays', 'Iterator',
+    'LinkedHashMap', 'LinkedHashSet', 'TreeMap', 'TreeSet', 'Locale',
+    'Calendar', 'Scanner', 'Comparator', 'Queue', 'Deque', 'Optional',
+    'AbstractMap', 'AbstractList', 'NoSuchElementException', 'Enumeration',
+    'BitSet', 'Vector', 'Stack', 'Properties', 'StringJoiner', 'Spliterator',
+  },
+  'kotlin.math': <String>{
+    'abs', 'min', 'max', 'sqrt', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan',
+    'atan2', 'pow', 'exp', 'log', 'log2', 'log10', 'hypot', 'round', 'floor',
+    'ceil', 'sign', 'PI', 'E', 'runBlocking',
+  },
+  'kotlin.collections': <String>{
+    'List', 'MutableList', 'Set', 'MutableSet', 'Map', 'MutableMap',
+  },
+  'kotlin.text': <String>{'StringBuilder'},
+  'kotlin.io': <String>{'File', 'Reader', 'Writer', 'Path'},
+};
+
+/// 找出文件里"用了但没 import"的类型名
+List<String> _findMissingImports(String source, Set<String> declaredNames) {
+  final code = _stripLiteralsAndComments(source);
+
+  // 已 import 的简单名
+  final imported = <String>{};
+  // 通配符包允许的类型
+  final wildcardAllowed = <String>{};
+  for (final m in RegExp(r'^import\s+([\w.]+(?:\.\*)?)(?:\s+as\s+\w+)?\s*$', multiLine: true)
+      .allMatches(code)) {
+    final fq = m.group(1)!;
+    if (fq.endsWith('.*')) {
+      final pkg = fq.substring(0, fq.length - 2);
+      wildcardAllowed.addAll(_wildcardPackageMembers[pkg] ?? const <String>{});
+      // 未登记的通配符包：无法审计，保守起见不做限制
+      if (!(_wildcardPackageMembers.containsKey(pkg))) {
+        wildcardAllowed.add('*');
+      }
+    } else {
+      imported.add(fq.split('.').last);
+    }
+  }
+
+  // 收集用到的"类型形状"标识符：首字母大写，且不是成员访问 / 注解
+  final used = <String>{};
+  for (final m in RegExp(r'(?<![.\w])([A-Z][A-Za-z0-9_]*)').allMatches(code)) {
+    final name = m.group(1)!;
+    // 排除注解（前面是 @）
+    final before = m.start > 0 ? code.substring(m.start - 1, m.start) : '';
+    if (before == '@') continue;
+    used.add(name);
+  }
+
+  final problems = <String>[];
+  for (final name in used) {
+    if (imported.contains(name)) continue;
+    if (wildcardAllowed.contains(name)) continue;
+    if (wildcardAllowed.contains('*')) continue;
+    if (declaredNames.contains(name)) continue;
+    if (_kotlinBuiltinNames.contains(name)) continue;
+    problems.add(name);
+  }
+  return problems.map((n) => '缺少 import: $n').toList();
+}
+
+/// 截取以 [marker] 开头的那一对括号内的内容（按括号配平查找）。
+String _parenBlock(String source, String marker) {
+  final start = source.indexOf(marker);
+  if (start < 0) {
+    fail('未找到: $marker');
+  }
+  final open = source.indexOf('(', start);
+  if (open < 0) {
+    fail('$marker 后面没有左括号');
+  }
+  var depth = 0;
+  for (var i = open; i < source.length; i++) {
+    final ch = source[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+      if (depth == 0) return source.substring(open, i + 1);
+    }
+  }
+  fail('$marker 的括号不配平');
+}
+
+/// 截取以 [marker] 开头的那一对花括号内的内容（按括号配平查找）。
+String _braceBlock(String source, String marker) {
+  final start = source.indexOf(marker);
+  if (start < 0) {
+    fail('未找到: $marker');
+  }
+  final open = source.indexOf('{', start);
+  if (open < 0) {
+    fail('$marker 后面没有左花括号');
+  }
+  var depth = 0;
+  for (var i = open; i < source.length; i++) {
+    final ch = source[i];
+    if (ch == '{') {
+      depth++;
+    } else if (ch == '}') {
+      depth--;
+      if (depth == 0) return source.substring(open + 1, i);
+    }
+  }
+  fail('$marker 的花括号不配平');
+}
+
+/// 提取状态衰减速率表。
+///
+/// Dart 侧: `static const Map<String, double> decayRates = <String, double>{ 'hunger': 0.45, ... }`
+/// Kotlin 侧: `val DECAY_RATES: Map<String, Float> = mapOf( "hunger" to 0.45f, ... )`
+///
+/// 两张表必须逐项一致，否则 App 里和桌面上的波可会算出不同的状态。
+Map<String, double> _extractDecayRates(String source, {required bool dart}) {
+  final rates = <String, double>{};
+  if (dart) {
+    final block = _braceBlock(source, 'decayRates = <String, double>');
+    for (final m in RegExp(r"'([A-Za-z_]\w*)':\s*([0-9]*\.?[0-9]+)")
+        .allMatches(block)) {
+      rates[m.group(1)!] = double.parse(m.group(2)!);
+    }
+  } else {
+    final block = _parenBlock(source, 'DECAY_RATES');
+    for (final m in RegExp(r'"([A-Za-z_]\w*)"\s+to\s+([0-9]*\.?[0-9]+)f')
+        .allMatches(block)) {
+      rates[m.group(1)!] = double.parse(m.group(2)!);
+    }
+  }
+  return rates;
 }
 
 /// 截取某个 WindowManager.LayoutParams 构造调用的参数区（含 flags 段）。

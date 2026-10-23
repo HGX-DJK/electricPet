@@ -8,12 +8,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.app.UiModeManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -128,6 +130,15 @@ class FloatingPetService : Service() {
     private var lastInteractionAt: Long = 0L
     private var lastAutoChatAt: Long = 0L
 
+    // ---------- 屏幕与安全区缓存 ----------
+    // 拖拽时每帧都要用屏幕尺寸和系统栏避让边距，
+    // 原来每次都现算（new DisplayMetrics + getIdentifier 资源表查找），
+    // 60fps 下明显拖慢渲染。缓存起来，只在屏幕配置变化时刷新。
+    private var cachedScreenWidth: Int = 0
+    private var cachedScreenHeight: Int = 0
+    private var safeTopInset: Int = 0
+    private var safeBottomInset: Int = 0
+
     // 小鱼干投喂小游戏
     private var foodWindowView: View? = null
     private var foodWindowParams: WindowManager.LayoutParams? = null
@@ -189,6 +200,28 @@ class FloatingPetService : Service() {
         const val AUTO_CHAT_INTERVAL_MS = 60_000L
         /** 超过这么久没人互动，波可就会主动冒泡 */
         const val AUTO_CHAT_IDLE_MS = 12 * 60 * 1000L
+
+        /**
+         * 状态衰减速率（每秒）。
+         *
+         * ⚠️ 必须与 Dart 侧 `PetModel.decayRates` 完全一致，
+         * 否则 App 里的波可和桌面上的波可会算出不同的饱腹度/心情。
+         * 守护测试会逐项比对这两张表。
+         */
+        val DECAY_RATES: Map<String, Float> = mapOf(
+            "hunger" to 0.45f,
+            "mood" to 0.35f,
+            "cleanliness" to 0.15f,
+            "energy" to 0.25f,
+        )
+
+        /** 单次最多补算的离线时长（秒，12 小时）—— 防止改系统时间造成数值爆炸 */
+        const val MAX_OFFLINE_DECAY_SECONDS = 43200.0
+
+        /** 与 Dart 侧共用的宠物数据存档键（SharedPreferences 的 key 前缀由插件自动加 flutter.） */
+        private const val PREFS_PET = "FlutterSharedPreferences"
+        private const val KEY_PET_DATA = "flutter.poko_pet_data"
+
         private const val PREFS_OVERLAY = "poko_overlay_settings"
         private const val KEY_SIZE_DP = "pet_size_dp"
         private const val KEY_OPACITY = "pet_opacity"
@@ -262,6 +295,9 @@ class FloatingPetService : Service() {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         instance = this
 
+        // 屏幕尺寸与系统栏避让边距先算好缓存起来（拖拽时每帧都要用）
+        invalidateScreenCache()
+
         // 1. 启动轻量高保活前台常驻服务 (支持 Android 14+ specialUse)，防系统在主应用关闭时强杀/冻结事件分发
         startAsForeground()
 
@@ -322,6 +358,11 @@ class FloatingPetService : Service() {
             val (savedSkin, savedName) = loadSavedPetConfig()
             applyConfig(savedSkin, savedName)
             facingLeft = !savedDockLeft // 靠右面向左，靠左面向右
+            // 无障碍：TalkBack 至少要能念出这是什么、怎么玩
+            contentDescription = "桌面悬浮萌宠 ${petName}。可拖动到任意位置，" +
+                "摸头摸身会有反应，长按可抚摸"
+            isFocusable = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
         }
 
         // 4. 构建桌面悬浮萌言萌语气泡 View 与快捷控制菜单、音效系统
@@ -346,6 +387,12 @@ class FloatingPetService : Service() {
 
         // 9. 主动搭话调度：长时间没人理它时会自己冒泡
         mainHandler.postDelayed(autoChatRunnable, AUTO_CHAT_INTERVAL_MS)
+
+        // 10. 监听 App 侧的宠物存档变更：喂食 / 换装 / 改音效开关都实时生效
+        registerPetDataListener()
+
+        // 11. 夜间配色：跟随 App 的昼夜节律（收不到时退回系统深色模式）
+        applyNightMode(resolveNightMode())
 
         try {
             windowManager?.addView(pokoView, pokoParams)
@@ -381,6 +428,11 @@ class FloatingPetService : Service() {
         val petName = intent?.getStringExtra("petName")
         // 每次启动/推送都同步外观：空值表示保持原样，非空则实时换品种
         pokoView?.applyConfig(skinId, petName)
+
+        // 昼夜状态：App 按真实太阳节律算好后推过来，桌面猫跟着换配色
+        if (intent?.hasExtra(OverlayChannel.ARG_NIGHT_MODE) == true) {
+            applyNightModeFromApp(intent.getBooleanExtra(OverlayChannel.ARG_NIGHT_MODE, false))
+        }
         return START_STICKY
     }
 
@@ -389,14 +441,48 @@ class FloatingPetService : Service() {
         // 核心：当用户在手机多任务列表中划掉关闭主App时，前台服务依然健壮保持运行，绝不自我杀死，桌面猫咪依然可以自由拖拽！
     }
 
+    /**
+     * 屏幕尺寸（带缓存）。
+     *
+     * 拖拽时每一帧都会用到屏幕尺寸，而原来的实现每次都要 new 一个 DisplayMetrics
+     * 再去问系统，60fps 下纯属浪费。现在缓存起来，只在屏幕配置变化时刷新。
+     */
     private fun getScreenDimensions(): Pair<Int, Int> {
+        if (cachedScreenWidth > 0 && cachedScreenHeight > 0) {
+            return Pair(cachedScreenWidth, cachedScreenHeight)
+        }
+
         val wm = windowManager ?: getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val metrics = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay?.getRealMetrics(metrics)
-        val w = if (metrics.widthPixels > 0) metrics.widthPixels else resources.displayMetrics.widthPixels
-        val h = if (metrics.heightPixels > 0) metrics.heightPixels else resources.displayMetrics.heightPixels
+        var w = 0
+        var h = 0
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // API 30+ 用 maximumWindowMetrics：defaultDisplay.getRealMetrics 在
+            // 分屏 / 折叠屏 / 多窗口下拿到的尺寸经常不对
+            val bounds = wm.maximumWindowMetrics.bounds
+            w = bounds.width()
+            h = bounds.height()
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            wm.defaultDisplay?.getRealMetrics(metrics)
+            w = metrics.widthPixels
+            h = metrics.heightPixels
+        }
+
+        if (w <= 0) w = resources.displayMetrics.widthPixels
+        if (h <= 0) h = resources.displayMetrics.heightPixels
+
+        cachedScreenWidth = w
+        cachedScreenHeight = h
         return Pair(w, h)
+    }
+
+    /** 屏幕配置变化（旋转 / 分屏 / 折叠展开）后让缓存失效 */
+    private fun invalidateScreenCache() {
+        cachedScreenWidth = 0
+        cachedScreenHeight = 0
+        refreshSafeInsets()
     }
 
     // ---------- 悬浮宠设置读写 ----------
@@ -633,6 +719,9 @@ class FloatingPetService : Service() {
                     longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
                     pokoView?.clearGazeTarget()
+                    // 取消时不会走落位逻辑，拖出屏幕的那段绘制偏移必须在这里收回，
+                    // 否则宠物会一直歪在窗口旁边悬在屏幕外（要等下次触摸才自愈）
+                    animatePeekOffsetBack()
                     velocityTracker?.recycle()
                     velocityTracker = null
                     Log.w(TAG, "拖拽被系统中断 (ACTION_CANCEL)，波可保持原地不动")
@@ -1535,7 +1624,7 @@ class FloatingPetService : Service() {
     }
 
     private fun showSpeechBubble() {
-        val hunger = getSavedHunger()
+        val hunger = readPetState().hunger
         if (hunger < 35 && Math.random() > 0.4) {
             val hungryQuotes = listOf(
                 "肚子有点咕噜咕噜了喵... 主人，小鱼干在呼唤我~ 🐟",
@@ -1678,70 +1767,172 @@ class FloatingPetService : Service() {
     }
 
     /**
+     * 宠物的实时状态快照。
+     *
+     * 数值都已经按"距上次结算过去了多久"补算过，
+     * 所以桌面悬浮宠读到的就是此刻的真实状态 —— App 关着它也一样会饿、会无聊。
+     */
+    private data class PetState(
+        val hunger: Int,
+        val mood: Int,
+        val energy: Int,
+        val cleanliness: Int,
+        val intimacy: Int,
+        val skinId: String,
+        val petName: String,
+        val enableSound: Boolean,
+    )
+
+    /**
+     * 读取宠物状态：只解析一次 JSON，并按 stateSavedAt 补算离线期间的衰减。
+     *
+     * 与 Dart 侧 PetModel 的约定完全对称：
+     *   - 谁写盘谁盖 stateSavedAt 时间戳
+     *   - 读取方按 (now - stateSavedAt) 补算
+     * 这样同一段时间只会被扣一次，App 里和桌面上的波可状态始终一致。
+     *
+     * ⚠️ 字段名必须是 `mood`（Dart 侧 PetModel 用的就是 mood）。
+     * 历史上原生侧写的是 `happiness`，Dart 侧根本不认这个 key，
+     * 导致心情在两端彻底断链：桌面永远读到兜底值，App 里喂食也涨不上去。
+     */
+    private fun readPetState(): PetState {
+        return try {
+            val prefs = getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
+            val rawJson = prefs.getString(KEY_PET_DATA, null)
+            if (rawJson.isNullOrBlank()) {
+                defaultPetState()
+            } else {
+                val json = JSONObject(rawJson)
+                val elapsed = elapsedDecaySeconds(json.optLong("stateSavedAt", 0L))
+                PetState(
+                    hunger = decayedValue(json, "hunger", 80, elapsed),
+                    mood = decayedValue(json, "mood", 80, elapsed),
+                    energy = decayedValue(json, "energy", 80, elapsed),
+                    cleanliness = decayedValue(json, "cleanliness", 80, elapsed),
+                    intimacy = json.optInt("intimacy", 50),
+                    skinId = json.optString("skinId", "cat_calico"),
+                    petName = json.optString("name", "波可"),
+                    enableSound = json.optBoolean("enableSound", true),
+                )
+            }
+        } catch (_: Exception) {
+            defaultPetState()
+        }
+    }
+
+    private fun defaultPetState() = PetState(
+        hunger = 80,
+        mood = 80,
+        energy = 80,
+        cleanliness = 80,
+        intimacy = 50,
+        skinId = "cat_calico",
+        petName = "波可",
+        enableSound = true,
+    )
+
+    /** 距离上次状态结算过去了多少秒（最多补算 12 小时） */
+    private fun elapsedDecaySeconds(stateSavedAt: Long): Float {
+        if (stateSavedAt <= 0L) return 0f
+        val diffMs = System.currentTimeMillis() - stateSavedAt
+        if (diffMs <= 0L) return 0f
+        return (diffMs / 1000.0).coerceAtMost(MAX_OFFLINE_DECAY_SECONDS).toFloat()
+    }
+
+    /** 某个状态值按流逝时间补算后的结果（0~100 整数） */
+    private fun decayedValue(json: JSONObject, key: String, fallback: Int, elapsed: Float): Int {
+        val base = json.optDouble(key, fallback.toDouble()).toFloat()
+        val rate = DECAY_RATES[key] ?: 0f
+        return (base - rate * elapsed).coerceIn(0f, 100f).toInt()
+    }
+
+    /**
      * 给猫加餐：写入饱食度 / 心情 / 亲密度，并同步到悬浮猫的表情与行为权重。
      * 通知栏投喂与拖拽投喂共用这一份结算逻辑。
      */
     private fun applyFeeding(hungerDelta: Int) {
         try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val rawJson = prefs.getString("flutter.poko_pet_data", null)
+            val prefs = getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
+            val rawJson = prefs.getString(KEY_PET_DATA, null)
             if (!rawJson.isNullOrBlank()) {
                 val json = JSONObject(rawJson)
-                val currentHunger = json.optInt("hunger", 80)
-                val currentHappiness = json.optInt("happiness", 80)
-                val currentIntimacy = json.optInt("intimacy", 50)
+                val elapsed = elapsedDecaySeconds(json.optLong("stateSavedAt", 0L))
 
-                val newHunger = (currentHunger + hungerDelta).coerceIn(0, 100)
-                val newHappiness = (currentHappiness + 10).coerceAtMost(100)
-                val newIntimacy = (currentIntimacy + 5).coerceAtMost(100)
+                // 先把离线期间的衰减补上再结算投喂，
+                // 这样写回盘里的数值就是"此刻"的真实值，不会把 App 攒下的状态抹掉
+                fun decayed(key: String, fallback: Int): Double {
+                    val base = json.optDouble(key, fallback.toDouble())
+                    val rate = (DECAY_RATES[key] ?: 0f).toDouble()
+                    return (base - rate * elapsed).coerceIn(0.0, 100.0)
+                }
 
-                json.put("hunger", newHunger)
-                json.put("happiness", newHappiness)
-                json.put("intimacy", newIntimacy)
-                prefs.edit().putString("flutter.poko_pet_data", json.toString()).apply()
+                json.put("hunger", (decayed("hunger", 80) + hungerDelta).coerceIn(0.0, 100.0))
+                json.put("mood", (decayed("mood", 80) + 10.0).coerceIn(0.0, 100.0))
+                json.put("energy", decayed("energy", 80))
+                json.put("cleanliness", decayed("cleanliness", 80))
+                json.put("intimacy", (json.optInt("intimacy", 50) + 5).coerceAtMost(100))
+                // 写盘即盖时间戳：这份值是"此刻"的真实值
+                json.put("stateSavedAt", System.currentTimeMillis())
+                // 旧版本误写过 `happiness`（Dart 侧不认这个 key），顺手清掉别留在存档里
+                json.remove("happiness")
+                prefs.edit().putString(KEY_PET_DATA, json.toString()).apply()
             }
         } catch (_: Exception) {}
 
         syncPetMood()
     }
 
-    private fun getSavedHunger(): Int {
-        return try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val rawJson = prefs.getString("flutter.poko_pet_data", null)
-            if (!rawJson.isNullOrBlank()) {
-                JSONObject(rawJson).optInt("hunger", 80)
-            } else {
-                80
-            }
-        } catch (_: Exception) {
-            80
-        }
-    }
-
-    private fun getSavedHappiness(): Int {
-        return try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val rawJson = prefs.getString("flutter.poko_pet_data", null)
-            if (!rawJson.isNullOrBlank()) {
-                JSONObject(rawJson).optInt("happiness", 80)
-            } else {
-                80
-            }
-        } catch (_: Exception) {
-            80
-        }
-    }
-
     /**
-     * 把饱食度 / 心情同步给悬浮猫：状态会直接影响表情与自主行为的权重，
+     * 把饱食度 / 心情 / 体力 / 洁净度同步给悬浮猫：
+     * 状态会直接影响表情与自主行为的权重，
      * 饿的时候它会更多地东张西望找吃的，而不是照常卖萌。
      */
     private fun syncPetMood() {
-        val hunger = getSavedHunger()
-        val happiness = getSavedHappiness()
-        pokoView?.hungerLevel = hunger
-        pokoView?.happinessLevel = happiness
+        val state = readPetState()
+        val view = pokoView ?: return
+        view.hungerLevel = state.hunger
+        view.happinessLevel = state.mood
+        view.energyLevel = state.energy
+        view.cleanlinessLevel = state.cleanliness
+        // 音效开关也一起同步：用户在 App 里关掉声音，桌面上的波可立刻闭嘴
+        isSoundEnabled = state.enableSound
+    }
+
+    // ---------- 夜间模式 ----------
+
+    /** App 推送过来的昼夜状态（null 表示还没收到过推送） */
+    private var appNightMode: Boolean? = null
+
+    /** 当前是否处于夜间配色 */
+    private var isNightMode: Boolean = false
+
+    /**
+     * 判定当前该不该用夜间配色。
+     *
+     * 优先用 App 推送的值 —— App 内部按真实太阳节律（SolarService）算昼夜，
+     * 比系统深色模式准得多；还没收到过推送时退回系统深色模式，
+     * 保证深夜桌面上不至于亮得刺眼。
+     */
+    private fun resolveNightMode(): Boolean {
+        appNightMode?.let { return it }
+        return try {
+            val uiMode = getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+            uiMode?.nightMode == UiModeManager.MODE_NIGHT_YES
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** 把夜间配色应用到悬浮猫 */
+    private fun applyNightMode(enabled: Boolean) {
+        isNightMode = enabled
+        pokoView?.setNightMode(enabled)
+    }
+
+    /** 接收 App 推送的昼夜状态 */
+    fun applyNightModeFromApp(enabled: Boolean) {
+        appNightMode = enabled
+        applyNightMode(enabled)
     }
 
     /**
@@ -1767,11 +1958,12 @@ class FloatingPetService : Service() {
 
     /** 主动搭话的话术：按当前状态挑一句 */
     private fun autoChatLine(): String {
-        val hunger = getSavedHunger()
-        val happiness = getSavedHappiness()
+        val state = readPetState()
+        val hunger = state.hunger
+        val mood = state.mood
         return when {
             hunger < 35 -> "主人～小鱼干告急啦，我肚子已经咕咕叫了 🐟🥺"
-            happiness < 40 -> "有点无聊喵… 摸摸我好不好？🥺"
+            mood < 40 -> "有点无聊喵… 摸摸我好不好？🥺"
             else -> listOf(
                 "主人好久没来看我啦，我一直在桌上乖乖等着呢～ 💕",
                 "偷偷看一眼：今天也要开开心心的哦 ✨",
@@ -1826,12 +2018,19 @@ class FloatingPetService : Service() {
 
         val preferredY = pParams.y - bubbleH - (6 * density).toInt()
         val minY = (28 * density).toInt()
-        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
-        bParams.y = if (preferredY < minY) {
+        val newX = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
+        val newY = if (preferredY < minY) {
             (pParams.y + pokoW + (6 * density).toInt()).coerceAtMost(screenHeight - bubbleH - (16 * density).toInt())
         } else {
             preferredY
         }
+
+        // 位置没变就别再动窗口：拖拽时每帧都会调到这里，
+        // 一次多余的 updateViewLayout 就多一次跨进程窗口重排
+        if (newX == bParams.x && newY == bParams.y) return
+
+        bParams.x = newX
+        bParams.y = newY
         try {
             windowManager?.updateViewLayout(bubble, bParams)
         } catch (_: Exception) {}
@@ -1856,20 +2055,39 @@ class FloatingPetService : Service() {
     }
 
     private fun loadSavedPetConfig(): Pair<String, String> {
-        try {
-            val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val rawJson = prefs.getString("flutter.poko_pet_data", null)
-            if (!rawJson.isNullOrBlank()) {
-                val json = JSONObject(rawJson)
-                val skinId = json.optString("skinId", "cat_calico")
-                val name = json.optString("name", "波可")
-                isSoundEnabled = json.optBoolean("enableSound", true)
-                return Pair(skinId, name)
+        val state = readPetState()
+        isSoundEnabled = state.enableSound
+        return Pair(state.skinId, state.petName)
+    }
+
+    /**
+     * 宠物存档变更监听。
+     *
+     * Dart 侧的 shared_preferences 插件和原生侧共用同一个 `FlutterSharedPreferences` 文件，
+     * 所以 App 里一写盘（喂食、换装、改音效开关），这里立刻就能收到通知，
+     * 桌面悬浮宠的状态与表情不必再等 60 秒的巡检。
+     */
+    private val petDataChangeListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_PET_DATA) {
+                syncPetMood()
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
         }
-        return Pair("cat_calico", "波可")
+
+    /** 注册宠物存档监听（服务启动时调用） */
+    private fun registerPetDataListener() {
+        try {
+            getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
+                .registerOnSharedPreferenceChangeListener(petDataChangeListener)
+        } catch (_: Exception) {}
+    }
+
+    /** 注销宠物存档监听（服务销毁时调用，避免泄漏） */
+    private fun unregisterPetDataListener() {
+        try {
+            getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
+                .unregisterOnSharedPreferenceChangeListener(petDataChangeListener)
+        } catch (_: Exception) {}
     }
 
     /**
@@ -1914,6 +2132,8 @@ class FloatingPetService : Service() {
         cancelEdgePeeking()
         isPeeking = false
         hideActionMenu(animated = false)
+        // 旋转 / 分屏 / 折叠展开之后屏幕尺寸与系统栏边距都变了，缓存必须失效
+        invalidateScreenCache()
         val params = pokoParams ?: return
         val view = pokoView ?: return
         view.alpha = 1.0f
@@ -1944,7 +2164,16 @@ class FloatingPetService : Service() {
         scheduleEdgePeeking(isLeft)
     }
 
-    private fun getSafeVerticalBounds(density: Float, screenHeight: Int, sizePx: Int): Pair<Int, Int> {
+    /**
+     * 重新计算系统栏避让边距。
+     *
+     * 原来的实现在 [getSafeVerticalBounds] 里每次都做一遍
+     * `resources.getIdentifier(...)` + `getDimensionPixelSize(...)`，
+     * 而拖拽时这个函数每帧都会被调到 —— 资源表查找在 60fps 下是实打实的开销。
+     * 现在只在启动与屏幕配置变化时算一次。
+     */
+    private fun refreshSafeInsets() {
+        val density = resources.displayMetrics.density
         var topInset = (24 * density).toInt()
         var bottomInset = (36 * density).toInt()
 
@@ -1962,8 +2191,18 @@ class FloatingPetService : Service() {
             if (h > (16 * density).toInt()) bottomInset = h + (8 * density).toInt()
         }
 
-        val minY = topInset
-        val maxY = (screenHeight - sizePx - bottomInset).coerceAtLeast(minY)
+        safeTopInset = topInset
+        safeBottomInset = bottomInset
+    }
+
+    /**
+     * 宠物可停靠的纵向范围（避开状态栏与手势条）。
+     * 边距来自 [refreshSafeInsets] 的缓存，不再每帧做资源表查找。
+     */
+    private fun getSafeVerticalBounds(density: Float, screenHeight: Int, sizePx: Int): Pair<Int, Int> {
+        if (safeTopInset <= 0) refreshSafeInsets()
+        val minY = safeTopInset
+        val maxY = (screenHeight - sizePx - safeBottomInset).coerceAtLeast(minY)
         return Pair(minY, maxY)
     }
 
@@ -2220,6 +2459,7 @@ class FloatingPetService : Service() {
         instance = null
         cancelEdgePeeking()
         isPeeking = false
+        unregisterPetDataListener()
         longPressRunnable?.let { mainHandler.removeCallbacks(it) }
         soundPool?.release()
         soundPool = null

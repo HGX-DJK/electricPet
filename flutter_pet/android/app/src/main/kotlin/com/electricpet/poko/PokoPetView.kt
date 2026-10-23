@@ -167,6 +167,44 @@ class PokoPetView(context: Context) : View(context) {
             field = value.coerceIn(0, 100)
         }
 
+    /** 体力值 0~100：偏低时更常趴着打瞌睡 */
+    var energyLevel: Int = 80
+        set(value) {
+            field = value.coerceIn(0, 100)
+        }
+
+    /** 洁净度 0~100：偏低时看起来邋遢（毛色发灰） */
+    var cleanlinessLevel: Int = 80
+        set(value) {
+            val clamped = value.coerceIn(0, 100)
+            if (field != clamped) {
+                field = clamped
+                // 毛色会随洁净度变化，需要重算配色
+                updateColors()
+                invalidate()
+            }
+        }
+
+    /**
+     * 夜间配色：跟 App 的昼夜节律保持一致。
+     *
+     * 之前桌面上的波可永远是白天配色，深夜亮在深色桌面上格外刺眼；
+     * 现在由服务层把 App 算好的昼夜状态推过来。
+     */
+    var isNightMode: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+                updateColors()
+                invalidate()
+            }
+        }
+
+    /** 切换夜间配色 */
+    fun setNightMode(enabled: Boolean) {
+        isNightMode = enabled
+    }
+
     // 动画运行器
     private var idleAnimator: ValueAnimator? = null
     private var currentActionAnimator: ValueAnimator? = null
@@ -230,6 +268,68 @@ class PokoPetView(context: Context) : View(context) {
     private val eyePath = Path()
     private val heartPath = Path()
     private val starPath = Path()
+    private val blazePath = Path()
+
+    // ---------- onDraw 零分配补充 ----------
+    //
+    // 之前这些都在绘制路径里现 new：RectF 十余个、Paint 七八个、
+    // Color.parseColor 十次、RadialGradient 两个（native 对象，最贵）。
+    // 待机动画是 60fps 持续跑的，等于每秒制造几百个临时对象 —— 纯浪费。
+    // 现在全部提到成员上复用，onDraw 里只做 set()/属性赋值。
+
+    /** 绘制过程中复用的矩形（避免每帧 new RectF） */
+    private val bodyRect = RectF()
+    private val bellyRect = RectF()
+    private val patchRect = RectF()
+    private val headRect = RectF()
+    private val blushRect = RectF()
+    private val eyeRect = RectF()
+    private val pupilRect = RectF()
+    private val mouthRect = RectF()
+    private val tongueRect = RectF()
+    private val pawRect = RectF()
+
+    /** 绘制过程中复用的画笔 */
+    private val tipPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val patchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val darkPatchPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val stripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val blazePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val innerMouthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val happyMouthPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+
+    /** 双眼 X 坐标的复用数组（避免每帧 new listOf） */
+    private val eyeXs = FloatArray(2)
+
+    /**
+     * 渐变 shader 缓存。
+     *
+     * RadialGradient 是 native 对象，每帧 new 一个不仅分配内存，
+     * 还会触发 native 侧的渐变重建。改成"只换颜色/半径时重建"，
+     * 位置变化用 local matrix 平移 —— Matrix 复用，不产生新对象。
+     */
+    private var bodyShader: RadialGradient? = null
+    private var bodyShaderColor: Int = 0
+    private var bodyShaderRadius: Float = 0f
+    private var headShader: RadialGradient? = null
+    private var headShaderColor: Int = 0
+    private var headShaderRadius: Float = 0f
+    private val shaderMatrix = Matrix()
+
+    // ---------- 绘制用颜色常量（避免每帧 parseColor 解析字符串） ----------
+    private val colorBellyWhite = 0xFFFFFDF8.toInt()
+    private val colorInnerEar = 0xFFFDA4AF.toInt()
+    private val colorEyeDark = 0xFF1E293B.toInt()
+    private val colorEyeSleepy = 0xFF334155.toInt()
+    private val colorPupil = 0xFF070B14.toInt()
+    private val colorNose = 0xFFFB7185.toInt()
+    private val colorInnerMouth = 0xFFE11D48.toInt()
+    private val colorHappyMouth = 0xFFF43F5E.toInt()
+    private val colorWhiskerLight = 0xFFF1F5F9.toInt()
+    private val colorWhiskerGrey = 0x8094A3B8.toInt()
 
     // 眨眼定时调度
     private val blinkRunnable = object : Runnable {
@@ -373,6 +473,46 @@ class PokoPetView(context: Context) : View(context) {
                 eyeColor = Color.parseColor("#10B981")
             }
         }
+
+        // 夜间：加一层"月光"滤镜（压暗 + 偏冷），深夜桌面不至于刺眼
+        if (isNightMode) {
+            primaryColor = applyNightTint(primaryColor)
+            secondaryColor = applyNightTint(secondaryColor)
+            darkPatchColor = applyNightTint(darkPatchColor)
+            eyeColor = applyNightTint(eyeColor)
+        }
+
+        // 脏了：毛色发灰（洁净度越低越明显）
+        if (cleanlinessLevel < 70) {
+            val dirt = (70 - cleanlinessLevel) / 70f * 0.30f
+            primaryColor = blendTowardGray(primaryColor, dirt)
+            secondaryColor = blendTowardGray(secondaryColor, dirt)
+        }
+    }
+
+    /** 月光滤镜：压暗并把蓝色通道抬高 */
+    private fun applyNightTint(color: Int): Int {
+        val a = Color.alpha(color)
+        val r = (Color.red(color) * 0.72f).toInt().coerceIn(0, 255)
+        val g = (Color.green(color) * 0.74f).toInt().coerceIn(0, 255)
+        val b = (Color.blue(color) * 0.86f).toInt().coerceIn(0, 255)
+        return Color.argb(a, r, g, b)
+    }
+
+    /** 把颜色朝灰色混合 [ratio]（0=原样，1=全灰） */
+    private fun blendTowardGray(color: Int, ratio: Float): Int {
+        val t = ratio.coerceIn(0f, 1f)
+        val a = Color.alpha(color)
+        val r = Color.red(color)
+        val g = Color.green(color)
+        val b = Color.blue(color)
+        val gray = (r * 0.3f + g * 0.59f + b * 0.11f).toInt()
+        return Color.argb(
+            a,
+            (r + (gray - r) * t).toInt().coerceIn(0, 255),
+            (g + (gray - g) * t).toInt().coerceIn(0, 255),
+            (b + (gray - b) * t).toInt().coerceIn(0, 255),
+        )
     }
 
     // ---------- 核心待机基础动画 ----------
@@ -424,8 +564,10 @@ class PokoPetView(context: Context) : View(context) {
             PetAction.SLEEPY,        // 困困瞌睡冒 Zzz
             PetAction.SPIN_TAIL      // 追尾巴转圈打转
         )
-        // 状态驱动：饿了更常东张西望找吃的；心情好则多来点活泼动作
+        // 状态驱动：饿了更常东张西望找吃的；心情好则多来点活泼动作；
+        // 体力见底时优先趴着打盹（它是真的累了）
         val selected = when {
+            energyLevel < 30 && random.nextInt(100) < 50 -> PetAction.SLEEPY
             hungerLevel < 35 && random.nextInt(100) < 45 -> PetAction.HEAD_TILT
             happinessLevel >= 70 && random.nextInt(100) < 40 ->
                 if (random.nextBoolean()) PetAction.HAPPY_BOUNCE else PetAction.SPIN_TAIL
@@ -1217,44 +1359,57 @@ class PokoPetView(context: Context) : View(context) {
             "cat_calico", "cat_ragdoll", "cat_siamese" -> secondaryColor
             else -> primaryColor
         }
-        val tipPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = tipColor }
+        tipPaint.color = tipColor
         canvas.drawCircle(tailTipX, tailTipY, 4.4f * density, tipPaint)
     }
 
     private fun drawBody(canvas: Canvas, cx: Float, cy: Float) {
-        val bodyRect = RectF(cx - 24f * density, cy - 6f * density, cx + 24f * density, cy + 25f * density)
-
-        // 3D 渐变体积光影
-        bodyPaint.shader = RadialGradient(
-            cx - 6f * density, cy - 2f * density, 34f * density,
-            lightenColor(primaryColor, 0.20f), primaryColor, Shader.TileMode.CLAMP
+        bodyRect.set(
+            cx - 24f * density, cy - 6f * density,
+            cx + 24f * density, cy + 25f * density
         )
+
+        // 3D 渐变体积光影：shader 只在颜色/半径变化时重建，位置靠 local matrix 平移
+        val bodyRadius = 34f * density
+        if (bodyShader == null || bodyShaderColor != primaryColor || bodyShaderRadius != bodyRadius) {
+            bodyShader = RadialGradient(
+                0f, 0f, bodyRadius,
+                lightenColor(primaryColor, 0.20f), primaryColor, Shader.TileMode.CLAMP
+            )
+            bodyShaderColor = primaryColor
+            bodyShaderRadius = bodyRadius
+        }
+        shaderMatrix.setTranslate(cx - 6f * density, cy - 2f * density)
+        bodyShader?.setLocalMatrix(shaderMatrix)
+        bodyPaint.shader = bodyShader
         canvas.drawOval(bodyRect, bodyPaint)
 
         // 软糯雪白肚腩
-        val bellyRect = RectF(cx - 15f * density, cy + 1f * density, cx + 15f * density, cy + 23f * density)
-        bellyPaint.color = Color.parseColor("#FFFDF8")
+        bellyRect.set(
+            cx - 15f * density, cy + 1f * density,
+            cx + 15f * density, cy + 23f * density
+        )
+        bellyPaint.color = colorBellyWhite
         canvas.drawOval(bellyRect, bellyPaint)
 
         // 品种专属斑纹 (三花斑块 / 橘猫虎斑)
         if (skinId == "cat_calico") {
-            val patchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = secondaryColor }
-            canvas.drawOval(
-                RectF(cx + 9f * density, cy + 3f * density, cx + 21f * density, cy + 16f * density),
-                patchPaint
+            patchPaint.color = secondaryColor
+            patchRect.set(
+                cx + 9f * density, cy + 3f * density,
+                cx + 21f * density, cy + 16f * density
             )
-            val darkPatch = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = darkPatchColor }
-            canvas.drawOval(
-                RectF(cx - 21f * density, cy + 7f * density, cx - 11f * density, cy + 19f * density),
-                darkPatch
+            canvas.drawOval(patchRect, patchPaint)
+
+            darkPatchPaint.color = darkPatchColor
+            patchRect.set(
+                cx - 21f * density, cy + 7f * density,
+                cx - 11f * density, cy + 19f * density
             )
+            canvas.drawOval(patchRect, darkPatchPaint)
         } else if (skinId == "cat_orange" || skinId == "cat_golden_shaded") {
-            val stripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = secondaryColor
-                style = Paint.Style.STROKE
-                strokeWidth = 1.8f * density
-                strokeCap = Paint.Cap.ROUND
-            }
+            stripePaint.color = secondaryColor
+            stripePaint.strokeWidth = 1.8f * density
             canvas.drawLine(cx + 12f * density, cy + 4f * density, cx + 21f * density, cy + 8f * density, stripePaint)
             canvas.drawLine(cx + 10f * density, cy + 9f * density, cx + 20f * density, cy + 13f * density, stripePaint)
             canvas.drawLine(cx - 12f * density, cy + 4f * density, cx - 21f * density, cy + 8f * density, stripePaint)
@@ -1277,11 +1432,19 @@ class PokoPetView(context: Context) : View(context) {
         drawEars(canvas, cx, headY)
 
         // 2. 圆润大头轮廓 (微包子脸发腮)
-        val headRect = RectF(cx - headW, headY - headH, cx + headW, headY + headH)
-        headPaint.shader = RadialGradient(
-            cx - 5f * density, headY - 6f * density, 34f * density,
-            lightenColor(primaryColor, 0.22f), primaryColor, Shader.TileMode.CLAMP
-        )
+        headRect.set(cx - headW, headY - headH, cx + headW, headY + headH)
+        val headRadius = 34f * density
+        if (headShader == null || headShaderColor != primaryColor || headShaderRadius != headRadius) {
+            headShader = RadialGradient(
+                0f, 0f, headRadius,
+                lightenColor(primaryColor, 0.22f), primaryColor, Shader.TileMode.CLAMP
+            )
+            headShaderColor = primaryColor
+            headShaderRadius = headRadius
+        }
+        shaderMatrix.setTranslate(cx - 5f * density, headY - 6f * density)
+        headShader?.setLocalMatrix(shaderMatrix)
+        headPaint.shader = headShader
         canvas.drawOval(headRect, headPaint)
 
         // 额头斑纹
@@ -1290,29 +1453,31 @@ class PokoPetView(context: Context) : View(context) {
             patchPath.moveTo(cx + 5f * density, headY - 20f * density)
             patchPath.quadTo(cx + 22f * density, headY - 14f * density, cx + 21f * density, headY - 2f * density)
             patchPath.quadTo(cx + 11f * density, headY - 8f * density, cx + 5f * density, headY - 20f * density)
-            val patchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = secondaryColor }
+            patchPaint.color = secondaryColor
             canvas.drawPath(patchPath, patchPaint)
         } else if (skinId == "cat_tuxedo") {
-            val blazePath = Path().apply {
-                moveTo(cx, headY - 14f * density)
-                lineTo(cx - 7f * density, headY + 5f * density)
-                quadTo(cx, headY + 8f * density, cx + 7f * density, headY + 5f * density)
-                close()
-            }
-            canvas.drawPath(blazePath, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE })
+            blazePath.reset()
+            blazePath.moveTo(cx, headY - 14f * density)
+            blazePath.lineTo(cx - 7f * density, headY + 5f * density)
+            blazePath.quadTo(cx, headY + 8f * density, cx + 7f * density, headY + 5f * density)
+            blazePath.close()
+            blazePaint.color = Color.WHITE
+            canvas.drawPath(blazePath, blazePaint)
         }
 
         // 3. 粉嫩腮红
         val blushAlpha = if (eyeMood == EyeMood.HAPPY_SMILE || squishScaleX > 1.05f) 140 else 80
         blushPaint.color = Color.argb(blushAlpha, 251, 113, 133)
-        canvas.drawOval(
-            RectF(cx - 19f * density, headY + 2f * density, cx - 11f * density, headY + 8f * density),
-            blushPaint
+        blushRect.set(
+            cx - 19f * density, headY + 2f * density,
+            cx - 11f * density, headY + 8f * density
         )
-        canvas.drawOval(
-            RectF(cx + 11f * density, headY + 2f * density, cx + 19f * density, headY + 8f * density),
-            blushPaint
+        canvas.drawOval(blushRect, blushPaint)
+        blushRect.set(
+            cx + 11f * density, headY + 2f * density,
+            cx + 19f * density, headY + 8f * density
         )
+        canvas.drawOval(blushRect, blushPaint)
 
         // 4. 水灵大眼与丰富表情
         drawEyes(canvas, cx, headY)
@@ -1329,7 +1494,7 @@ class PokoPetView(context: Context) : View(context) {
     private fun drawEars(canvas: Canvas, cx: Float, headY: Float) {
         val earBaseColor = if (skinId == "cat_siamese") secondaryColor else primaryColor
         earPaint.color = earBaseColor
-        innerEarPaint.color = Color.parseColor("#FDA4AF")
+        innerEarPaint.color = colorInnerEar
 
         // 左耳
         earPath.reset()
@@ -1376,7 +1541,7 @@ class PokoPetView(context: Context) : View(context) {
         when (effectiveMood) {
             EyeMood.HAPPY_SMILE -> {
                 // 开心欢畅月牙笑眼 ⌒ ⌒
-                smileEyePaint.color = Color.parseColor("#1E293B")
+                smileEyePaint.color = colorEyeDark
                 smileEyePaint.strokeWidth = 2.4f * density
 
                 eyePath.reset()
@@ -1391,7 +1556,7 @@ class PokoPetView(context: Context) : View(context) {
             }
             EyeMood.SLEEPY -> {
                 // 困困安详平闭眼 ── ──
-                smileEyePaint.color = Color.parseColor("#334155")
+                smileEyePaint.color = colorEyeSleepy
                 smileEyePaint.strokeWidth = 2.0f * density
 
                 canvas.drawLine(leftEyeX - 4.2f * density, eyeY, leftEyeX + 4.2f * density, eyeY, smileEyePaint)
@@ -1399,7 +1564,7 @@ class PokoPetView(context: Context) : View(context) {
             }
             EyeMood.SQUINT_YAWN -> {
                 // 伸懒腰紧闭双眼 > <
-                smileEyePaint.color = Color.parseColor("#1E293B")
+                smileEyePaint.color = colorEyeDark
                 smileEyePaint.strokeWidth = 2.2f * density
 
                 // 左眼 >
@@ -1419,12 +1584,15 @@ class PokoPetView(context: Context) : View(context) {
             EyeMood.WIDE_SURPRISE -> {
                 // 拎起悬空呆萌圆溜溜大眼 (o . o)
                 val eyeRadius = 6.2f * density
-                for (eyeX in listOf(leftEyeX, rightEyeX)) {
+                eyeXs[0] = leftEyeX
+                eyeXs[1] = rightEyeX
+                for (i in 0 until 2) {
+                    val eyeX = eyeXs[i]
                     irisPaint.color = eyeColor
                     canvas.drawCircle(eyeX, eyeY, eyeRadius, irisPaint)
 
                     // 巨型黑曜石圆瞳
-                    pupilPaint.color = Color.parseColor("#070B14")
+                    pupilPaint.color = colorPupil
                     canvas.drawCircle(eyeX, eyeY, 4.6f * density, pupilPaint)
 
                     // 闪耀高光
@@ -1437,24 +1605,26 @@ class PokoPetView(context: Context) : View(context) {
                 val eyeRadiusW = 4.6f * density
                 val eyeRadiusH = 5.8f * density
 
-                for (eyeX in listOf(leftEyeX, rightEyeX)) {
+                eyeXs[0] = leftEyeX
+                eyeXs[1] = rightEyeX
+                for (i in 0 until 2) {
+                    val eyeX = eyeXs[i]
                     irisPaint.color = eyeColor
-                    canvas.drawOval(
-                        RectF(eyeX - eyeRadiusW, eyeY - eyeRadiusH, eyeX + eyeRadiusW, eyeY + eyeRadiusH),
-                        irisPaint
+                    eyeRect.set(
+                        eyeX - eyeRadiusW, eyeY - eyeRadiusH,
+                        eyeX + eyeRadiusW, eyeY + eyeRadiusH
                     )
+                    canvas.drawOval(eyeRect, irisPaint)
 
                     // 黑曜石瞳孔 (带注视偏移)
-                    pupilPaint.color = Color.parseColor("#070B14")
-                    canvas.drawOval(
-                        RectF(
-                            eyeX - 3.0f * density + pupilOffsetX,
-                            eyeY - 4.5f * density + pupilOffsetY,
-                            eyeX + 3.0f * density + pupilOffsetX,
-                            eyeY + 4.5f * density + pupilOffsetY
-                        ),
-                        pupilPaint
+                    pupilPaint.color = colorPupil
+                    pupilRect.set(
+                        eyeX - 3.0f * density + pupilOffsetX,
+                        eyeY - 4.5f * density + pupilOffsetY,
+                        eyeX + 3.0f * density + pupilOffsetX,
+                        eyeY + 4.5f * density + pupilOffsetY
                     )
+                    canvas.drawOval(pupilRect, pupilPaint)
 
                     // 双重高光星芒
                     canvas.drawCircle(eyeX - 1.4f * density, eyeY - 2.0f * density, 1.6f * density, sparklePaint)
@@ -1473,51 +1643,60 @@ class PokoPetView(context: Context) : View(context) {
         nosePath.quadTo(cx, noseY - 2.2f * density, cx + 2.5f * density, noseY - 1.4f * density)
         nosePath.quadTo(cx + 2.0f * density, noseY + 1.5f * density, cx, noseY + 2.4f * density)
         nosePath.quadTo(cx - 2.0f * density, noseY + 1.5f * density, cx - 2.5f * density, noseY - 1.4f * density)
-        nosePaint.color = Color.parseColor("#FB7185")
+        nosePaint.color = colorNose
         canvas.drawPath(nosePath, nosePaint)
 
         // 嘴部与舌头形态
         when (mouthState) {
             MouthState.YAWN_OPEN -> {
                 // 打哈欠大张嘴：深粉嫩大口腔 + 柔和舌头
-                val mouthRect = RectF(cx - 4.8f * density, noseY + 2.5f * density, cx + 4.8f * density, noseY + 10f * density)
-                val innerMouthPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#E11D48") }
-                canvas.drawOval(mouthRect, innerMouthPaint)
-                canvas.drawOval(
-                    RectF(cx - 3f * density, noseY + 6.5f * density, cx + 3f * density, noseY + 10.5f * density),
-                    tonguePaint
+                mouthRect.set(
+                    cx - 4.8f * density, noseY + 2.5f * density,
+                    cx + 4.8f * density, noseY + 10f * density
                 )
+                innerMouthPaint.color = colorInnerMouth
+                canvas.drawOval(mouthRect, innerMouthPaint)
+                tongueRect.set(
+                    cx - 3f * density, noseY + 6.5f * density,
+                    cx + 3f * density, noseY + 10.5f * density
+                )
+                canvas.drawOval(tongueRect, tonguePaint)
             }
             MouthState.BLEP_TONGUE -> {
                 // 治愈 ω 嘴 + 萌吐舌尖 (Blep)
                 drawOmegaMouth(canvas, cx, noseY)
-                canvas.drawOval(
-                    RectF(cx - 2.4f * density, noseY + 4.2f * density, cx + 2.4f * density, noseY + 8.2f * density),
-                    tonguePaint
+                tongueRect.set(
+                    cx - 2.4f * density, noseY + 4.2f * density,
+                    cx + 2.4f * density, noseY + 8.2f * density
                 )
+                canvas.drawOval(tongueRect, tonguePaint)
             }
             MouthState.HAPPY_OPEN -> {
                 // 开心欢笑微张口
-                val smileRect = RectF(cx - 4.2f * density, noseY + 2.8f * density, cx + 4.2f * density, noseY + 8f * density)
-                val happyMouth = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#F43F5E") }
-                canvas.drawOval(smileRect, happyMouth)
+                mouthRect.set(
+                    cx - 4.2f * density, noseY + 2.8f * density,
+                    cx + 4.2f * density, noseY + 8f * density
+                )
+                happyMouthPaint.color = colorHappyMouth
+                canvas.drawOval(mouthRect, happyMouthPaint)
             }
             MouthState.NORMAL_OMEGA -> {
                 // 经典治愈微笑嘴 ω
                 drawOmegaMouth(canvas, cx, noseY)
                 // 触碰挤压时微露粉舌
                 if (squishScaleX > 1.05f) {
-                    canvas.drawOval(
-                        RectF(cx - 2.2f * density, noseY + 4.2f * density, cx + 2.2f * density, noseY + 7.8f * density),
-                        tonguePaint
+                    tongueRect.set(
+                        cx - 2.2f * density, noseY + 4.2f * density,
+                        cx + 2.2f * density, noseY + 7.8f * density
                     )
+                    canvas.drawOval(tongueRect, tonguePaint)
                 }
             }
         }
     }
 
     private fun drawOmegaMouth(canvas: Canvas, cx: Float, noseY: Float) {
-        mouthPaint.color = Color.parseColor("#334155")
+        mouthPaint.color = colorEyeSleepy
         mouthPaint.strokeWidth = 1.4f * density
 
         mouthPath.reset()
@@ -1530,7 +1709,7 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun drawWhiskers(canvas: Canvas, cx: Float, headY: Float) {
-        val whiskerColor = if (skinId == "cat_black" || skinId == "cat_tuxedo") Color.parseColor("#F1F5F9") else Color.parseColor("#8094A3B8")
+        val whiskerColor = if (skinId == "cat_black" || skinId == "cat_tuxedo") colorWhiskerLight else colorWhiskerGrey
         whiskerPaint.color = whiskerColor
         whiskerPaint.strokeWidth = 1.1f * density
 
@@ -1548,7 +1727,7 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun drawPaws(canvas: Canvas, cx: Float, cy: Float) {
-        pawPaint.color = Color.parseColor("#FFFDF8")
+        pawPaint.color = colorBellyWhite
         pawBorderPaint.color = Color.argb(26, 0, 0, 0)
         pawBorderPaint.strokeWidth = 1.0f * density
 
@@ -1559,17 +1738,17 @@ class PokoPetView(context: Context) : View(context) {
         // 动态计算左爪位置 (支持洗脸/踩奶/伸懒腰/悬空乱蹬)
         val leftX = cx - 9.5f * density + leftPawOffsetX
         val leftY = basePawY + leftPawOffsetY
-        val leftRect = RectF(leftX - pawW, leftY - pawH, leftX + pawW, leftY + pawH)
-        canvas.drawOval(leftRect, pawPaint)
-        canvas.drawOval(leftRect, pawBorderPaint)
+        pawRect.set(leftX - pawW, leftY - pawH, leftX + pawW, leftY + pawH)
+        canvas.drawOval(pawRect, pawPaint)
+        canvas.drawOval(pawRect, pawBorderPaint)
         canvas.drawLine(leftX, leftY - 0.5f * density, leftX, leftY + pawH, pawBorderPaint)
 
         // 动态计算右爪位置
         val rightX = cx + 9.5f * density + rightPawOffsetX
         val rightY = basePawY + rightPawOffsetY
-        val rightRect = RectF(rightX - pawW, rightY - pawH, rightX + pawW, rightY + pawH)
-        canvas.drawOval(rightRect, pawPaint)
-        canvas.drawOval(rightRect, pawBorderPaint)
+        pawRect.set(rightX - pawW, rightY - pawH, rightX + pawW, rightY + pawH)
+        canvas.drawOval(pawRect, pawPaint)
+        canvas.drawOval(pawRect, pawBorderPaint)
         canvas.drawLine(rightX, rightY - 0.5f * density, rightX, rightY + pawH, pawBorderPaint)
     }
 

@@ -61,6 +61,9 @@ class OverlayChannel {
   /// 宠物名字
   static const String argPetName = 'petName';
 
+  /// 昼夜状态：App 按真实太阳节律算好后推给桌面悬浮宠
+  static const String argNightMode = 'nightMode';
+
   /// 设置项集合
   static const String argSettings = 'settings';
 
@@ -95,6 +98,7 @@ class OverlayChannel {
   static const Map<String, String> allArgs = {
     'ARG_SKIN_ID': 'skinId',
     'ARG_PET_NAME': 'petName',
+    'ARG_NIGHT_MODE': 'nightMode',
     'ARG_SETTINGS': 'settings',
     'ARG_SETTING_SIZE_DP': 'sizeDp',
     'ARG_SETTING_OPACITY': 'opacity',

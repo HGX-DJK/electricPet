@@ -210,6 +210,27 @@ class PetModel extends ChangeNotifier {
   double energy = 80.0;      // 体力值 (0~100)
   double cleanliness = 85.0; // 洁净度 (0~100)
 
+  /// 状态快照的时间戳（毫秒）：当前这组状态值是"那一刻"的真实值。
+  ///
+  /// 背景：App 内与桌面悬浮宠都会按时间衰减这组状态，两边同时扣会重复扣减。
+  /// 约定为「谁写盘谁盖时间戳」，另一方按 (now - stateSavedAt) 补算，
+  /// 这样同一段时间永远只会被扣一次，两边读到的值也一致。
+  int stateSavedAt = 0;
+
+  /// 状态衰减速率（每秒）。
+  ///
+  /// ⚠️ 必须与原生侧 `FloatingPetService` 的 DECAY_RATES 保持完全一致，
+  /// 否则 App 里和桌面上的波可会算出不同的状态。守护测试会逐项比对。
+  static const Map<String, double> decayRates = <String, double>{
+    'hunger': 0.45,
+    'mood': 0.35,
+    'cleanliness': 0.15,
+    'energy': 0.25,
+  };
+
+  /// 单次最多补算的离线时长（秒，12 小时）——防止改系统时间造成数值爆炸
+  static const double maxOfflineDecaySeconds = 43200;
+
   int level = 1;
   double exp = 0.0;
   int intimacy = 100;
@@ -655,12 +676,27 @@ class PetModel extends ChangeNotifier {
       energy = (energy + dt * 1.5).clamp(0.0, 100.0);
       hunger = (hunger - dt * 0.2).clamp(0.0, 100.0);
     } else {
-      hunger = (hunger - dt * 0.45).clamp(0.0, 100.0);
-      mood = (mood - dt * 0.35).clamp(0.0, 100.0);
-      cleanliness = (cleanliness - dt * 0.15).clamp(0.0, 100.0);
-      energy = (energy - dt * 0.25).clamp(0.0, 100.0);
+      hunger = (hunger - dt * decayRates['hunger']!).clamp(0.0, 100.0);
+      mood = (mood - dt * decayRates['mood']!).clamp(0.0, 100.0);
+      cleanliness = (cleanliness - dt * decayRates['cleanliness']!).clamp(0.0, 100.0);
+      energy = (energy - dt * decayRates['energy']!).clamp(0.0, 100.0);
     }
     notifyListeners();
+  }
+
+  /// 离线期间的状态补算：按 stateSavedAt 推算流逝时长并扣减。
+  ///
+  /// 桌面悬浮宠即使 App 没开也会按同一套速率结算，
+  /// 所以这里必须和原生侧用完全相同的公式，否则两端会算出不同的状态。
+  /// @return 实际补算的秒数
+  double applyOfflineDecay() {
+    if (stateSavedAt <= 0) return 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final seconds = ((now - stateSavedAt) / 1000.0).clamp(0.0, maxOfflineDecaySeconds);
+    if (seconds <= 0) return 0;
+    tickDecay(seconds);
+    stateSavedAt = now;
+    return seconds;
   }
 
   void setUserScale(double scale) {
@@ -683,6 +719,7 @@ class PetModel extends ChangeNotifier {
       'mood': mood,
       'energy': energy,
       'cleanliness': cleanliness,
+      'stateSavedAt': stateSavedAt,
       'level': level,
       'exp': exp,
       'intimacy': intimacy,
@@ -708,6 +745,7 @@ class PetModel extends ChangeNotifier {
     mood = (data['mood'] as num?)?.toDouble() ?? mood;
     energy = (data['energy'] as num?)?.toDouble() ?? energy;
     cleanliness = (data['cleanliness'] as num?)?.toDouble() ?? cleanliness;
+    stateSavedAt = (data['stateSavedAt'] as num?)?.toInt() ?? stateSavedAt;
     level = data['level'] ?? level;
     exp = (data['exp'] as num?)?.toDouble() ?? exp;
     intimacy = data['intimacy'] ?? intimacy;
@@ -754,6 +792,9 @@ class PetModel extends ChangeNotifier {
   Future<void> saveToDisk() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      // 写盘即盖时间戳：这份状态值是"此刻"的真实值，
+      // 桌面悬浮宠据此按 (now - stateSavedAt) 补算离线期间的衰减
+      stateSavedAt = DateTime.now().millisecondsSinceEpoch;
       final data = toDataMap();
       await prefs.setString('poko_pet_data', jsonEncode(data));
       // 方案 B：静默双写到外部公用目录 (防卸载丢失)
@@ -771,6 +812,8 @@ class PetModel extends ChangeNotifier {
       if (raw != null) {
         final data = jsonDecode(raw) as Map<String, dynamic>;
         applyDataMap(data);
+        // 冷启动补算：App 关着这段时间状态也该衰减（桌面悬浮宠也是同一套公式）
+        applyOfflineDecay();
         isFreshInstall = false;
         notifyListeners();
       } else {

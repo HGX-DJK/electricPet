@@ -64,6 +64,9 @@ object OverlayChannel {
     /** 宠物名字 */
     const val ARG_PET_NAME = "petName"
 
+    /** 昼夜状态：App 按真实太阳节律算好后推给桌面悬浮宠 */
+    const val ARG_NIGHT_MODE = "nightMode"
+
     /** 设置项集合 */
     const val ARG_SETTINGS = "settings"
 
@@ -104,6 +107,7 @@ object OverlayChannel {
     val ALL_ARGS: Map<String, String> = mapOf(
         "ARG_SKIN_ID" to ARG_SKIN_ID,
         "ARG_PET_NAME" to ARG_PET_NAME,
+        "ARG_NIGHT_MODE" to ARG_NIGHT_MODE,
         "ARG_SETTINGS" to ARG_SETTINGS,
         "ARG_SETTING_SIZE_DP" to ARG_SETTING_SIZE_DP,
         "ARG_SETTING_OPACITY" to ARG_SETTING_OPACITY,

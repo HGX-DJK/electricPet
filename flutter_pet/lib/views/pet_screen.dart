@@ -572,6 +572,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _decayTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       widget.petModel.tickDecay(1.0);
       _checkAutoDialogue();
+      _syncNightModeToOverlay();
 
       // 自主生活与房间漫步引擎：待机 3~4 秒即刻活跃生活起来！
       if ((_state == 'IDLE' || _state == 'WALK') && !_isDragging && !_isLaserMode && !_isWardrobeMode && !_isActionMode && !widget.petModel.isSleeping) {
@@ -584,6 +585,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _idleSeconds = 0;
       }
     });
+  }
+
+  /// 上次推送给桌面悬浮宠的昼夜状态（只有变了才推，避免无谓的通道调用）
+  bool? _pushedNightMode;
+
+  /// 把昼夜状态同步给桌面悬浮宠。
+  ///
+  /// App 内部按真实太阳节律（SolarService）算昼夜，比系统深色模式准得多；
+  /// 桌面上的波可据此切换夜间配色，深夜亮在深色桌面上不至于刺眼。
+  void _syncNightModeToOverlay() {
+    final isNight = _isNightMode;
+    if (_pushedNightMode == isNight) return;
+    _pushedNightMode = isNight;
+    unawaited(OverlayService.updateFloatingPet(nightMode: isNight));
   }
 
   /// 首启/重装后探测公共存储中的历史档案并呼出继承弹窗 (防卸载丢失)
@@ -2068,6 +2083,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
 
     final currentTheme = SolarService.getSkyTheme(manualMode: _skyManualMode);
+
+    // 手动切换昼夜主题后，立刻把新的昼夜状态推给桌面悬浮宠
+    _syncNightModeToOverlay();
 
     // 飘浮光影粒子与天象经验彩蛋
     _spawnParticles(Offset(_petX, _petY - 60), emoji: currentTheme.icon, count: 4);
@@ -4544,6 +4562,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       final ok = await OverlayService.startFloatingPet(
                         skinId: widget.petModel.skinId,
                         petName: widget.petModel.name,
+                        nightMode: _isNightMode,
                       );
                       if (ok) {
                         _showDialogueBubble(

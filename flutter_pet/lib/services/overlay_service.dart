@@ -38,11 +38,19 @@ class OverlayService {
   }
 
   /// 开启全局桌面悬浮宠
-  static Future<bool> startFloatingPet({String? skinId, String? petName}) async {
+  ///
+  /// [nightMode] 是 App 按真实太阳节律算出来的昼夜状态，
+  /// 传过去可以让桌面上的波可一开始就配上对应的夜间/日间配色。
+  static Future<bool> startFloatingPet({
+    String? skinId,
+    String? petName,
+    bool? nightMode,
+  }) async {
     try {
       final bool res = await _channel.invokeMethod(OverlayChannel.startFloatingService, {
         OverlayChannel.argSkinId: skinId,
         OverlayChannel.argPetName: petName,
+        OverlayChannel.argNightMode: nightMode,
       });
       return res;
     } catch (_) {
@@ -59,13 +67,21 @@ class OverlayService {
 
   /// 把最新的外观配置实时同步给正在运行的桌面悬浮宠 (切换品种/改名后立即生效)
   /// 悬浮服务未运行时返回 false，不会误启动服务
-  static Future<bool> updateFloatingPet({String? skinId, String? petName}) async {
+  ///
+  /// [nightMode] 是 App 按真实太阳节律算出来的昼夜状态：
+  /// 桌面上的波可据此切换夜间配色，深夜不再亮得刺眼。
+  static Future<bool> updateFloatingPet({
+    String? skinId,
+    String? petName,
+    bool? nightMode,
+  }) async {
     try {
       final bool? res = await _channel.invokeMethod<bool>(
         OverlayChannel.updateFloatingPet,
         {
           OverlayChannel.argSkinId: skinId,
           OverlayChannel.argPetName: petName,
+          OverlayChannel.argNightMode: nightMode,
         },
       );
       return res ?? false;
