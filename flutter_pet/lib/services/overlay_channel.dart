@@ -53,6 +53,9 @@ class OverlayChannel {
   /// 更新桌面悬浮宠设置 (服务运行中会立即生效)
   static const String updateOverlaySettings = 'updateOverlaySettings';
 
+  /// 打开系统的小组件选择界面 (用于添加「波可桌面萌宠」桌面小组件)
+  static const String openWidgetPicker = 'openWidgetPicker';
+
   // ---------- 参数名 ----------
 
   /// 皮肤 / 品种 ID
@@ -92,6 +95,7 @@ class OverlayChannel {
     'READ_PUBLIC_BACKUP': 'readPublicBackup',
     'GET_OVERLAY_SETTINGS': 'getOverlaySettings',
     'UPDATE_OVERLAY_SETTINGS': 'updateOverlaySettings',
+    'OPEN_WIDGET_PICKER': 'openWidgetPicker',
   };
 
   /// 全部参数名 (常量名 -> 参数名)，必须与 Kotlin 侧 `OverlayChannel.ALL_ARGS` 逐项一致

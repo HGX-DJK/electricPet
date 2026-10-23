@@ -4498,6 +4498,27 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     FloatingPetSettingsSheet.show(context, isNight: _isNightMode);
                   },
                 ),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF4F46E5),
+                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.widgets_rounded, size: 18),
+                  label: const Text('添加桌面小组件'),
+                  onPressed: () async {
+                    // 跳系统的小组件选择器，让用户把「波可桌面萌宠」放到桌面上。
+                    // 没有这个入口的话，用户根本不知道有这个小组件。
+                    final bool ok = await OverlayService.openWidgetPicker();
+                    if (!ctx.mounted) return;
+                    if (!ok) {
+                      _showDialogueBubble(
+                          '请长按手机桌面空白处 → 小组件 → 找到「波可桌面萌宠」添加~ 🧩');
+                    }
+                  },
+                ),
                 const SizedBox(height: 14),
                 if (hasPermission)
                   Container(

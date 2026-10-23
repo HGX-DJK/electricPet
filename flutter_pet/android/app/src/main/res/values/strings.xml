@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 桌面小组件的说明文字（会显示在添加小组件的选择列表里） -->
+    <string name="widget_description">一眼看到波可的状态，一键把它唤回桌面</string>
+    <!-- 小组件按钮：唤出桌面悬浮猫 -->
+    <string name="widget_recall">🐾 唤出桌面猫</string>
+</resources>

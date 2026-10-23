@@ -58,6 +58,20 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Displaying floating pet companion overlay on home screen" />
         </service>
+
+        <!-- 桌面小组件：显示波可状态 + 一键唤出桌面悬浮猫 -->
+        <receiver
+            android:name=".PokoWidgetProvider"
+            android:exported="false"
+            android:label="波可桌面萌宠">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/poko_widget_info" />
+        </receiver>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

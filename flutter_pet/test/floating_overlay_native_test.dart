@@ -22,6 +22,10 @@ void main() {
   late String serviceSource;
   late String activitySource;
   late String petViewSource;
+  late String widgetProviderSource;
+  late String manifestSource;
+  late String widgetInfoXml;
+  late String widgetLayoutXml;
   late String overlayChannelKotlin;
   late String overlayChannelDart;
   late String overlayServiceSource;
@@ -40,6 +44,22 @@ void main() {
     petViewSource = _readRepoFile(
       packageRoot,
       'android/app/src/main/kotlin/com/electricpet/poko/PokoPetView.kt',
+    );
+    widgetProviderSource = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/kotlin/com/electricpet/poko/PokoWidgetProvider.kt',
+    );
+    manifestSource = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/AndroidManifest.xml',
+    );
+    widgetInfoXml = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/res/xml/poko_widget_info.xml',
+    );
+    widgetLayoutXml = _readRepoFile(
+      packageRoot,
+      'android/app/src/main/res/layout/poko_widget.xml',
     );
     overlayChannelKotlin = _readRepoFile(
       packageRoot,
@@ -594,10 +614,17 @@ void main() {
         activitySource,
         petViewSource,
         overlayChannelKotlin,
+        widgetProviderSource,
       ]);
 
       final problems = <String>[];
-      for (final source in <String>[serviceSource, activitySource, petViewSource]) {
+      for (final source in <String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+        widgetProviderSource,
+      ]) {
         problems.addAll(_findMissingImports(source, declared));
       }
 
@@ -662,6 +689,7 @@ class Sample(context: Context) {
         activitySource,
         petViewSource,
         overlayChannelKotlin,
+        widgetProviderSource,
       ]) {
         problems.addAll(_findJvmSignatureClashes(source));
       }
@@ -756,6 +784,7 @@ class Safe6 {
         activitySource,
         petViewSource,
         overlayChannelKotlin,
+        widgetProviderSource,
       ]) {
         for (final c in _scanKotlinClasses(source)) {
           classes[c.name] = c;
@@ -795,6 +824,190 @@ class Safe6 {
           reason: '属性扫描量明显偏低（当前 $totalProps），检测器可能已经失效');
       expect(totalFuns, greaterThan(80),
           reason: '函数扫描量明显偏低（当前 $totalFuns），检测器可能已经失效');
+    });
+  });
+
+  group('触觉反馈：震动必须按语义区分，且波形长度必须自洽', () {
+    test('每个震动模式的 timings 与 amplitudes 长度必须相等', () {
+      // ⚠️ VibrationEffect.createWaveform(timings, amplitudes, repeat) 在
+      // amplitudes 长度与 timings 不一致时抛 IllegalArgumentException —— 直接崩。
+      // 这类手滑只有机器能查，守护测试就是那个机器。
+      final patternRe = RegExp(
+        r'val (HAPTIC_\w+)\s*=\s*HapticPattern\(\s*longArrayOf\(([^)]*)\)\s*,\s*intArrayOf\(([^)]*)\)\s*\)',
+      );
+      final matches = patternRe.allMatches(serviceSource).toList();
+
+      expect(matches.length, greaterThanOrEqualTo(8),
+          reason: '应至少解析出 8 个震动模式，实际 ${matches.length} 个 —— '
+              '检测器可能已经失效');
+
+      for (final m in matches) {
+        final name = m.group(1)!;
+        final timings = m.group(2)!
+            .split(',')
+            .where((s) => s.trim().isNotEmpty)
+            .length;
+        final amplitudes = m.group(3)!
+            .split(',')
+            .where((s) => s.trim().isNotEmpty)
+            .length;
+        expect(amplitudes, timings,
+            reason: '$name 的 amplitudes 长度($amplitudes) 与 timings 长度($timings) '
+                '不一致 —— 运行时 VibrationEffect.createWaveform 会抛异常闪退');
+      }
+    });
+
+    test('不得再出现裸的 vibrate(30) 这类无语义的震动调用', () {
+      // 此前所有触摸反馈都是同一个 vibrate(30)，摸头和被踩尾巴手感完全一样。
+      // 现在全部走语义表（HAPTIC_*），所以代码里不该再有裸 vibrate(...) 调用。
+      // 先剥掉注释 —— 文档里提到旧写法是正常的。
+      final code = _stripLiteralsAndComments(serviceSource);
+      final bareVibrates = RegExp(r'(?<![\w.])vibrate\(\s*\d')
+          .allMatches(code)
+          .map((m) => m.group(0))
+          .toList();
+      expect(bareVibrates, isEmpty,
+          reason: '发现无语义的裸震动调用：${bareVibrates.join(", ")}');
+    });
+
+    test('四个触摸分区必须有各自不同的震动模式', () {
+      for (final pattern in const <String>[
+        'HAPTIC_PET_HEAD',
+        'HAPTIC_PET_BODY',
+        'HAPTIC_PET_TAIL',
+        'HAPTIC_PET_PAW',
+      ]) {
+        expect(serviceSource, contains(pattern),
+            reason: '缺少 $pattern —— 分区触觉必须互不相同');
+      }
+    });
+  });
+
+  group('状态可见化：徽标阈值与状态播报必须用同一组常量', () {
+    test('桌面猫必须有状态徽标（饿了/脏了/困了一眼可见）', () {
+      expect(petViewSource, contains('refreshStateBadge'),
+          reason: 'PokoPetView 必须提供状态徽标刷新入口');
+      expect(petViewSource, contains('drawStatusBadge'),
+          reason: 'PokoPetView 必须绘制状态徽标');
+      for (final threshold in const <String>[
+        'BADGE_THRESHOLD_HUNGER',
+        'BADGE_THRESHOLD_MOOD',
+        'BADGE_THRESHOLD_ENERGY',
+        'BADGE_THRESHOLD_CLEAN',
+      ]) {
+        expect(petViewSource, contains(threshold),
+            reason: 'PokoPetView 缺少状态阈值 $threshold');
+      }
+    });
+
+    test('状态播报必须复用徽标的同一组阈值常量，不得硬编码数字', () {
+      // 徽标用 PokoPetView.BADGE_THRESHOLD_*，播报也必须用同一组，
+      // 否则会出现"徽标亮了但没播报"或"播报了但没徽标"的割裂感。
+      expect(serviceSource, contains('PokoPetView.BADGE_THRESHOLD_HUNGER'));
+      expect(serviceSource, contains('PokoPetView.BADGE_THRESHOLD_CLEAN'));
+      expect(serviceSource, contains('PokoPetView.BADGE_THRESHOLD_ENERGY'));
+      expect(serviceSource, contains('PokoPetView.BADGE_THRESHOLD_MOOD'));
+      expect(serviceSource, contains('maybeBroadcastStateChange'),
+          reason: '服务层必须在状态跌破阈值时主动播报');
+    });
+
+    test('状态播报必须有节流，不能每次同步都弹气泡', () {
+      expect(serviceSource, contains('STATE_BROADCAST_COOLDOWN_MS'),
+          reason: '状态播报必须节流，否则 App 里每点一下就弹一次气泡');
+      expect(serviceSource, contains('lastStateBroadcastAt'));
+    });
+  });
+
+  group('桌面小组件：只读状态 + 一键唤出悬浮猫', () {
+    test('Manifest 必须声明小组件 receiver', () {
+      expect(manifestSource, contains('.PokoWidgetProvider'));
+      expect(manifestSource, contains('android.appwidget.action.APPWIDGET_UPDATE'));
+      expect(manifestSource, contains('android.appwidget.provider'));
+      expect(manifestSource, contains('@xml/poko_widget_info'));
+    });
+
+    test('小组件元信息与布局必须齐备', () {
+      expect(widgetInfoXml, contains('<appwidget-provider'));
+      expect(widgetInfoXml, contains('@layout/poko_widget'));
+      expect(widgetInfoXml, contains('android:updatePeriodMillis'),
+          reason: '小组件必须有刷新周期');
+      for (final id in const <String>[
+        'widget_root',
+        'widget_emoji',
+        'widget_name',
+        'widget_status',
+        'widget_recall',
+      ]) {
+        expect(widgetLayoutXml, contains(id),
+            reason: '小组件布局缺少 $id');
+      }
+    });
+
+    test('小组件必须复用服务层的状态快照，不得自己另算一套', () {
+      expect(widgetProviderSource, contains('FloatingPetService.readStateSnapshot'),
+          reason: '小组件必须用与桌面猫同一份状态快照');
+      expect(serviceSource, contains('fun readStateSnapshot'),
+          reason: '状态快照必须由服务层统一提供');
+    });
+
+    test('小组件只读不写：不得写 SharedPreferences', () {
+      // 状态存档由 App 与悬浮宠服务共同维护。
+      // 小组件要是也去写，就会和 Flutter 侧互相覆盖（App 内存里的旧值会盖掉新值）。
+      expect(widgetProviderSource, isNot(contains('.edit()')),
+          reason: '小组件不得写 SharedPreferences');
+      expect(widgetProviderSource, isNot(contains('putString')));
+      expect(widgetProviderSource, isNot(contains('putInt')));
+    });
+
+    test('唤出桌面猫必须走前台服务通道（后台启动限制）', () {
+      expect(widgetProviderSource, contains('getForegroundService'),
+          reason: '后台唤出前台服务必须用 getForegroundService，'
+              '用 getService 在 Android 8+ 会抛 IllegalStateException');
+      expect(widgetProviderSource, contains('FloatingPetService'),
+          reason: '小组件按钮必须能启动悬浮宠服务');
+    });
+
+    test('状态变化时小组件要跟着刷新', () {
+      expect(widgetProviderSource, contains('fun refreshAll'));
+      expect(serviceSource, contains('PokoWidgetProvider.refreshAll'),
+          reason: '服务层状态变化后必须主动刷新小组件');
+    });
+  });
+
+  group('入口语义：点身体=互动，点旁边=菜单，收起后能召回', () {
+    test('点空白只开菜单，不得再叠加"摸摸 + 随机气泡"', () {
+      // 之前一次点击同时做三件事：摸摸（音效+动画）、弹菜单、冒随机气泡，
+      // 用户说不清自己在按什么，菜单也像是自己冒出来的。
+      final zoneFn = _braceBlock(serviceSource, 'private fun handleZoneTap(');
+      final blankBranch = zoneFn.substring(zoneFn.indexOf('// 空白处'));
+      expect(blankBranch, isNot(contains('playSound(')),
+          reason: '点空白开菜单时不应再叠加音效');
+      expect(blankBranch, isNot(contains('onPetTapped()')),
+          reason: '点空白开菜单时不应再叠加"摸摸"动画');
+      expect(blankBranch, isNot(contains('showSpeechBubble(')),
+          reason: '点空白开菜单时不应再叠加随机气泡');
+      expect(blankBranch, contains('showActionMenu()'),
+          reason: '点空白仍然要能开菜单');
+    });
+
+    test('"收起"不能等同于"消失"：不得 stopSelf，必须留着召回入口', () {
+      final dismissFn = _braceBlock(serviceSource, 'private fun handleDesktopDismiss(');
+      expect(dismissFn, isNot(contains('stopSelf()')),
+          reason: '收起只是收进通知栏，不能把服务停掉 —— '
+              '否则用户收起来就再也找不回来了');
+      expect(serviceSource, contains('ACTION_NOTIFICATION_RECALL'),
+          reason: '必须提供"召回波可"的 action');
+      expect(serviceSource, contains('fun recallPet()'));
+      expect(serviceSource, contains('isPetRecalled'),
+          reason: '必须记录"当前是否被收进通知栏"');
+    });
+
+    test('通知栏按钮要跟着状态切换：可见时互动，收起后召回/关闭', () {
+      expect(serviceSource, contains('🐾 召回'));
+      expect(serviceSource, contains('✕ 关闭'));
+      // 收起状态下，猫不能因为 App 前后台切换就自己跑回桌面
+      expect(serviceSource, contains('!isPetRecalled'),
+          reason: '显隐判定必须把"被用户收起"算进去');
     });
   });
 
@@ -1156,6 +1369,7 @@ const Set<String> _kotlinBuiltinNames = <String>{
   'OptIn', 'RequiresOptIn', 'JvmInline', 'SuppressWarnings',
   // 下面这几个是"不用 import 也能用"的：
   'R',            // Android 自动生成的资源类，同包可见
+  'Companion',    // 伴生对象的隐式名，同类内可直接引用
   'Charsets',     // kotlin.text.Charsets，kotlin 默认导入
   'START_STICKY', // android.app.Service 的继承成员
   'START_NOT_STICKY',
@@ -1171,6 +1385,7 @@ const Map<String, Set<String>> _wildcardPackageMembers = <String, Set<String>>{
     'ComposeShader', 'PorterDuff', 'PorterDuffXfermode', 'Xfermode',
     'Typeface', 'Bitmap', 'BitmapFactory', 'BlurMaskFilter', 'DashPathEffect',
     'PaintFlags', 'PathEffect', 'PathMeasure', 'RoundRect', 'Picture',
+    'FontMetrics', 'TypefaceMetrics',
   },
   'android.view': <String>{
     'View', 'ViewGroup', 'MotionEvent', 'VelocityTracker', 'ViewConfiguration',

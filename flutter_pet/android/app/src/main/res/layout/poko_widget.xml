@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  波可桌面小组件布局。
+
+  刻意保持极简：一个大表情 + 名字 + 一句状态 + 一个"唤出桌面猫"按钮。
+  小组件是桌面上长期存在的东西，画得越满越容易变成桌面噪音。
+  RemoteViews 只支持有限的控件（TextView / ImageView / LinearLayout ...），
+  不能自定义绘制，所以表情用 emoji 文本承载。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@drawable/widget_background"
+    android:padding="10dp">
+
+    <TextView
+        android:id="@+id/widget_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="😺"
+        android:textSize="30sp"
+        android:includeFontPadding="false" />
+
+    <TextView
+        android:id="@+id/widget_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="波可"
+        android:textColor="#0F172A"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:text="心情不错~"
+        android:textColor="#64748B"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_recall"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_button_background"
+        android:gravity="center"
+        android:padding="6dp"
+        android:text="🐾 唤出桌面猫"
+        android:textColor="#FFFFFF"
+        android:textSize="11sp" />
+</LinearLayout>

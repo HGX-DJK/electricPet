@@ -126,4 +126,18 @@ class OverlayService {
       return false;
     }
   }
+
+  /// 打开系统的小组件选择界面，让用户把「波可桌面萌宠」放到桌面上。
+  ///
+  /// 没有这个入口的话，用户根本不知道这个 App 提供了桌面小组件，
+  /// 功能等于白做。系统不认这个 Intent 时原生侧会给出手动添加的提示。
+  static Future<bool> openWidgetPicker() async {
+    try {
+      final bool? res =
+          await _channel.invokeMethod<bool>(OverlayChannel.openWidgetPicker);
+      return res ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

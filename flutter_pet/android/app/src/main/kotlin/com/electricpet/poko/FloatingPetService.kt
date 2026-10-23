@@ -30,6 +30,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
+import android.text.TextUtils
 import android.util.DisplayMetrics
 import android.util.Log
 import android.util.TypedValue
@@ -92,6 +93,14 @@ class FloatingPetService : Service() {
     // 边缘半收起探头避让模式状态与调度
     private var isPeeking: Boolean = false
     private var hasTouchDown: Boolean = false
+
+    /**
+     * 波可是否被用户"收进通知栏"。
+     *
+     * true = 服务还活着、通知还留着，但桌面上没有猫；
+     * 用户点通知栏的「召回波可」就能把它叫回来。
+     */
+    private var isPetRecalled: Boolean = false
     private var peekAnimator: ValueAnimator? = null
     private var peekingRunnable: Runnable? = null
     // 拖拽溢出偏移的回收动画（与探头动画分开，避免互相打断）
@@ -200,6 +209,11 @@ class FloatingPetService : Service() {
         const val AUTO_CHAT_INTERVAL_MS = 60_000L
         /** 超过这么久没人互动，波可就会主动冒泡 */
         const val AUTO_CHAT_IDLE_MS = 12 * 60 * 1000L
+        /**
+         * 两次"状态变差"播报之间的最小间隔（毫秒）。
+         * 防止 App 里连续操作时反复弹同样的提醒。
+         */
+        const val STATE_BROADCAST_COOLDOWN_MS = 10 * 60 * 1000L
 
         /**
          * 状态衰减速率（每秒）。
@@ -218,6 +232,132 @@ class FloatingPetService : Service() {
         /** 单次最多补算的离线时长（秒，12 小时）—— 防止改系统时间造成数值爆炸 */
         const val MAX_OFFLINE_DECAY_SECONDS = 43200.0
 
+        // ---------- 触觉反馈（震动语义表） ----------
+
+        /**
+         * 一次触觉反馈的波形定义。
+         *
+         * 背景：此前所有触摸反馈用的都是同一个 `vibrate(30)`，
+         * 摸头和被踩尾巴的手感一模一样 —— 用户盯着屏幕时表情够用，
+         * 但视线一离开屏幕，震动就是唯一还能传达"你摸到哪儿了"的通道。
+         * 它零延迟、几乎不耗电，是最便宜也最容易被忽略的反馈通道。
+         *
+         * timings 是"开/关"交替的波形（首个 0 表示起始延迟）；
+         * amplitudes 必须与 timings **等长**，
+         * 否则 `VibrationEffect.createWaveform` 会抛 IllegalArgumentException 直接崩。
+         * 守护测试会逐项断言两者长度一致。
+         */
+        class HapticPattern(val timings: LongArray, val amplitudes: IntArray)
+
+        /** 摸头：轻快两下，像被顺毛 */
+        val HAPTIC_PET_HEAD = HapticPattern(
+            longArrayOf(0, 16, 55, 16), intArrayOf(0, 80, 0, 80)
+        )
+
+        /** 挠身体：三下细碎的痒痒感 */
+        val HAPTIC_PET_BODY = HapticPattern(
+            longArrayOf(0, 10, 35, 10, 35, 10), intArrayOf(0, 55, 0, 55, 0, 55)
+        )
+
+        /** 踩尾巴：一下重震，警觉炸毛 */
+        val HAPTIC_PET_TAIL = HapticPattern(
+            longArrayOf(0, 70), intArrayOf(0, 210)
+        )
+
+        /** 戳爪爪：两下短促 */
+        val HAPTIC_PET_PAW = HapticPattern(
+            longArrayOf(0, 22, 60, 22), intArrayOf(0, 120, 0, 120)
+        )
+
+        /** 普通单击：一下轻震 */
+        val HAPTIC_TAP = HapticPattern(
+            longArrayOf(0, 20), intArrayOf(0, 100)
+        )
+
+        /** 长按抚摸：一下绵长舒服的震 */
+        val HAPTIC_PET_LONG = HapticPattern(
+            longArrayOf(0, 45), intArrayOf(0, 90)
+        )
+
+        /** 菜单开合 / 跳转 */
+        val HAPTIC_MENU = HapticPattern(
+            longArrayOf(0, 12, 45, 12), intArrayOf(0, 70, 0, 70)
+        )
+
+        /** 喂食成功：三下递增的愉快节奏 */
+        val HAPTIC_FEED = HapticPattern(
+            longArrayOf(0, 14, 45, 14, 45, 14), intArrayOf(0, 80, 0, 105, 0, 130)
+        )
+
+        /** 收回：一重一轻，像"拜拜" */
+        val HAPTIC_DISMISS = HapticPattern(
+            longArrayOf(0, 45, 60, 25), intArrayOf(0, 140, 0, 70)
+        )
+
+        /** 追尾巴：两下轻快 */
+        val HAPTIC_SPIN = HapticPattern(
+            longArrayOf(0, 16, 45, 16), intArrayOf(0, 85, 0, 85)
+        )
+
+        // ---------- 状态快照（服务与桌面小组件共用） ----------
+
+        /**
+         * 读取宠物状态快照：只解析一次 JSON，并按 stateSavedAt 补算离线期间的衰减。
+         *
+         * 桌面悬浮宠和桌面小组件都走这一份逻辑，
+         * 保证"猫身上的状态"和"小组件上写的状态"永远是同一个值。
+         */
+        fun readStateSnapshot(context: Context): PetState {
+            return try {
+                val prefs = context.getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
+                val rawJson = prefs.getString(KEY_PET_DATA, null)
+                if (rawJson.isNullOrBlank()) {
+                    defaultPetState()
+                } else {
+                    val json = JSONObject(rawJson)
+                    val elapsed = elapsedDecaySeconds(json.optLong("stateSavedAt", 0L))
+                    PetState(
+                        hunger = decayedValue(json, "hunger", 80, elapsed),
+                        mood = decayedValue(json, "mood", 80, elapsed),
+                        energy = decayedValue(json, "energy", 80, elapsed),
+                        cleanliness = decayedValue(json, "cleanliness", 80, elapsed),
+                        intimacy = json.optInt("intimacy", 50),
+                        skinId = json.optString("skinId", "cat_calico"),
+                        petName = json.optString("name", "波可"),
+                        enableSound = json.optBoolean("enableSound", true),
+                    )
+                }
+            } catch (_: Exception) {
+                defaultPetState()
+            }
+        }
+
+        private fun defaultPetState() = PetState(
+            hunger = 80,
+            mood = 80,
+            energy = 80,
+            cleanliness = 80,
+            intimacy = 50,
+            skinId = "cat_calico",
+            petName = "波可",
+            enableSound = true,
+        )
+
+        /** 距离上次状态结算过去了多少秒（最多补算 12 小时） */
+        private fun elapsedDecaySeconds(stateSavedAt: Long): Float {
+            if (stateSavedAt <= 0L) return 0f
+            val diffMs = System.currentTimeMillis() - stateSavedAt
+            if (diffMs <= 0L) return 0f
+            return (diffMs / 1000.0).coerceAtMost(MAX_OFFLINE_DECAY_SECONDS).toFloat()
+        }
+
+        /** 某个状态值按流逝时间补算后的结果（0~100 整数） */
+        private fun decayedValue(json: JSONObject, key: String, fallback: Int, elapsed: Float): Int {
+            val base = json.optDouble(key, fallback.toDouble()).toFloat()
+            val rate = DECAY_RATES[key] ?: 0f
+            return (base - rate * elapsed).coerceIn(0f, 100f).toInt()
+        }
+
         /** 与 Dart 侧共用的宠物数据存档键（SharedPreferences 的 key 前缀由插件自动加 flutter.） */
         private const val PREFS_PET = "FlutterSharedPreferences"
         private const val KEY_PET_DATA = "flutter.poko_pet_data"
@@ -232,6 +372,15 @@ class FloatingPetService : Service() {
         private const val ACTION_NOTIFICATION_PET = "com.electricpet.poko.ACTION_NOTIFICATION_PET"
         const val ACTION_NOTIFICATION_FEED = "com.electricpet.poko.ACTION_NOTIFICATION_FEED"
         const val ACTION_NOTIFICATION_STOP = "com.electricpet.poko.ACTION_NOTIFICATION_STOP"
+
+        /**
+         * 通知栏「召回波可」：把收回小窝的波可重新叫回桌面。
+         *
+         * 之前"收回"直接 stopSelf()，服务一停悬浮窗和通知都没了，
+         * 想再叫回来只能开 App —— 用户反馈"收起来就找不到了"。
+         * 现在改成"收进通知栏"：服务留着，通知栏留「召回」和「关闭」两个按钮。
+         */
+        const val ACTION_NOTIFICATION_RECALL = "com.electricpet.poko.ACTION_NOTIFICATION_RECALL"
 
         /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
         @Volatile
@@ -422,6 +571,10 @@ class FloatingPetService : Service() {
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_NOTIFICATION_RECALL -> {
+                recallPet()
+                return START_STICKY
+            }
         }
 
         val skinId = intent?.getStringExtra("skinId")
@@ -552,6 +705,12 @@ class FloatingPetService : Service() {
         var lastRawX = 0f
         var isClick = false
         var hasDragged = false
+        // 拖拽过程中的朝向：跟随水平移动方向（被拖着走会侧身迎向运动方向），
+        // 松手后由落位逻辑恢复成"面向屏幕中心"。
+        var dragFacingLeft = false
+        // 朝向切换的累积位移 + 滞后阈值（避免镜像翻面时来回抖动）
+        var dragDxAccum = 0f
+        val facingFlipThreshold = 14f * density
         // 单次手势只打一条移动日志，便于用一条 logcat 判定"跟手了没有"
         var hasLoggedMove = false
         var velocityTracker: VelocityTracker? = null
@@ -594,6 +753,7 @@ class FloatingPetService : Service() {
                     hasLoggedMove = false
                     isLongPressing = false
                     isPinching = false
+                    dragFacingLeft = pokoView?.facingLeft ?: false
 
                     // 视线跟随：指尖一落下，眼珠就开始盯着看
                     pokoView?.setGazeTarget(event.x, event.y)
@@ -604,7 +764,7 @@ class FloatingPetService : Service() {
                         if (hasTouchDown && !hasDragged) {
                             isLongPressing = true
                             isClick = false
-                            vibrate(45)
+                            haptic(Companion.HAPTIC_PET_LONG)
                             playSound("purr")
                             pokoView?.onPetTapped()
                             showCustomSpeechBubble("呼噜噜... 被主人长按抚摸好温暖呀，幸福感爆棚！💖✨")
@@ -667,6 +827,23 @@ class FloatingPetService : Service() {
                     lastRawX = event.rawX
                     pokoView?.updateDragVelocity(vx)
 
+                    // 朝向跟随拖动方向：往左拖就侧身朝左、往右拖就朝右。
+                    // 之前是按"宠物在屏幕左半边还是右半边"硬切，
+                    // 结果往左拖时猫脸还朝右，跟手感完全对不上。
+                    //
+                    // 注意朝向是靠整幅画面镜像实现的（canvas.scale(-1,1)），
+                    // 翻面是"啪"的一下突变，所以这里用累积位移 + 滞后阈值：
+                    // 累计移动超过阈值才允许翻面，翻完清零 —— 既跟手又不会来回抖。
+                    dragDxAccum += vx
+                    if (abs(dragDxAccum) > facingFlipThreshold) {
+                        val wantLeft = dragDxAccum < 0
+                        if (wantLeft != dragFacingLeft) {
+                            dragFacingLeft = wantLeft
+                            pokoView?.facingLeft = wantLeft
+                        }
+                        dragDxAccum = 0f
+                    }
+
                     if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         isClick = false
                         hasDragged = true
@@ -692,7 +869,8 @@ class FloatingPetService : Service() {
                     pokoView?.peekOffsetX = overflow.toFloat()
 
                     // 拖拽时视线随屏幕左右侧自适应（靠左向右看，靠右向左看）
-                    pokoView?.facingLeft = (params.x > screenWidth / 2)
+                    // 注意：朝向在上面的"跟随拖动方向"里已经处理过了，
+                    // 这里不再按屏幕半区硬切，否则会把刚翻好的面又掰回去。
 
                     try {
                         windowManager?.updateViewLayout(pokoView, params)
@@ -792,40 +970,49 @@ class FloatingPetService : Service() {
         val zone = pokoView?.hitTest(touchX, touchY) ?: PokoPetView.TouchZone.NONE
         val handled = pokoView?.reactToTouch(zone) ?: false
         if (handled) {
-            vibrate(30)
+            // 触觉按部位区分：摸头轻快两下，踩尾巴一下重震，戳爪爪两下短促。
+            // 表情在屏幕里，震动在手里 —— 视线一移开，全靠它区分摸到了哪儿。
             when (zone) {
                 PokoPetView.TouchZone.HEAD -> {
+                    haptic(Companion.HAPTIC_PET_HEAD)
                     playSound("purr")
                     showCustomSpeechBubble("呼噜噜～ 被摸到头了，好舒服呀主人！💕")
                 }
                 PokoPetView.TouchZone.BODY -> {
+                    haptic(Companion.HAPTIC_PET_BODY)
                     playSound("purr")
                     showCustomSpeechBubble("嘿嘿痒痒的～ 主人在摸我身体呢 ✨")
                 }
                 PokoPetView.TouchZone.TAIL -> {
+                    haptic(Companion.HAPTIC_PET_TAIL)
                     playSound("meow")
                     showCustomSpeechBubble("喵！尾巴不许碰啦，再摸我要炸毛咯～ 🫧")
                 }
                 PokoPetView.TouchZone.PAW -> {
+                    haptic(Companion.HAPTIC_PET_PAW)
                     playSound("meow")
                     showCustomSpeechBubble("爪爪被戳到啦！轻一点嘛～ 🐾")
                 }
-                else -> {}
+                else -> haptic(Companion.HAPTIC_TAP)
             }
             return
         }
 
-        // 空白处：默认摸摸 + 快捷菜单
-        vibrate(30)
-        playSound("meow")
-        pokoView?.onPetTapped()
-        pokoView?.performClick()
+        // 空白处：**只**负责开菜单。
+        //
+        // 之前这里一次点击同时做了三件事：摸摸（喵一声 + 挤压动画）、弹出菜单、
+        // 再冒一句随机气泡。三个反馈叠在一起，用户既说不清自己在按什么，
+        // 菜单也像是"自己冒出来的"。
+        //
+        // 现在分工明确：点身体 = 逗它玩，点旁边 = 打开操作菜单。
+        // 菜单弹出时猫歪个头看你，表示"菜单是我开的"，保持"它是活的"的感觉。
+        haptic(Companion.HAPTIC_MENU)
         if (isActionMenuVisible()) {
             hideActionMenu()
         } else {
+            pokoView?.executeAction(PokoPetView.PetAction.HEAD_TILT)
             showActionMenu()
         }
-        showSpeechBubble()
         scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
     }
 
@@ -944,7 +1131,9 @@ class FloatingPetService : Service() {
      */
     private fun refreshPetVisibility() {
         val view = pokoView ?: return
-        val visible = screenOn && !isAppForeground
+        // 注意 isPetRecalled：用户主动"收进通知栏"之后，
+        // 不能再因为 App 前后台切换就把猫自己放回桌面 —— 那等于收回无效。
+        val visible = screenOn && !isAppForeground && !isPetRecalled
         val target = if (visible) View.VISIBLE else View.GONE
         if (view.visibility != target) {
             view.visibility = target
@@ -1180,6 +1369,10 @@ class FloatingPetService : Service() {
             setPadding(padH, padV, padH, padV)
             gravity = Gravity.CENTER
             maxWidth = (200 * density).toInt()
+            // 气泡最多三行，超出省略。
+            // 桌面上一个四五行高的气泡会挡住半块屏幕，用户还没看完就自己消失了。
+            maxLines = 3
+            ellipsize = TextUtils.TruncateAt.END
 
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.RECTANGLE
@@ -1314,7 +1507,7 @@ class FloatingPetService : Service() {
         }
 
         val btnDismiss = TextView(this).apply {
-            text = "✕ 收回"
+            text = "🗂 收起"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setTextColor(Color.parseColor("#EA580C"))
             typeface = Typeface.DEFAULT_BOLD
@@ -1458,7 +1651,7 @@ class FloatingPetService : Service() {
 
     private fun handleDesktopPet() {
         hideActionMenu()
-        vibrate(30)
+        haptic(Companion.HAPTIC_PET_BODY)
         playSound("meow")
         pokoView?.onPetTapped()
         pokoView?.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
@@ -1468,7 +1661,7 @@ class FloatingPetService : Service() {
     /** 回小窝：双击手势让位给"逗猫"后，回 App 的入口挪到这里 */
     private fun handleDesktopHome() {
         hideActionMenu(animated = false)
-        vibrate(35)
+        haptic(Companion.HAPTIC_MENU)
         openMainActivity()
     }
 
@@ -1572,7 +1765,7 @@ class FloatingPetService : Service() {
             pokoView?.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
             pokoView?.onPetTapped()
             playSound("purr")
-            vibrate(30)
+            haptic(Companion.HAPTIC_FEED)
             showCustomSpeechBubble("呜姆～ 小鱼干真香！饱食度 +15 🐟💕")
         } else {
             // 喂偏了：猫扑空，歪着头盯着小鱼干看
@@ -1619,8 +1812,45 @@ class FloatingPetService : Service() {
 
     private fun handleDesktopDismiss() {
         hideActionMenu(animated = false)
-        vibrate(35)
-        stopSelf()
+        haptic(Companion.HAPTIC_DISMISS)
+        hidePetToTray()
+    }
+
+    /**
+     * 把波可"收进通知栏"：桌面上不再显示，但服务与通知都留着，
+     * 用户点通知栏的「召回波可」就能立刻把它叫回桌面。
+     *
+     * 用 setVisibility(GONE) 而不是 removeView：
+     * 窗口对象和坐标原封不动，召回时只要改回 VISIBLE 就行，
+     * 彻底避开"重新 addView 可能抛异常 / 位置丢失"这一类窗口生命周期问题。
+     */
+    private fun hidePetToTray() {
+        val view = pokoView ?: return
+        cancelEdgePeeking()
+        isPeeking = false
+        view.visibility = View.GONE
+        isPetRecalled = true
+        // 通知栏按钮要跟着变（召回 / 关闭），所以重新发一次前台通知
+        startAsForeground()
+        Toast.makeText(this, "🐾 波可收进通知栏啦，点通知里的「召回」就能叫它回来～", Toast.LENGTH_LONG).show()
+    }
+
+    /**
+     * 把收进通知栏的波可重新叫回桌面。
+     */
+    private fun recallPet() {
+        val view = pokoView ?: return
+        isPetRecalled = false
+        // 显隐统一交给 refreshPetVisibility 决定（App 在前台时依然不显示悬浮猫）
+        refreshPetVisibility()
+        view.alpha = petOpacity
+        // 通知栏按钮切回常规的一组
+        startAsForeground()
+        haptic(Companion.HAPTIC_PET_HEAD)
+        playSound("meow")
+        view.onPetTapped()
+        view.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
+        showCustomSpeechBubble("我回来啦！主人是不是想我了呀～ 💕")
     }
 
     private fun showSpeechBubble() {
@@ -1692,10 +1922,21 @@ class FloatingPetService : Service() {
         }
 
         bubble.text = text
-        bubble.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
 
         val density = resources.displayMetrics.density
         val (screenWidth, screenHeight) = getScreenDimensions()
+
+        // ⚠️ 必须用 AT_MOST 而不是 UNSPECIFIED 来测量：
+        // TextView 的 maxWidth 在 UNSPECIFIED 下是不生效的，
+        // 长文案会把气泡撑到超出屏幕宽度。AT_MOST 才会让它按可用宽度换行。
+        val maxBubbleW = ((screenWidth * 0.62f).toInt())
+            .coerceAtMost((220 * density).toInt())
+            .coerceAtLeast((120 * density).toInt())
+        bubble.measure(
+            View.MeasureSpec.makeMeasureSpec(maxBubbleW, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.UNSPECIFIED
+        )
+
         val bubbleW = bubble.measuredWidth
         val bubbleH = bubble.measuredHeight
         val pokoW = pokoView?.width ?: petSizePx
@@ -1748,14 +1989,14 @@ class FloatingPetService : Service() {
     }
 
     private fun handleNotificationPet() {
-        vibrate(30)
+        haptic(Companion.HAPTIC_TAP)
         playSound("meow")
         pokoView?.onPetTapped()
         showCustomSpeechBubble("呼噜噜... 收到主人在通知栏的抚摸！💕(ฅ'ω'ฅ)")
     }
 
     private fun handleNotificationFeed() {
-        vibrate(35)
+        haptic(Companion.HAPTIC_FEED)
         playSound("purr")
         pokoView?.onPetTapped()
         pokoView?.executeAction(PokoPetView.PetAction.HAPPY_BOUNCE)
@@ -1771,8 +2012,11 @@ class FloatingPetService : Service() {
      *
      * 数值都已经按"距上次结算过去了多久"补算过，
      * 所以桌面悬浮宠读到的就是此刻的真实状态 —— App 关着它也一样会饿、会无聊。
+     *
+     * 桌面小组件（`PokoWidgetProvider`）也复用这一个快照，
+     * 保证小组件上显示的状态和桌面猫看到的状态是同一份。
      */
-    private data class PetState(
+    data class PetState(
         val hunger: Int,
         val mood: Int,
         val energy: Int,
@@ -1781,7 +2025,32 @@ class FloatingPetService : Service() {
         val skinId: String,
         val petName: String,
         val enableSound: Boolean,
-    )
+    ) {
+        /**
+         * 桌面小组件上显示的大表情。
+         *
+         * 阈值与 [PokoPetView] 的状态徽标完全一致（同一组常量），
+         * 所以小组件和桌面猫不会出现"一个说饿一个说不饿"的矛盾。
+         */
+        val emoji: String
+            get() = when {
+                hunger < PokoPetView.BADGE_THRESHOLD_HUNGER -> "🍖"
+                cleanliness < PokoPetView.BADGE_THRESHOLD_CLEAN -> "🧼"
+                energy < PokoPetView.BADGE_THRESHOLD_ENERGY -> "💤"
+                mood < PokoPetView.BADGE_THRESHOLD_MOOD -> "😿"
+                else -> "😺"
+            }
+
+        /** 桌面小组件上显示的状态文案 */
+        val statusLine: String
+            get() = when {
+                hunger < PokoPetView.BADGE_THRESHOLD_HUNGER -> "肚子饿了，想吃小鱼干～"
+                cleanliness < PokoPetView.BADGE_THRESHOLD_CLEAN -> "身上脏兮兮的，需要搓澡"
+                energy < PokoPetView.BADGE_THRESHOLD_ENERGY -> "困得睁不开眼，眯一会儿…"
+                mood < PokoPetView.BADGE_THRESHOLD_MOOD -> "有点小情绪，陪我玩会儿嘛"
+                else -> "心情不错，陪你待机～"
+            }
+    }
 
     /**
      * 读取宠物状态：只解析一次 JSON，并按 stateSavedAt 补算离线期间的衰减。
@@ -1795,56 +2064,7 @@ class FloatingPetService : Service() {
      * 历史上原生侧写的是 `happiness`，Dart 侧根本不认这个 key，
      * 导致心情在两端彻底断链：桌面永远读到兜底值，App 里喂食也涨不上去。
      */
-    private fun readPetState(): PetState {
-        return try {
-            val prefs = getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
-            val rawJson = prefs.getString(KEY_PET_DATA, null)
-            if (rawJson.isNullOrBlank()) {
-                defaultPetState()
-            } else {
-                val json = JSONObject(rawJson)
-                val elapsed = elapsedDecaySeconds(json.optLong("stateSavedAt", 0L))
-                PetState(
-                    hunger = decayedValue(json, "hunger", 80, elapsed),
-                    mood = decayedValue(json, "mood", 80, elapsed),
-                    energy = decayedValue(json, "energy", 80, elapsed),
-                    cleanliness = decayedValue(json, "cleanliness", 80, elapsed),
-                    intimacy = json.optInt("intimacy", 50),
-                    skinId = json.optString("skinId", "cat_calico"),
-                    petName = json.optString("name", "波可"),
-                    enableSound = json.optBoolean("enableSound", true),
-                )
-            }
-        } catch (_: Exception) {
-            defaultPetState()
-        }
-    }
-
-    private fun defaultPetState() = PetState(
-        hunger = 80,
-        mood = 80,
-        energy = 80,
-        cleanliness = 80,
-        intimacy = 50,
-        skinId = "cat_calico",
-        petName = "波可",
-        enableSound = true,
-    )
-
-    /** 距离上次状态结算过去了多少秒（最多补算 12 小时） */
-    private fun elapsedDecaySeconds(stateSavedAt: Long): Float {
-        if (stateSavedAt <= 0L) return 0f
-        val diffMs = System.currentTimeMillis() - stateSavedAt
-        if (diffMs <= 0L) return 0f
-        return (diffMs / 1000.0).coerceAtMost(MAX_OFFLINE_DECAY_SECONDS).toFloat()
-    }
-
-    /** 某个状态值按流逝时间补算后的结果（0~100 整数） */
-    private fun decayedValue(json: JSONObject, key: String, fallback: Int, elapsed: Float): Int {
-        val base = json.optDouble(key, fallback.toDouble()).toFloat()
-        val rate = DECAY_RATES[key] ?: 0f
-        return (base - rate * elapsed).coerceIn(0f, 100f).toInt()
-    }
+    private fun readPetState(): PetState = readStateSnapshot(this)
 
     /**
      * 给猫加餐：写入饱食度 / 心情 / 亲密度，并同步到悬浮猫的表情与行为权重。
@@ -1894,8 +2114,86 @@ class FloatingPetService : Service() {
         view.happinessLevel = state.mood
         view.energyLevel = state.energy
         view.cleanlinessLevel = state.cleanliness
+        // 状态徽标：让"它其实饿了"在桌面上一眼可见（一切正常时不显示）
+        view.refreshStateBadge()
+        // 桌面小组件也跟着刷新：小组件读的是同一份快照，所以显示的一定一致
+        PokoWidgetProvider.refreshAll(this)
         // 音效开关也一起同步：用户在 App 里关掉声音，桌面上的波可立刻闭嘴
         isSoundEnabled = state.enableSound
+        // 状态刚跌破阈值时主动说一声，补上"时间过去 → 状态变差"的反馈闭环
+        maybeBroadcastStateChange(state)
+    }
+
+    // ---------- 状态变化播报 ----------
+
+    /**
+     * 上一次同步时各维度"是否处于异常"的标记。
+     *
+     * 顺序与 [stateAlertOrder] 一致：饥饿 / 清洁 / 能量 / 心情。
+     * null 表示还没同步过（服务刚起来）。
+     */
+    private var lastStateAlerts: IntArray? = null
+
+    /** 上次播报的时间戳，用于节流 */
+    private var lastStateBroadcastAt = 0L
+
+    /**
+     * 状态刚变差时主动冒个泡。
+     *
+     * 背景：状态衰减（尤其"App 关着 8 小时回来猫饿扁了"）算得再对，
+     * 用户看不见因果 —— 桌上只是一只蔫掉的猫。这里在状态**跌破阈值的那一刻**
+     * 让它自己说一声，因果链才闭合。
+     *
+     * 阈值与 PokoPetView 的状态徽标完全一致（同一组常量），
+     * 否则会出现"徽标亮了但没播报"的割裂感。
+     */
+    private fun maybeBroadcastStateChange(state: PetState) {
+        val now = System.currentTimeMillis()
+        if (now - lastStateBroadcastAt < STATE_BROADCAST_COOLDOWN_MS) return
+
+        val alerts = intArrayOf(
+            if (state.hunger < PokoPetView.BADGE_THRESHOLD_HUNGER) 1 else 0,
+            if (state.cleanliness < PokoPetView.BADGE_THRESHOLD_CLEAN) 1 else 0,
+            if (state.energy < PokoPetView.BADGE_THRESHOLD_ENERGY) 1 else 0,
+            if (state.mood < PokoPetView.BADGE_THRESHOLD_MOOD) 1 else 0,
+        )
+
+        val prev = lastStateAlerts
+        if (prev == null) {
+            // 第一次同步：状态已经很差就直接说一声（用户离开很久回来正是这种场景）
+            lastStateAlerts = alerts
+            var firstBad = -1
+            for (i in alerts.indices) {
+                if (alerts[i] == 1) {
+                    firstBad = i
+                    break
+                }
+            }
+            if (firstBad >= 0) {
+                lastStateBroadcastAt = now
+                showCustomSpeechBubble(stateAlertLine(firstBad))
+            }
+            return
+        }
+
+        for (idx in alerts.indices) {
+            // 只播报"刚刚跌破阈值"的那一项，已经异常的不重复说
+            if (alerts[idx] == 1 && prev[idx] == 0) {
+                lastStateAlerts = alerts
+                lastStateBroadcastAt = now
+                showCustomSpeechBubble(stateAlertLine(idx))
+                return
+            }
+        }
+        lastStateAlerts = alerts
+    }
+
+    /** 状态异常时说的话（idx 与 stateAlertOrder 一致） */
+    private fun stateAlertLine(idx: Int): String = when (idx) {
+        0 -> "肚子咕咕叫啦…主人我好饿呀，想吃小鱼干～ 🐟"
+        1 -> "身上脏兮兮的…主人帮我搓搓澡好不好嘛～ 🧼"
+        2 -> "困得睁不开眼啦…让我先眯一小会儿 zzz… 💤"
+        else -> "有点想主人了…今天都不理我，是不是把我忘了呀… 🥺"
     }
 
     // ---------- 夜间模式 ----------
@@ -2407,16 +2705,33 @@ class FloatingPetService : Service() {
             }
             val pendingStopIntent = PendingIntent.getService(this, 103, stopIntent, flags)
 
-            val notification = Notification.Builder(this, channelId)
-                .setContentTitle("波可正在桌面上陪着您~ 🐾")
-                .setContentText("点击返回小窝，也可在下方快捷互动！")
+            val recallIntent = Intent(this, FloatingPetService::class.java).apply {
+                action = ACTION_NOTIFICATION_RECALL
+            }
+            val pendingRecallIntent = PendingIntent.getService(this, 104, recallIntent, flags)
+
+            // 通知栏按钮跟着当前状态走：
+            // 猫在桌面上 -> 摸摸 / 喂食 / 收回
+            // 猫被收进通知栏 -> 召回 / 关闭（这样"收回"不等于"消失不见"）
+            val builder = Notification.Builder(this, channelId)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentIntent(pendingIntent)
-                .addAction(Notification.Action.Builder(0, "🐾 摸摸", pendingPetIntent).build())
-                .addAction(Notification.Action.Builder(0, "🐟 喂食", pendingFeedIntent).build())
-                .addAction(Notification.Action.Builder(0, "🏠 收回", pendingStopIntent).build())
                 .setOngoing(true)
-                .build()
+
+            if (isPetRecalled) {
+                builder.setContentTitle("波可在小窝里休息中~ 🐾")
+                    .setContentText("点「召回」把它叫回桌面，点「关闭」彻底收起")
+                    .addAction(Notification.Action.Builder(0, "🐾 召回", pendingRecallIntent).build())
+                    .addAction(Notification.Action.Builder(0, "✕ 关闭", pendingStopIntent).build())
+            } else {
+                builder.setContentTitle("波可正在桌面上陪着您~ 🐾")
+                    .setContentText("点击返回小窝，也可在下方快捷互动！")
+                    .addAction(Notification.Action.Builder(0, "🐾 摸摸", pendingPetIntent).build())
+                    .addAction(Notification.Action.Builder(0, "🐟 喂食", pendingFeedIntent).build())
+                    .addAction(Notification.Action.Builder(0, "🏠 收回", pendingStopIntent).build())
+            }
+
+            val notification = builder.build()
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -2434,26 +2749,33 @@ class FloatingPetService : Service() {
         }
     }
 
-    private fun vibrate(durationMs: Long = 30) {
+    /**
+     * 播放一次触觉反馈。
+     *
+     * ⚠️ `VibrationEffect.createWaveform(timings, amplitudes, repeat)` 在
+     * amplitudes 长度与 timings 不一致时会抛 IllegalArgumentException 直接崩，
+     * 所以这里做了长度兜底：长度对不上就退化成不带振幅的波形。
+     * （长度一致性由守护测试逐项断言，这里只是防止手滑写错就闪退。）
+     */
+    private fun haptic(pattern: Companion.HapticPattern) {
         val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+        if (!vibrator.hasVibrator()) return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+            val effect = if (pattern.amplitudes.size == pattern.timings.size) {
+                VibrationEffect.createWaveform(pattern.timings, pattern.amplitudes, -1)
+            } else {
+                VibrationEffect.createWaveform(pattern.timings, -1)
+            }
+            vibrator.vibrate(effect)
         } else {
             @Suppress("DEPRECATION")
-            vibrator.vibrate(durationMs)
+            vibrator.vibrate(pattern.timings, -1)
         }
     }
 
+    /** 追尾巴旋转时的两下轻快震动 */
     private fun vibrateDoubleTick() {
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val timings = longArrayOf(0, 30, 50, 45)
-            val amplitudes = intArrayOf(0, 180, 0, 255)
-            vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
-        } else {
-            @Suppress("DEPRECATION")
-            vibrator.vibrate(longArrayOf(0, 30, 50, 45), -1)
-        }
+        haptic(Companion.HAPTIC_SPIN)
     }
 
     override fun onDestroy() {

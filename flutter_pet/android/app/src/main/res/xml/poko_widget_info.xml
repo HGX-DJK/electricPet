@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  桌面小组件元信息。
+
+  updatePeriodMillis = 30 分钟：这是系统允许的最小周期（低于 30 分钟会被忽略）。
+  状态会随时间衰减，30 分钟的刷新粒度对小部件来说足够；
+  另外波可状态变化时服务会主动调 PokoWidgetProvider.refreshAll() 立即刷新。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/poko_widget"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:previewImage="@mipmap/ic_launcher"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellHeight="2"
+    android:targetCellWidth="3"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

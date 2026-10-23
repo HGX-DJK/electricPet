@@ -138,6 +138,12 @@ class PokoPetView(context: Context) : View(context) {
     private var bodyLeanAngle: Float = 0f
     private var spinAngle: Float = 0f
 
+    /**
+     * 拖拽惯性：尾巴滞后于身体的摆动量（度）
+     */
+    private var tailSwingAngle: Float = 0f
+    private var tailSwingVelocity: Float = 0f
+
     // 触控果冻回弹挤压形变
     private var squishScaleX: Float = 1f
     private var squishScaleY: Float = 1f
@@ -160,7 +166,6 @@ class PokoPetView(context: Context) : View(context) {
         set(value) {
             field = value.coerceIn(0, 100)
         }
-
     /** 心情值 0~100：偏高时自主动作更活泼 */
     var happinessLevel: Int = 80
         set(value) {
@@ -184,6 +189,99 @@ class PokoPetView(context: Context) : View(context) {
                 invalidate()
             }
         }
+
+    // ---------- 状态徽标（把"猫现在状态不好"变成一眼可见） ----------
+
+    /**
+     * 状态徽标：状态差的时候，身体右上角冒一个小徽章。
+     *
+     * 背景：状态衰减（尤其离线衰减）算完之后，桌面上仍然看不出"它其实饿了"——
+     * 用户只看到一只"有点蔫"的猫，"时间过去 → 状态变差"的因果链是断的。
+     * 徽标只在状态异常时出现，一切正常时完全不出现，不打扰桌面。
+     *
+     * 位置说明：窗口是 82dp 的正方形，头顶只有约 12dp 余量，放不下徽标；
+     * 身体两侧有空白，所以徽章挂在右上角外侧。
+     */
+    private var statusBadge: String? = null
+
+    /** 徽标底色（按状态区分） */
+    private var statusBadgeColor: Int = 0
+
+    /** 徽标上下浮动的相位（0~1） */
+    private var statusBadgePhase: Float = 0f
+
+    /**
+     * 状态徽标的阈值。
+     *
+     * ⚠️ 与服务层 `FloatingPetService` 播报状态变化用的阈值必须一致，
+     * 否则会出现"徽标亮了但没播报"或"播报了但没徽标"的割裂感。
+     * 守护测试会比对两处。
+     */
+    companion object {
+        /** 饱食度低于此值算"饿了" */
+        const val BADGE_THRESHOLD_HUNGER = 30
+
+        /** 心情低于此值算"不开心" */
+        const val BADGE_THRESHOLD_MOOD = 30
+
+        /** 体力低于此值算"困了" */
+        const val BADGE_THRESHOLD_ENERGY = 25
+
+        /** 洁净度低于此值算"脏了" */
+        const val BADGE_THRESHOLD_CLEAN = 30
+
+        const val BADGE_ICON_HUNGER = "🍖"
+        const val BADGE_ICON_MOOD = "😿"
+        const val BADGE_ICON_ENERGY = "💤"
+        const val BADGE_ICON_CLEAN = "🧼"
+    }
+
+    /**
+     * 重算状态徽标。状态变化时由服务层调用。
+     *
+     * 优先级：饿了 > 脏了 > 困了 > 不开心。
+     * 饿和脏是需要用户动手解决的（喂食 / 洗澡），
+     * 困和不开心用户也帮不上忙，所以排后面。
+     */
+    fun refreshStateBadge() {
+        val icon: String
+        val color: Int
+        when {
+            hungerLevel < BADGE_THRESHOLD_HUNGER -> {
+                icon = BADGE_ICON_HUNGER
+                color = Color.rgb(249, 115, 22)
+            }
+            cleanlinessLevel < BADGE_THRESHOLD_CLEAN -> {
+                icon = BADGE_ICON_CLEAN
+                color = Color.rgb(139, 92, 246)
+            }
+            energyLevel < BADGE_THRESHOLD_ENERGY -> {
+                icon = BADGE_ICON_ENERGY
+                color = Color.rgb(14, 165, 233)
+            }
+            happinessLevel < BADGE_THRESHOLD_MOOD -> {
+                icon = BADGE_ICON_MOOD
+                color = Color.rgb(236, 72, 153)
+            }
+            else -> {
+                icon = ""
+                color = 0
+            }
+        }
+        if (icon.isEmpty()) {
+            if (statusBadge != null) {
+                statusBadge = null
+                statusBadgeColor = 0
+                invalidate()
+            }
+            return
+        }
+        if (statusBadge != icon) {
+            statusBadge = icon
+            statusBadgeColor = color
+            invalidate()
+        }
+    }
 
     /**
      * 夜间配色：跟 App 的昼夜节律保持一致。
@@ -259,6 +357,14 @@ class PokoPetView(context: Context) : View(context) {
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         textAlign = Paint.Align.CENTER
     }
+    /** 状态徽标的底色圆 + 描边 */
+    private val badgePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    /** 状态徽标里的 emoji 文字 */
+    private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+    }
+    /** 复用的字体度量，避免 onDraw 里 getFontMetrics() 每次 new 一个 FontMetrics */
+    private val badgeFontMetrics = FontMetrics()
 
     private val earPath = Path()
     private val innerEarPath = Path()
@@ -529,6 +635,9 @@ class PokoPetView(context: Context) : View(context) {
                 val f = anim.animatedValue as Float
                 val rad = (f * 2.0 * Math.PI).toFloat()
 
+                // 状态徽标的上下浮动相位（复用待机动画的节拍，不另开动画器）
+                statusBadgePhase = f
+
                 if (currentAction == PetAction.IDLE) {
                     // 大幅度有生命感的有机呼吸与骨骼微缩放
                     breathY = sin(rad) * 3.8f * density
@@ -541,11 +650,16 @@ class PokoPetView(context: Context) : View(context) {
                     // 视线跟随：指尖靠近时眼珠悄悄转过去
                     updateGaze()
                 } else if (currentAction == PetAction.DRAGGING) {
-                    // 悬空时四肢轻轻蹬踩扑腾
+                    // 被拎起来悬空：四肢蹬得更急、身子被拎着有点发软下坠、尾巴乱甩。
+                    // 之前只有 4.5f 的小幅蹬腿，看着像"贴图在抖"；幅度和身体形变一起做，
+                    // 才像真的被提着晃。
                     val paddleRad = (f * 4.0 * Math.PI).toFloat()
-                    leftPawOffsetY = sin(paddleRad) * 4.5f * density
-                    rightPawOffsetY = -sin(paddleRad) * 4.5f * density
-                    tailAngle = -18f + sin(paddleRad * 0.5f) * 10f
+                    leftPawOffsetY = sin(paddleRad) * 6.5f * density
+                    rightPawOffsetY = -sin(paddleRad) * 6.5f * density
+                    // 身子被拎着微微拉长下坠
+                    bodyStretchY = 1.16f + sin(paddleRad * 0.5f) * 0.03f
+                    bodyStretchX = 0.88f - sin(paddleRad * 0.5f) * 0.02f
+                    tailAngle = -18f + sin(paddleRad * 0.5f) * 16f
                 }
 
                 invalidate()
@@ -1161,16 +1275,35 @@ class PokoPetView(context: Context) : View(context) {
                 bodyStretchY = 1.16f
                 tailAngle = -18f
             } else {
-                // 放手瞬间触发果冻落地缓冲回弹！
-                triggerLandingBounce()
+                // 放手瞬间的状态复位。
+                // 注意这里**不**做落地回弹 —— 真正的回弹由服务层的落位逻辑
+                // (settleAfterDrag) 统一触发一次；两处都做的话落地会连抖两下。
+                resetToIdleState()
             }
             invalidate()
         }
     }
 
     fun updateDragVelocity(vx: Float) {
-        if (!isDragging) return
+        if (!isDragging) {
+            // 松手后尾巴继续荡一会儿再停
+            tailSwingVelocity *= 0.88f
+            tailSwingAngle += tailSwingVelocity
+            if (abs(tailSwingAngle) < 0.2f && abs(tailSwingVelocity) < 0.2f) {
+                tailSwingAngle = 0f
+                tailSwingVelocity = 0f
+            }
+            invalidate()
+            return
+        }
         bodyLeanAngle = (vx * 0.12f).coerceIn(-22f, 22f)
+
+        // 尾巴惯性：被拖着走时尾巴滞后于身体摆过去，松手后自己荡回来。
+        // 这是"这团毛是真的"最省力的一笔 —— 纯视觉，不需要任何新资源。
+        val targetSwing = (-vx * 0.10f).coerceIn(-26f, 26f)
+        tailSwingVelocity += (targetSwing - tailSwingAngle) * 0.18f
+        tailSwingVelocity *= 0.82f
+        tailSwingAngle += tailSwingVelocity
         invalidate()
     }
 
@@ -1333,12 +1466,59 @@ class PokoPetView(context: Context) : View(context) {
         drawParticles(canvas)
 
         canvas.restore() // 恢复朝向矩阵
+
+        // 9. 状态徽标画在镜像矩阵之外 ——
+        //    emoji 文字被水平镜像会变成反字，必须在恢复朝向之后再画。
+        //    探头偏移也一并还原：徽标要跟着猫一起探头，不能留在原地。
+        if (statusBadge != null) {
+            canvas.save()
+            if (peekOffsetX != 0f) {
+                canvas.translate(peekOffsetX, 0f)
+            }
+            drawStatusBadge(canvas, w / 2f, h * 0.53f + jumpOffsetY)
+            canvas.restore()
+        }
+    }
+
+    /**
+     * 绘制状态徽标：身体右上角的一枚小徽章。
+     *
+     * 只在状态异常时绘制（statusBadge 为 null 时直接返回），
+     * 一切正常时桌面上就是干干净净一只猫。
+     */
+    private fun drawStatusBadge(canvas: Canvas, cx: Float, cy: Float) {
+        val icon = statusBadge ?: return
+        // 上下轻浮，制造"在呼吸"的生气感
+        val bob = sin(statusBadgePhase * 2.0 * Math.PI).toFloat() * 2.2f * density
+        val bx = cx + 25f * density
+        val by = cy - 25f * density + bob
+        val r = 9.5f * density
+
+        // 白底圆
+        badgePaint.style = Paint.Style.FILL
+        badgePaint.color = Color.WHITE
+        canvas.drawCircle(bx, by, r, badgePaint)
+
+        // 状态色描边
+        badgePaint.style = Paint.Style.STROKE
+        badgePaint.strokeWidth = 2f * density
+        badgePaint.color = statusBadgeColor
+        canvas.drawCircle(bx, by, r, badgePaint)
+        badgePaint.style = Paint.Style.FILL
+
+        // emoji 居中（复用成员 FontMetrics，不在 onDraw 里 new 对象）
+        badgeTextPaint.textSize = 11f * density
+        badgeTextPaint.getFontMetrics(badgeFontMetrics)
+        val baseline = by - (badgeFontMetrics.ascent + badgeFontMetrics.descent) / 2f
+        canvas.drawText(icon, bx, baseline, badgeTextPaint)
     }
 
     private fun drawTail(canvas: Canvas, cx: Float, cy: Float) {
         val tailBaseX = cx + 13f * density
         val tailBaseY = cy + 12f * density
-        val angleRad = (tailAngle * Math.PI / 180.0).toFloat()
+        // tailAngle 是动作本身带的尾巴角度，tailSwingAngle 是拖拽惯性的额外摆动
+        val swing = (tailAngle + tailSwingAngle) * Math.PI / 180.0
+        val angleRad = swing.toFloat()
         val tailTipX = cx + 25f * density + sin(angleRad) * 13f * density
         val tailTipY = cy - 13f * density + cos(angleRad) * 5f * density
 

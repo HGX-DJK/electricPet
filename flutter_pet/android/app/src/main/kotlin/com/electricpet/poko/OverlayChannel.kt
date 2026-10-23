@@ -56,6 +56,9 @@ object OverlayChannel {
     /** 更新桌面悬浮宠设置 (服务运行中会立即生效) */
     const val UPDATE_OVERLAY_SETTINGS = "updateOverlaySettings"
 
+    /** 打开系统的小组件选择界面 (用于添加「波可桌面萌宠」桌面小组件) */
+    const val OPEN_WIDGET_PICKER = "openWidgetPicker"
+
     // ---------- 参数名 ----------
 
     /** 皮肤 / 品种 ID */
@@ -98,6 +101,7 @@ object OverlayChannel {
         "READ_PUBLIC_BACKUP" to READ_PUBLIC_BACKUP,
         "GET_OVERLAY_SETTINGS" to GET_OVERLAY_SETTINGS,
         "UPDATE_OVERLAY_SETTINGS" to UPDATE_OVERLAY_SETTINGS,
+        "OPEN_WIDGET_PICKER" to OPEN_WIDGET_PICKER,
     )
 
     /**

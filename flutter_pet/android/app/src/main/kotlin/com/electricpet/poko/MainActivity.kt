@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
+import android.widget.Toast
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
@@ -185,6 +186,10 @@ class MainActivity: FlutterActivity() {
                     }
                     result.success(true)
                 }
+                OverlayChannel.OPEN_WIDGET_PICKER -> {
+                    openWidgetPicker()
+                    result.success(true)
+                }
                 OverlayChannel.CHECK_STORAGE_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         result.success(Environment.isExternalStorageManager())
@@ -279,6 +284,29 @@ class MainActivity: FlutterActivity() {
                 }
                 else -> result.notImplemented()
             }
+        }
+    }
+
+    /**
+     * 打开系统的小组件选择界面，让用户把「波可桌面萌宠」小组件放到桌面上。
+     *
+     * 绝大多数 ROM 都认 `ACTION_MAIN + CATEGORY_APP_WIDGET` 这个隐式 Intent；
+     * 万一 ROM 不认（少见），退化成提示用户手动添加，不让用户一头雾水。
+     */
+    private fun openWidgetPicker() {
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_APP_WIDGET)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(
+                this,
+                "请长按手机桌面空白处 → 小组件 → 找到「波可桌面萌宠」添加~",
+                Toast.LENGTH_LONG,
+            ).show()
         }
     }
 }
