@@ -290,23 +290,29 @@ class MainActivity: FlutterActivity() {
     /**
      * 打开系统的小组件选择界面，让用户把「波可桌面萌宠」小组件放到桌面上。
      *
-     * 绝大多数 ROM 都认 `ACTION_MAIN + CATEGORY_APP_WIDGET` 这个隐式 Intent；
-     * 万一 ROM 不认（少见），退化成提示用户手动添加，不让用户一头雾水。
+     * ⚠️ 这里刻意用**字符串字面量**而不是某个 Kotlin 常量：
+     * "android.appwidget.category.APPWIDGET" 是 Launcher 用来识别
+     * "这个 App 能提供小组件"的 category（它在 AOSP 里定义于 AppWidgetManager）。
+     * 之前误写成 `Intent.CATEGORY_APP_WIDGET` —— 那个常量**根本不存在**，
+     * 编译期直接报 Unresolved reference，且因为缺 android.jar 本地完全看不出来。
+     *
+     * 万一 ROM 不认这个 Intent（少见），退化成提示用户手动添加，
+     * 不让用户一头雾水。
      */
     private fun openWidgetPicker() {
+        val manualHint = "请长按手机桌面空白处 → 小组件 → 找到「波可桌面萌宠」添加~"
         try {
-            val intent = Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_APP_WIDGET)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent == null) {
+                Toast.makeText(this, manualHint, Toast.LENGTH_LONG).show()
+                return
             }
-            startActivity(intent)
+            launchIntent.addCategory("android.appwidget.category.APPWIDGET")
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(launchIntent)
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(
-                this,
-                "请长按手机桌面空白处 → 小组件 → 找到「波可桌面萌宠」添加~",
-                Toast.LENGTH_LONG,
-            ).show()
+            Toast.makeText(this, manualHint, Toast.LENGTH_LONG).show()
         }
     }
 }

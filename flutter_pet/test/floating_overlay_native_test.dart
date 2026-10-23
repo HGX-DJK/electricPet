@@ -1011,6 +1011,111 @@ class Safe6 {
     });
   });
 
+  group('Android 资源引用完整性：aapt 阶段的错误本地查不到', () {
+    test('XML 与 Kotlin 里引用的资源必须真实存在', () {
+      // 背景：本机没有 Android SDK，aapt 根本跑不起来，
+      // 所以 "@string/xxx 写错了" / "@layout/xxx 不存在" 这类错误本地完全看不出来，
+      // 只能等 CI 在 aapt 阶段炸出来。本组把这一层也纳入守护。
+      final resDir =
+          Directory('${packageRoot.path}/android/app/src/main/res');
+      final defined = _collectAndroidResources(resDir);
+      expect(defined, isNotEmpty, reason: '资源目录解析失败，检测器可能已失效');
+
+      // 引用来源：所有 XML（含 AndroidManifest）+ Kotlin 里的 R.xxx.yyy
+      final refs = <String, String>{};
+
+      for (final file in resDir.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.xml')) continue;
+        final content = file.readAsStringSync();
+        for (final m
+            in RegExp(r'@(?!android:)(\w+)/([A-Za-z0-9_.]+)').allMatches(content)) {
+          refs.putIfAbsent(m.group(2)!, () => file.path);
+        }
+      }
+      for (final source in <String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+        widgetProviderSource,
+      ]) {
+        for (final m in RegExp(r'\bR\.(\w+)\.(\w+)').allMatches(source)) {
+          refs.putIfAbsent(m.group(2)!, () => 'R.${m.group(1)}');
+        }
+      }
+      for (final m in RegExp(r'@(\w+)/([A-Za-z0-9_.]+)')
+          .allMatches(manifestSource)) {
+        refs.putIfAbsent(m.group(2)!, () => 'AndroidManifest.xml');
+      }
+
+      final missing = refs.keys.where((n) => !defined.contains(n)).toList()
+        ..sort();
+      expect(
+        missing,
+        isEmpty,
+        reason: '引用了不存在的资源（CI 会在 aapt 阶段失败）：\n'
+            '${missing.map((n) => '$n  (来自 ${refs[n]})').join('\n')}',
+      );
+    });
+
+    test('资源引用的解析器必须真的解析出了东西（防止检测器空转）', () {
+      final resDir =
+          Directory('${packageRoot.path}/android/app/src/main/res');
+      final defined = _collectAndroidResources(resDir);
+      expect(defined.length, greaterThan(10),
+          reason: '解析到的资源数明显偏少（${defined.length}），检测器可能已失效');
+      expect(defined, contains('poko_widget'),
+          reason: '应识别出小组件布局');
+      expect(defined, contains('widget_background'),
+          reason: '应识别出小组件背景 drawable');
+      expect(defined, contains('widget_description'),
+          reason: '应识别出 values/strings.xml 里定义的字符串');
+      expect(defined, contains('widget_emoji'),
+          reason: '应识别出布局里 @+id 声明的 id');
+    });
+  });
+
+  group('Android 静态常量：成员必须真实存在', () {
+    test('Intent.ACTION_* / CATEGORY_* 必须是真实存在的常量', () {
+      // 背景：CI 报过 `Unresolved reference 'CATEGORY_APP_WIDGET'` ——
+      // Intent 里根本没有这个常量（是记错了，AppWidgetManager 那边才是别的名字）。
+      // 这类"成员不存在"的错误本地原理上查不出来：
+      // import 审计器只查"用了没 import"，而这里是"import 了但成员没有"。
+      final code = _stripLiteralsAndComments(<String>[
+        serviceSource,
+        activitySource,
+        petViewSource,
+        overlayChannelKotlin,
+        widgetProviderSource,
+      ].join('\n'));
+
+      final problems = <String>[];
+      for (final m in RegExp(r'\bIntent\.(ACTION_[A-Z0-9_]+|CATEGORY_[A-Z0-9_]+)\b')
+          .allMatches(code)) {
+        final name = m.group(1)!;
+        if (!_knownIntentConstants.contains(name)) {
+          problems.add('Intent.$name');
+        }
+      }
+
+      expect(
+        problems,
+        isEmpty,
+        reason: '引用了 Intent 上不存在的常量（CI 会报 Unresolved reference）：\n'
+            '${problems.join("\n")}\n'
+            '若确实要用新的 Intent 常量，先确认它在 android.content.Intent 里真实存在，'
+            '再登记到守护测试的 _knownIntentConstants 表里。',
+      );
+    });
+
+    test('Intent 常量表本身不能为空（防止检测器把一切都放行）', () {
+      expect(_knownIntentConstants.length, greaterThan(20),
+          reason: 'Intent 常量表明显偏小，检测器可能已失效');
+      expect(_knownIntentConstants, contains('ACTION_MAIN'));
+      expect(_knownIntentConstants, contains('CATEGORY_LAUNCHER'));
+    });
+  });
+
   group('状态系统：字段名 / 衰减速率 / 时间戳约定必须两端一致', () {
     test('心情字段必须是 mood，绝不能再用 happiness', () {
       // 历史事故：原生侧读写 "happiness"，而 Dart 侧 PetModel 用的是 "mood"，
@@ -1309,6 +1414,87 @@ String _readRepoFile(Directory root, String relativePath) {
   }
   return file.readAsStringSync();
 }
+
+// ---------------------------------------------------------------------------
+// Android 资源与常量审计
+//
+// 动机：本机没有 Android SDK，aapt 跑不起来、android.jar 也没有，
+// 于是两类错误本地原理上就查不出来，只能等 CI 炸出来：
+//   1. 资源引用错误：@string/xxx 写错了、@layout/xxx 不存在 -> aapt 阶段失败
+//   2. 常量成员错误：Intent.CATEGORY_APP_WIDGET 根本不存在 -> kotlinc 阶段失败
+// ---------------------------------------------------------------------------
+
+/// 已知的 android.content.Intent 静态常量（ACTION_* / CATEGORY_*）。
+///
+/// ⚠️ 新增 Intent 常量时，务必先确认它在 android.content.Intent 里真实存在，
+/// 再登记到这里 —— 没登记的会被判为"不存在的常量"而让 CI 变红。
+const Set<String> _knownIntentConstants = <String>{
+  // ---- ACTION ----
+  'ACTION_MAIN', 'ACTION_VIEW', 'ACTION_SEND', 'ACTION_SENDTO',
+  'ACTION_SEND_MULTIPLE', 'ACTION_EDIT', 'ACTION_INSERT', 'ACTION_DELETE',
+  'ACTION_PICK', 'ACTION_GET_CONTENT', 'ACTION_CHOOSER', 'ACTION_ASSIST',
+  'ACTION_CAPTURE_IMAGE', 'ACTION_CAPTURE_VIDEO', 'ACTION_CAMERA',
+  'ACTION_DIAL', 'ACTION_SEARCH', 'ACTION_PROCESS_TEXT',
+  'ACTION_CREATE_SHORTCUT', 'ACTION_DELETE_SHORTCUT',
+  'ACTION_MEDIA_MOUNTED', 'ACTION_MEDIA_UNMOUNTED', 'ACTION_MEDIA_EJECT',
+  'ACTION_MEDIA_SCANNER_SCAN_FILE', 'ACTION_PACKAGE_ADDED',
+  'ACTION_PACKAGE_REMOVED', 'ACTION_PACKAGE_REPLACED', 'ACTION_PACKAGE_CHANGED',
+  'ACTION_PACKAGE_DATA_CLEARED', 'ACTION_PACKAGE_RESTARTED',
+  'ACTION_INSTALL_PACKAGE', 'ACTION_UNINSTALL_PACKAGE',
+  'ACTION_TIME_TICK', 'ACTION_TIME_CHANGED', 'ACTION_TIMEZONE_CHANGED',
+  'ACTION_LOCALE_CHANGED', 'ACTION_BOOT_COMPLETED', 'ACTION_SHUTDOWN',
+  'ACTION_USER_PRESENT', 'ACTION_SCREEN_ON', 'ACTION_SCREEN_OFF',
+  'ACTION_HEADSET_PLUG', 'ACTION_BATTERY_CHANGED', 'ACTION_BATTERY_LOW',
+  'ACTION_BATTERY_OKAY', 'ACTION_POWER_CONNECTED', 'ACTION_POWER_DISCONNECTED',
+  'ACTION_NEW_OUTGOING_CALL', 'ACTION_CALL_BUTTON', 'ACTION_EMERGENCY_ASSIST',
+  // ---- CATEGORY ----
+  'CATEGORY_DEFAULT', 'CATEGORY_BROWSABLE', 'CATEGORY_LAUNCHER', 'CATEGORY_HOME',
+  'CATEGORY_INFO', 'CATEGORY_SERVICE', 'CATEGORY_CARGO', 'CATEGORY_MESSAGING',
+  'CATEGORY_SOCIAL', 'CATEGORY_EVERYTHING', 'CATEGORY_TAB',
+};
+
+/// 收集 res/ 目录下已定义的全部资源名。
+///
+/// 覆盖三类来源：
+///   - 文件名（layout/xxx.xml、drawable/xxx.xml、mipmap-*/xxx.png ...）
+///   - values/*.xml 里声明的 string / color / style / dimen ...
+///   - 布局里 `@+id/xxx` 声明的 id
+Set<String> _collectAndroidResources(Directory resDir) {
+  final defined = <String>{};
+  if (!resDir.existsSync()) return defined;
+
+  for (final entity in resDir.listSync(recursive: true)) {
+    if (entity is! File) continue;
+    final path = entity.path.replaceAll('\\', '/');
+    final fileName = path.split('/').last;
+    final parentDir =
+        path.substring(0, path.lastIndexOf('/')).split('/').last;
+
+    if (parentDir.startsWith('values')) {
+      // values/ 里定义的是 string / color / style / dimen ...
+      final content = entity.readAsStringSync();
+      for (final m in RegExp(
+        r'<(?:string|color|style|dimen|bool|integer|string-array|array|plurals|item)\s[^>]*?name="([^"]+)"',
+      ).allMatches(content)) {
+        defined.add(m.group(1)!);
+      }
+    } else {
+      // 其余目录：文件名即资源名（drawable / layout / mipmap / xml ...）
+      final dot = fileName.indexOf('.');
+      if (dot > 0) defined.add(fileName.substring(0, dot));
+    }
+
+    // 布局里用 @+id/xxx 声明的 id
+    if (fileName.endsWith('.xml')) {
+      final content = entity.readAsStringSync();
+      for (final m in RegExp(r'@\+id/([A-Za-z0-9_]+)').allMatches(content)) {
+        defined.add(m.group(1)!);
+      }
+    }
+  }
+  return defined;
+}
+
 
 // ---------------------------------------------------------------------------
 // Kotlin import 审计

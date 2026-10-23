@@ -363,8 +363,6 @@ class PokoPetView(context: Context) : View(context) {
     private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
     }
-    /** 复用的字体度量，避免 onDraw 里 getFontMetrics() 每次 new 一个 FontMetrics */
-    private val badgeFontMetrics = FontMetrics()
 
     private val earPath = Path()
     private val innerEarPath = Path()
@@ -1506,10 +1504,12 @@ class PokoPetView(context: Context) : View(context) {
         canvas.drawCircle(bx, by, r, badgePaint)
         badgePaint.style = Paint.Style.FILL
 
-        // emoji 居中（复用成员 FontMetrics，不在 onDraw 里 new 对象）
+        // emoji 垂直居中：按 textSize 的比例近似。
+        // 刻意不引入 FontMetrics —— 多一个跨 API 的依赖就多一个
+        // "本地缺 android.jar 看不见、CI 才炸"的风险，而 emoji
+        // 字形本身上下就留白，肉眼几乎看不出差别。
         badgeTextPaint.textSize = 11f * density
-        badgeTextPaint.getFontMetrics(badgeFontMetrics)
-        val baseline = by - (badgeFontMetrics.ascent + badgeFontMetrics.descent) / 2f
+        val baseline = by + badgeTextPaint.textSize * 0.30f
         canvas.drawText(icon, bx, baseline, badgeTextPaint)
     }
 
