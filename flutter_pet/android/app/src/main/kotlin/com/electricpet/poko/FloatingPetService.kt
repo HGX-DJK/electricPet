@@ -61,6 +61,8 @@ class FloatingPetService : Service() {
     private var actionMenuView: LinearLayout? = null
     private var actionMenuParams: WindowManager.LayoutParams? = null
     private var hideActionMenuRunnable: Runnable? = null
+    /** 菜单窗口当前是否已挂载到 WindowManager（用显式标记判断，避免依赖 View.parent 的回收时机） */
+    private var isActionMenuAttached: Boolean = false
 
     // 双击与触控物理量
     private var lastClickTime: Long = 0
@@ -167,7 +169,7 @@ class FloatingPetService : Service() {
         //    FLAG_NOT_TOUCH_MODAL : 宠物以外的区域触摸透传给下层应用，避免悬浮窗吞掉整屏点击
         //    FLAG_LAYOUT_IN_SCREEN: 窗口按物理屏幕坐标系布局，可触达区域(touchable region)计算正确 —— 能拖动的关键
         //    禁用 FLAG_LAYOUT_NO_LIMITS: 它让窗口脱离屏幕裁剪，Android 10+ 上可触达区域会失效，触摸打不到宠物
-        val (savedDockLeft, savedYRatio) = loadSavedDockConfig()
+        val (savedDockLeft, savedYRatio, savedXRatio) = loadSavedDockConfig()
         val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         val initialY = (screenHeight * savedYRatio).toInt().coerceIn(minY, maxY)
 
@@ -184,6 +186,11 @@ class FloatingPetService : Service() {
             x = (screenWidth - sizePx - (12 * density).toInt()).coerceAtLeast(0)
             if (savedDockLeft) {
                 x = (4 * density).toInt()
+            }
+            // 还原用户上次自由放置的横向位置（比例）；从未自由放置过则保持贴边停靠
+            if (savedXRatio >= 0f) {
+                x = ((screenWidth - sizePx) * savedXRatio).toInt()
+                    .coerceIn(0, (screenWidth - sizePx).coerceAtLeast(0))
             }
             y = initialY
         }
@@ -282,7 +289,9 @@ class FloatingPetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     hasTouchDown = true
                     cancelEdgePeeking()
-                    restoreFromPeeking()
+                    // 按下瞬间直接归位（不走动画），保证下面采集到的 initialX/initialY
+                    // 就是宠物真实的落点，不会与归位动画抢写 params.x 而在起手时跳变
+                    restoreFromPeeking(animated = false)
                     velocityTracker?.recycle()
                     velocityTracker = VelocityTracker.obtain()
                     velocityTracker?.addMovement(event)
@@ -373,8 +382,12 @@ class FloatingPetService : Service() {
 
                     if (isLongPressing) {
                         isLongPressing = false
-                        scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
-                        return@setOnTouchListener true
+                        // 只有完全没有拖动时才吞掉释放；已经拖动过则继续走拖拽落位逻辑，
+                        // 否则"先按住半秒再拖"与"快速拖"会得到两种完全不同的结果
+                        if (!hasDragged) {
+                            scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
+                            return@setOnTouchListener true
+                        }
                     }
 
                     if (isClick && event.actionMasked == MotionEvent.ACTION_UP) {
@@ -400,8 +413,8 @@ class FloatingPetService : Service() {
                             scheduleEdgePeeking(!(pokoView?.facingLeft ?: true))
                         }
                     } else if (hasDragged) {
-                        // 拖拽释放：波可智能自动磁吸滑行贴边并缓冲着陆！
-                        snapToNearestEdge(params, sizePx, density, gestureScreenWidth, releaseVx)
+                        // 拖拽释放：自由停留在用户放置的位置，靠近边缘时才轻柔磁吸贴边并缓冲着陆
+                        settleAfterDrag(params, sizePx, density, gestureScreenWidth, releaseVx)
                     }
                     true
                 }
@@ -470,11 +483,16 @@ class FloatingPetService : Service() {
     }
 
     /**
-     * 智能自动磁吸贴边：
-     * 结合手势释放瞬时加速度 (Fling) 与就近边缘，波可平滑磁吸至屏幕左/右边缘，
-     * 视线朝向屏幕中心，着陆时触发果冻弹性缓冲，并开启闲置半收起避让模式！
+     * 拖拽释放后的落位策略（自由拖动 + 近边轻吸附）：
+     *
+     * 历史教训：早期版本无条件强制磁吸到最近边缘，用户反馈"宠物拖不动"——
+     * 手指按住时确实跟手，一抬手就被拽回屏幕边，放哪儿都不算数。
+     * 现在只有当波可本来就停在边缘附近（或被甩向边缘）时才轻柔吸附，
+     * 其余情况一律自由停留在用户放置的位置。
+     *
+     * 视线始终朝向屏幕中心，着陆时触发果冻弹性缓冲。
      */
-    private fun snapToNearestEdge(
+    private fun settleAfterDrag(
         params: WindowManager.LayoutParams,
         sizePx: Int,
         density: Float,
@@ -498,9 +516,18 @@ class FloatingPetService : Service() {
         pokoView?.alpha = 1.0f
 
         val startX = params.x
+
+        // 自由放置：未落在边缘附近时原地停留，绝不强制拉回边缘
+        if (!isDockedAtEdge(params, sizePx, density, screenWidth)) {
+            pokoView?.triggerLandingBounce()
+            saveDockPreference(isLeftHalf, params.x, params.y)
+            scheduleEdgePeeking(isLeftHalf)
+            return
+        }
+
         if (startX == targetX) {
             pokoView?.triggerLandingBounce()
-            saveDockPreference(isLeftHalf, params.y)
+            saveDockPreference(isLeftHalf, params.x, params.y)
             scheduleEdgePeeking(isLeftHalf)
             return
         }
@@ -522,12 +549,29 @@ class FloatingPetService : Service() {
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
                     pokoView?.triggerLandingBounce()
-                    saveDockPreference(isLeftHalf, params.y)
+                    saveDockPreference(isLeftHalf, params.x, params.y)
                     scheduleEdgePeeking(isLeftHalf)
                 }
             })
         }
         edgeSnapAnimator?.start()
+    }
+
+    /**
+     * 波可当前是否停在屏幕左右边缘附近。
+     *
+     * 自主边缘散步、探头避让等"边缘动效"以及松手时的磁吸吸附都只在此条件下触发，
+     * 自由停放在屏幕中间的波可不会被这些边缘行为打扰，也不会被强行拽回边缘。
+     */
+    private fun isDockedAtEdge(
+        params: WindowManager.LayoutParams,
+        sizePx: Int,
+        density: Float,
+        screenWidth: Int
+    ): Boolean {
+        val snapRange = (10 * density).toInt()
+        val maxX = (screenWidth - sizePx).coerceAtLeast(0)
+        return params.x <= snapRange || params.x >= (maxX - snapRange).coerceAtLeast(0)
     }
 
     /**
@@ -550,9 +594,12 @@ class FloatingPetService : Service() {
 
         val density = resources.displayMetrics.density
         val sizePx = (82 * density).toInt()
-        val (_, screenHeight) = getScreenDimensions()
+        val (screenWidth, screenHeight) = getScreenDimensions()
         val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         val currentY = params.y
+
+        // 自由放在屏幕中间的波可不做边缘散步，尊重用户指定的桌面位置
+        if (!isDockedAtEdge(params, sizePx, density, screenWidth)) return
 
         // 随机向上或向下溜达 28 ~ 45dp
         val strollDistance = ((28 + Math.random() * 17) * density).toInt()
@@ -748,6 +795,9 @@ class FloatingPetService : Service() {
             WindowManager.LayoutParams.WRAP_CONTENT,
             layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                // 与宠物窗口保持一致：没有 FLAG_NOT_TOUCH_MODAL 的窗口在将来一旦可获焦，
+                // 会立刻变成触摸模态窗口吞掉整屏点击，导致宠物彻底拖不动
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -759,7 +809,7 @@ class FloatingPetService : Service() {
 
     private fun isActionMenuVisible(): Boolean {
         val menu = actionMenuView ?: return false
-        return menu.visibility == View.VISIBLE && menu.parent != null
+        return menu.visibility == View.VISIBLE && isActionMenuAttached
     }
 
     private fun showActionMenu() {
@@ -793,9 +843,10 @@ class FloatingPetService : Service() {
         mParams.x = targetX
         mParams.y = targetY
 
-        if (menu.parent == null) {
+        if (!isActionMenuAttached) {
             try {
                 windowManager?.addView(menu, mParams)
+                isActionMenuAttached = true
             } catch (_: Exception) {}
         } else {
             try {
@@ -835,12 +886,28 @@ class FloatingPetService : Service() {
                 .setDuration(180)
                 .withEndAction {
                     menu.visibility = View.GONE
+                    removeActionMenuWindow()
                 }
                 .start()
         } else {
             menu.animate().cancel()
             menu.visibility = View.GONE
+            removeActionMenuWindow()
         }
+    }
+
+    /**
+     * 把快捷菜单窗口真正从 WindowManager 上摘下来。
+     * 之前只是把 View 置为 GONE 却始终挂着窗口，白占系统窗口资源，
+     * 也让"菜单是否已添加"难以判断（重复 addView 会抛异常被静默吞掉，菜单再也不会出现）。
+     */
+    private fun removeActionMenuWindow() {
+        if (!isActionMenuAttached) return
+        val menu = actionMenuView ?: return
+        try {
+            windowManager?.removeView(menu)
+        } catch (_: Exception) {}
+        isActionMenuAttached = false
     }
 
     private fun handleDesktopPet() {
@@ -1129,25 +1196,39 @@ class FloatingPetService : Service() {
         return Pair("cat_calico", "波可")
     }
 
-    private fun loadSavedDockConfig(): Pair<Boolean, Float> {
+    /**
+     * 读取停靠偏好：左侧/右侧、纵向比例、横向比例。
+     * 横向比例为 -1f 表示用户尚未自由放置过波可，此时沿用贴边停靠规则。
+     */
+    private fun loadSavedDockConfig(): Triple<Boolean, Float, Float> {
         return try {
             val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             val isLeft = prefs.getBoolean("flutter.poko_dock_left", false)
             val yRatio = prefs.getFloat("flutter.poko_dock_y_ratio", 0.45f).coerceIn(0.1f, 0.85f)
-            Pair(isLeft, yRatio)
+            val xRatio = prefs.getFloat("flutter.poko_dock_x_ratio", -1f)
+            Triple(isLeft, yRatio, xRatio)
         } catch (_: Exception) {
-            Pair(false, 0.45f)
+            Triple(false, 0.45f, -1f)
         }
     }
 
-    private fun saveDockPreference(isLeft: Boolean, currentY: Int) {
+    /**
+     * 保存停靠偏好：横向位置按比例持久化，波可下次启动仍停在用户放的地方，
+     * 而不是被强行拉回屏幕边缘（否则用户会觉得"拖了等于没拖"）。
+     */
+    private fun saveDockPreference(isLeft: Boolean, currentX: Int, currentY: Int) {
         try {
-            val (_, screenHeight) = getScreenDimensions()
-            val ratio = if (screenHeight > 0) (currentY.toFloat() / screenHeight.toFloat()).coerceIn(0.1f, 0.85f) else 0.45f
+            val (screenWidth, screenHeight) = getScreenDimensions()
+            val density = resources.displayMetrics.density
+            val sizePx = (82 * density).toInt()
+            val yRatio = if (screenHeight > 0) (currentY.toFloat() / screenHeight.toFloat()).coerceIn(0.1f, 0.85f) else 0.45f
+            val travelRange = (screenWidth - sizePx).coerceAtLeast(1)
+            val xRatio = (currentX.toFloat() / travelRange.toFloat()).coerceIn(0f, 1f)
             val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
             prefs.edit()
                 .putBoolean("flutter.poko_dock_left", isLeft)
-                .putFloat("flutter.poko_dock_y_ratio", ratio)
+                .putFloat("flutter.poko_dock_y_ratio", yRatio)
+                .putFloat("flutter.poko_dock_x_ratio", xRatio)
                 .apply()
         } catch (_: Exception) {}
     }
@@ -1165,9 +1246,16 @@ class FloatingPetService : Service() {
         val (screenWidth, screenHeight) = getScreenDimensions()
         val edgeThreshold = (4 * density).toInt()
 
-        // 手机屏幕横竖屏旋转或分屏时，确保宠物始终贴在当前侧边缘并在安全视野内
+        // 手机屏幕横竖屏旋转或分屏时：按比例还原用户放置的横向位置，
+        // 只有从未自由放置过的波可才回退到贴边停靠，避免旋转一次就被拽回边缘
         val isLeft = !view.facingLeft
-        params.x = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+        val (_, _, savedXRatio) = loadSavedDockConfig()
+        val maxX = (screenWidth - sizePx).coerceAtLeast(0)
+        params.x = if (savedXRatio >= 0f) {
+            (maxX * savedXRatio).toInt().coerceIn(0, maxX)
+        } else {
+            if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
+        }
         val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
         params.y = params.y.coerceIn(minY, maxY)
 
@@ -1223,6 +1311,10 @@ class FloatingPetService : Service() {
         cancelEdgePeeking()
         if (!screenOn || isAppForeground) return
 
+        // 只有真正停在屏幕左右边缘的波可才会探头避让；
+        // 自由放在屏幕中间的波可保持完整可见，不该被边缘动效拽走
+        if (!isPetDockedAtEdge()) return
+
         peekingRunnable = Runnable {
             if (!screenOn || isAppForeground || isStrolling || hasTouchDown) return@Runnable
             val params = pokoParams ?: return@Runnable
@@ -1253,7 +1345,10 @@ class FloatingPetService : Service() {
                 }
                 addListener(object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
-                        isPeeking = true
+                        // Android 在 cancel() 时同样会回调 onAnimationEnd，
+                        // 必须用 isCanceled 区分"探头完成"与"被中途取消"；
+                        // 否则每次按下宠物都会被误判成探头状态并强行拉回边缘
+                        isPeeking = !animation.isCanceled
                     }
                 })
             }
@@ -1262,13 +1357,29 @@ class FloatingPetService : Service() {
         mainHandler.postDelayed(peekingRunnable!!, 5500)
     }
 
+    /** 便捷判断：波可此刻是否正停在屏幕左右边缘附近 */
+    private fun isPetDockedAtEdge(): Boolean {
+        val params = pokoParams ?: return false
+        val density = resources.displayMetrics.density
+        val sizePx = (82 * density).toInt()
+        val (screenWidth, _) = getScreenDimensions()
+        return isDockedAtEdge(params, sizePx, density, screenWidth)
+    }
+
     private fun cancelEdgePeeking() {
         peekingRunnable?.let { mainHandler.removeCallbacks(it) }
         peekingRunnable = null
         peekAnimator?.cancel()
     }
 
-    private fun restoreFromPeeking() {
+    /**
+     * 从探头状态恢复完整可见。
+     *
+     * @param animated false 表示立即归位（手指按下的瞬间使用）：
+     *   归位动画会逐帧改写 params.x，与拖拽的"params.x = initialX + dx"互相覆盖，
+     *   导致宠物起手时在"边缘 ↔ 手指"之间来回跳，表现为按不住、拖不动。
+     */
+    private fun restoreFromPeeking(animated: Boolean = true) {
         cancelEdgePeeking()
         val view = pokoView ?: return
         val params = pokoParams ?: return
@@ -1284,6 +1395,15 @@ class FloatingPetService : Service() {
             val targetX = if (isLeft) edgeThreshold else (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
 
             val startX = params.x
+            if (!animated) {
+                // 立即归位，不再启动动画与拖拽抢写窗口坐标
+                params.x = targetX
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                } catch (_: Exception) {}
+                return
+            }
+
             ValueAnimator.ofFloat(0f, 1f).apply {
                 duration = 200
                 interpolator = OvershootInterpolator(1.8f)
@@ -1411,6 +1531,7 @@ class FloatingPetService : Service() {
             } catch (_: Exception) {}
         }
         actionMenuView = null
+        isActionMenuAttached = false
 
         bubbleView?.let {
             try {

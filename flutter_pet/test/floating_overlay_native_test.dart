@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 ///   - ea7df41 修好：窗口标志用 FLAG_NOT_TOUCH_MODAL + FLAG_LAYOUT_IN_SCREEN
 ///   - 03fc3a9 改坏：为解决「拖到屏幕边缘丢事件」换回 FLAG_LAYOUT_NO_LIMITS，
 ///     顺带丢掉了 FLAG_NOT_TOUCH_MODAL —— 悬浮窗可触达区域失效、触摸命中不到宠物
+///   - 2145509 再改坏：把「仅近边轻吸附」换成「无条件强制磁吸到最近边缘」，
+///     松手必被拽回屏幕边，放哪儿都不算数，用户再次反馈「宠物拖不动」
 ///
 /// 另有两条悬浮宠协同不变量：
 ///   - 双击桌面悬浮猫打开小窝时，桌面悬浮猫必须让位，否则与 App 内的猫叠成两只
@@ -100,6 +102,100 @@ void main() {
       expect(dockGap, isNotNull, reason: '未找到初始停靠间距');
       expect(threshold!, lessThan(dockGap!),
           reason: '吸附阈值($threshold) >= 初始停靠间距($dockGap) 时，用户刚拖动一点点宠物就会被吸回原位，表现为「拖不动」');
+    });
+  });
+
+  group('松手落位：必须允许自由放置，禁止无条件强制吸边', () {
+    test('松手落位函数必须区分「近边吸附」与「自由停留」两条分支', () {
+      final settle = _between(
+        serviceSource,
+        'private fun settleAfterDrag',
+        'private fun isDockedAtEdge',
+      );
+
+      expect(settle, contains('if (!isDockedAtEdge('),
+          reason: '松手时必须先判断是否靠近边缘；未靠近时应原地停留，不能强制拉回屏幕边');
+      expect(settle, contains('saveDockPreference(isLeftHalf, params.x, params.y)'),
+          reason: '自由停留时必须保存当前落点，否则重启后又被拽回边缘');
+    });
+
+    test('拖拽释放必须走自由落位逻辑，而不是无条件磁吸贴边', () {
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->',
+        'private fun refreshPetVisibility',
+      );
+
+      expect(upBranch, contains('settleAfterDrag'),
+          reason: '拖拽释放未走 settleAfterDrag，自由放置能力失效');
+      expect(upBranch, isNot(contains('snapToNearestEdge')),
+          reason: 'snapToNearestEdge 是无条件强制吸边的旧实现，必须彻底移除');
+      expect(serviceSource, isNot(contains('snapToNearestEdge')),
+          reason: '旧的无条件强制吸边实现仍留在代码里，用户松手后宠物必然弹回屏幕边');
+    });
+
+    test('自由放置的横向位置必须持久化，重启与旋转后不得被拽回边缘', () {
+      expect(serviceSource, contains('putFloat("flutter.poko_dock_x_ratio", xRatio)'),
+          reason: '横向落点未持久化，重启后宠物会跳回屏幕边缘');
+      expect(serviceSource, contains('getFloat("flutter.poko_dock_x_ratio", -1f)'),
+          reason: '未读取持久化的横向落点');
+      expect(serviceSource, contains('savedXRatio'),
+          reason: '启动时未按比例还原用户放置的横向位置');
+    });
+
+    test('边缘动效（探头避让 / 自主散步）只能在贴边时触发', () {
+      expect(serviceSource, contains('private fun isDockedAtEdge('),
+          reason: '缺少贴边判定，自由放在屏幕中间的波可会被边缘动效拽走');
+      expect(serviceSource, contains('if (!isPetDockedAtEdge()) return'),
+          reason: '探头避让未做贴边校验，自由放置的波可会被拉出屏幕外');
+      expect(serviceSource, contains('if (!isDockedAtEdge(params, sizePx, density, screenWidth)) return'),
+          reason: '自主边缘散步未做贴边校验');
+    });
+  });
+
+  group('拖拽手感：按下归位 / 长按 / 探头状态三不得互相打架', () {
+    test('按下瞬间必须直接归位，不得用动画与拖拽抢写窗口坐标', () {
+      final downBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_DOWN ->',
+        'MotionEvent.ACTION_MOVE ->',
+      );
+
+      expect(downBranch, contains('restoreFromPeeking(animated = false)'),
+          reason: '按下时若走归位动画，动画会逐帧改写 params.x，与拖拽互相覆盖，表现为起手跳变、按不住');
+    });
+
+    test('探头动画被取消时不得误标记为探头状态', () {
+      expect(serviceSource, contains('isPeeking = !animation.isCanceled'),
+          reason: 'Android 在 cancel() 时同样回调 onAnimationEnd，不区分 isCanceled 会把宠物误判为探头状态，'
+              '导致每次按下都被强行拉回屏幕边');
+    });
+
+    test('长按不得吞掉已经发生拖拽的释放落位', () {
+      final longPressBranch = _between(
+        serviceSource,
+        'if (isLongPressing) {',
+        'if (isClick && event.actionMasked',
+      );
+
+      expect(longPressBranch, contains('if (!hasDragged)'),
+          reason: '长按分支必须只在「完全没有拖动」时才吞掉释放；否则「先按住半秒再拖」与「快速拖」结果不一致');
+    });
+  });
+
+  group('悬浮窗族标志位一致性', () {
+    test('快捷控制菜单窗口必须与宠物窗口一致使用 FLAG_NOT_TOUCH_MODAL', () {
+      final menuWindow = _layoutParamsBlock(serviceSource, 'actionMenuParams = WindowManager.LayoutParams(');
+
+      expect(menuWindow, contains('FLAG_NOT_TOUCH_MODAL'),
+          reason: '菜单窗口缺 FLAG_NOT_TOUCH_MODAL，一旦将来可获焦就会变成触摸模态窗口吞掉整屏点击，宠物彻底拖不动');
+    });
+
+    test('快捷菜单隐藏后必须真正移除窗口，不能一直挂在 WindowManager 上', () {
+      expect(serviceSource, contains('private fun removeActionMenuWindow()'),
+          reason: '缺少移除菜单窗口的逻辑');
+      expect(serviceSource, contains('isActionMenuAttached = false'),
+          reason: '菜单窗口移除后未复位挂载标记，重复 addView 会抛异常被静默吞掉，菜单再也不出现');
     });
   });
 
