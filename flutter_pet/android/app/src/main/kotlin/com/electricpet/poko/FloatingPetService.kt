@@ -1344,11 +1344,18 @@ class FloatingPetService : Service() {
                     } catch (_: Exception) {}
                 }
                 addListener(object : AnimatorListenerAdapter() {
+                    // Android 在 cancel() 时会先回调 onAnimationCancel 再回调 onAnimationEnd，
+                    // 用本地标记区分"探头完成"与"被中途取消"；
+                    // 否则每次按下宠物都会被误判成探头状态并强行拉回边缘。
+                    // 注意：不能用 Animator.isCanceled 判定 —— 它不是公开 SDK API，会编译失败。
+                    private var cancelled = false
+
+                    override fun onAnimationCancel(animation: Animator) {
+                        cancelled = true
+                    }
+
                     override fun onAnimationEnd(animation: Animator) {
-                        // Android 在 cancel() 时同样会回调 onAnimationEnd，
-                        // 必须用 isCanceled 区分"探头完成"与"被中途取消"；
-                        // 否则每次按下宠物都会被误判成探头状态并强行拉回边缘
-                        isPeeking = !animation.isCanceled
+                        isPeeking = !cancelled
                     }
                 })
             }

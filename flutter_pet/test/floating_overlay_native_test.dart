@@ -166,9 +166,20 @@ void main() {
     });
 
     test('探头动画被取消时不得误标记为探头状态', () {
-      expect(serviceSource, contains('isPeeking = !animation.isCanceled'),
-          reason: 'Android 在 cancel() 时同样回调 onAnimationEnd，不区分 isCanceled 会把宠物误判为探头状态，'
-              '导致每次按下都被强行拉回屏幕边');
+      final peekBlock = _between(
+        serviceSource,
+        'private fun scheduleEdgePeeking',
+        'private fun isPetDockedAtEdge',
+      );
+
+      expect(peekBlock, contains('override fun onAnimationCancel(animation: Animator)'),
+          reason: '缺少 onAnimationCancel 回调，无法区分"探头完成"与"被中途取消"；'
+              'Android 在 cancel() 时同样回调 onAnimationEnd，误判会让每次按下都被强行拉回屏幕边');
+      expect(peekBlock, contains('isPeeking = !cancelled'),
+          reason: '探头状态必须结合取消标记判定');
+      expect(serviceSource, isNot(contains('animation.isCanceled')),
+          reason: 'Animator.isCanceled 不是公开 SDK API，使用它会导致 Android 端编译失败'
+              '（已在 CI 的 compileReleaseKotlin 阶段报错）');
     });
 
     test('长按不得吞掉已经发生拖拽的释放落位', () {
