@@ -1,9 +1,15 @@
-// 一次性可视化探针：把波可按真实坐标渲染成 PNG，用来肉眼核对"朝向 / 屁股对着家具"的问题。
+// 一次性可视化探针：把波可按真实坐标渲染成 PNG，用来肉眼核对
+//「朝向 / 尾巴有没有压在家具上」「猫有没有真的面对家具」这类只能看图才能确认的问题。
+//
 // 用法：flutter test tool/render_cat_probe.dart
 // 产物：<系统临时目录>/poko_probe/orientation.png
 //
-// ⚠️ 跑完看到 PROBE_OUT=... 就说明图已经生成，可以直接 Ctrl+C 结束 ——
-//    这个探针渲染完不会自动退出（渲染引擎还占着），别等它。
+// 场景参数与 pet_screen.dart 里的常量保持一致：
+//   猫草   ：站位 = 草心 + 50，盆栽下沉 34px（top = 地板线 + 50），探身 +1
+//   猫抓柱 ：站位 = 柱心 - 78，不下沉，探身 +1
+// 家具一律画在猫之后（前景层），与 App 内新分层一致。
+//
+// ⚠️ 跑完看到 PROBE_OUT=... 就 Ctrl+C 结束（探针不会自动退出）。
 //
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 import 'dart:io';
@@ -21,7 +27,19 @@ const double kCellW = 240;
 const double kCellH = 280;
 const double kFloorTop = 60;
 
-Widget _cat(PetModel model, double petX, double petY, bool facingLeft) {
+// 与 pet_screen.dart 的 _kPlantTopOffset / _kPlantStandOffset / _kPostStandOffset 对齐
+const double kPlantTopOffset = 50.0; // 盆栽 top 相对地板线
+const double kPlantStandOffset = 50.0; // 猫站位距草心
+const double kPostStandOffset = 78.0; // 猫站位距柱心
+
+Widget _cat(
+  PetModel model,
+  double petX,
+  double petY, {
+  required bool facingLeft,
+  required String state,
+  required double focusLean,
+}) {
   return Positioned(
     left: petX - 100,
     top: petY - 100,
@@ -30,8 +48,9 @@ Widget _cat(PetModel model, double petX, double petY, bool facingLeft) {
       painter: PetPainter(
         model: model,
         animTime: 0.35,
-        state: 'IDLE',
+        state: state,
         facingLeft: facingLeft,
+        focusLean: focusLean,
       ),
     ),
   );
@@ -40,14 +59,13 @@ Widget _cat(PetModel model, double petX, double petY, bool facingLeft) {
 Widget _scene({
   required PetModel model,
   required bool grass,
-  required bool facingLeft,
+  required String state,
   required String label,
 }) {
-  // 家具：猫草在左 (left:24)，猫抓柱在右 (right:24)
   final Widget furniture = grass
       ? const Positioned(
           left: 24,
-          top: kFloorTop + 16,
+          top: kFloorTop + kPlantTopOffset,
           child: CatGrassPlanter(isNight: false, plantTilt: 0, onTap: _noop),
         )
       : const Positioned(
@@ -55,8 +73,9 @@ Widget _scene({
           top: kFloorTop + 16,
           child: CatScratchingPost(isNight: false, postWiggle: 0, onTap: _noop),
         );
-  // 猫的落点：猫草 +38（猫在草右边），猫抓柱 -38（猫在柱左边）
-  final double petX = grass ? 48.0 + 38.0 : (kCellW - 48.0) - 38.0;
+  final double petX = grass
+      ? 48.0 + kPlantStandOffset
+      : (kCellW - 48.0) - kPostStandOffset;
   const double petY = kFloorTop + 42.0;
 
   return SizedBox(
@@ -65,14 +84,21 @@ Widget _scene({
     child: Stack(
       children: <Widget>[
         Container(color: const Color(0xFFEDE0CE)),
-        // 木地板
         Positioned(
           left: 0,
           top: kFloorTop,
           child: Container(width: kCellW, height: kCellH - kFloorTop, color: const Color(0xFFD9C3A3)),
         ),
+        _cat(
+          model,
+          petX,
+          petY,
+          facingLeft: grass, // 啃草朝左、磨爪朝右
+          state: state,
+          focusLean: 1.0,
+        ),
+        // ⚠️ 家具在猫之后 = 前景层（猫头不再把猫草整个盖住）
         furniture,
-        _cat(model, petX, petY, facingLeft),
         Positioned(
           left: 4,
           top: 4,
@@ -93,14 +119,10 @@ void main() {
     final ragdoll = PetModel()..skinId = 'cat_ragdoll';
 
     final List<Widget> cells = <Widget>[
-      _scene(model: black, grass: true, facingLeft: true, label: 'BLACK grass | facingLeft=true (现状)'),
-      _scene(model: black, grass: true, facingLeft: false, label: 'BLACK grass | facingLeft=false'),
-      _scene(model: black, grass: false, facingLeft: false, label: 'BLACK post | facingLeft=false (现状)'),
-      _scene(model: black, grass: false, facingLeft: true, label: 'BLACK post | facingLeft=true'),
-      _scene(model: ragdoll, grass: true, facingLeft: true, label: 'RAGDOLL grass | facingLeft=true (现状)'),
-      _scene(model: ragdoll, grass: true, facingLeft: false, label: 'RAGDOLL grass | facingLeft=false'),
-      _scene(model: ragdoll, grass: false, facingLeft: false, label: 'RAGDOLL post | facingLeft=false (现状)'),
-      _scene(model: ragdoll, grass: false, facingLeft: true, label: 'RAGDOLL post | facingLeft=true'),
+      _scene(model: black, grass: true, state: 'EATING', label: 'BLACK grass'),
+      _scene(model: ragdoll, grass: true, state: 'EATING', label: 'RAGDOLL grass'),
+      _scene(model: black, grass: false, state: 'STRETCH_YAWN', label: 'BLACK post'),
+      _scene(model: ragdoll, grass: false, state: 'STRETCH_YAWN', label: 'RAGDOLL post'),
     ];
 
     final key = GlobalKey();

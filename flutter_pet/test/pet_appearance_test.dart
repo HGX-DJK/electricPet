@@ -102,6 +102,64 @@ void main() {
           reason: '用户拍的照片要与系统里程碑区分开');
     });
   });
+
+  group('面对家具：猫必须真的转过去对着猫草 / 猫抓柱', () {
+    test('渲染器必须支持探身参数，并让头往朝向前方偏', () {
+      expect(painterSource, contains('final double focusLean'),
+          reason: '渲染器必须有 focusLean 参数，用来表达"探身面对家具"');
+      expect(painterSource, contains('this.focusLean = 0.0'),
+          reason: 'focusLean 默认必须是 0（不探身），保持待机姿态不变');
+
+      final head = _bodyAfterSignature(painterSource, 'void _drawHead(');
+      expect(head, isNotEmpty, reason: '解析不到 _drawHead 函数体');
+      expect(head, contains('focusLean'),
+          reason: '画头时必须用 focusLean 让脑袋往朝向前方探过去，'
+              '否则波可去啃猫草时依然是正面盯着主人，看不出在跟草互动');
+      expect(head, contains('canvas.rotate'),
+          reason: '探身必须伴随头部侧倾，只平移会显得脖子被拉长');
+    });
+
+    test('探身时视线必须锁定家具', () {
+      expect(painterSource, contains('focusLean'),
+          reason: '视线也要跟着探身走');
+      expect(RegExp(r'gazeX\s*=\s*\(gazeX\s*\+\s*[\d.]+\s*\*\s*focusLean\)').hasMatch(painterSource),
+          isTrue,
+          reason: '探身时瞳孔必须朝目标方向偏移，'
+              '否则猫虽然歪着头、眼睛却还盯着主人，"面对猫草"依然不成立');
+    });
+
+    test('啃草与磨爪都必须开启探身', () {
+      expect(petScreenSource, contains('_setFocusLean(true)'),
+          reason: '啃猫草 / 磨猫抓柱时必须开启探身');
+      expect(petScreenSource, contains('_setFocusLean(false)'),
+          reason: '互动结束后必须把探身收回来，否则会一直歪着头');
+      expect(petScreenSource, contains('focusLean: _focusController.value'),
+          reason: '探身强度必须传给渲染器');
+    });
+
+    test('家具必须画在猫之后（前景层），否则会被猫头整个盖住', () {
+      final painterAt = petScreenSource.indexOf('PetPainter(');
+      expect(painterAt, greaterThan(0), reason: '找不到猫的绘制位置');
+
+      for (final furniture in const <String>['CatGrassPlanter(', 'CatScratchingPost(']) {
+        final at = petScreenSource.indexOf(furniture);
+        expect(at, greaterThan(0), reason: '找不到家具：$furniture');
+        expect(at, greaterThan(painterAt),
+            reason: '$furniture 必须画在猫之后（前景层）。'
+                '波可脑袋宽约 93px、猫草只有 56px 宽，'
+                '家具若在猫之前，猫头会把猫草整个盖住，玩家根本看不见猫在啃什么');
+      }
+    });
+
+    test('猫的站位必须留出距离，不能又贴回家具身上', () {
+      expect(petScreenSource, contains('const double _kPlantStandOffset = 50.0'),
+          reason: '啃草站位距离必须保持 50px：贴太近猫草会被猫头盖死');
+      expect(petScreenSource, contains('const double _kPostStandOffset = 78.0'),
+          reason: '磨爪站位距离必须保持 78px：磨爪时猫趴着伸展，贴太近柱子会被盖死');
+      expect(petScreenSource, contains('const double _kPlantTopOffset = 50.0'),
+          reason: '猫草盆栽必须下沉到地板线 + 50，草叶才落在猫的嘴边高度');
+    });
+  });
 }
 
 /// 定位 Flutter 包根目录（向上查找 pubspec.yaml）
@@ -141,6 +199,41 @@ String _functionBody(String source, String marker) {
     } else if (ch == '}') {
       depth--;
       if (depth == 0) return source.substring(open + 1, i);
+    }
+  }
+  return '';
+}
+
+/// 截取函数**签名之后**的那一对花括号内的内容。
+///
+/// 和 [_functionBody] 的区别：带具名参数的函数（如
+/// `void _drawHead(Canvas c, SkinConfig s, {bool isBackView = false}) {`）
+/// 的签名里就有 `{`，直接找"第一个 {"会取到参数列表而不是函数体。
+String _bodyAfterSignature(String source, String marker) {
+  final start = source.indexOf(marker);
+  if (start < 0) return '';
+  var i = source.indexOf('(', start);
+  if (i < 0) return '';
+  var depth = 0;
+  for (; i < source.length; i++) {
+    final ch = source[i];
+    if (ch == '(') {
+      depth++;
+    } else if (ch == ')') {
+      depth--;
+      if (depth == 0) break;
+    }
+  }
+  final open = source.indexOf('{', i);
+  if (open < 0) return '';
+  depth = 0;
+  for (var j = open; j < source.length; j++) {
+    final ch = source[j];
+    if (ch == '{') {
+      depth++;
+    } else if (ch == '}') {
+      depth--;
+      if (depth == 0) return source.substring(open + 1, j);
     }
   }
   return '';

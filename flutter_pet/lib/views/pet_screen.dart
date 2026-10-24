@@ -69,9 +69,30 @@ class PetScreen extends StatefulWidget {
   State<PetScreen> createState() => _PetScreenState();
 }
 
+/// 猫草盆栽相对房间地板起始线的**下沉量**。
+///
+/// 盆栽原本和猫头齐平，猫头一凑过去就把草整个挡住；
+/// 下沉 34px 后，草叶正好落在波可的嘴边高度（猫低头就能啃到），
+/// 画面上形成"猫低头对着草叶"的互动关系，而不是"猫站在花盆旁边发呆"。
+const double _kPlantTopOffset = 50.0;
+
+/// 波可站到猫草旁边时，与猫草中心的横向距离。
+///
+/// 猫头宽约 93px，猫草只有 56px 宽：贴太近草会被盖死，
+/// 退开 50px 后草基本完整可见，同时低头探身仍能对上草叶。
+const double _kPlantStandOffset = 50.0;
+
+/// 波可站到猫抓柱旁边时，与猫抓柱中心的横向距离。
+///
+/// 磨爪时波可是趴着伸展的（STRETCH_YAWN），身体压得很宽，
+/// 靠太近猫抓柱会被整个盖住；退开 78px 后柱子完整可见，
+/// 头转向柱子的动作也读得清楚。
+const double _kPostStandOffset = 78.0;
+
 class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _idleAnimController;
   late AnimationController _squishController; // 点击戳戳 Q 弹形变控制器
+  late AnimationController _focusController; // 探身朝向家具（猫草 / 猫抓柱）
   late Animation<double> _squishScaleX;
   late Animation<double> _squishScaleY;
 
@@ -301,6 +322,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       TweenSequenceItem(tween: Tween(begin: 0.85, end: 1.06).chain(CurveTween(curve: Curves.easeInOut)), weight: 35),
       TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)), weight: 30),
     ]).animate(_squishController);
+
+    // 探身朝向家具动画（0 = 站直不动，1 = 头与视线完全转过去）
+    _focusController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
 
     // 监听 PetModel 属性变更
     widget.petModel.addListener(_onModelUpdated);
@@ -973,6 +1000,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     widget.petModel.removeListener(_onModelUpdated);
     _idleAnimController.dispose();
     _squishController.dispose();
+    _focusController.dispose();
     _decayTimer?.cancel();
     _dialogueTimer?.cancel();
     _particleTimer?.cancel();
@@ -2192,7 +2220,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     final floorTop = (_lastScreenSize.height * 0.33).clamp(240.0, 290.0);
     const plantCenterX = 24.0 + 24.0;
-    final plantCenterY = floorTop + 16.0 + 26.0;
+    // 盆栽下沉后草叶所在的高度（见 _kPlantTopOffset 注释）
+    final plantCenterY = floorTop + _kPlantTopOffset + 26.0;
+    // 波可站定后的纵坐标：保持不变，才能让猫的嘴边正好对上草叶
+    final plantStandY = floorTop + 42.0;
 
     // 盆栽处飘出鲜嫩草叶与清香微粒子
     _spawnParticles(Offset(plantCenterX, plantCenterY - 10), emoji: '🌿', count: 4);
@@ -2200,17 +2231,40 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnTextParticle(Offset(plantCenterX - 15, plantCenterY - 30), '猫草清香 🌿✨', const Color(0xFF10B981));
 
     // 判断猫咪是否已经在猫草旁边
-    final isNearPlant = (_petX - (plantCenterX + 38.0)).abs() < 60.0 && (_petY - plantCenterY).abs() < 55.0;
+    final isNearPlant =
+        (_petX - (plantCenterX + _kPlantStandOffset)).abs() < 60.0 && (_petY - plantStandY).abs() < 60.0;
 
     if (isNearPlant) {
       _startNibblingGrass(floorTop);
     } else if (walkIfFar && !_isDragging && !widget.petModel.isSleeping) {
       _showDialogueBubble('猫草清香扑鼻~ 迈着小碎步跑过去尝鲜咬一口！🌱🐾', duration: const Duration(seconds: 3), speak: true);
       _startWalkingTo(
-        (plantCenterX + 38.0).clamp(35.0, _lastScreenSize.width - 35.0),
-        plantCenterY,
+        (plantCenterX + _kPlantStandOffset).clamp(35.0, _lastScreenSize.width - 35.0),
+        plantStandY,
         'CAT_GRASS',
         '猫草清香扑鼻~ 波可小步跑过去闻闻咬一小口！🌱😋',
+      );
+    }
+  }
+
+  /// 让波可探身去"面对"它正在啃 / 蹭的那件家具。
+  ///
+  /// 波可是正面朝向的猫，光靠尾巴只能读出朝哪边，读不出它在跟谁互动；
+  /// 所以啃猫草、磨猫抓柱时要把脑袋和眼神一起转过去，
+  /// 看起来才是"低头对着草叶啃"而不是"站在旁边发呆"。
+  void _setFocusLean(bool on) {
+    if (!mounted) return;
+    if (on) {
+      _focusController.animateTo(
+        1.0,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+    } else {
+      _focusController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeInCubic,
       );
     }
   }
@@ -2220,12 +2274,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     _idleSeconds = 0;
     _facingLeft = true;
+    // 把脸转向猫草（头往朝向前方探 + 视线锁定草叶）
+    _setFocusLean(true);
 
     // Phase 1: 凑近轻嗅青草芳香
     _playAction('LOOK_AROUND');
     _vibrate('light');
     const plantCenterX = 24.0 + 24.0;
-    final plantCenterY = floorTop + 16.0 + 26.0;
+    final plantCenterY = floorTop + _kPlantTopOffset + 26.0;
 
     _spawnParticles(Offset(plantCenterX, plantCenterY - 10), emoji: '🌿', count: 3);
     _spawnParticles(Offset(plantCenterX + 10, plantCenterY - 15), emoji: '✨', count: 2);
@@ -2269,6 +2325,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         Timer(const Duration(milliseconds: 1600), () => SoundService.stopPurr());
 
         _playAction('WASH_FACE');
+        // 吃完擦嘴时不必再盯着草叶，把脸转回来
+        _setFocusLean(false);
 
         final grassQuotes = [
           '嗷呜咬下鲜嫩的小草尖！清甜脆嫩，肚肚里的毛球都被消化调理啦~ 🌿😋',
@@ -2332,9 +2390,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final postCenterY = floorTop + 16.0 + 26.0;
 
     // 若猫咪距离猫抓柱较远，迈着欢快小碎步跑过去磨爪
-    if (walkIfFar && ((_petX - postCenterX).abs() > 65.0) && !_isDragging && !widget.petModel.isSleeping) {
+    if (walkIfFar && ((_petX - postCenterX).abs() > 100.0) && !_isDragging && !widget.petModel.isSleeping) {
       _startWalkingTo(
-        (postCenterX - 38.0).clamp(35.0, _lastScreenSize.width - 35.0),
+        (postCenterX - _kPostStandOffset).clamp(35.0, _lastScreenSize.width - 35.0),
         postCenterY,
         'SCRATCHING_POST',
         '迈着欢快的小碎步，跑去右上角剑麻柱磨爪爪啦！🐾🪵',
@@ -2364,9 +2422,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         setState(() {
           _state = 'STRETCH_YAWN';
         });
+        // 把脸转向右侧的猫抓柱（头往朝向前方探 + 视线锁定剑麻柱）
+        _setFocusLean(true);
         _actionTimer = Timer(const Duration(milliseconds: 1800), () {
           if (mounted && _state == 'STRETCH_YAWN') {
             setState(() => _state = 'IDLE');
+            _setFocusLean(false);
           }
         });
       }
@@ -3458,30 +3519,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ),
                   ),
-                  Positioned(
-                    left: 24.0,
-                    top: floorTop + 16.0,
-                    child: AnimatedOpacity(
-                      opacity: _isWardrobeMode ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: IgnorePointer(
-                        ignoring: _isWardrobeMode,
-                        child: CatGrassPlanter(isNight: isNight, plantTilt: _plantTilt, onTap: _onPlantTap),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 24.0,
-                    top: floorTop + 16.0,
-                    child: AnimatedOpacity(
-                      opacity: _isWardrobeMode ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: IgnorePointer(
-                        ignoring: _isWardrobeMode,
-                        child: CatScratchingPost(isNight: isNight, postWiggle: _postWiggle, onTap: _onScratcherTap),
-                      ),
-                    ),
-                  ),
+                  // ⚠️ 猫草盆栽与猫抓柱已挪到**主 Stack 的猫之后**绘制（前景层）。
+                  // 原因：波可脑袋宽约 93px，而猫草盆栽只有 56px 宽，
+                  // 两者一旦挨太近，猫头会把猫草整个盖住 —— 玩家根本看不见猫在啃什么。
+                  // 放到前景层后，猫低头探身去啃时草叶正好搭在它嘴边，"面对猫草"才成立。
                 ],
               ),
 
@@ -3700,6 +3741,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       _hasExceededDragThreshold = true;
                       _isDragging = true;
                       _stopRoaming();
+                      // 主人把猫抓起来了，任何"对着家具"的互动都到此为止
+                      _setFocusLean(false);
                       _isChasingYarn = false;
                       _isYarnFlying = false;
                       if (_state != 'DIZZY') {
@@ -3815,7 +3858,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     });
                   },
                   child: AnimatedBuilder(
-                    animation: Listenable.merge([_idleAnimController, _squishController]),
+                    animation: Listenable.merge([_idleAnimController, _squishController, _focusController]),
                     builder: (context, child) {
                       return Transform.rotate(
                         angle: _bodyTiltAngle,
@@ -3845,12 +3888,45 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                 isNight: isNight,
                                 userScale: _userScale,
                                 tiltX: _tiltX,
+                                focusLean: _focusController.value,
                               ),
                             ),
                           ),
                         ),
                       );
                     },
+                  ),
+                ),
+              ),
+
+              // 软装家具 1 / 2（前景层）：猫草盆栽与猫抓柱
+              //
+              // ⚠️ 必须画在**猫之后**。波可脑袋宽约 93px，猫草盆栽只有 56px 宽，
+              // 两者挨在一起时，猫头会把猫草整个盖住 —— 玩家根本看不见猫在啃什么，
+              // "面对猫草"自然也就无从谈起。放到前景层后，猫低头探身去啃时，
+              // 草叶正好搭在它嘴边，互动关系一眼可辨。
+              // （与「软装家具 3 食盆」的既有分层约定保持一致：落地家具走前景。）
+              Positioned(
+                left: 24.0,
+                top: floorTop + _kPlantTopOffset,
+                child: AnimatedOpacity(
+                  opacity: _isWardrobeMode ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: _isWardrobeMode,
+                    child: CatGrassPlanter(isNight: isNight, plantTilt: _plantTilt, onTap: _onPlantTap),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 24.0,
+                top: floorTop + 16.0,
+                child: AnimatedOpacity(
+                  opacity: _isWardrobeMode ? 0.0 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: _isWardrobeMode,
+                    child: CatScratchingPost(isNight: isNight, postWiggle: _postWiggle, onTap: _onScratcherTap),
                   ),
                 ),
               ),

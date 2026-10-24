@@ -23,6 +23,16 @@ class PetPainter extends CustomPainter {
   final double userScale;    // 双指捏合无级缩放 (0.75x ~ 1.45x)
   final double tiltX;        // 手机加速度计/陀螺仪倾角 (-1.0 ~ 1.0)
 
+  /// 探身朝向目标强度 (0.0 ~ 1.0)
+  ///
+  /// 家具交互（啃猫草 / 磨猫抓柱）时，把脑袋和眼神一起探向它正在面对的那件家具。
+  /// 波可是**正面朝向**的，光靠尾巴只能读出"朝哪边"，读不出"在跟谁互动"，
+  /// 所以必须让头与视线真的转过去，才不会看着像站在旁边发呆。
+  ///
+  /// ⚠️ 渲染器里**局部 +X 恒等于「朝向前方」**（朝向镜像是绘制在最外层的全局变换），
+  /// 所以"朝左啃猫草"和"朝右磨猫抓柱"共用这一套参数即可，不必按左右分别写。
+  final double focusLean;
+
   PetPainter({
     required this.model,
     required this.animTime,
@@ -41,6 +51,7 @@ class PetPainter extends CustomPainter {
     this.isSlowBlink = false,
     this.userScale = 1.0,
     this.tiltX = 0.0,
+    this.focusLean = 0.0,
   });
 
   /// 3D 光影自适应色彩提亮：模拟朝光面高光与次表面散射
@@ -740,6 +751,16 @@ class PetPainter extends CustomPainter {
       // 🐱 追尾巴：小脑瓜聚精会神向内下倾，眼神紧锁侧前方的尾巴尖！
       headCenter = const Offset(-6, -14);
       canvas.rotate(-0.18);
+    }
+
+    // 探身朝向家具（猫草 / 猫抓柱）：头往朝向前方偏过去，并随之侧倾。
+    // 局部 +X 恒等于朝向前方，所以这一段对"朝左啃草"和"朝右磨爪"同时生效。
+    if (focusLean > 0) {
+      canvas.rotate(0.13 * focusLean);
+      headCenter = Offset(
+        headCenter.dx + 17.0 * focusLean,
+        headCenter.dy + 9.0 * focusLean,
+      );
     }
 
     // 耳朵绘制：每 5.5 秒自然机敏抖耳，摸头时高频微颤，触摸单耳独立高频弹颤
@@ -1536,6 +1557,13 @@ class PetPainter extends CustomPainter {
       // 玩毛线球：专注低头盯球，瞳孔随球在双爪间快速晃动
       gazeX = math.sin(animTime * 7.0) * 3.5;
       gazeY = 4.2;
+    }
+
+    if (touchPos == null && focusLean > 0) {
+      // 探身啃草 / 磨爪时，瞳孔要锁定那件家具，别再直勾勾盯着主人看。
+      // gazeX 正向 = 看向朝向前方（局部 +X），gazeY 正向 = 视线下移。
+      gazeX = (gazeX + 4.2 * focusLean).clamp(-5.0, 5.0);
+      gazeY = (gazeY + 2.6 * focusLean).clamp(-4.0, 4.5);
     }
 
     final eyeList = [
