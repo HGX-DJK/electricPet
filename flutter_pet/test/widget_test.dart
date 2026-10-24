@@ -214,14 +214,15 @@ void main() {
     expect(catPaintFinder, findsWidgets);
 
     // 2. 测试揪尾巴微互动 (Tail Boop / Pinch & Puff)
-    // 寻找小猫 GestureDetector 并点击小猫右侧尾巴区域 (相对于 200x200 画布的 offset (160, 95))
+    // 尾巴永远拖在"身后"（与朝向相反的一侧）：默认朝右时尾巴在**左**边，
+    // 所以这里点的是小猫左侧的尾巴区域 (相对于 200x200 画布的 offset (35, 95))
     final catFinder = find.byWidgetPredicate(
       (w) => w is GestureDetector && w.child is AnimatedBuilder,
     );
     expect(catFinder, findsOneWidget);
 
     final catTopLeft = tester.getTopLeft(catFinder);
-    final tailTapTarget = Offset(catTopLeft.dx + 160.0, catTopLeft.dy + 95.0);
+    final tailTapTarget = Offset(catTopLeft.dx + 35.0, catTopLeft.dy + 95.0);
     await tester.tapAt(tailTapTarget);
     await tester.pump(const Duration(milliseconds: 500));
 

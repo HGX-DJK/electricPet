@@ -2941,8 +2941,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     }
 
     // 0. 揪尾巴炸毛微互动 (Tail Boop / Pinch - 尾巴敏感禁区惊跳炸毛与高频电波甩尾)
-    final isTailTouch = (!_facingLeft && localPos.dx >= 135 && localPos.dx <= 192 && localPos.dy >= 55 && localPos.dy <= 135) ||
-                        (_facingLeft && localPos.dx >= 8 && localPos.dx <= 65 && localPos.dy >= 55 && localPos.dy <= 135);
+    // 尾巴永远拖在"身后"（与朝向相反的一侧）：朝右时尾巴在左，朝左时尾巴在右
+    final isTailTouch = (!_facingLeft && localPos.dx >= 8 && localPos.dx <= 65 && localPos.dy >= 55 && localPos.dy <= 135) ||
+                        (_facingLeft && localPos.dx >= 135 && localPos.dx <= 192 && localPos.dy >= 55 && localPos.dy <= 135);
     if (isTailTouch) {
       _triggerTailBoop();
       return;

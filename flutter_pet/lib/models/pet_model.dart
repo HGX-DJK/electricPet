@@ -31,6 +31,71 @@ class SkinConfig {
   });
 }
 
+/// 一条真实的时光纪念。
+///
+/// 既包括系统自动记下的成长里程碑（第一次喂食、升级、换装、陪伴满 N 天…），
+/// 也包括用户自己拍下的「今日纪念照」—— 全部落盘，重启还在。
+///
+/// 以前这个相册是五张写死的假卡片，日期也是编的，
+/// 「拍下一张今日纪念照」按钮只播了个音效，什么也没存 —— 毫无实际意义。
+class MemoryEntry {
+  /// 去重键：里程碑用稳定 id（如 `level_3`），快照用时间戳
+  final String id;
+  final String title;
+  final String note;
+  final String emoji;
+  final String badge;
+
+  /// 发生时间（毫秒）
+  final int timestamp;
+
+  /// 记录当时的品种
+  final String skinId;
+
+  /// true = 用户亲手拍的快照；false = 系统自动记下的里程碑
+  final bool isSnapshot;
+
+  const MemoryEntry({
+    required this.id,
+    required this.title,
+    required this.note,
+    required this.emoji,
+    required this.badge,
+    required this.timestamp,
+    required this.skinId,
+    this.isSnapshot = false,
+  });
+
+  Map<String, dynamic> toMap() => <String, dynamic>{
+        'id': id,
+        'title': title,
+        'note': note,
+        'emoji': emoji,
+        'badge': badge,
+        'timestamp': timestamp,
+        'skinId': skinId,
+        'isSnapshot': isSnapshot,
+      };
+
+  static MemoryEntry fromMap(Map<String, dynamic> m) => MemoryEntry(
+        id: (m['id'] ?? '') as String,
+        title: (m['title'] ?? '') as String,
+        note: (m['note'] ?? '') as String,
+        emoji: (m['emoji'] ?? '🐾') as String,
+        badge: (m['badge'] ?? '纪念') as String,
+        timestamp: (m['timestamp'] as num?)?.toInt() ?? 0,
+        skinId: (m['skinId'] ?? '') as String,
+        isSnapshot: (m['isSnapshot'] as bool?) ?? false,
+      );
+
+  /// 真实日期（YYYY.MM.DD）
+  String get dateText {
+    final d = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    return '${d.year}.${d.month.toString().padLeft(2, '0')}.'
+        '${d.day.toString().padLeft(2, '0')}';
+  }
+}
+
 /// 萌宠核心属性与成长模型
 class PetModel extends ChangeNotifier {
   static const Map<String, SkinConfig> availableSkins = {
@@ -244,6 +309,122 @@ class PetModel extends ChangeNotifier {
     final diffMs = DateTime.now().millisecondsSinceEpoch - birthTime;
     if (diffMs <= 0) return 1;
     return math.max(1, (diffMs / 86400000).floor() + 1);
+  }
+
+  // ---------- 时光纪念相册（真实记录，落盘持久化） ----------
+
+  /// 纪念相册内容，**最新在前**
+  final List<MemoryEntry> memories = <MemoryEntry>[];
+
+  /// 相册最多保留多少条（超出的从最旧开始丢）
+  static const int maxMemories = 80;
+
+  /// 上次检查陪伴天数里程碑时的天数（避免每秒重复扫描）
+  int _lastMilestoneDays = 0;
+
+  /// 记一条纪念（同一个 id 只记一次）。
+  ///
+  /// [timestamp] 允许传入"这件事真正发生的时间"——
+  /// 比如陪伴满 7 天是第 7 天的事，补记时也要写第 7 天的日期，而不是今天。
+  void recordMemory({
+    required String id,
+    required String title,
+    required String note,
+    required String emoji,
+    required String badge,
+    int? timestamp,
+  }) {
+    if (memories.any((m) => m.id == id)) return;
+    _insertMemory(
+      MemoryEntry(
+        id: id,
+        title: title,
+        note: note,
+        emoji: emoji,
+        badge: badge,
+        timestamp: timestamp ?? DateTime.now().millisecondsSinceEpoch,
+        skinId: skinId,
+      ),
+    );
+    notifyListeners();
+    saveToDisk();
+  }
+
+  /// 按时间倒序插入纪念（最新的在最前面；补记的旧里程碑会回到它该在的位置）
+  void _insertMemory(MemoryEntry entry) {
+    // 用 <= 而不是 <：同一毫秒内发生的两件事（如"初遇"和"第一张快照"），
+    // 后来的那条必须排在前面，否则"最新在最前"会在毫秒边界上翻车。
+    var index = memories.indexWhere((m) => m.timestamp <= entry.timestamp);
+    if (index < 0) index = memories.length;
+    memories.insert(index, entry);
+    if (memories.length > maxMemories) {
+      memories.removeRange(maxMemories, memories.length);
+    }
+  }
+
+  /// 拍一张「今日纪念照」——真的会进相册、也会存盘。
+  MemoryEntry takeSnapshot() {
+    final now = DateTime.now();
+    final skin = currentSkin;
+    final state = _stateLine();
+    final entry = MemoryEntry(
+      id: 'snap_${now.millisecondsSinceEpoch}',
+      title: '${now.month} 月 ${now.day} 日 · ${skin.name}',
+      note: '今天的我，是$skin.name。$state',
+      emoji: skin.icon,
+      badge: '今日纪念',
+      timestamp: now.millisecondsSinceEpoch,
+      skinId: skinId,
+      isSnapshot: true,
+    );
+    _insertMemory(entry);
+    notifyListeners();
+    saveToDisk();
+    return entry;
+  }
+
+  /// 一句话描述当前状态（拍立得手账用）
+  String _stateLine() {
+    if (isSleeping) return '正缩在暖垫上呼呼大睡，梦里大概全是小鱼干～';
+    if (hunger < 35) return '肚子咕咕叫着想吃小鱼干，胡须都耷拉下来了～';
+    if (cleanliness < 40) return '毛上沾了点灰，得找个时间好好搓个澡～';
+    if (mood < 40) return '有点小失落，蹭蹭你的手心就会好起来～';
+    return '今天状态满满，尾巴翘得老高，元气满满地陪着你！';
+  }
+
+  /// 检查羁绊阶段里程碑（阶段提升时记一条）
+  void _syncBondMilestone() {
+    final bond = intimacyBondInfo;
+    final stage = bond['stage'] as int;
+    recordMemory(
+      id: 'bond_$stage',
+      title: '羁绊进阶 · ${bond['title']}',
+      note: '${bond['desc']}从这一刻起，我开始叫你「${bond['ownerTitle']}」啦！',
+      emoji: bond['icon'] as String,
+      badge: '羁绊$stage阶段',
+    );
+  }
+
+  /// 检查陪伴天数里程碑（第 7 / 30 / 100 / 365 天）
+  void _syncDayMilestones() {
+    if (birthTime <= 0) return;
+    final days = totalDays;
+    if (days == _lastMilestoneDays) return;
+    _lastMilestoneDays = days;
+    const marks = <int>[7, 30, 100, 365];
+    for (final d in marks) {
+      if (days < d) continue;
+      // 写第 d 天那天真正发生的时间，而不是补记的今天
+      final at = birthTime + (d - 1) * 86400000;
+      recordMemory(
+        id: 'days_$d',
+        title: '相伴第 $d 天',
+        note: '已经和你一起走过 $d 天啦！每一天的投喂、摸头、磨爪，我都记在心里 💖',
+        emoji: d >= 100 ? '🎉' : '📅',
+        badge: '陪伴里程碑',
+        timestamp: at,
+      );
+    }
   }
 
   bool isSleeping = false;
@@ -532,6 +713,7 @@ class PetModel extends ChangeNotifier {
     intimacy += amount;
     notifyListeners();
     saveToDisk();
+    _syncBondMilestone();
   }
 
   void addCleanliness(double amount) {
@@ -561,6 +743,17 @@ class PetModel extends ChangeNotifier {
     weight += 0.02;
     addExp(food['exp'] as double);
 
+    // 第一次被投喂 —— 这是最该被记住的一刻
+    if (totalFedCount == 1) {
+      recordMemory(
+        id: 'first_feed',
+        title: '第一口小鱼干',
+        note: '你把${food['name']}递到我嘴边！第一口鱼干嘎吱嘎吱，尾巴当场翘成了问号 🐟',
+        emoji: '🐟',
+        badge: '第一次投喂',
+      );
+    }
+
     final pers = food['personality'] as List<dynamic>?;
     if (pers != null && pers.length == 2) {
       addPersonalityPoint(pers[0] as String, pers[1] as int);
@@ -579,6 +772,7 @@ class PetModel extends ChangeNotifier {
     addPersonalityPoint('sport', 1);
     notifyListeners();
     saveToDisk();
+    _syncBondMilestone();
   }
 
   /// 洗澡清洁
@@ -586,6 +780,14 @@ class PetModel extends ChangeNotifier {
     cleanliness = 100.0;
     mood = (mood + 10.0).clamp(0.0, 100.0);
     addExp(15.0);
+    // 第一次被搓澡 —— 也是一条值得记住的纪念
+    recordMemory(
+      id: 'first_wash',
+      title: '第一次搓澡澡',
+      note: '被你按在小盆里搓得蓬松又干净，抖了抖水珠，假装生气地喵了一声 🫧',
+      emoji: '🫧',
+      badge: '第一次洗澡',
+    );
     notifyListeners();
     saveToDisk();
   }
@@ -639,7 +841,19 @@ class PetModel extends ChangeNotifier {
   /// 切换皮肤
   void setSkin(String newSkinId) {
     if (availableSkins.containsKey(newSkinId)) {
+      final previousSkinId = skinId;
       skinId = newSkinId;
+      // 第一次换上这个品种 —— 衣橱里的每一款，都值得留一张纪念
+      final skin = availableSkins[newSkinId]!;
+      recordMemory(
+        id: 'skin_$newSkinId',
+        title: '第一次换上${skin.name}',
+        note: previousSkinId == newSkinId
+            ? '又换上了${skin.name}，镜子里依然是那个最熟悉的毛茸茸～'
+            : '换上了${skin.name}！${skin.desc}',
+        emoji: skin.icon,
+        badge: '新造型',
+      );
       notifyListeners();
       saveToDisk();
       // 实时同步到桌面悬浮宠：所有换品种入口（衣橱弹窗/换装坞）都汇聚到这里，
@@ -665,9 +879,18 @@ class PetModel extends ChangeNotifier {
       level += 1;
       intimacy += 25;
       coins += 20; // 升级奖励 20 赛博金币
+      // 升级的瞬间就是一条值得记住的里程碑
+      recordMemory(
+        id: 'level_$level',
+        title: '升级啦 · Lv.$level',
+        note: '经验攒满，升级到 Lv.$level！还奖励了 20 枚赛博金币，尾巴当场翘成了问号 ✨',
+        emoji: '⭐',
+        badge: '等级里程碑',
+      );
     }
     notifyListeners();
     saveToDisk();
+    _syncBondMilestone();
   }
 
   /// 时间流逝状态扣减 (每秒调用)
@@ -682,6 +905,8 @@ class PetModel extends ChangeNotifier {
       energy = (energy - dt * decayRates['energy']!).clamp(0.0, 100.0);
     }
     notifyListeners();
+    // 陪伴天数的里程碑（每跨过一天才检查一次）
+    _syncDayMilestones();
   }
 
   /// 离线期间的状态补算：按 stateSavedAt 推算流逝时长并扣减。
@@ -735,6 +960,7 @@ class PetModel extends ChangeNotifier {
       'enableHaptics': enableHaptics,
       'enableFootprints': enableFootprints,
       'userScale': userScale,
+      'memories': memories.map((m) => m.toMap()).toList(),
     };
   }
 
@@ -777,6 +1003,16 @@ class PetModel extends ChangeNotifier {
     enableHaptics = data['enableHaptics'] ?? enableHaptics;
     enableFootprints = data['enableFootprints'] ?? enableFootprints;
     userScale = (data['userScale'] as num?)?.toDouble() ?? userScale;
+    // 时光纪念相册：真实记录，跟着存档一起走
+    if (data['memories'] != null) {
+      final loaded = (data['memories'] as List<dynamic>)
+          .whereType<Map<String, dynamic>>()
+          .map(MemoryEntry.fromMap)
+          .toList();
+      memories
+        ..clear()
+        ..addAll(loaded);
+    }
   }
 
   void restoreFromData(Map<String, dynamic> data) {
@@ -818,6 +1054,15 @@ class PetModel extends ChangeNotifier {
         notifyListeners();
       } else {
         isFreshInstall = true;
+        // 第一次相遇 —— 相册的第一张，也是最有分量的一张
+        recordMemory(
+          id: 'meet',
+          title: '初遇的那天',
+          note: '你第一次把我领进这个温暖的房间。我睁着大大的水灵眼睛，怯生生地打量着四周 —— 从今天起，我就是你的波可啦。',
+          emoji: '🐱',
+          badge: '初入家门',
+          timestamp: birthTime > 0 ? birthTime : DateTime.now().millisecondsSinceEpoch,
+        );
       }
     } catch (_) {
       isFreshInstall = true;

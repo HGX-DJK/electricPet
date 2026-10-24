@@ -1163,8 +1163,8 @@ class PokoPetView(context: Context) : View(context) {
         val headW = 27f * density
         val headH = 21f * density
 
-        // 尾巴：身体右后方的尾巴
-        val tailX = cx + 13f * density
+        // 尾巴：身体**后方**的尾巴（尾巴永远拖在身后，见 drawTail 的局部镜像）
+        val tailX = cx - 13f * density
         val tailY = cy + 12f * density
         if (abs(lx - tailX) < 20f * density && abs(y - tailY) < 18f * density) {
             return TouchZone.TAIL
@@ -1545,6 +1545,17 @@ class PokoPetView(context: Context) : View(context) {
     }
 
     private fun drawTail(canvas: Canvas, cx: Float, cy: Float) {
+        // ⚠️ 尾巴必须永远拖在**身后**（与朝向相反的一侧）。
+        //
+        // 桌面悬浮猫是正面朝向的，整只猫里唯一能表达"朝哪边"的就是尾巴的位置 ——
+        // 尾巴在哪边，就读成"屁股朝哪边"。以前尾巴和朝向画在**同一侧**，
+        // 看起来就是"屁股对着用户"，非常出戏。
+        //
+        // 这里对尾巴做一次局部水平镜像（绕身体中心），让它始终待在反方向：
+        // 朝左时尾巴在右，朝右时尾巴在左 —— 符合"尾巴拖在身后"的直觉。
+        canvas.save()
+        canvas.scale(-1f, 1f, cx, cy)
+
         val tailBaseX = cx + 13f * density
         val tailBaseY = cy + 12f * density
         // tailAngle 是动作本身带的尾巴角度，tailSwingAngle 是拖拽惯性的额外摆动
@@ -1575,6 +1586,8 @@ class PokoPetView(context: Context) : View(context) {
         }
         tipPaint.color = tipColor
         canvas.drawCircle(tailTipX, tailTipY, 4.4f * density, tipPaint)
+
+        canvas.restore() // 结束尾巴的局部镜像
     }
 
     private fun drawBody(canvas: Canvas, cx: Float, cy: Float) {

@@ -299,6 +299,18 @@ class PetPainter extends CustomPainter {
   }
 
   void _drawTail(Canvas canvas, SkinConfig skin) {
+    // ⚠️ 尾巴必须永远拖在**身后**（与朝向相反的一侧）。
+    //
+    // 波可是正面朝向的，整只猫里唯一能表达"朝哪边"的就是尾巴的位置 ——
+    // 尾巴在哪边，就读成"屁股朝哪边"。以前尾巴和朝向画在**同一侧**，
+    // 于是波可去啃左边的猫草、去磨右边的猫抓柱时，尾巴正好压在那件家具上，
+    // 看起来就是"屁股对着家具"，非常出戏。
+    //
+    // 这里对尾巴做一次局部水平镜像（绕猫身中心），让它始终待在反方向：
+    // 朝左时尾巴在右，朝右时尾巴在左 —— 符合"尾巴拖在身后"的直觉。
+    canvas.save();
+    canvas.scale(-1, 1);
+
     // 尾巴摆动速率：真实猫尾双正弦波涟漪摆动；若炸毛则受惊高频电波震颤 (Puffed tail tremor)
     double tailWag;
     if (isTailPuffed) {
@@ -450,6 +462,8 @@ class PetPainter extends CustomPainter {
                 : Offset(52 + tailWag, -25)));
     final double tipRadius = isLonghair ? 12.0 : (isOtter ? 9.5 : (isSleek ? 4.5 : 7.0));
     canvas.drawCircle(tipOffset, tipRadius, tipPaint);
+
+    canvas.restore(); // 结束尾巴的局部镜像
   }
 
   void _drawBody(Canvas canvas, SkinConfig skin, {bool isBackView = false}) {
