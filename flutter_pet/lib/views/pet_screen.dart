@@ -4021,6 +4021,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 nestY: nestY,
                 petX: _petX,
                 petY: _petY,
+                screenWidth: screenSize.width,
                 isNight: isNight,
                 isCoveredWithBlanket: _isCoveredWithBlanket,
                 idleAnimation: _idleAnimController,

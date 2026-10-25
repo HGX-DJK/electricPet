@@ -87,6 +87,13 @@ class PokoBackpackDrawer extends StatelessWidget {
             const SizedBox(height: 12),
 
             // 2. 标题栏与实时健康状态小胶囊 + 资产看板
+            //
+            // ⚠️ 这里必须拆成两行。
+            // 旧版把「标题 + 状态胶囊 + 金币 + 桌面悬浮 + 关闭」全塞进同一个 Row：
+            // 胶囊们是固定宽度的非弹性子项，合计约 210px，而 390dp 手机上这一行
+            // 只剩约 110px —— 于是标题「波可的奇妙背包」被压成 22px，屏幕上只剩
+            // 一个省略号；再窄一点（360/320dp）整行还会直接溢出。
+            // 现在标题独占一行，胶囊们下沉一行，各得其所。
             Row(
               children: [
                 Container(
@@ -104,45 +111,20 @@ class PokoBackpackDrawer extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              '波可的奇妙背包',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isNight ? Colors.white : const Color(0xFF1E293B),
-                                letterSpacing: 0.3,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.25 : 0.12),
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.4),
-                              ),
-                            ),
-                            child: Text(
-                              model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 1),
                       Text(
-                        '日常照料、逗猫玩具与生活贴心工具',
+                        '波可的奇妙背包',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? Colors.white : const Color(0xFF1E293B),
+                          letterSpacing: 0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '日常照料与逗猫玩具',
                         style: TextStyle(
                           fontSize: 11,
                           color: isNight
@@ -155,69 +137,27 @@ class PokoBackpackDrawer extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                // 3. 实时能量币资产看板胶囊
+                const SizedBox(width: 8),
+                // 实时健康状态小胶囊
                 Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.25 : 0.12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
-                      width: 1.0,
+                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('🪙', style: TextStyle(fontSize: 12)),
-                      const SizedBox(width: 3.5),
-                      Text(
-                        '${model.coins}',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // 4. 全局桌面悬浮宠快捷开关
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onToggleFloating();
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                    decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.6),
-                        width: 1.0,
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('📱', style: TextStyle(fontSize: 12)),
-                        SizedBox(width: 3.5),
-                        Text(
-                          '桌面悬浮',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF6366F1),
-                          ),
-                        ),
-                      ],
+                  child: Text(
+                    model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => Navigator.of(context).pop(),
                   child: Container(
@@ -244,7 +184,76 @@ class PokoBackpackDrawer extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+
+            // 2.1 资产与桌面端联动胶囊行 (右对齐)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // 3. 实时能量币资产看板胶囊
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text('🪙', style: TextStyle(fontSize: 12)),
+                      const SizedBox(width: 3.5),
+                      Text(
+                        '${model.coins}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // 4. 全局桌面悬浮宠快捷开关
+                GestureDetector(
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onToggleFloating();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: isNight ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.6),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('📱', style: TextStyle(fontSize: 12)),
+                        SizedBox(width: 3.5),
+                        Text(
+                          '桌面悬浮',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF6366F1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
 
             // 3. 规整清爽 6 宫格功能卡片矩阵 (2列 x 3行，无冗余去重)
             GridView.count(
@@ -259,7 +268,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 _BackpackCard(
                   icon: '🍱',
                   title: '美味投喂',
-                  subtitle: '补充饱腹与好感经验',
+                  subtitle: '饱腹又涨好感',
                   badgeText: '${model.hunger.toInt()}%',
                   badgeColor: const Color(0xFFF59E0B),
                   accentColor: const Color(0xFFF59E0B),
@@ -270,10 +279,12 @@ class PokoBackpackDrawer extends StatelessWidget {
                   },
                 ),
                 // 2. 神奇激光笔逗猫 (全新超高趣味交互)
+                // 标题压在 4 字以内：卡片右半区还要给「新玩具」角标留位置，
+                // 5 个字的标题在 360dp 窄屏上会被角标挤成省略号。
                 _BackpackCard(
                   icon: '🔴',
-                  title: '神奇激光笔',
-                  subtitle: '指尖红点，小猫疯狂飞扑',
+                  title: '激光笔',
+                  subtitle: '红点逗猫飞扑',
                   badgeText: '新玩具',
                   badgeColor: const Color(0xFFEF4444),
                   accentColor: const Color(0xFFEF4444),
@@ -287,7 +298,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 _BackpackCard(
                   icon: '🧶',
                   title: '抛毛线球',
-                  subtitle: '抛弹毛线球追逐打滚',
+                  subtitle: '抛球满地打滚',
                   accentColor: const Color(0xFFEC4899),
                   isNight: isNight,
                   onTap: () {
@@ -299,7 +310,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 _BackpackCard(
                   icon: '🫧',
                   title: '泡泡沐浴',
-                  subtitle: '草莓香波洗香香提升心情',
+                  subtitle: '香波洗香香',
                   badgeText: '${model.energy.toInt()}%',
                   badgeColor: const Color(0xFF10B981),
                   accentColor: const Color(0xFF10B981),
@@ -313,7 +324,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 _BackpackCard(
                   icon: model.isSleeping ? '☀️' : '🌙',
                   title: model.isSleeping ? '唤醒波可' : '伴眠哄睡',
-                  subtitle: model.isSleeping ? '元气满满起床迎接主人' : '进入呼噜呼噜甜甜梦乡',
+                  subtitle: model.isSleeping ? '元气满满起床' : '呼噜甜甜梦乡',
                   accentColor: const Color(0xFF6366F1),
                   isNight: isNight,
                   onTap: () {
@@ -325,7 +336,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                 _BackpackCard(
                   icon: '📝',
                   title: '贴心便签',
-                  subtitle: '生活备忘与灵感待办',
+                  subtitle: '生活备忘待办',
                   badgeText: memoCount > 0 ? '$memoCount 条' : null,
                   badgeColor: const Color(0xFFEAB308),
                   accentColor: const Color(0xFFEAB308),
@@ -620,6 +631,10 @@ class _BackpackCardState extends State<_BackpackCard> {
                       ],
                     ),
                     const SizedBox(height: 2),
+                    // 副标题宽度预算：2 列宫格在 320dp 窄屏上，卡片右半区只剩
+                    // 约 75px，扣掉 9.5px 字号 → 最多 7 个全角汉字。
+                    // 所以文案统一压在 6 字以内留出余量，超了会被省略号切掉
+                    // （见 test/mobile_features_test.dart 的守门断言）。
                     Text(
                       widget.subtitle,
                       style: TextStyle(

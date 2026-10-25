@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -487,6 +488,117 @@ void main() {
       await tester.tap(find.text('导入口令恢复'), warnIfMissed: false);
       await tester.pump();
       expect(didPaste, isTrue);
+    });
+
+    testWidgets('Backpack Drawer Text Stays Fully Visible On Narrow Screens', (WidgetTester tester) async {
+      // 背景：背包抽屉是 2 列宫格，卡片内还得让出 38px 图标块 + 8px 间距，
+      // 副标题真正能用的宽度在 320dp 窄屏上只剩约 75px（≈ 7 个全角汉字）。
+      // 文案一旦写长，免不掉被省略号切掉半个字 —— 这里逐档屏宽守住这条线。
+      // 抽屉标题栏同理：胶囊们曾把标题挤成一条省略号，这里一并守住。
+      const cardSubtitles = [
+        '饱腹又涨好感',
+        '红点逗猫飞扑',
+        '抛球满地打滚',
+        '香波洗香香',
+        '呼噜甜甜梦乡',
+        '生活备忘待办',
+      ];
+      const headerTexts = [
+        '波可的奇妙背包',
+        '日常照料与逗猫玩具',
+      ];
+      // 只守「无角标」卡片的标题：带 % 数字角标的卡片，测试字体里数字是 1em
+      // （真机是 0.55em），拿测试环境当基准会误报。
+      const badgeFreeTitles = [
+        '抛毛线球',
+        '伴眠哄睡',
+      ];
+      // 带角标的标题只有 360dp 以上才守：320dp 上 2 列宫格卡片的右半区只剩
+      // ~32px，放不下「标题 + 角标」，真机同样会省略号截断，属该宽度的固有取舍。
+      const badgeTitles = [
+        '激光笔',
+      ];
+
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      for (final width in [320.0, 360.0, 390.0]) {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1.0;
+
+        final pet = PetModel();
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: PokoBackpackDrawer(
+                model: pet,
+                isNight: false,
+                memoCount: 0,
+                onFeedTap: () {},
+                onLaserTap: () {},
+                onTeaseTap: () {},
+                onMemoTap: () {},
+                onBathTap: () {},
+                onSleepTap: () {},
+                onToggleFloating: () {},
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final texts = <String>[
+          ...headerTexts,
+          ...badgeFreeTitles,
+          ...cardSubtitles,
+          if (width >= 360) ...badgeTitles,
+        ];
+        for (final text in texts) {
+          final finder = find.text(text);
+          expect(finder, findsOneWidget, reason: '${width}dp 屏上找不到「$text」');
+          final paragraph = tester.renderObject<RenderParagraph>(finder);
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '${width}dp 屏上「$text」被省略号截断了',
+          );
+        }
+      }
+    });
+
+    testWidgets('Tuck-in Blanket Chip Always Stays Clear Of The Cat Body', (WidgetTester tester) async {
+      // 背景：「盖被被」粉色胶囊徽标曾被钉死在 nestX + 48，而波可默认就趴在
+      // 圆垫正中心（petX ≈ nestX），猫身半宽约 50px —— 徽标左缘直接切进猫身右缘，
+      // 看上去就是「一枚粉色胶囊黏在猫身上」。现在徽标跟着猫的实际站位走。
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      await tester.pumpWidget(const DesktopElectricPetApp());
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final chip = find.byKey(const ValueKey('tuck_in_blanket_button'));
+      expect(chip, findsOneWidget, reason: '波可趴在窝上时应当出现「盖被被」徽标');
+
+      final petFinder = find.byWidgetPredicate((w) => w is CustomPaint && w.painter is PetPainter);
+      expect(petFinder, findsOneWidget);
+
+      final chipRect = tester.getRect(chip);
+      final petRect = tester.getRect(petFinder);
+
+      // 猫身半宽约 50px（200×200 画布内的实际绘制范围），徽标左缘至少要让开 60px
+      expect(
+        chipRect.left,
+        greaterThanOrEqualTo(petRect.center.dx + 60),
+        reason: '「盖被被」徽标压到波可身上了（猫心 x=${petRect.center.dx}，徽标左缘 x=${chipRect.left}）',
+      );
+      // 同时不能顶出屏幕右边界
+      expect(chipRect.right, lessThanOrEqualTo(392));
     });
 
     test('MiniMax AI Service Configuration and Local Companion Engine Test', () async {

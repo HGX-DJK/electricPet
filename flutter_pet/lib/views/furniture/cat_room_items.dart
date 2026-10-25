@@ -746,6 +746,7 @@ class CoveredBlanket extends StatelessWidget {
   final double nestY;
   final double petX;
   final double petY;
+  final double screenWidth;
   final bool isNight;
   final bool isCoveredWithBlanket;
   final Animation<double> idleAnimation;
@@ -759,6 +760,7 @@ class CoveredBlanket extends StatelessWidget {
     required this.nestY,
     required this.petX,
     required this.petY,
+    required this.screenWidth,
     required this.isNight,
     required this.isCoveredWithBlanket,
     required this.idleAnimation,
@@ -775,10 +777,26 @@ class CoveredBlanket extends StatelessWidget {
     }
 
     if (!isCoveredWithBlanket) {
+      // 「盖被被」胶囊徽标的落位 —— 铁律：**绝不能压到波可本体**。
+      //
+      // ⚠️ 旧实现把徽标钉死在 nestX + 48，可波可默认就趴在圆垫正中心
+      // （petX ≈ nestX），而猫身半宽约 50px —— 徽标左缘正好切进猫身右缘，
+      // 看上去就是「一枚粉色胶囊黏在猫身上」，胡须也被压住。
+      // 现在改成跟着猫的实际站位来算，三重保险：
+      //   1) 下限：猫身右缘 + 安全留白，任何站位都留得出空隙；
+      //   2) 兜底：贴着圆垫右下角，视觉上像别在窝边上；
+      //   3) 上限：夹进屏幕右边界，窄屏也不会溢出。
+      const chipWidth = 58.0; // 胶囊实际宽度（含左右各 7px 内边距）
+      const catHalfWidth = 52.0; // 猫身半宽（含耳朵余量）
+      const chipGap = 8.0; // 猫身与胶囊之间的安全留白
+      final chipLeft = math.min(
+        math.max(nestX + 72.0, petX + catHalfWidth + chipGap),
+        screenWidth - chipWidth - 10.0,
+      );
       return Positioned(
         key: const ValueKey('tuck_in_blanket_button'),
-        left: nestX + 48,
-        top: nestY + 28,
+        left: chipLeft,
+        top: nestY + 30,
         child: AnimatedOpacity(
           opacity: isWardrobeMode ? 0.0 : 1.0,
           duration: const Duration(milliseconds: 200),

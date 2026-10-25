@@ -76,10 +76,10 @@ void main() {
     // 验证抽屉内去重：不再包含衣橱与绝活，保持功能纯粹
     expect(find.text('萌宠衣橱'), findsNothing);
     expect(find.text('美味投喂'), findsOneWidget);
-    expect(find.text('神奇激光笔'), findsOneWidget);
+    expect(find.text('激光笔'), findsOneWidget);
 
     // 启动神奇激光笔
-    await tester.tap(find.text('神奇激光笔'));
+    await tester.tap(find.text('激光笔'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
 
