@@ -50,104 +50,155 @@ class SmartDialogueBubble extends StatelessWidget {
     // 计算小尾巴水平位置（对齐猫头中央，限制在气泡左右边距以内）
     final tailX = (petX - bubbleLeft - 7.0).clamp(20.0, bubbleWidth - 34.0);
 
-    // Stack 内可用高度（SafeArea 已把状态栏/手势条从 MediaQuery.padding 里摘掉，
-    // 但 viewPadding 仍是物理窗口内边距，据此还原 Stack 的真实高度，
-    // 保证 bottom 锚点与宠物坐标处在同一坐标系）
-    final media = MediaQuery.of(context);
-    final double stackHeight =
-        media.size.height - media.viewPadding.top - media.viewPadding.bottom;
-
-    return Positioned(
-      left: bubbleLeft,
-      // showAbove 用 bottom 锚定（气泡向上生长），否则用 top 锚定（气泡在猫下方）
-      bottom: showAbove ? (stackHeight - bubbleBottom) : null,
-      top: showAbove ? null : (petY + 95.0),
-      child: BouncyTouchFeedback(
-        key: const ValueKey('smart_dialogue_bubble'),
-        scaleDown: 0.96,
-        onTap: onTap,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 当气泡位于猫咪下方时，小尾巴朝上指向猫咪
-            if (!showAbove)
-              Padding(
-                padding: EdgeInsets.only(left: tailX),
-                child: CustomPaint(
-                  size: const Size(14, 7),
-                  painter: BubbleTailPainter(
-                    isNight: isNight,
-                    pointingUp: true,
-                    fillColor: t.surface.withValues(alpha: 0.96),
-                    borderColor: t.border,
-                  ),
-                ),
-              ),
-
-            // 主气泡容器 (附带文本切换弹性弹出动效)
-            Container(
-              width: bubbleWidth,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: PokoSpacing.lg, vertical: PokoSpacing.md),
-              decoration: BoxDecoration(
-                color: t.surface.withValues(alpha: 0.96),
-                borderRadius: BorderRadius.circular(PokoRadius.lg),
-                border: Border.all(color: t.border, width: 1),
-                boxShadow: PokoShadow.card(t.shadow),
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
-                transitionBuilder: (child, anim) {
-                  return ScaleTransition(
-                    scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
-                    child: FadeTransition(opacity: anim, child: child),
-                  );
-                },
-                child: Row(
-                  key: ValueKey(currentDialogue),
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
-                    const SizedBox(width: PokoSpacing.sm),
-                    Expanded(
-                      child: Text(
-                        currentDialogue,
-                        style: TextStyle(
-                          fontSize: PokoFont.body,
-                          color: t.textPrimary,
-                          fontWeight: FontWeight.w500,
-                          height: 1.4,
-                        ),
-                        // 最多 4 行：气泡高度有上限，才不会顶出屏幕顶部
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+    // ⚠️ 这里**不能**用 MediaQuery 反推 Stack 高度来算 bottom 锚点。
+    // Android 沉浸式下 MediaQuery.viewPadding 并不可靠：实测 padding 能正确上报
+    // 状态栏 + 导航栏，而 viewPadding 仍是 0，于是反推出的「Stack 高度」比真实值
+    // 大出整整一个系统栏高度 —— 气泡整体上浮 60~80px，直接飘到房间上方的窗户
+    // 旁边，离猫十万八千里（实测真机气泡底边离猫耳 91px，本地渲染只有 26px）。
+    //
+    // 改用 CustomSingleChildLayout：委托拿到的就是 Stack 的**真实尺寸**，
+    // 气泡与宠物的相对距离在任何机型、任何系统栏模式下都恒定。
+    return Positioned.fill(
+      child: CustomSingleChildLayout(
+        delegate: _BubbleAnchorDelegate(
+          bubbleLeft: bubbleLeft,
+          bubbleBottom: bubbleBottom,
+          showAbove: showAbove,
+          petY: petY,
+        ),
+        child: BouncyTouchFeedback(
+          key: const ValueKey('smart_dialogue_bubble'),
+          scaleDown: 0.96,
+          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 当气泡位于猫咪下方时，小尾巴朝上指向猫咪
+              if (!showAbove)
+                Padding(
+                  padding: EdgeInsets.only(left: tailX),
+                  child: CustomPaint(
+                    size: const Size(14, 7),
+                    painter: BubbleTailPainter(
+                      isNight: isNight,
+                      pointingUp: true,
+                      fillColor: t.surface.withValues(alpha: 0.96),
+                      borderColor: t.border,
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
 
-            // 当气泡位于头顶上方时，小尾巴朝下指向猫咪
-            if (showAbove)
-              Padding(
-                padding: EdgeInsets.only(left: tailX),
-                child: CustomPaint(
-                  size: const Size(14, 7),
-                  painter: BubbleTailPainter(
-                    isNight: isNight,
-                    pointingUp: false,
-                    fillColor: t.surface.withValues(alpha: 0.96),
-                    borderColor: t.border,
+              // 主气泡容器 (附带文本切换弹性弹出动效)
+              Container(
+                width: bubbleWidth,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: PokoSpacing.lg, vertical: PokoSpacing.md),
+                decoration: BoxDecoration(
+                  color: t.surface.withValues(alpha: 0.96),
+                  borderRadius: BorderRadius.circular(PokoRadius.lg),
+                  border: Border.all(color: t.border, width: 1),
+                  boxShadow: PokoShadow.card(t.shadow),
+                ),
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  transitionBuilder: (child, anim) {
+                    return ScaleTransition(
+                      scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                      child: FadeTransition(opacity: anim, child: child),
+                    );
+                  },
+                  child: Row(
+                    key: ValueKey(currentDialogue),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
+                      const SizedBox(width: PokoSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          currentDialogue,
+                          style: TextStyle(
+                            fontSize: PokoFont.body,
+                            color: t.textPrimary,
+                            fontWeight: FontWeight.w500,
+                            height: 1.4,
+                          ),
+                          // 最多 4 行：气泡高度有上限，才不会顶出屏幕顶部
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-          ],
+
+              // 当气泡位于头顶上方时，小尾巴朝下指向猫咪
+              if (showAbove)
+                Padding(
+                  padding: EdgeInsets.only(left: tailX),
+                  child: CustomPaint(
+                    size: const Size(14, 7),
+                    painter: BubbleTailPainter(
+                      isNight: isNight,
+                      pointingUp: false,
+                      fillColor: t.surface.withValues(alpha: 0.96),
+                      borderColor: t.border,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// 气泡在房间 Stack 内的锚点委托。
+///
+/// 用 Stack 的**真实尺寸**定位气泡，而不是靠 MediaQuery 反推高度 ——
+/// 后者在 Android 沉浸式下不可靠，会让气泡整体上浮 60~80px 脱离猫咪。
+class _BubbleAnchorDelegate extends SingleChildLayoutDelegate {
+  /// 气泡左缘。
+  final double bubbleLeft;
+
+  /// 气泡整列（含小尾巴）的底边，坐标系与宠物坐标一致（Stack 局部坐标）。
+  final double bubbleBottom;
+
+  /// 气泡是否位于猫头顶上方（false 时位于猫下方）。
+  final bool showAbove;
+
+  /// 宠物中心纵坐标（Stack 局部坐标）。
+  final double petY;
+
+  const _BubbleAnchorDelegate({
+    required this.bubbleLeft,
+    required this.bubbleBottom,
+    required this.showAbove,
+    required this.petY,
+  });
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
+      BoxConstraints.loose(constraints.biggest);
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    if (!showAbove) {
+      // 气泡在猫下方：列首是小尾巴，列顶落在尾巴根，尾巴朝上指向猫
+      return Offset(bubbleLeft, petY + 95.0);
+    }
+    // 气泡在猫上方：整列底边锚定在 bubbleBottom（小尾巴尖），整列向上生长
+    return Offset(bubbleLeft, bubbleBottom - childSize.height);
+  }
+
+  @override
+  bool shouldRelayout(covariant _BubbleAnchorDelegate oldDelegate) =>
+      oldDelegate.bubbleLeft != bubbleLeft ||
+      oldDelegate.bubbleBottom != bubbleBottom ||
+      oldDelegate.showAbove != showAbove ||
+      oldDelegate.petY != petY;
 }
 
 /// 对话气泡指向猫咪的自适应小尾巴绘制器 (Comic Bubble Tail)

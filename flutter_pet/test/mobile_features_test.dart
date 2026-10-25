@@ -601,6 +601,50 @@ void main() {
       expect(chipRect.right, lessThanOrEqualTo(392));
     });
 
+    testWidgets('Dialogue Bubble Stays Glued To The Cat Under Any System Bar Inset', (WidgetTester tester) async {
+      // 背景：气泡曾用 MediaQuery 反推 Stack 高度来算 bottom 锚点。
+      // Android 沉浸式下 padding 能正确上报状态栏 + 导航栏，而 viewPadding 仍是 0，
+      // 反推出的高度比真实值大出一个系统栏 —— 气泡整体上浮 58~81px，
+      // 直接飘到房间上方的窗户旁边，离猫十万八千里（真机实测气泡底边离猫耳 91px，
+      // 本地渲染只有 26px）。
+      // 这里逐组系统栏 inset 断言「气泡底边 ↔ 猫心」的间距恒定。
+      const configs = <String, FakeViewPadding>{
+        'no-insets': FakeViewPadding.zero,
+        'status+nav': FakeViewPadding(top: 24, bottom: 34),
+        'hidden-bars': FakeViewPadding(top: 0, bottom: 0),
+        'big-status': FakeViewPadding(top: 47, bottom: 34),
+      };
+
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+        tester.view.resetPadding();
+        tester.view.resetViewPadding();
+      });
+
+      for (final entry in configs.entries) {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = entry.value;
+        tester.view.viewPadding = entry.value;
+
+        await tester.pumpWidget(const DesktopElectricPetApp());
+        await tester.pump(const Duration(milliseconds: 400));
+
+        final bubble = tester.getRect(find.byKey(const ValueKey('smart_dialogue_bubble')));
+        final pet = tester.getRect(
+          find.byWidgetPredicate((w) => w is CustomPaint && w.painter is PetPainter),
+        );
+
+        // 气泡整列底边恒为「猫心 - 102」：猫头顶(含耳朵)在 petY-92，留 10px 呼吸位。
+        expect(
+          bubble.bottom - pet.center.dy,
+          closeTo(-102.0, 0.5),
+          reason: '${entry.key} 系统栏模式下气泡脱离猫咪了',
+        );
+      }
+    });
+
     test('MiniMax AI Service Configuration and Local Companion Engine Test', () async {
       final ai = MinimaxService();
       await ai.init();

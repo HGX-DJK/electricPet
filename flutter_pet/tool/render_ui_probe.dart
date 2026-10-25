@@ -69,9 +69,15 @@ void main() {
   void setPhone(WidgetTester tester) {
     tester.view.physicalSize = kPhone;
     tester.view.devicePixelRatio = 1.0;
+    // 模拟真机的系统栏 inset（状态栏 47 + 手势导航条 34）。
+    // 真机上正是这个 inset 暴露了「气泡用 MediaQuery 反推 Stack 高度」的定位 bug。
+    tester.view.padding = const FakeViewPadding(top: 47, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 47, bottom: 34);
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
+      tester.view.resetPadding();
+      tester.view.resetViewPadding();
     });
   }
 
