@@ -1156,8 +1156,11 @@ class PokoPetView(context: Context) : View(context) {
         if (width <= 0 || height <= 0) return TouchZone.NONE
         val cx = width / 2f
         val cy = height * 0.53f + jumpOffsetY
-        // 画面被朝向镜像翻转过，命中判定必须跟着一起翻，否则摸左边会摸到尾巴
-        val lx = if (facingLeft) 2f * cx - x else x
+        // 画面被朝向镜像翻转过，命中判定必须跟着一起翻，否则摸左边会摸到尾巴。
+        // 探头偏移是在镜像**之后**平移的，所以命中判定也要先把偏移减掉再翻，
+        // 这样"看到的部位"和"摸到的部位"始终是同一个。
+        val rawX = x - peekOffsetX
+        val lx = if (facingLeft) 2f * cx - rawX else rawX
 
         val headY = cy - 10f * density + headOffsetY
         val headW = 27f * density
@@ -1445,14 +1448,25 @@ class PokoPetView(context: Context) : View(context) {
 
         canvas.save()
 
-        // 0. 探头避让：只在窗口内部平移绘制内容，窗口位置保持不变（保证拖拽坐标稳定）
-        if (peekOffsetX != 0f) {
-            canvas.translate(peekOffsetX, 0f)
-        }
-
         // 1. 边缘停驻朝向镜像 (贴在屏幕右边缘时面向内测左方)
+        //
+        // ⚠️ 镜像必须**先于**探头偏移做，否则探头方向会被镜像反号：
+        // 偏移量是在"窗口坐标系"里给的（左边躲 -> 负值、右边躲 -> 正值），
+        // 先平移再镜像的话，贴右边的波可会往屏幕**内侧**滑，
+        // 结果它并没有藏到屏幕边后面，反而有一截身子画到了**窗口之外** ——
+        // 那截身子落在悬浮窗的可触达区域之外，手指按上去系统根本收不到，
+        // 表现出来就是「按不动 / 拖不动」。
         if (facingLeft) {
             canvas.scale(-1f, 1f, w / 2f, h / 2f)
+        }
+
+        // 2. 探头避让：只在窗口内部平移绘制内容，窗口位置保持不变（保证拖拽坐标稳定）
+        //
+        // 放在镜像之后，偏移方向才与"往哪一侧屏幕边缘躲"保持一致：
+        // 露在外面的部分永远朝向屏幕边缘（画到屏外），
+        // 屏幕上看得见的那部分始终落在窗口的可触达区域里。
+        if (peekOffsetX != 0f) {
+            canvas.translate(peekOffsetX, 0f)
         }
 
         val cx = w / 2f

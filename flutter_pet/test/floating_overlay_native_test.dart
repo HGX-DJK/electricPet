@@ -236,6 +236,45 @@ void main() {
           reason: '绘制管线未应用探头偏移');
     });
 
+    test('探头偏移必须画在朝向镜像之后，否则猫身会滑出窗口变成按不到的死区', () {
+      // 背景：探头偏移量是在「窗口坐标系」里给的（往左躲 = 负值，往右躲 = 正值）。
+      // 早期实现先平移偏移、再做朝向镜像，于是偏移被镜像反了号：
+      // 贴右边缘的波可本该往屏幕外躲，却反而往屏幕内侧滑，
+      // 有一截身子被画到了**悬浮窗之外** —— 那截身子落在可触达区域之外，
+      // 手指按上去系统压根收不到，用户看到的就是「按不动 / 拖不动」。
+      final drawBlock = _between(
+        petViewSource,
+        'override fun onDraw',
+        'private fun drawTail',
+      );
+
+      final mirrorAt = drawBlock.indexOf('canvas.scale(-1f, 1f, w / 2f, h / 2f)');
+      final peekAt = drawBlock.indexOf('canvas.translate(peekOffsetX, 0f)');
+
+      expect(mirrorAt, greaterThan(0), reason: 'onDraw 里找不到朝向镜像');
+      expect(peekAt, greaterThan(0), reason: 'onDraw 里找不到探头偏移平移');
+      expect(
+        mirrorAt,
+        lessThan(peekAt),
+        reason: '朝向镜像必须先于探头偏移平移，否则探头方向会被镜像反号，'
+            '猫身会滑到窗口外变成按不到的死区（拖不动的直接原因）',
+      );
+    });
+
+    test('分区命中判定必须把探头偏移一起算进去', () {
+      final hitBlock = _between(
+        petViewSource,
+        'fun hitTest(x: Float, y: Float): TouchZone',
+        'fun reactToTouch',
+      );
+
+      expect(
+        hitBlock,
+        contains('peekOffsetX'),
+        reason: '命中判定没有把探头绘制偏移算进去，会出现「看到的是头、摸到的却是身体」',
+      );
+    });
+
     test('从探头恢复时不得移动窗口', () {
       final restoreBlock = _between(
         serviceSource,
