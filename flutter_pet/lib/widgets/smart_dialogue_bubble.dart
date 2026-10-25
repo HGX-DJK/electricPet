@@ -36,14 +36,32 @@ class SmartDialogueBubble extends StatelessWidget {
 
     // 垂直方向：如果猫咪在屏幕上方，气泡放猫咪下方；默认放猫咪头顶上方！
     final showAbove = petY > 210.0;
-    final bubbleTop = showAbove ? (petY - 146.0) : (petY + 95.0);
+
+    // ⚠️ 气泡在猫头顶时必须锚定**底边**，不能锚定顶边。
+    // 气泡高度随文案行数变化（1~5 行都可能出现），若顶边固定在 petY-146，
+    // 文案一长底边就会往下沉，直接压到猫头和耳朵上（实测 3 行文案即压住头顶 13px）。
+    // 锚定底边后，气泡始终向上生长，与猫头保持固定间距。
+    //
+    // 猫头顶(含耳朵)在 petY - 92 附近，这里留出 10px 呼吸间距。
+    const double catHeadTop = 92.0;
+    const double bubbleBottomGap = 10.0;
+    final double bubbleBottom = petY - catHeadTop - bubbleBottomGap;
 
     // 计算小尾巴水平位置（对齐猫头中央，限制在气泡左右边距以内）
     final tailX = (petX - bubbleLeft - 7.0).clamp(20.0, bubbleWidth - 34.0);
 
+    // Stack 内可用高度（SafeArea 已把状态栏/手势条从 MediaQuery.padding 里摘掉，
+    // 但 viewPadding 仍是物理窗口内边距，据此还原 Stack 的真实高度，
+    // 保证 bottom 锚点与宠物坐标处在同一坐标系）
+    final media = MediaQuery.of(context);
+    final double stackHeight =
+        media.size.height - media.viewPadding.top - media.viewPadding.bottom;
+
     return Positioned(
       left: bubbleLeft,
-      top: bubbleTop,
+      // showAbove 用 bottom 锚定（气泡向上生长），否则用 top 锚定（气泡在猫下方）
+      bottom: showAbove ? (stackHeight - bubbleBottom) : null,
+      top: showAbove ? null : (petY + 95.0),
       child: BouncyTouchFeedback(
         key: const ValueKey('smart_dialogue_bubble'),
         scaleDown: 0.96,
@@ -101,6 +119,9 @@ class SmartDialogueBubble extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           height: 1.4,
                         ),
+                        // 最多 4 行：气泡高度有上限，才不会顶出屏幕顶部
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

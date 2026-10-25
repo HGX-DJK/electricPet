@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/bouncy_touch_feedback.dart';
 
 /// ============================================================================
 /// 波可设计系统 (Poko Design System)
@@ -277,9 +278,11 @@ class PokoGlassCard extends StatelessWidget {
       child: child,
     );
     if (onTap == null) return content;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
+    // ⚠️ 统一走 BouncyTouchFeedback：与全 App 的"按下弹压、松手回弹"手感保持一致。
+    // 这里曾是裸 GestureDetector，导致同一批弹层里的卡片有的有手感、有的没有。
+    return BouncyTouchFeedback(
+      scaleDown: 0.97,
+      onTap: onTap!,
       child: content,
     );
   }
@@ -397,7 +400,12 @@ class PokoChip extends StatelessWidget {
       ),
     );
     if (onTap == null) return body;
-    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: body);
+    // 与 PokoGlassCard 一致，统一弹压手感
+    return BouncyTouchFeedback(
+      scaleDown: 0.93,
+      onTap: onTap!,
+      child: body,
+    );
   }
 }
 

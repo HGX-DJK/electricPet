@@ -163,41 +163,55 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(PokoSpacing.sm),
-                            decoration: BoxDecoration(
-                              color: PokoPalette.rose.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(PokoRadius.sm),
-                            ),
-                            child: const Text(
-                              '📸',
-                              style: TextStyle(fontSize: 20),
-                            ),
-                          ),
-                          const SizedBox(width: PokoSpacing.sm),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '波可的时光纪念相册',
-                                style: TextStyle(
-                                  fontSize: PokoFont.title,
-                                  fontWeight: FontWeight.bold,
-                                  color: t.textPrimary,
-                                ),
+                      // ⚠️ 这一层必须用 Flexible 包住：
+                      // 外层 Row 的 mainAxisSize 是 max，它给**非弹性子项**的是无界宽度，
+                      // 直接放带 Expanded 的内层 Row 会抛
+                      //「RenderFlex children have non-zero flex but incoming width constraints are unbounded」。
+                      Flexible(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(PokoSpacing.sm),
+                              decoration: BoxDecoration(
+                                color: PokoPalette.rose.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(PokoRadius.sm),
                               ),
-                              Text(
-                                '成长里程碑与随手拍都会真实留在这里 · 已收藏 ${memories.length} 张',
-                                style: TextStyle(
-                                  fontSize: PokoFont.caption,
-                                  color: t.textSecondary,
-                                ),
+                              child: const Text(
+                                '📸',
+                                style: TextStyle(fontSize: 20),
                               ),
-                            ],
-                          ),
-                        ],
+                            ),
+                            const SizedBox(width: PokoSpacing.sm),
+                            // ⚠️ 必须用 Expanded 收窄：标题 + 副标题是长中文文案，
+                            // 不加约束会把整行撑爆（实测右侧溢出 24px，副标题被硬切半个字）。
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '波可的时光纪念相册',
+                                    style: TextStyle(
+                                      fontSize: PokoFont.title,
+                                      fontWeight: FontWeight.bold,
+                                      color: t.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '成长里程碑与随手拍都会真实留在这里 · 已收藏 ${memories.length} 张',
+                                    style: TextStyle(
+                                      fontSize: PokoFont.caption,
+                                      color: t.textSecondary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       GestureDetector(
                         onTap: () => Navigator.pop(context),
