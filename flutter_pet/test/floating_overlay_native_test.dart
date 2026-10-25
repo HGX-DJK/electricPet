@@ -313,6 +313,147 @@ void main() {
     });
   });
 
+  group('拖不动专项：触摸必须真的落到宠物身上', () {
+    // 用户反馈原文：
+    // 「新安装包手机端的桌面悬浮宠物会出现有时候可以拖动，有时候又拖动不了的情况，
+    //  特别是关闭 app，再打开这个桌面悬浮宠物，在拖动好多时候都拖不动」
+    //
+    // 这一组把"按下 → 跟手"这条链路上所有会导致"按不动 / 拖不动"的坑逐条钉死。
+    // 触摸链路在原生侧，widget 测试覆盖不到，只能用源码断言固化。
+
+    test('悬浮窗脱挂必须能自愈：拖拽链路不能永久失效', () {
+      expect(serviceSource, contains('private fun ensurePetWindowAttached()'),
+          reason: '缺少悬浮窗挂载体检：「View 还在、窗口却已从 WindowManager 脱挂」时'
+              '所有触摸都收不到，而且永远不会自己恢复');
+      expect(serviceSource, contains('private fun reattachPetWindow()'),
+          reason: '缺少悬浮窗重新挂载逻辑');
+      expect(serviceSource, contains('isAttachedToWindow'),
+          reason: '挂载体检必须真的检查 View 是否还挂在 WindowManager 上');
+
+      final downBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_DOWN ->',
+        'MotionEvent.ACTION_POINTER_DOWN',
+      );
+      expect(downBranch, contains('ensurePetWindowAttached()'),
+          reason: '按下时必须先体检窗口是否还挂着，否则「看得见但按不动」永远无法自愈');
+
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      expect(moveBranch, contains('reattachPetWindow()'),
+          reason: '窗口位置更新失败（绝大多数情况就是窗口已脱挂）后必须立刻重挂，'
+              '否则后续所有触摸都收不到，且再也不会恢复');
+    });
+
+    test('拉起主 App 不得留下悬空的前台标记（悬空 = 悬浮猫永久不可触摸）', () {
+      expect(serviceSource, contains('var isMainActivityResumed: Boolean'),
+          reason: '缺少「主 Activity 是否真的在前台」这一交叉校验用的真值；'
+              'isAppForeground 会被 openMainActivity 提前手工置 true，'
+              '一旦拉起失败就没人复位，宠物永久停在 View.GONE（GONE 不参与触摸分发）');
+
+      final notify = _braceBlock(serviceSource, 'fun notifyAppForegroundChanged');
+      expect(notify, contains('isMainActivityResumed = foreground'),
+          reason: 'Activity 前后台切换时必须同步维护真实前台状态');
+
+      final openMain = _braceBlock(serviceSource, 'private fun openMainActivity()');
+      expect(openMain, contains('foregroundWatchdog'),
+          reason: '拉起主 App 时手工置位的前台标记必须配一个看门狗来回收');
+      expect(openMain, contains('!isMainActivityResumed'),
+          reason: '看门狗必须以「Activity 从未真正 resume」作为悬空判据');
+      expect(openMain, contains('FOREGROUND_WATCHDOG_DELAY_MS'),
+          reason: '看门狗必须有明确的超时时长');
+    });
+
+    test('主 Activity 销毁时必须复位前台标记', () {
+      expect(activitySource, contains('override fun onDestroy()'),
+          reason: '缺少 onDestroy 兜底');
+      final destroy = _braceBlock(activitySource, 'override fun onDestroy()');
+      expect(destroy, contains('notifyAppForegroundChanged(false)'),
+          reason: 'Activity 真正销毁时必须复位前台标记，'
+              '否则悬浮猫会停在不可见 / 不可触摸状态');
+    });
+
+    test('服务启动必须交叉校验前后台标记，防止标记失同步', () {
+      final startCommand = _braceBlock(serviceSource, 'override fun onStartCommand');
+      expect(startCommand, contains('isAppForeground != isMainActivityResumed'),
+          reason: '服务被系统重建（START_STICKY）或被 App 重新拉起后，'
+              '前后台标记可能失同步，必须交叉校验并纠正');
+      expect(startCommand, contains('refreshPetVisibility()'),
+          reason: '纠正标记后必须立刻刷新悬浮猫显隐');
+    });
+
+    test('双指手势不得在第二根手指落下时立刻接管拖拽', () {
+      final pointerDown = _between(
+        serviceSource,
+        'MotionEvent.ACTION_POINTER_DOWN ->',
+        'MotionEvent.ACTION_POINTER_UP',
+      );
+      // 断言只看真实代码：注释里为了说明历史问题会提到旧的写法
+      expect(_stripLiteralsAndComments(pointerDown), isNot(contains('isPinching = true')),
+          reason: '第二根手指一落下就切捏合模式，会把用户「想用力拖一把」或手掌误触的'
+              '拖拽整段吞掉，宠物纹丝不动 —— 这是「有时能拖、有时拖不动」的主要来源之一');
+      expect(pointerDown, contains('pinchStartDistance = pointerDistance(event)'),
+          reason: '第二根手指落下时必须先记录两指距离基线');
+
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      expect(moveBranch, contains('pinchTriggerDistance'),
+          reason: '必须以两指距离变化阈值作为捏合判据');
+      expect(moveBranch, contains('abs(dist - pinchStartDistance) > pinchTriggerDistance'),
+          reason: '捏合判定必须比较「当前两指距离」与「基线距离」的差值');
+    });
+
+    test('快捷菜单不得压在宠物窗口上，否则会抢走宠物的触摸', () {
+      final showMenu = _braceBlock(serviceSource, 'private fun showActionMenu()');
+      final showMenuCode = _stripLiteralsAndComments(showMenu);
+      expect(showMenuCode, isNot(contains('coerceAtMost(screenWidth - menuW')),
+          reason: '用 coerceAtMost 把菜单夹回屏幕内的同时会把它拉回宠物身上；'
+              '菜单窗口 z 序更高，会吃掉重叠区域的点击，'
+              '表现为「明明按在猫身上，猫却一动不动」');
+      expect(showMenuCode, isNot(contains('coerceAtLeast((4 * density)')),
+          reason: '同上：把菜单夹回屏幕内会与宠物窗口重叠');
+      expect(showMenu, contains('rightFits'),
+          reason: '必须先判断菜单放右侧是否放得下，放不下就换边');
+      expect(showMenu, contains('leftFits'),
+          reason: '必须判断菜单放左侧是否放得下');
+      expect(showMenu, contains('aboveY'),
+          reason: '两侧都放不下时必须改放宠物上方 / 下方，绝不能压在宠物身上');
+    });
+
+    test('探头复位动画必须纳入统一托管，不能用不受控的匿名动画器写 peekOffsetX', () {
+      final restore = _braceBlock(serviceSource, 'private fun restoreFromPeeking');
+      expect(restore, contains('peekOffsetAnimator = ValueAnimator.ofFloat'),
+          reason: '复位动画必须持有引用才能被取消；匿名动画器会在拖拽期间继续改写 '
+              'peekOffsetX，与探头动画、溢出回收动画抢同一个属性，'
+              '让「看到的猫」和「能按到的窗口区域」错位，表现为间歇性拖不动');
+      expect(restore, contains('peekOffsetAnimator?.start()'),
+          reason: '托管之后必须启动同一个被持有的动画器');
+      expect(_stripLiteralsAndComments(restore), isNot(contains('}.start()')),
+          reason: '仍然存在裸的匿名 ValueAnimator 启动调用，该动画不受控、无法取消');
+    });
+
+    test('触摸日志必须打印窗口挂载状态与屏幕尺寸', () {
+      final downBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_DOWN ->',
+        'MotionEvent.ACTION_POINTER_DOWN',
+      );
+      expect(downBranch, contains('isAttachedToWindow'),
+          reason: '按下日志必须带出窗口挂载状态：一旦再出现「按不动」，'
+              '一条 logcat 就能直接定位，不用再靠猜');
+      expect(downBranch, contains('vis='),
+          reason: '按下日志必须带出视图可见性');
+      expect(downBranch, contains('screen='),
+          reason: '按下日志必须带出屏幕尺寸，便于核对坐标钳制范围');
+    });
+  });
+
   group('悬浮窗族标志位一致性', () {
     test('快捷控制菜单窗口必须与宠物窗口一致使用 FLAG_NOT_TOUCH_MODAL', () {
       final menuWindow = _layoutParamsBlock(serviceSource, 'actionMenuParams = WindowManager.LayoutParams(');

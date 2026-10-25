@@ -41,6 +41,15 @@ class MainActivity: FlutterActivity() {
         super.onPause()
     }
 
+    override fun onDestroy() {
+        // Activity 真正被销毁时（不是切后台）再复位一次前台标记。
+        // onPause 正常情况下已经复位过，这里是兜底：
+        // 万一这条链路没走到，前台标记就会悬空，
+        // 桌面悬浮猫会永久停在不可见 / 不可触摸状态（View.GONE 不参与触摸分发）。
+        FloatingPetService.notifyAppForegroundChanged(false)
+        super.onDestroy()
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,

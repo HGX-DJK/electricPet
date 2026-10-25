@@ -142,6 +142,8 @@ class FloatingPetService : Service() {
     private var peekingRunnable: Runnable? = null
     // 拖拽溢出偏移的回收动画（与探头动画分开，避免互相打断）
     private var peekOffsetAnimator: ValueAnimator? = null
+    // 「拉起主 App」后回收悬空前台标记的看门狗（见 openMainActivity）
+    private var foregroundWatchdog: Runnable? = null
 
     // 音频音效系统
     private var soundPool: SoundPool? = null
@@ -234,7 +236,15 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v3"
+        const val DRAG_FIX_VERSION = "drag-fix-v4"
+
+        /**
+         * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
+         *
+         * 拉起一个 Activity 通常在几百毫秒内完成 resume，2.5 秒足够宽松；
+         * 超时仍未 resume 就说明那次手工置位是悬空的，必须收回。
+         */
+        const val FOREGROUND_WATCHDOG_DELAY_MS = 2500L
 
         // ---------- 悬浮宠设置 ----------
         const val DEFAULT_PET_SIZE_DP = 82
@@ -423,6 +433,21 @@ class FloatingPetService : Service() {
         @Volatile
         var isAppForeground: Boolean = false
 
+        /**
+         * 主 Activity 是否**真的**处于前台（onResume 置位、onPause 复位）。
+         *
+         * 它和 [isAppForeground] 的区别很关键：
+         * [isAppForeground] 会被 [openMainActivity] 提前手工置成 true（先让猫隐身再拉起 App），
+         * 那时候 Activity 其实还没 resume。如果拉起失败或被系统拦下，
+         * 这个 true 就成了**悬空标记**——没人来复位它，
+         * 宠物会永久停在不可见/不可触摸状态（View.GONE 的视图根本不参与触摸分发），
+         * 表现出来就是「关掉 App 再打开悬浮宠后拖不动」。
+         *
+         * 所以要用这个"真值"做交叉校验：标记说前台、但 Activity 从未 resume 过 → 悬空，收回。
+         */
+        @Volatile
+        var isMainActivityResumed: Boolean = false
+
         /** 当前运行中的服务实例，供主 Activity 前后台切换时即时同步悬浮猫显隐 */
         @Volatile
         var instance: FloatingPetService? = null
@@ -431,6 +456,7 @@ class FloatingPetService : Service() {
         @JvmStatic
         fun notifyAppForegroundChanged(foreground: Boolean) {
             isAppForeground = foreground
+            isMainActivityResumed = foreground
             instance?.refreshPetVisibility()
         }
 
@@ -595,6 +621,23 @@ class FloatingPetService : Service() {
         // 每次启动或自启重新加固前台服务优先级
         startAsForeground()
 
+        // ⚠️ 前后台状态自愈：
+        // 服务可能被系统重建（START_STICKY），也可能被 App 侧重新拉起，
+        // 这时全局静态的前台标记有可能与主 Activity 的真实状态对不上
+        //（比如"关掉 App 再打开悬浮宠"这条路上，标记悬空留在 true）。
+        // 标记一旦悬空，悬浮猫就会一直停在 View.GONE ——
+        // 而 GONE 的视图根本不参与触摸分发，用户只会看到"拖不动"。
+        // 这里用 Activity 的真实 resume 状态做一次交叉校验并纠正。
+        if (isAppForeground != isMainActivityResumed) {
+            Log.w(
+                TAG,
+                "前后台标记失同步（isAppForeground=$isAppForeground " +
+                    "isMainActivityResumed=$isMainActivityResumed），按 Activity 真实状态纠正"
+            )
+            isAppForeground = isMainActivityResumed
+            refreshPetVisibility()
+        }
+
         when (intent?.action) {
             ACTION_NOTIFICATION_PET -> {
                 handleNotificationPet()
@@ -753,6 +796,10 @@ class FloatingPetService : Service() {
         // 朝向切换的累积位移 + 滞后阈值（避免镜像翻面时来回抖动）
         var dragDxAccum = 0f
         val facingFlipThreshold = 14f * density
+        // 双指捏合的触发阈值：两指距离要真的拉开/收拢到这个量级，才认定用户在做捏合。
+        // 之前是"第二根手指一落下就切到捏合模式"，于是用户想用力拖一把、手掌误触屏幕，
+        // 拖拽都会被整段吞掉（宠物纹丝不动），表现出来就是"有时能拖有时拖不动"。
+        val pinchTriggerDistance = 26f * density
         // 单次手势只打一条移动日志，便于用一条 logcat 判定"跟手了没有"
         var hasLoggedMove = false
         var velocityTracker: VelocityTracker? = null
@@ -770,6 +817,11 @@ class FloatingPetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     hasTouchDown = true
                     lastInteractionAt = System.currentTimeMillis()
+                    // ⚠️ 按下第一件事先给悬浮窗做体检：
+                    // 「View 还在、窗口却已经从 WindowManager 脱挂」是"时好时坏"的经典成因 ——
+                    // 此时所有触摸都收不到，而且永远不会自愈。
+                    // 这里掉了就当场重挂，保证这一把一定能拖。
+                    ensurePetWindowAttached()
                     cancelEdgePeeking()
                     // 按下瞬间立即完全露出（只复位绘制偏移，窗口坐标一动不动），
                     // 保证下面采集到的 initialX/initialY 就是宠物真实落点
@@ -819,22 +871,27 @@ class FloatingPetService : Service() {
                     Log.d(
                         TAG,
                         "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY) " +
-                            "peekOffset=${pokoView?.peekOffsetX} sizePx=$petSizePx"
+                            "peekOffset=${pokoView?.peekOffsetX} sizePx=$petSizePx " +
+                            "vis=${pokoView?.visibility} attached=${pokoView?.isAttachedToWindow} " +
+                            "screen=($gestureScreenWidth, $gestureScreenHeight)"
                     )
                     true
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
-                    // 第二根手指落下：进入双指手势（捏合缩放 / 旋转翻面）
-                    if (event.pointerCount >= 2) {
-                        isPinching = true
-                        isClick = false
-                        hasDragged = false
+                    // 第二根手指落下：**这里只记基线，不立刻接管手势**。
+                    //
+                    // 之前一看到第二根手指就 isPinching = true，此后的 MOVE 全部被
+                    // handlePinchGesture 吃掉 —— 用户想用力拖一把、或者手掌误触碰到屏幕，
+                    // 拖拽就被整段吞掉，宠物纹丝不动，还顺带把宠物改了尺寸，
+                    // 触摸区跟着变小，越发"按不到、拖不动"。
+                    //
+                    // 现在改成"两指距离真的拉开/收拢到阈值之外"才认定为捏合，
+                    // 否则继续老老实实走拖拽。
+                    if (event.pointerCount >= 2 && !isPinching) {
                         pinchStartDistance = pointerDistance(event)
                         pinchStartSizeDp = petSizeDp
                         pinchStartAngle = pointerAngle(event)
                         pinchStartFacingLeft = pokoView?.facingLeft ?: false
-                        longPressRunnable?.let { mainHandler.removeCallbacks(it) }
-                        hideActionMenu(animated = false)
                     }
                     true
                 }
@@ -855,6 +912,26 @@ class FloatingPetService : Service() {
                     pokoView?.setGazeTarget(event.x, event.y)
 
                     // 双指手势优先：捏合改大小、旋转翻朝向
+                    //
+                    // ⚠️ 必须是"两指距离变化超过阈值"才认定为捏合，不能是"第二根手指一落下就算"。
+                    // 否则用户单手想拖、不小心用上第二根手指时，整段拖拽会被捏合逻辑吃掉，
+                    // 宠物一动不动 —— 这正是"有时可以拖动、有时又拖不动"的主要来源之一。
+                    if (!isPinching && event.pointerCount >= 2 && pinchStartDistance > 1f) {
+                        val dist = pointerDistance(event)
+                        if (abs(dist - pinchStartDistance) > pinchTriggerDistance) {
+                            isPinching = true
+                            isClick = false
+                            hasDragged = false
+                            // 以"判定为捏合的这一刻"重新取基线，
+                            // 免得第一帧就把尺寸改掉一大截
+                            pinchStartDistance = dist
+                            pinchStartSizeDp = petSizeDp
+                            pinchStartAngle = pointerAngle(event)
+                            pinchStartFacingLeft = pokoView?.facingLeft ?: false
+                            longPressRunnable?.let { mainHandler.removeCallbacks(it) }
+                            hideActionMenu(animated = false)
+                        }
+                    }
                     if (isPinching && event.pointerCount >= 2) {
                         handlePinchGesture(event)
                         return@setOnTouchListener true
@@ -920,6 +997,9 @@ class FloatingPetService : Service() {
                     } catch (e: Exception) {
                         // 之前这里被静默吞掉，导致"宠物按不动/拖不动"完全无从排查
                         Log.e(TAG, "悬浮窗位置更新失败", e)
+                        // 位置更新失败往往意味着窗口已经从 WindowManager 脱挂，
+                        // 此时后续所有触摸都收不到，而且永远不会自愈 —— 立刻重挂一次。
+                        reattachPetWindow()
                     }
 
                     if (!hasLoggedMove) {
@@ -1001,6 +1081,47 @@ class FloatingPetService : Service() {
                 }
                 else -> false
             }
+        }
+    }
+
+    /**
+     * 体检：悬浮窗是否还挂在 WindowManager 上。
+     *
+     * 「View 还在、窗口却已经脱挂」是"时好时坏"的经典成因：
+     * 这种状态下所有触摸事件都收不到，用户只会看到"按下去没反应、拖不动"，
+     * 而且它自己永远不会恢复 —— 除非有人主动把它重新挂上去。
+     *
+     * 历史上 updateViewLayout 抛异常只被记一行日志就吞掉，
+     * 窗口从此脱挂，用户只能靠重装 App 才能救回来。
+     *
+     * @return true 表示窗口健在（或已当场修好）
+     */
+    private fun ensurePetWindowAttached(): Boolean {
+        val view = pokoView ?: return false
+        if (view.parent != null && view.isAttachedToWindow) return true
+        Log.w(TAG, "悬浮窗已从 WindowManager 脱挂，准备重新挂载")
+        return reattachPetWindow()
+    }
+
+    /**
+     * 把悬浮窗重新挂回 WindowManager。
+     *
+     * 挂之前先摘一次，避免 "View already added" 抛异常被静默吞掉、
+     * 结果窗口再也挂不上去的情况。
+     */
+    private fun reattachPetWindow(): Boolean {
+        val view = pokoView ?: return false
+        val params = pokoParams ?: return false
+        try {
+            windowManager?.removeView(view)
+        } catch (_: Exception) {}
+        try {
+            windowManager?.addView(view, params)
+            Log.w(TAG, "悬浮窗已重新挂载，拖拽链路恢复")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "悬浮窗重新挂载失败", e)
+            return false
         }
     }
 
@@ -1184,6 +1305,9 @@ class FloatingPetService : Service() {
         view.setAnimationEnabled(visible)
 
         if (visible) {
+            // 恢复可见前先确认窗口还挂在 WindowManager 上：
+            // "看得见但按不动"比"看不见"更难排查，这里顺手自愈一次。
+            ensurePetWindowAttached()
             mainHandler.removeCallbacks(edgeStrollRunnable)
             mainHandler.postDelayed(edgeStrollRunnable, 7000)
             scheduleEdgePeeking(!view.facingLeft)
@@ -1613,15 +1737,35 @@ class FloatingPetService : Service() {
         val pokoH = pokoView?.height ?: petSizePx
 
         val gap = (6 * density).toInt()
-        val targetX = if (pParams.x < screenWidth / 2) {
-            (pParams.x + pokoW + gap).coerceAtMost(screenWidth - menuW - (4 * density).toInt())
-        } else {
-            (pParams.x - menuW - gap).coerceAtLeast((4 * density).toInt())
-        }
-
-        val preferredY = pParams.y + (pokoH - menuH) / 2
+        val edge = (4 * density).toInt()
         val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, menuH)
-        val targetY = preferredY.coerceIn(minY, maxY)
+
+        // ⚠️ 菜单窗口的 z 序在宠物窗口**之上**。一旦菜单与宠物窗口重叠，
+        // 重叠那一块的点击会被菜单吃掉 —— 用户明明按在猫身上，猫却一动不动。
+        // 旧实现用 coerceAtMost / coerceAtLeast 把菜单夹在屏幕内，
+        // 夹的过程中正好会把菜单拉回宠物身上（屏幕越窄越明显），
+        // 于是"拖到屏幕中间就拖不动、拖到边上就能拖" —— 典型的时好时坏。
+        //
+        // 现在菜单必须整体落在宠物窗口之外；两侧都放不下就改放猫的上方 / 下方。
+        val rightX = pParams.x + pokoW + gap
+        val leftX = pParams.x - menuW - gap
+        val rightFits = rightX >= edge && rightX + menuW + edge <= screenWidth
+        val leftFits = leftX >= edge && leftX + menuW + edge <= screenWidth
+
+        var targetX: Int
+        var targetY: Int
+        if (rightFits || leftFits) {
+            targetX = if (rightFits) rightX else leftX
+            val preferredY = pParams.y + (pokoH - menuH) / 2
+            targetY = preferredY.coerceIn(minY, maxY)
+        } else {
+            // 两侧都塞不下：改放宠物上方（顶到屏幕边则放下方），同样不压住宠物
+            val aboveY = pParams.y - menuH - gap
+            val belowY = pParams.y + pokoH + gap
+            targetY = if (aboveY >= minY) aboveY else belowY.coerceAtMost(maxY)
+            targetX = (pParams.x + (pokoW - menuW) / 2)
+                .coerceIn(edge, (screenWidth - menuW - edge).coerceAtLeast(edge))
+        }
 
         mParams.x = targetX
         mParams.y = targetY
@@ -2503,7 +2647,25 @@ class FloatingPetService : Service() {
                 Log.e(TAG, "拉起主应用失败", e)
                 isAppForeground = false
                 refreshPetVisibility()
+                return
             }
+
+            // ⚠️ 看门狗：上面那次 `isAppForeground = true` 是**手工**置位的，
+            // 正常情况下要靠主 Activity 的 onPause 复位。可一旦 startActivity 没能
+            // 真正把 Activity 拉起来（被系统拦、任务栈异常、进程正在退出），
+            // 这个 true 就悬空了 —— 没人复位它，宠物会永久停在 GONE，
+            // 而 GONE 的视图根本不参与触摸分发，用户只会看到「关掉 App 再打开悬浮宠后拖不动」。
+            //
+            // 这里兜底：超时后如果主 Activity 从未 resume 过，就把悬空标记收回。
+            mainHandler.removeCallbacks(foregroundWatchdog)
+            foregroundWatchdog = Runnable {
+                if (!isMainActivityResumed) {
+                    Log.w(TAG, "主 Activity 未真正前台化，收回悬空的前台标记，悬浮猫恢复可触摸")
+                    isAppForeground = false
+                    refreshPetVisibility()
+                }
+            }
+            mainHandler.postDelayed(foregroundWatchdog!!, FOREGROUND_WATCHDOG_DELAY_MS)
         }
     }
 
@@ -2786,13 +2948,19 @@ class FloatingPetService : Service() {
             return
         }
 
-        ValueAnimator.ofFloat(currentOffset, 0f).apply {
+        // ⚠️ 复位动画必须纳入 peekOffsetAnimator 统一托管。
+        // 之前这里是匿名 ValueAnimator：既不持有引用、也没人取消它，
+        // 于是它会在拖拽期间继续改写 peekOffsetX，和探头动画、溢出回收动画抢同一个属性。
+        // 一旦三者打架，"看到的猫"就和"能按到的窗口区域"对不上，
+        // 手指按在猫身上却落在窗口之外 —— 表现出来就是间歇性拖不动。
+        peekOffsetAnimator = ValueAnimator.ofFloat(currentOffset, 0f).apply {
             duration = 200
             interpolator = OvershootInterpolator(1.8f)
             addUpdateListener { anim ->
                 view.peekOffsetX = anim.animatedValue as Float
             }
-        }.start()
+        }
+        peekOffsetAnimator?.start()
     }
 
     /**
@@ -2942,6 +3110,8 @@ class FloatingPetService : Service() {
         soundPool = null
         mainHandler.removeCallbacks(edgeStrollRunnable)
         mainHandler.removeCallbacks(autoChatRunnable)
+        foregroundWatchdog?.let { mainHandler.removeCallbacks(it) }
+        foregroundWatchdog = null
         removeFoodWindow()
         flingAnimator?.cancel()
         strollAnimator?.cancel()
