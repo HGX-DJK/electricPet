@@ -91,6 +91,18 @@ class FloatingPetService : Service() {
      */
     private var isPetWindowAttached: Boolean = false
 
+    /**
+     * 「窗口位置更新失败，需要重挂」的待办标记。
+     *
+     * 拖拽途中**绝不能**重建窗口：触摸手势是跟着窗口走的，
+     * removeView + addView 换掉窗口的那一刻，系统会把当前这根手指的
+     * MOVE / UP 一起丢掉 —— 日志里明明已经打了「进入拖拽」，宠物却纹丝不动。
+     *
+     * 所以拖拽里遇到更新失败只记这个标记，等手势彻底结束，
+     * 由 attachWatchdog 统一重挂，既不丢手势又能自愈。
+     */
+    private var petWindowNeedsReattach: Boolean = false
+
     // 专属悬浮对话气泡
     private var bubbleView: TextView? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
@@ -175,6 +187,17 @@ class FloatingPetService : Service() {
     private var isPetRecalled: Boolean = false
     private var peekAnimator: ValueAnimator? = null
     private var peekingRunnable: Runnable? = null
+
+    /**
+     * 排探头任务时波可所在的窗口坐标。
+     *
+     * 探头任务是 **延迟 5.5 秒** 才执行的，这 5.5 秒里波可完全可能
+     * 被用户拖走、被甩飞、或者被别的动画挪走。
+     * 任务真正跑起来时必须拿它对照一下：波可已经不在原地了就**放弃探头**，
+     * 绝不能把一个不知跑到哪儿的宠物硬拽回边缘 —— 那是「拖着还乱飞」的观感来源。
+     */
+    private var peekScheduledX = 0
+    private var peekScheduledY = 0
     // 拖拽溢出偏移的回收动画（与探头动画分开，避免互相打断）
     private var peekOffsetAnimator: ValueAnimator? = null
     // 「拉起主 App」后回收悬空前台标记的看门狗（见 openMainActivity）
@@ -270,6 +293,26 @@ class FloatingPetService : Service() {
                 }
                 if (hasTouchDown) return          // 手势进行中绝不碰窗口
                 val view = pokoView ?: return
+
+                // 上一段手势里 updateViewLayout 失败过 → 手势已结束，现在可以安全重挂
+                if (petWindowNeedsReattach) {
+                    petWindowNeedsReattach = false
+                    Log.w(TAG, "看门狗接手：上一段手势中窗口位置更新失败，现在重挂悬浮窗")
+                    if (reattachPetWindow()) {
+                        val params = pokoParams
+                        if (params != null) {
+                            clampPetPositionToScreen(params)
+                            try {
+                                windowManager?.updateViewLayout(view, params)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "看门狗重挂后刷新布局失败", e)
+                            }
+                        }
+                        refreshPetVisibility()
+                        return
+                    }
+                }
+
                 if (isPetWindowAttached && view.isAttachedToWindow) return
                 Log.w(TAG, "看门狗发现悬浮窗脱挂，准备重新挂载")
                 if (ensurePetWindowAttached()) {
@@ -317,7 +360,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v8"
+        const val DRAG_FIX_VERSION = "drag-fix-v9"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -911,9 +954,20 @@ class FloatingPetService : Service() {
         //     而且窗口被屏幕边界钳制时也算得对（钳制后 params.x 变了，l 跟着补回来）。
         var initialFingerX = 0f
         var initialFingerY = 0f
+        // 本次手势开始时手指的屏幕绝对位置（**不可变基线**）。
+        //
+        // ⚠️ 拖拽阈值必须用它，不能用 initialFingerX：
+        //   initialFingerX 会被"边界钳制消费"改写（贴边继续外推时它不再增长），
+        //   拿它判阈值就会出现「明明推了一大段，日志里却始终没有『进入拖拽』」。
+        //   用户看到的就是"有时好像没有进入拖拽"。
+        var gestureStartFingerX = 0f
+        var gestureStartFingerY = 0f
         // 上一帧的手指屏幕绝对位置（用于算这一帧的位移与速度）
         var lastFingerX = 0f
         var lastFingerY = 0f
+        // 上一帧真正写进窗口的坐标（用于诊断"进入了拖拽但窗口纹丝不动"）
+        var lastAppliedX = 0
+        var lastAppliedY = 0
         // 自行推算的释放速度（px/s）：由位移 + eventTime 得出，不依赖 rawX 语义
         var velocityX = 0f
         var velocityY = 0f
@@ -986,8 +1040,13 @@ class FloatingPetService : Service() {
                     // 基线一律用这个量，不依赖 event.rawX 在不同 ROM 上的语义差异。
                     initialFingerX = params.x + event.x
                     initialFingerY = params.y + event.y
+                    // 不可变的"手势起点"基线：只用于判定是否进入拖拽
+                    gestureStartFingerX = initialFingerX
+                    gestureStartFingerY = initialFingerY
                     lastFingerX = initialFingerX
                     lastFingerY = initialFingerY
+                    lastAppliedX = params.x
+                    lastAppliedY = params.y
                     velocityX = 0f
                     velocityY = 0f
                     lastEventTime = event.eventTime
@@ -1111,6 +1170,14 @@ class FloatingPetService : Service() {
                     val totalDx = wantedX - initialX
                     val totalDy = wantedY - initialY
 
+                    // 手指**真实走过的行程**（相对手势起点，永不被边界钳制改写）。
+                    // 判定"是否进入拖拽"必须用它：
+                    //   贴着屏幕边缘继续往外推时，窗口没地方去了（totalDx 不再增长），
+                    //   但手指明明推了很远 —— 用 totalDx 判阈值就永远进不了拖拽态，
+                    //   用户看到的就是"有时好像没有进入"。
+                    val travelDx = (fingerX - gestureStartFingerX).toInt()
+                    val travelDy = (fingerY - gestureStartFingerY).toInt()
+
                     // 自行推算速度（px/s）：用 eventTime 做时间基准，
                     // 同样不依赖 rawX 语义，甩出去的惯性方向才不会反。
                     val dt = (event.eventTime - lastEventTime).coerceAtLeast(1L)
@@ -1138,14 +1205,20 @@ class FloatingPetService : Service() {
                         dragDxAccum = 0f
                     }
 
-                    if (!hasDragged && (abs(totalDx) > touchSlop || abs(totalDy) > touchSlop)) {
+                    if (!hasDragged &&
+                        (abs(travelDx) > touchSlop || abs(travelDy) > touchSlop)
+                    ) {
                         isClick = false
                         hasDragged = true
                         hideActionMenu(animated = false)
                         longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                         // 真正开始拖动才"拎起悬空"，单击不再出现拎起-落地的抽搐
                         pokoView?.onDragStateChanged(true)
-                        Log.d(TAG, "进入拖拽 dx=$totalDx dy=$totalDy")
+                        Log.d(
+                            TAG,
+                            "进入拖拽 dx=$totalDx dy=$totalDy " +
+                                "(手指行程=$travelDx,$travelDy 本帧 step=($stepX, $stepY))"
+                        )
                     }
 
                     // 限制移动在屏幕边界之内，动态适应状态栏与手势条避让
@@ -1165,6 +1238,28 @@ class FloatingPetService : Service() {
 
                     params.x = clampedX
                     params.y = clampedY
+
+                    // 🔍 诊断：已经进入拖拽，窗口位置却一帧都没变。
+                    //
+                    // 排除掉"被屏幕边界钳住"这种正常情况（wantedX == clampedX），
+                    // 剩下的就只剩两种可能：
+                    //   ① updateViewLayout 没真正生效（窗口没动）
+                    //   ② 有别的东西在同一帧把窗口坐标改回去了
+                    // 两种都会让用户看到「日志里已经打了『进入拖拽』，宠物却不动」。
+                    // 把现场记下来，下一轮定位就不用再靠猜。
+                    if (hasDragged && (stepX != 0 || stepY != 0) &&
+                        wantedX == clampedX && wantedY == clampedY &&
+                        params.x == lastAppliedX && params.y == lastAppliedY
+                    ) {
+                        Log.w(
+                            TAG,
+                            "拖拽中窗口位置没有变化 step=($stepX, $stepY) " +
+                                "窗口=(${params.x}, ${params.y}) 期望=($clampedX, $clampedY) " +
+                                "attached=${pokoView?.isAttachedToWindow} wm=$isPetWindowAttached"
+                        )
+                    }
+                    lastAppliedX = params.x
+                    lastAppliedY = params.y
 
                     // 拖出屏幕的部分用"绘制偏移"表现：窗口本身绝不越界，
                     // 既能拖出半只猫，又不会重现坐标钳制把宠物钉死在边缘的问题
@@ -1186,9 +1281,17 @@ class FloatingPetService : Service() {
                     } catch (e: Exception) {
                         // 之前这里被静默吞掉，导致"宠物按不动/拖不动"完全无从排查
                         Log.e(TAG, "悬浮窗位置更新失败", e)
-                        // 位置更新失败往往意味着窗口已经从 WindowManager 脱挂，
-                        // 此时后续所有触摸都收不到，而且永远不会自愈 —— 立刻重挂一次。
-                        reattachPetWindow()
+                        // ⚠️⚠️ 这里**绝不能**立刻 reattachPetWindow()。
+                        //
+                        // 触摸手势属于**窗口**而不是屏幕：removeView + addView 换掉窗口的那一刻，
+                        // 系统会把当前这根手指的触摸流一起丢掉 ——
+                        // MOVE / UP 全部收不到。
+                        // 用户看到的就是：日志里明明打了「进入拖拽」，宠物却纹丝不动。
+                        //
+                        // 正确做法：只记一个"待重挂"标记，等手势彻底结束，
+                        // 由 attachWatchdog 在**没有任何手指按着**的时候统一重挂 ——
+                        // 既不丢手势，又能自愈。
+                        petWindowNeedsReattach = true
                     }
 
                     if (!hasLoggedMove) {
@@ -1320,6 +1423,24 @@ class FloatingPetService : Service() {
     private fun reattachPetWindow(): Boolean {
         val view = pokoView ?: return false
         val params = pokoParams ?: return false
+
+        // ⚠️⚠️ **总闸**：手势进行中一律不换窗口。
+        //
+        // 触摸手势属于**窗口**而不是屏幕：removeView + addView 换掉窗口的那一刻，
+        // 系统会把当前这根手指的 MOVE / UP 一起丢掉 ——
+        // 表现出来就是「日志里明明打了『进入拖拽』，宠物却纹丝不动」。
+        //
+        // 这个函数是所有重建路径的总入口（看门狗、挂载体检、显隐恢复、
+        // 拖拽失败重试），把闸门放在这里，才能保证**没有任何一条路径**
+        // 会在用户正按着宠物的时候把窗口换掉。
+        //
+        // 只记标记，等手势彻底结束由 attachWatchdog 接手重挂：既不丢手势，又能自愈。
+        if (hasTouchDown) {
+            petWindowNeedsReattach = true
+            Log.w(TAG, "手势进行中不能重建悬浮窗，已记待重挂标记")
+            return false
+        }
+
         try {
             windowManager?.removeView(view)
         } catch (_: Exception) {}
@@ -1432,19 +1553,38 @@ class FloatingPetService : Service() {
             duration = (endTime * 1000).toLong()
             interpolator = DecelerateInterpolator(1.4f)
             addUpdateListener { anim ->
-                val f = anim.animatedValue as Float
-                params.x = (startX + (targetX - startX) * f).toInt()
-                params.y = (startY + (targetY - startY) * f).toInt()
-                if (startPeek != 0f) {
-                    pokoView?.peekOffsetX = startPeek * (1f - f)
+                // ⚠️ 单写者原则：手指按着的时候，窗口坐标只属于手势处理器。
+                // 动画器若在这时继续写 params.x/y，宠物就会一边跟手指一边往动画目标跑，
+                // 表现出来就是「拖着还乱飞」。
+                if (!hasTouchDown) {
+                    val f = anim.animatedValue as Float
+                    params.x = (startX + (targetX - startX) * f).toInt()
+                    params.y = (startY + (targetY - startY) * f).toInt()
+                    if (startPeek != 0f) {
+                        pokoView?.peekOffsetX = startPeek * (1f - f)
+                    }
+                    try {
+                        windowManager?.updateViewLayout(pokoView, params)
+                        updateBubblePosition()
+                    } catch (_: Exception) {}
                 }
-                try {
-                    windowManager?.updateViewLayout(pokoView, params)
-                    updateBubblePosition()
-                } catch (_: Exception) {}
             }
             addListener(object : AnimatorListenerAdapter() {
+                // ⚠️ Android 在 cancel() 时会**先**回调 onAnimationCancel，**再**回调 onAnimationEnd。
+                // 不区分二者的话：用户在惯性滑行途中重新按住宠物 → ACTION_DOWN 里 cancel()
+                // → onAnimationEnd 照样触发 → settleAfterDrag() 又启动新的落位吸附动画 →
+                // 宠物在新手势进行中自己往边缘滑走。
+                // 这就是「有时候拖着还乱飞」的确切来源之一。
+                //
+                // 注意：不能用 Animator.isCanceled 判定 —— 它不是公开 SDK API，会编译失败。
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
                 override fun onAnimationEnd(animation: Animator) {
+                    if (cancelled) return
                     settleAfterDrag(params, sizePx, density, screenWidth, releaseVx)
                 }
             })
@@ -1522,13 +1662,17 @@ class FloatingPetService : Service() {
                 // 一直可见：窗口理应还挂着，位置也得在屏内。
                 // 这里只做体检，不重建窗口（重建会让猫闪一下）。
                 ensurePetWindowAttached()
-                val params = pokoParams
-                if (params != null) {
-                    clampPetPositionToScreen(params)
-                    try {
-                        windowManager?.updateViewLayout(view, params)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "悬浮窗位置刷新失败", e)
+                // ⚠️ 手势进行中绝不碰窗口坐标：
+                // 一旦在这里改了位置，宠物就会从用户的手指底下跳走。
+                if (!hasTouchDown) {
+                    val params = pokoParams
+                    if (params != null) {
+                        clampPetPositionToScreen(params)
+                        try {
+                            windowManager?.updateViewLayout(view, params)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "悬浮窗位置刷新失败", e)
+                        }
                     }
                 }
             } else {
@@ -1586,6 +1730,13 @@ class FloatingPetService : Service() {
     private fun restorePetWindowForInteraction() {
         val view = pokoView ?: return
         val params = pokoParams ?: return
+
+        // ⚠️ 手势进行中不做任何位置/窗口改动（reattachPetWindow 内部也有同样的总闸）。
+        // 此刻用户正按着宠物，窗口一动，手势就断了。
+        if (hasTouchDown) {
+            Log.w(TAG, "手势进行中跳过悬浮窗恢复，交给看门狗")
+            return
+        }
 
         // 位置先归位：窗口在屏幕外的话，可触达区域也在屏幕外，用户根本碰不到它
         clampPetPositionToScreen(params)
@@ -1717,15 +1868,31 @@ class FloatingPetService : Service() {
             duration = snapDuration
             interpolator = DecelerateInterpolator(1.8f)
             addUpdateListener { anim ->
-                val f = anim.animatedValue as Float
-                params.x = (startX + (targetX - startX) * f).toInt()
-                try {
-                    windowManager?.updateViewLayout(pokoView, params)
-                    updateBubblePosition()
-                } catch (_: Exception) {}
+                // ⚠️ 单写者原则：手指按着的时候，窗口坐标只属于手势处理器。
+                // 吸附动画若在这时继续把宠物往边缘拉，就会和用户的手指抢方向盘 ——
+                // 表现就是「拖着还乱飞」。
+                if (!hasTouchDown) {
+                    val f = anim.animatedValue as Float
+                    params.x = (startX + (targetX - startX) * f).toInt()
+                    try {
+                        windowManager?.updateViewLayout(pokoView, params)
+                        updateBubblePosition()
+                    } catch (_: Exception) {}
+                }
             }
             addListener(object : AnimatorListenerAdapter() {
+                // ⚠️ cancel() 会先回调 onAnimationCancel 再回调 onAnimationEnd。
+                // 不区分二者的话，用户按住宠物的瞬间取消吸附动画，
+                // onAnimationEnd 里的 scheduleEdgePeeking() 照样会执行 ——
+                // 等于在手势进行中又排了一个"把宠物拽回边缘"的任务。
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                }
+
                 override fun onAnimationEnd(animation: Animator) {
+                    if (cancelled) return
                     pokoView?.triggerLandingBounce()
                     saveDockPreference(isLeftHalf, params.x, params.y)
                     scheduleEdgePeeking(isLeftHalf)
@@ -1808,23 +1975,36 @@ class FloatingPetService : Service() {
             duration = 1500
             interpolator = DecelerateInterpolator()
             addUpdateListener { anim ->
-                val f = anim.animatedValue as Float
-                params.y = (startY + (targetY - startY) * f).toInt()
-                view.updateWalkingStep(f)
-                try {
-                    windowManager?.updateViewLayout(view, params)
-                    updateBubblePosition()
-                } catch (_: Exception) {}
+                // ⚠️ 单写者原则：手指按着的时候，窗口坐标只属于手势处理器。
+                // 自主散步若在这时继续挪动 params.y，宠物会一边跟手指一边自己溜达。
+                if (!hasTouchDown) {
+                    val f = anim.animatedValue as Float
+                    params.y = (startY + (targetY - startY) * f).toInt()
+                    view.updateWalkingStep(f)
+                    try {
+                        windowManager?.updateViewLayout(view, params)
+                        updateBubblePosition()
+                    } catch (_: Exception) {}
+                }
             }
             addListener(object : AnimatorListenerAdapter() {
+                // ⚠️ cancel() 会先回调 onAnimationCancel 再回调 onAnimationEnd。
+                // 不区分二者的话，用户按住宠物打断散步后，
+                // onAnimationEnd 里的 scheduleEdgePeeking() 照样执行 ——
+                // 5.5 秒后宠物被拽回边缘，而用户此刻正在拖它 → 「拖着还乱飞」。
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: Animator) {
+                    cancelled = true
+                    isStrolling = false
+                    view.stopWalking()
+                }
+
                 override fun onAnimationEnd(animation: Animator) {
                     isStrolling = false
                     view.stopWalking()
+                    if (cancelled) return
                     scheduleEdgePeeking(!view.facingLeft)
-                }
-                override fun onAnimationCancel(animation: Animator) {
-                    isStrolling = false
-                    view.stopWalking()
                 }
             })
         }
@@ -3161,6 +3341,11 @@ class FloatingPetService : Service() {
         // 自由放在屏幕中间的波可保持完整可见，不该被边缘动效拽走
         if (!isPetDockedAtEdge()) return
 
+        // 记下"排任务时波可停在哪"，等任务真正执行时用来判断它有没有被挪走
+        val scheduledParams = pokoParams
+        peekScheduledX = scheduledParams?.x ?: 0
+        peekScheduledY = scheduledParams?.y ?: 0
+
         peekingRunnable = Runnable {
             if (!screenOn || isAppForeground || isStrolling || hasTouchDown) return@Runnable
             val params = pokoParams ?: return@Runnable
@@ -3170,18 +3355,59 @@ class FloatingPetService : Service() {
             val sizePx = petSizePx
             val edgeThreshold = (4 * density).toInt()
 
+            // ⚠️⚠️ 运行时必须**重新**确认波可此刻还停在边缘。
+            //
+            // 排任务时判定在边缘，5.5 秒之后完全可能早就不在边缘了
+            // （用户把它拖到了屏幕中间，或者甩到了另一边）。
+            // 旧实现只在排任务时检查一次，运行时就直接
+            //   params.x = dockedX      ← 把窗口硬拽回边缘
+            // 于是：宠物明明停在屏幕中间，却突然自己跑到边缘；
+            // 更糟的是 dockedX 用的是 **5.5 秒前捕获的 isLeft**，
+            // 宠物被拖到另一侧时会被"横跨屏幕"瞬移回原来那侧。
+            // 用户看到的就是「有时候拖着还乱飞」——
+            // 而且 5.5 秒的时序窗口，恰好解释了「时好时坏」。
+            if (!isPetDockedAtEdge()) return@Runnable
+
+            // 也确认波可没被挪到别处去（拖走 / 甩飞 / 被别的动画挪走）
+            val driftTolerance = (24 * density).toInt()
+            if (abs(params.x - peekScheduledX) > driftTolerance ||
+                abs(params.y - peekScheduledY) > driftTolerance
+            ) {
+                Log.d(
+                    TAG,
+                    "探头任务放弃：波可已从排任务时的位置 (${peekScheduledX}, ${peekScheduledY}) " +
+                        "挪到 (${params.x}, ${params.y})"
+                )
+                return@Runnable
+            }
+
+            // ⚠️ 停靠侧必须按**当前**窗口位置判定，不能沿用排任务时传入的 isLeft：
+            // 5.5 秒里宠物可能被拖到另一侧，沿用旧值会把它瞬移回原来的边。
+            val maxX = (screenWidth - sizePx).coerceAtLeast(0)
+            val snapRange = (10 * density).toInt()
+            val dockedOnLeft = params.x <= snapRange
+
             // 探头前先把窗口贴到对应边缘；探头过程只靠"窗口内绘制偏移"完成，窗口不再移动
-            val dockedX = if (isLeft) {
+            val dockedX = if (dockedOnLeft) {
                 edgeThreshold
             } else {
                 (screenWidth - sizePx - edgeThreshold).coerceAtLeast(0)
             }
-            if (params.x != dockedX) {
+            // 只允许"贴边"级别的微调；位移过大说明状态已经不可信，宁可不碰
+            if (abs(params.x - dockedX) <= snapRange && params.x != dockedX) {
                 params.x = dockedX
                 try {
                     windowManager?.updateViewLayout(view, params)
-                } catch (_: Exception) {}
+                } catch (e: Exception) {
+                    Log.e(TAG, "探头前贴边失败", e)
+                }
             }
+
+            Log.d(
+                TAG,
+                "探头执行：当前在${if (dockedOnLeft) "左" else "右"}侧 " +
+                    "(排任务时的参考侧=${if (isLeft) "左" else "右"}) x=${params.x}"
+            )
 
             // 向屏幕边缘外侧避让收纳 32%：左侧边缘向左藏、右侧边缘向右藏
             //
@@ -3191,7 +3417,7 @@ class FloatingPetService : Service() {
             // 否则贴右边躲的波可会往屏幕内侧滑，探头完全反了向。
             //
             // 偏移发生在绘制层，窗口坐标不变 —— 拖拽起点与手指位移始终一一对应
-            val peekOffset = if (isLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)
+            val peekOffset = if (dockedOnLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)
 
             peekAnimator?.cancel()
             peekAnimator = ValueAnimator.ofFloat(0f, 1f).apply {

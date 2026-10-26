@@ -278,14 +278,20 @@ void main() {
               '镜像就会把方向反掉');
 
       // 服务层：贴左躲 -> 负值（往屏幕左），贴右躲 -> 正值（往屏幕右）
+      //
+      // ⚠️ v9 起，这里的判据从"排任务时传入的 isLeft"改成了
+      // "**当前窗口实际停在哪一侧**"（dockedOnLeft）。
+      // 原因：探头任务延迟 5.5 秒才执行，这期间宠物可能被拖到另一侧；
+      // 沿用旧的 isLeft 会让它被"横跨屏幕"瞬移回原来那侧 —— 用户说的"乱飞"。
       final peekBlock = _between(
         serviceSource,
         'private fun scheduleEdgePeeking',
         'private fun isPetDockedAtEdge',
       );
-      expect(peekBlock, contains('if (isLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)'),
+      expect(peekBlock, contains('if (dockedOnLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)'),
           reason: '探头偏移必须是屏幕方向：左侧为负、右侧为正，'
-              '这样"往哪边躲就往哪边藏"，与猫面朝哪边无关');
+              '这样"往哪边躲就往哪边藏"，与猫面朝哪边无关；'
+              '而且左右必须按**当前实际停靠侧**判定，不能沿用排任务时的旧值');
 
       // 拖拽溢出偏移同理：手指往右推，猫就往右被推出屏幕边缘
       final moveBranch = _between(
@@ -396,9 +402,25 @@ void main() {
         'MotionEvent.ACTION_MOVE ->',
         'MotionEvent.ACTION_UP',
       );
-      expect(moveBranch, contains('reattachPetWindow()'),
-          reason: '窗口位置更新失败（绝大多数情况就是窗口已脱挂）后必须立刻重挂，'
-              '否则后续所有触摸都收不到，且再也不会恢复');
+      // ⚠️ 这条断言在 v9 被推翻了。
+      //
+      // 旧断言要求"位置更新失败后立刻重挂窗口"，理由是窗口脱挂了就再也收不到触摸。
+      // 但它忽略了一件事：**触摸手势属于窗口，而不是屏幕**。
+      // removeView + addView 换掉窗口的那一刻，系统会把当前这根手指的
+      // MOVE / UP 一起丢掉 —— 于是出现一个非常矛盾的现象：
+      //   日志里明明已经打了「进入拖拽」，宠物却纹丝不动。
+      // 这正是用户反馈的「有时候有进入拖拽，但是不动」。
+      //
+      // 正确做法：拖拽途中只记"待重挂"标记，等手势彻底结束，
+      // 由手势之外的看门狗统一重挂 —— 既不丢手势，又能自愈。
+      expect(_stripLiteralsAndComments(moveBranch), isNot(contains('reattachPetWindow()')),
+          reason: '拖拽途中绝不能重建窗口 —— 触摸手势属于窗口而不是屏幕，'
+              'removeView + addView 换掉窗口的那一刻，'
+              '系统会把当前这根手指的 MOVE / UP 一起丢掉，'
+              '表现出来就是「日志里已经打了『进入拖拽』，宠物却纹丝不动」');
+      expect(_stripLiteralsAndComments(moveBranch), contains('petWindowNeedsReattach = true'),
+          reason: '位置更新失败必须记下「待重挂」标记，'
+              '否则窗口脱挂之后再也收不到触摸，而且永远不会自愈');
     });
 
     test('挂载体检绝不能用 View.parent 判断，且不得在手势进行中重建窗口', () {
@@ -606,6 +628,334 @@ void main() {
       }
       expect(sim.windowY, 280.0,
           reason: '手指纵向从 140 走到 320 → 窗口必须同步下移 180（100 → 280）');
+    });
+  });
+
+  group('乱飞专项：窗口坐标只能有一个写入者', () {
+    // 用户反馈原文（第 4 轮）：
+    // 「触摸按下有时候有进入拖拽，但是不动，有时候好像没有进入；有时候拖着还乱飞」
+    //
+    // 这一组把"谁有权写悬浮窗坐标"这件事钉死。
+    //
+    // 背景：悬浮窗的坐标 params.x / params.y 至少被 5 个地方写：
+    //   ① 手势处理器（拖拽）        ← 手指按住时**唯一**合法的写入者
+    //   ② 惯性滑行 flingAnimator
+    //   ③ 贴边吸附 edgeSnapAnimator
+    //   ④ 自主散步 strollAnimator
+    //   ⑤ 探头调度 peekingRunnable
+    //
+    // 只要它们在手指按着的时候还在写，宠物就会"一边跟手指一边往别处跑"——
+    // 这就是「乱飞」。而 Android 的 cancel() 会**先**回调 onAnimationCancel、
+    // **再**回调 onAnimationEnd，所以"用户按住宠物 → 取消动画"这条路径上，
+    // 旧实现会在新手势进行中又启动新的落位动画 / 探头调度。
+
+    test('拖拽阈值必须用手指真实行程，不能用会被边界改写的位移', () {
+      // 贴着屏幕边缘继续往外推时，窗口没地方去了，位移不再增长；
+      // 但手指明明推了很远。旧实现用位移判阈值 → 永远进不了拖拽态 →
+      // 用户看到的就是「有时候好像没有进入」。
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      final moveCode = _stripLiteralsAndComments(moveBranch);
+
+      expect(moveCode, contains('gestureStartFingerX'),
+          reason: '必须有一个**不可变**的手势起点基线来度量手指真实行程');
+      expect(moveCode, contains('val travelDx = (fingerX - gestureStartFingerX).toInt()'),
+          reason: '拖拽阈值必须用手指相对手势起点的真实行程');
+      expect(moveCode, contains('abs(travelDx) > touchSlop'),
+          reason: '进入拖拽的判定必须基于真实行程，'
+              '否则贴边外推时窗口动不了、阈值也过不去，用户以为"没进入拖拽"');
+      expect(moveCode, isNot(contains('abs(totalDx) > touchSlop')),
+          reason: 'totalDx 会被"边界钳制消费"改写，拿它判阈值在贴边时永远进不了拖拽态');
+    });
+
+    test('探头任务必须在运行时复查边缘，停靠侧也必须按当前位置判定', () {
+      // 这是「有时候拖着还乱飞」的头号来源：
+      //
+      // 探头任务排下去之后要等 5.5 秒才执行。这 5.5 秒里宠物完全可能被
+      // 用户拖走、被甩到另一边、或者被别的动画挪走。
+      //
+      // 旧实现只在**排任务时**检查了一次"是否停在边缘"，运行时直接
+      //   params.x = dockedX
+      // 把窗口硬拽回边缘；而 dockedX 用的是 **5.5 秒前捕获的 isLeft**，
+      // 宠物被拖到另一侧时会被"横跨屏幕"瞬移回原来那侧。
+      //
+      // 5.5 秒的时序窗口，恰好解释了用户说的「时好时坏」。
+      final peekFun = _braceBlock(serviceSource, 'private fun scheduleEdgePeeking');
+      final runnable = _braceBlock(peekFun, 'peekingRunnable = Runnable {');
+      final runnableCode = _stripLiteralsAndComments(runnable);
+
+      expect(runnableCode, contains('if (!isPetDockedAtEdge()) return@Runnable'),
+          reason: '探头任务**运行时**必须重新确认宠物此刻还停在边缘；'
+              '只检查排任务时的那一刻，会把停在屏幕中间的宠物硬拽回边缘');
+      expect(runnableCode, contains('peekScheduledX'),
+          reason: '必须记录排任务时宠物的位置，'
+              '运行时发现它被挪走了就要放弃探头，而不是把它拽回边缘');
+      expect(runnableCode, contains('val dockedOnLeft = params.x <= snapRange'),
+          reason: '停靠侧必须按**当前**窗口位置判定，'
+              '绝不能沿用排任务时捕获的 isLeft —— 那会造成横跨屏幕的瞬移');
+      expect(runnableCode, isNot(contains('val dockedX = if (isLeft)')),
+          reason: 'dockedX 绝不能再由排任务时捕获的 isLeft 决定');
+      expect(runnableCode, contains('val peekOffset = if (dockedOnLeft)'),
+          reason: '探头偏移方向必须与"当前实际停靠侧"一致，'
+              '否则宠物换边后探头会朝屏幕内侧滑');
+    });
+
+    test('动画器被取消时不得触发落位 / 探头调度', () {
+      // Android 的 cancel() 会**先**回调 onAnimationCancel、**再**回调 onAnimationEnd。
+      //
+      // 用户在惯性滑行途中重新按住宠物 → ACTION_DOWN 里 cancel()
+      // → onAnimationEnd 照样触发 → settleAfterDrag() 又启动新的落位吸附动画
+      // → 宠物在新手势进行中自己往边缘滑走。
+      //
+      // 这就是「有时候拖着还乱飞」的确切来源之一。
+      // 注意：不能用 Animator.isCanceled 判定 —— 它不是公开 SDK API，会编译失败。
+      final fling = _braceBlock(serviceSource, 'flingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+      expect(fling, contains('onAnimationCancel'),
+          reason: '惯性动画必须能区分"播完"与"被取消"');
+      expect(fling, contains('private var cancelled = false'),
+          reason: '惯性动画必须用本地 cancelled 标记区分取消');
+      expect(_stripLiteralsAndComments(_onAnimationEndBody(fling)),
+          contains('if (cancelled) return'),
+          reason: '被取消的惯性动画不得再启动落位逻辑，'
+              '否则新手势进行中宠物会自己滑走');
+
+      final snap = _braceBlock(serviceSource, 'edgeSnapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+      expect(snap, contains('onAnimationCancel'),
+          reason: '贴边吸附动画必须能区分"播完"与"被取消"');
+      expect(_stripLiteralsAndComments(_onAnimationEndBody(snap)),
+          contains('if (cancelled) return'),
+          reason: '被取消的吸附动画不得再排探头任务 —— '
+              '那等于在手势进行中排了个"把宠物拽回边缘"的任务');
+
+      final stroll = _braceBlock(serviceSource, 'strollAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+      expect(stroll, contains('onAnimationCancel'),
+          reason: '自主散步动画必须能区分"播完"与"被取消"');
+      expect(_stripLiteralsAndComments(_onAnimationEndBody(stroll)),
+          contains('if (cancelled) return'),
+          reason: '被打断的散步不得再排探头任务');
+    });
+
+    test('手势进行中，动画器不得写窗口坐标（单写者原则）', () {
+      // 只要动画器在手指按着的时候还能改 params.x / params.y，
+      // 宠物就会一边跟手指一边往动画目标跑 —— 用户看到的就是「乱飞」。
+      final fling = _braceBlock(serviceSource, 'flingAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+      final snap = _braceBlock(serviceSource, 'edgeSnapAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+      final stroll = _braceBlock(serviceSource, 'strollAnimator = ValueAnimator.ofFloat(0f, 1f).apply {');
+
+      for (final entry in {
+        '惯性滑行': fling,
+        '贴边吸附': snap,
+        '自主散步': stroll,
+      }.entries) {
+        expect(_stripLiteralsAndComments(entry.value), contains('if (!hasTouchDown)'),
+            reason: '${entry.key}动画在写窗口坐标前必须检查"手指是不是还按着"；'
+                '手指按着时窗口坐标只属于手势处理器');
+      }
+    });
+
+    test('窗口坐标的其它写入者（探头调度）也必须避开手势进行中', () {
+      final peekFun = _braceBlock(serviceSource, 'private fun scheduleEdgePeeking');
+      final runnable = _braceBlock(peekFun, 'peekingRunnable = Runnable {');
+      expect(_stripLiteralsAndComments(runnable), contains('hasTouchDown'),
+          reason: '探头任务执行时必须确认没有手指按着，'
+              '否则会在用户正拖它的时候把窗口挪走');
+    });
+
+    test('重建窗口必须有总闸：手势进行中任何路径都不许换窗口', () {
+      // reattachPetWindow() 是所有"重建窗口"路径的总入口：
+      //   看门狗、挂载体检 ensurePetWindowAttached()、显隐恢复
+      //   restorePetWindowForInteraction()、拖拽失败重试……
+      //
+      // 只要有一条路径能在用户正按着的时候换窗口，这根手指后面的 MOVE / UP 就全丢了，
+      // 表现出来就是「日志里已经打了『进入拖拽』，宠物却纹丝不动」。
+      //
+      // 所以总闸必须落在 reattachPetWindow() 自己身上，
+      // 而不是指望每个调用方都记得检查（早晚会有新的调用方漏掉）。
+      final reattach = _braceBlock(serviceSource, 'private fun reattachPetWindow()');
+      final reattachCode = _stripLiteralsAndComments(reattach);
+      expect(reattachCode, contains('if (hasTouchDown)'),
+          reason: '重建窗口的总入口必须挡下手势进行中的调用');
+      expect(reattachCode, contains('petWindowNeedsReattach = true'),
+          reason: '挡下来之后要记下待重挂标记，'
+              '否则窗口可能就这么挂着坏状态，直到下个看门狗周期才恢复');
+      expect(reattachCode.indexOf('if (hasTouchDown)'),
+          lessThan(reattachCode.indexOf('removeView')),
+          reason: '总闸必须在 removeView 之前生效 —— '
+              '先摘了再判断就晚了，手势已经断了');
+
+      // 显隐恢复路径同理：它会重建窗口，也会顺带把坐标钳回屏内（等于把宠物挪走）
+      final restore =
+          _braceBlock(serviceSource, 'private fun restorePetWindowForInteraction()');
+      expect(_stripLiteralsAndComments(restore), contains('if (hasTouchDown)'),
+          reason: '显隐恢复会重建窗口并改坐标，手势进行中必须让路');
+
+      final visibility =
+          _braceBlock(serviceSource, 'private fun refreshPetVisibility()');
+      expect(_stripLiteralsAndComments(visibility), contains('if (!hasTouchDown)'),
+          reason: '显隐刷新里"把坐标钳回屏内"这一步会移动宠物，'
+              '手势进行中绝不能做');
+    });
+
+    test('必须留下"进入拖拽却没动"的现场日志，否则下一轮只能靠猜', () {
+      // 这一轮已经修掉了好几条确定的成因，但真机上的行为还需要用户实测确认。
+      // 万一还有漏网的，必须留下现场证据：
+      //   已进入拖拽、没被边界钳住、手指也在动，窗口坐标却一帧都没变。
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      final moveCode = _stripLiteralsAndComments(moveBranch);
+      expect(serviceSource, contains('var lastAppliedX'),
+          reason: '缺少"进入拖拽却不动"的现场判定基线：'
+              '必须记住上一帧真正写进窗口的坐标，才能发现窗口一帧都没动；'
+              '没有它，下一轮反馈就只能靠猜');
+      expect(moveCode, contains('params.x == lastAppliedX && params.y == lastAppliedY'),
+          reason: '诊断必须真的比对"这一帧"和"上一帧"的窗口坐标，'
+              '光记住坐标不比对等于没记');
+      expect(moveCode, contains('wantedX == clampedX'),
+          reason: '诊断必须先排除"被屏幕边界钳住"这种正常情况，否则全是误报');
+      expect(moveBranch, contains('拖拽中窗口位置没有变化'),
+          reason: '缺少"进入拖拽却不动"的现场日志文案');
+    });
+  });
+
+  group('乱飞专项：行为级模拟（不依赖真机）', () {
+    test('宠物被拖到屏幕中间后，探头任务必须放弃，不得把它拽回边缘', () {
+      final sim = _PeekTaskSim(
+        windowX: 8,
+        windowY: 400,
+        windowSize: 160,
+        screenWidth: 1080,
+        screenHeight: 2200,
+        density: 3.0,
+        isLeftAtSchedule: true,
+      );
+      sim.schedule();
+
+      // 5.5 秒里用户把宠物拖到了屏幕中间
+      sim.windowX = 460;
+
+      final before = sim.windowX;
+      sim.run();
+      expect(sim.resultX, isNull,
+          reason: '宠物已经不在边缘了，探头任务必须放弃 —— '
+              '旧实现会把一个停在屏幕中间的宠物硬拽回边缘');
+      expect(sim.windowX, before,
+          reason: '放弃任务时窗口坐标绝不能被改动');
+    });
+
+    test('宠物被拖到另一侧后，探头任务绝不能横跨屏幕瞬移', () {
+      final sim = _PeekTaskSim(
+        windowX: 8,
+        windowY: 400,
+        windowSize: 160,
+        screenWidth: 1080,
+        screenHeight: 2200,
+        density: 3.0,
+        isLeftAtSchedule: true,
+      );
+      sim.schedule();
+
+      // 5.5 秒里用户把宠物拖到了右边
+      sim.windowX = 1080 - 160 - 8;
+
+      sim.run();
+
+      final leftDockedX = 4 * 3.0;
+      expect(sim.resultX, isNull,
+          reason: '宠物被挪走太远，探头任务应当放弃');
+      expect(sim.windowX, isNot(closeTo(leftDockedX, 1.0)),
+          reason: '绝不能把宠物瞬移回 5.5 秒前那一侧的边缘');
+      expect(sim.windowX, closeTo(1080 - 160 - 8, 1.0),
+          reason: '宠物必须留在用户放它的位置');
+    });
+
+    test('即使漂移检查放行，停靠侧也必须按当前位置判定', () {
+      // 把漂移检查关掉，只验证"停靠侧来自当前位置"这一条：
+      // 旧实现用排任务时捕获的 isLeft，宠物在右边却会被算成左边。
+      final sim = _PeekTaskSim(
+        windowX: 8,
+        windowY: 400,
+        windowSize: 160,
+        screenWidth: 1080,
+        screenHeight: 2200,
+        density: 3.0,
+        isLeftAtSchedule: true,
+        enforceDrift: false,
+      );
+      sim.schedule();
+
+      // 宠物此刻在右侧边缘，但排任务时的参考侧是左边
+      sim.windowX = 1080 - 160 - 8;
+      sim.run();
+
+      final rightDockedX = 1080 - 160 - 4 * 3.0;
+      final leftDockedX = 4 * 3.0;
+      expect(sim.windowX, closeTo(rightDockedX, 1.0),
+          reason: '探头必须贴在**当前**所在的那一侧');
+      expect(sim.windowX, isNot(closeTo(leftDockedX, 1.0)),
+          reason: '沿用旧的参考侧会造成横跨屏幕的瞬移（用户说的"乱飞"）');
+    });
+
+    test('用户按住宠物时取消惯性动画，宠物不得再自己往落位目标滑', () {
+      final sim = _FlingVsTouchSim(
+        windowX: 100,
+        snapTargetX: 900,
+      );
+      sim.touchDown = true;
+      sim.cancel();
+
+      expect(sim.settleStarted, isFalse,
+          reason: '取消动画不得启动新的落位动画 —— '
+              '那会让宠物在用户正按着的时候自己往边缘滑（"拖着还乱飞"）');
+      expect(sim.windowX, 100.0,
+          reason: '手指按着期间，窗口坐标只能属于手势处理器');
+    });
+
+    test('旧实现（取消仍触发落位 + 动画器照写坐标）在同一场景下确实会乱飞', () {
+      // 这条测试的作用是把"为什么必须加取消守卫"钉死，
+      // 防止以后有人为了"简化"把守卫删掉。
+      final sim = _FlingVsTouchSim(
+        windowX: 100,
+        snapTargetX: 900,
+        guardAgainstCancel: false,
+        guardSingleWriter: false,
+      );
+      sim.touchDown = true;
+      sim.cancel();
+      sim.update(0.5);
+
+      expect(sim.settleStarted, isTrue,
+          reason: '旧实现里 cancel() 触发的 onAnimationEnd 会启动落位动画');
+      expect(sim.windowX, isNot(100.0),
+          reason: '旧实现下宠物会在手指按住期间自己往落位目标移动 —— 这就是"乱飞"');
+    });
+
+    test('贴着屏幕边缘继续外推也必须进入拖拽态', () {
+      final sim = _DragSim(
+        windowX: 318,
+        windowY: 300,
+        windowSize: 82,
+        screenWidth: 400,
+        screenHeight: 800,
+        touchSlop: 12,
+      );
+      sim.down(50, 50);
+
+      // 手指继续往右推 200px（窗口已经贴到右边缘，去不了了）
+      for (final target in [380.0, 450.0, 520.0]) {
+        sim.move(target - sim.windowX, 50 - sim.windowY);
+      }
+
+      expect(sim.windowX, 318.0, reason: '窗口必须被钳在屏幕内');
+      expect(sim.enteredDrag, isTrue,
+          reason: '手指真实行程已经超过阈值，必须进入拖拽态；'
+              '旧实现用"窗口位移"判阈值，贴边时永远进不去 —— '
+              '用户看到的就是"有时候好像没有进入"');
     });
   });
 
@@ -2854,6 +3204,7 @@ class _DragSim {
     required this.screenWidth,
     required this.screenHeight,
     this.useRawCoordinateFormula = false,
+    this.touchSlop = 12,
   });
 
   double windowX;
@@ -2865,6 +3216,9 @@ class _DragSim {
   /// 是否改用旧算法（依赖 raw 坐标语义）
   final bool useRawCoordinateFormula;
 
+  /// 进入拖拽的位移阈值（px）
+  final double touchSlop;
+
   late double initialX;
   late double initialY;
   late double initialFingerX;
@@ -2875,6 +3229,15 @@ class _DragSim {
   late double lastFingerY;
   late double totalDx;
   late double totalDy;
+
+  /// 手指相对**手势起点**的真实行程（不会被边界钳制改写）
+  late double gestureStartFingerX;
+  late double gestureStartFingerY;
+  double travelDx = 0;
+  double travelDy = 0;
+
+  /// 是否已经进入拖拽态
+  bool enteredDrag = false;
 
   /// 手指按下
   void down(double localX, double localY) {
@@ -2888,6 +3251,11 @@ class _DragSim {
     lastFingerY = initialFingerY;
     totalDx = 0;
     totalDy = 0;
+    gestureStartFingerX = initialFingerX;
+    gestureStartFingerY = initialFingerY;
+    travelDx = 0;
+    travelDy = 0;
+    enteredDrag = false;
   }
 
   /// 手指移动到新的局部坐标处
@@ -2908,6 +3276,13 @@ class _DragSim {
       lastFingerY = fingerY;
       wantedX = initialX + (fingerX - initialFingerX);
       wantedY = initialY + (fingerY - initialFingerY);
+      // 真实行程：相对不可变的手势起点，边界钳制改不动它
+      travelDx = fingerX - gestureStartFingerX;
+      travelDy = fingerY - gestureStartFingerY;
+      if (!enteredDrag &&
+          (travelDx.abs() > touchSlop || travelDy.abs() > touchSlop)) {
+        enteredDrag = true;
+      }
     }
 
     final maxX = (screenWidth - windowSize).clamp(0.0, double.infinity);
@@ -2922,6 +3297,157 @@ class _DragSim {
     windowX = clampedX;
     windowY = clampedY;
   }
+}
+
+/// 复刻 FloatingPetService.scheduleEdgePeeking 里 peekingRunnable 的判定逻辑。
+///
+/// 探头任务是**延迟 5.5 秒**才执行的，这 5.5 秒里宠物完全可能被用户拖走。
+/// 旧实现只在排任务时检查了一次"是否停在边缘"，运行时直接
+/// `params.x = dockedX` 把窗口硬拽回边缘，而 dockedX 用的是 5.5 秒前捕获的 isLeft
+/// —— 宠物被拖到另一侧时会被"横跨屏幕"瞬移回去。
+class _PeekTaskSim {
+  _PeekTaskSim({
+    required this.windowX,
+    required this.windowY,
+    required this.windowSize,
+    required this.screenWidth,
+    required this.screenHeight,
+    required this.density,
+    required this.isLeftAtSchedule,
+    this.enforceDrift = true,
+  });
+
+  double windowX;
+  double windowY;
+  final double windowSize;
+  final double screenWidth;
+  final double screenHeight;
+  final double density;
+
+  /// 排任务时捕获的参考侧（旧实现直接拿它算 dockedX —— 跨侧瞬移的根源）
+  final bool isLeftAtSchedule;
+
+  /// 是否启用"漂移复查"（宠物被挪太远就放弃探头）
+  final bool enforceDrift;
+
+  late double scheduledX;
+  late double scheduledY;
+
+  /// 任务执行后的窗口 X；null 表示"任务放弃，什么都没做"
+  double? resultX;
+
+  /// 排任务
+  void schedule() {
+    scheduledX = windowX;
+    scheduledY = windowY;
+  }
+
+  /// 5.5 秒后任务真正执行（期间宠物可能已经被拖走）
+  void run() {
+    final maxX = (screenWidth - windowSize).clamp(0.0, double.infinity);
+    final snapRange = 10 * density;
+
+    // 运行时复查：必须仍在边缘
+    final docked = windowX <= snapRange || windowX >= maxX - snapRange;
+    if (!docked) {
+      resultX = null;
+      return;
+    }
+
+    // 漂移复查：宠物被挪到别处了就放弃
+    if (enforceDrift) {
+      final driftTolerance = 24 * density;
+      if ((windowX - scheduledX).abs() > driftTolerance ||
+          (windowY - scheduledY).abs() > driftTolerance) {
+        resultX = null;
+        return;
+      }
+    }
+
+    // 停靠侧按**当前**位置判定
+    final dockedOnLeft = windowX <= snapRange;
+    final edgeThreshold = 4 * density;
+    final dockedX = dockedOnLeft
+        ? edgeThreshold
+        : (screenWidth - windowSize - edgeThreshold).clamp(0.0, double.infinity);
+
+    if ((windowX - dockedX).abs() <= snapRange && windowX != dockedX) {
+      windowX = dockedX;
+    }
+    resultX = windowX;
+  }
+}
+
+/// 复刻「用户按住宠物时，惯性 / 吸附动画还在跑」这条对抗场景。
+///
+/// 复刻的关键平台事实：Android 的 `cancel()` 会**先**回调 onAnimationCancel、
+/// **再**回调 onAnimationEnd。旧实现没有区分二者，于是"用户按住宠物 → 取消动画"
+/// 这条路径上，落位动画照样被启动，宠物在新手势进行中自己往边缘滑。
+class _FlingVsTouchSim {
+  _FlingVsTouchSim({
+    required this.windowX,
+    required this.snapTargetX,
+    this.guardAgainstCancel = true,
+    this.guardSingleWriter = true,
+  });
+
+  double windowX;
+
+  /// 落位动画的目标 X（宠物会自己往这里滑）
+  final double snapTargetX;
+
+  /// 是否区分"被取消"与"播完"（新实现才有）
+  final bool guardAgainstCancel;
+
+  /// 手指按着时动画器是否还写窗口坐标（新实现才有）
+  final bool guardSingleWriter;
+
+  /// 手指是否按着
+  bool touchDown = false;
+
+  /// 是否已启动落位动画
+  bool settleStarted = false;
+
+  /// cancel()：Android 会先回调 onAnimationCancel，再回调 onAnimationEnd
+  void cancel() {
+    final cancelled = true;
+    onAnimationEnd(cancelled: cancelled);
+  }
+
+  void onAnimationEnd({required bool cancelled}) {
+    if (guardAgainstCancel && cancelled) return;
+    settleStarted = true;
+  }
+
+  /// 动画的逐帧更新
+  void update(double f) {
+    if (guardSingleWriter && touchDown) return;
+    windowX = windowX + (snapTargetX - windowX) * f;
+  }
+}
+
+/// 提取动画器监听器里 `onAnimationEnd` 的方法体（按花括号配平）。
+///
+/// Android 在 `cancel()` 时会**先**回调 onAnimationCancel、**再**回调 onAnimationEnd，
+/// 所以这里必须能单独把 onAnimationEnd 的body抠出来检查它有没有"被取消就跳过"的守卫。
+String _onAnimationEndBody(String source) {
+  const marker = 'override fun onAnimationEnd(animation: Animator)';
+  final start = source.indexOf(marker);
+  if (start < 0) {
+    fail('未找到: $marker');
+  }
+  final open = source.indexOf('{', start);
+  var depth = 0;
+  for (var i = open; i < source.length; i++) {
+    final ch = source[i];
+    if (ch == '{') {
+      depth++;
+    } else if (ch == '}') {
+      depth--;
+      if (depth == 0) return source.substring(open + 1, i);
+    }
+  }
+  fail('onAnimationEnd 的花括号不配平');
 }
 
 /// 截取以 [marker] 开头的那一对括号内的内容（按括号配平查找）。
