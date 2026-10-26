@@ -36,7 +36,6 @@ import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
-import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
@@ -158,6 +157,14 @@ class FloatingPetService : Service() {
     // 边缘半收起探头避让模式状态与调度
     private var isPeeking: Boolean = false
     private var hasTouchDown: Boolean = false
+    /**
+     * 最近一次手指按下的时刻。
+     *
+     * 用途：万一某个 UP / CANCEL 没送达（窗口被换掉、系统吞了事件），
+     * `hasTouchDown` 会永远停在 true —— 看门狗从此再也不肯修窗口，
+     * 宠物就变成"永久拖不动"。看门狗靠这个时间戳把卡死的手势强制复位。
+     */
+    private var lastTouchDownAt: Long = 0L
 
     /**
      * 波可是否被用户"收进通知栏"。
@@ -252,6 +259,15 @@ class FloatingPetService : Service() {
         override fun run() {
             mainHandler.postDelayed(this, 1500)
             try {
+                // 顺带清理"丢失的手势"：
+                // 万一某个 UP / CANCEL 没送达（窗口被换掉、系统吞了事件），
+                // hasTouchDown 会永远停在 true —— 看门狗从此再也不肯动手，
+                // 宠物就变成"永久拖不动"。这里按时间戳强制复位。
+                if (hasTouchDown && System.currentTimeMillis() - lastTouchDownAt > 5000) {
+                    Log.w(TAG, "手势状态疑似卡死（超过 5 秒没有收到 UP/CANCEL），强制复位")
+                    hasTouchDown = false
+                    pokoView?.onDragStateChanged(false)
+                }
                 if (hasTouchDown) return          // 手势进行中绝不碰窗口
                 val view = pokoView ?: return
                 if (isPetWindowAttached && view.isAttachedToWindow) return
@@ -301,7 +317,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v7"
+        const val DRAG_FIX_VERSION = "drag-fix-v8"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -865,9 +881,44 @@ class FloatingPetService : Service() {
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         var initialX = 0
         var initialY = 0
-        var initialTouchX = 0f
-        var initialTouchY = 0f
-        var lastRawX = 0f
+
+        // ⚠️⚠️⚠️ 拖拽位移必须用**手指的屏幕绝对位置**来算，
+        // 而手指的屏幕绝对位置要用「窗口当前位置 + 窗口局部坐标」推出来，
+        // 绝对不能用 event.rawX / event.rawY。
+        //
+        // 原因（"有时候可以拖、有时候拖不动"的机制性原因）：
+        //   `MotionEvent.getRawX()` 对 `WindowManager.addView()` 挂上去的悬浮窗，
+        //   在不同 ROM / 不同版本上"原始坐标"到底是**屏幕绝对坐标**还是**窗口内坐标**
+        //   并不一致（它取决于窗口的 raw offset 怎么算）。
+        //
+        //   旧实现把整个拖拽数学建在 rawX 上：
+        //       dx = event.rawX - initialTouchX
+        //       params.x = initialX + dx
+        //   只要窗口在拖拽过程中自己移动了，rawX 的语义就会让 dx 归零：
+        //       · rawX 是屏幕绝对坐标 → 手指没动、窗口动了 → dx 恒为 0；
+        //       · rawX 是窗口内坐标   → 窗口移动后 rawX 跟着变 → dx 也只生效一帧。
+        //   两种情况都是"**窗口只跟第一帧就卡住**"，
+        //   能不能看出"动了"完全取决于第一帧位移有没有超过 touchSlop ——
+        //   这正是用户看到的「有时候可以拖动，有时候又拖不动」。
+        //
+        // 现在的做法（两种 raw 语义下都正确）：
+        //   手指屏幕绝对位置 F = 窗口屏幕位置 W + 窗口局部坐标 l   ← 这个等式恒成立
+        //   窗口跟着手指走：W_new = W_0 + (F_now - F_0)
+        //
+        //   · event.x / event.y 是 View 局部坐标，定义上没有歧义；
+        //   · params.x / params.y 是我们自己写的窗口位置；
+        //   · 两者相加就是手指此刻真实的屏幕绝对位置，
+        //     而且窗口被屏幕边界钳制时也算得对（钳制后 params.x 变了，l 跟着补回来）。
+        var initialFingerX = 0f
+        var initialFingerY = 0f
+        // 上一帧的手指屏幕绝对位置（用于算这一帧的位移与速度）
+        var lastFingerX = 0f
+        var lastFingerY = 0f
+        // 自行推算的释放速度（px/s）：由位移 + eventTime 得出，不依赖 rawX 语义
+        var velocityX = 0f
+        var velocityY = 0f
+        var lastEventTime = 0L
+
         var isClick = false
         var hasDragged = false
         // 拖拽过程中的朝向：跟随水平移动方向（被拖着走会侧身迎向运动方向），
@@ -882,7 +933,6 @@ class FloatingPetService : Service() {
         val pinchTriggerDistance = 26f * density
         // 单次手势只打一条移动日志，便于用一条 logcat 判定"跟手了没有"
         var hasLoggedMove = false
-        var velocityTracker: VelocityTracker? = null
         // 单次手势内锁定屏幕尺寸，避免坐标空间在手势中途跳变导致宠物瞬移
         var gestureScreenWidth = 0
         var gestureScreenHeight = 0
@@ -896,6 +946,7 @@ class FloatingPetService : Service() {
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     hasTouchDown = true
+                    lastTouchDownAt = System.currentTimeMillis()
                     lastInteractionAt = System.currentTimeMillis()
                     // ⚠️ 按下第一件事先给悬浮窗做体检 —— 但这里**只看不修**。
                     //
@@ -921,9 +972,6 @@ class FloatingPetService : Service() {
                     // 按下瞬间立即完全露出（只复位绘制偏移，窗口坐标一动不动），
                     // 保证下面采集到的 initialX/initialY 就是宠物真实落点
                     restoreFromPeeking(animated = false)
-                    velocityTracker?.recycle()
-                    velocityTracker = VelocityTracker.obtain()
-                    velocityTracker?.addMovement(event)
                     edgeSnapAnimator?.cancel()
                     flingAnimator?.cancel()
                     strollAnimator?.cancel()
@@ -934,9 +982,15 @@ class FloatingPetService : Service() {
                     gestureScreenHeight = sh
                     initialX = params.x
                     initialY = params.y
-                    initialTouchX = event.rawX
-                    initialTouchY = event.rawY
-                    lastRawX = event.rawX
+                    // 手指此刻的**屏幕绝对位置** = 窗口位置 + 窗口局部坐标。
+                    // 基线一律用这个量，不依赖 event.rawX 在不同 ROM 上的语义差异。
+                    initialFingerX = params.x + event.x
+                    initialFingerY = params.y + event.y
+                    lastFingerX = initialFingerX
+                    lastFingerY = initialFingerY
+                    velocityX = 0f
+                    velocityY = 0f
+                    lastEventTime = event.eventTime
                     isClick = true
                     hasDragged = false
                     hasLoggedMove = false
@@ -965,7 +1019,8 @@ class FloatingPetService : Service() {
                     // 拎起要等真正超过拖拽阈值才触发，否则单击会先拎起再落地，出现一下抽搐。
                     Log.d(
                         TAG,
-                        "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY) " +
+                        "触摸按下 local=(${event.x}, ${event.y}) raw=(${event.rawX}, ${event.rawY}) " +
+                            "win=($initialX, $initialY) " +
                             "peekOffset=${pokoView?.peekOffsetX} sizePx=$petSizePx " +
                             "vis=${pokoView?.visibility} attached=${pokoView?.isAttachedToWindow} " +
                             "wm=${isPetWindowAttached} " +
@@ -997,13 +1052,15 @@ class FloatingPetService : Service() {
                         isPinching = false
                         initialX = params.x
                         initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
+                        // 重新锚定：以此刻的手指屏幕绝对位置为新基线
+                        initialFingerX = params.x + event.x
+                        initialFingerY = params.y + event.y
+                        lastFingerX = initialFingerX
+                        lastFingerY = initialFingerY
                     }
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    velocityTracker?.addMovement(event)
                     // 视线跟随：眼珠始终追着指尖
                     pokoView?.setGazeTarget(event.x, event.y)
 
@@ -1035,12 +1092,34 @@ class FloatingPetService : Service() {
 
                     val screenWidth = gestureScreenWidth
                     val screenHeight = gestureScreenHeight
-                    val dx = (event.rawX - initialTouchX).toInt()
-                    val dy = (event.rawY - initialTouchY).toInt()
 
-                    val vx = event.rawX - lastRawX
-                    lastRawX = event.rawX
-                    pokoView?.updateDragVelocity(vx)
+                    // ⚠️⚠️ 手指此刻的屏幕绝对位置 = 窗口当前位置 + 窗口局部坐标。
+                    // 这个等式恒成立，且完全不依赖 event.rawX 的语义，
+                    // 因此在 rawX 到底是"屏幕绝对"还是"窗口内"的 ROM 上都正确。
+                    val fingerX = params.x + event.x
+                    val fingerY = params.y + event.y
+
+                    // 本帧手指移动了多少（真实位移，不受窗口是否被钳制影响）
+                    val stepX = (fingerX - lastFingerX).toInt()
+                    val stepY = (fingerY - lastFingerY).toInt()
+                    lastFingerX = fingerX
+                    lastFingerY = fingerY
+
+                    // 窗口跟着手指走：起点 + 手指的累计位移
+                    val wantedX = initialX + (fingerX - initialFingerX).toInt()
+                    val wantedY = initialY + (fingerY - initialFingerY).toInt()
+                    val totalDx = wantedX - initialX
+                    val totalDy = wantedY - initialY
+
+                    // 自行推算速度（px/s）：用 eventTime 做时间基准，
+                    // 同样不依赖 rawX 语义，甩出去的惯性方向才不会反。
+                    val dt = (event.eventTime - lastEventTime).coerceAtLeast(1L)
+                    lastEventTime = event.eventTime
+                    val instVx = stepX * 1000f / dt
+                    val instVy = stepY * 1000f / dt
+                    velocityX = velocityX * 0.5f + instVx * 0.5f
+                    velocityY = velocityY * 0.5f + instVy * 0.5f
+                    pokoView?.updateDragVelocity(stepX.toFloat())
 
                     // 朝向跟随拖动方向：往左拖就侧身朝左、往右拖就朝右。
                     // 之前是按"宠物在屏幕左半边还是右半边"硬切，
@@ -1049,7 +1128,7 @@ class FloatingPetService : Service() {
                     // 注意朝向是靠整幅画面镜像实现的（canvas.scale(-1,1)），
                     // 翻面是"啪"的一下突变，所以这里用累积位移 + 滞后阈值：
                     // 累计移动超过阈值才允许翻面，翻完清零 —— 既跟手又不会来回抖。
-                    dragDxAccum += vx
+                    dragDxAccum += stepX
                     if (abs(dragDxAccum) > facingFlipThreshold) {
                         val wantLeft = dragDxAccum < 0
                         if (wantLeft != dragFacingLeft) {
@@ -1059,23 +1138,33 @@ class FloatingPetService : Service() {
                         dragDxAccum = 0f
                     }
 
-                    if (!hasDragged && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
+                    if (!hasDragged && (abs(totalDx) > touchSlop || abs(totalDy) > touchSlop)) {
                         isClick = false
                         hasDragged = true
                         hideActionMenu(animated = false)
                         longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                         // 真正开始拖动才"拎起悬空"，单击不再出现拎起-落地的抽搐
                         pokoView?.onDragStateChanged(true)
-                        Log.d(TAG, "进入拖拽 dx=$dx dy=$dy")
+                        Log.d(TAG, "进入拖拽 dx=$totalDx dy=$totalDy")
                     }
 
                     // 限制移动在屏幕边界之内，动态适应状态栏与手势条避让
                     val maxX = (screenWidth - petSizePx).coerceAtLeast(0)
                     val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, petSizePx)
 
-                    val wantedX = initialX + dx
-                    params.x = wantedX.coerceIn(0, maxX)
-                    params.y = (initialY + dy).coerceIn(minY, maxY)
+                    val clampedX = wantedX.coerceIn(0, maxX)
+                    val clampedY = wantedY.coerceIn(minY, maxY)
+
+                    // ⚠️ 被屏幕边界吃掉的位移必须**消费掉**（记回基线）。
+                    //
+                    // 不消费的话，手指往回拉时宠物会先在屏幕边缘"粘"一段距离
+                    // 才跟得回来 —— 那段粘滞正是用户感知到的「拖不动 / 粘手」。
+                    // 消费掉之后，窗口位移与手指位移始终 1:1，贴边拖也跟手。
+                    initialFingerX += (wantedX - clampedX)
+                    initialFingerY += (wantedY - clampedY)
+
+                    params.x = clampedX
+                    params.y = clampedY
 
                     // 拖出屏幕的部分用"绘制偏移"表现：窗口本身绝不越界，
                     // 既能拖出半只猫，又不会重现坐标钳制把宠物钉死在边缘的问题
@@ -1106,7 +1195,8 @@ class FloatingPetService : Service() {
                         hasLoggedMove = true
                         Log.d(
                             TAG,
-                            "首次移动 dx=$dx dy=$dy -> 窗口位置 x=${params.x} y=${params.y} " +
+                            "首次移动 dx=$totalDx dy=$totalDy (单帧 step=($stepX, $stepY)) " +
+                                "-> 窗口位置 x=${params.x} y=${params.y} " +
                                 "(初始 win=($initialX, $initialY))"
                         )
                     }
@@ -1122,9 +1212,20 @@ class FloatingPetService : Service() {
                     // 取消时不会走落位逻辑，拖出屏幕的那段绘制偏移必须在这里收回，
                     // 否则宠物会一直歪在窗口旁边悬在屏幕外（要等下次触摸才自愈）
                     animatePeekOffsetBack()
-                    velocityTracker?.recycle()
-                    velocityTracker = null
-                    Log.w(TAG, "拖拽被系统中断 (ACTION_CANCEL)，波可保持原地不动")
+                    // 手势状态必须彻底复位，否则下一次按下会继承上一次的
+                    // "正在拖拽"标记，落位逻辑会走错分支。
+                    isClick = false
+                    hasDragged = false
+                    isLongPressing = false
+                    isPinching = false
+                    velocityX = 0f
+                    velocityY = 0f
+                    Log.w(
+                        TAG,
+                        "拖拽被系统中断 (ACTION_CANCEL)，波可保持原地不动 " +
+                            "(按住时长=${System.currentTimeMillis() - lastTouchDownAt}ms) " +
+                            "—— 若松手前几乎没动过，多半是屏幕边缘的系统手势抢走了这一把"
+                    )
                     true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -1133,16 +1234,10 @@ class FloatingPetService : Service() {
                     longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
                     pokoView?.clearGazeTarget()
-                    var releaseVx = 0f
-                    var releaseVy = 0f
-                    velocityTracker?.let { vt ->
-                        vt.addMovement(event)
-                        vt.computeCurrentVelocity(1000)
-                        releaseVx = vt.xVelocity
-                        releaseVy = vt.yVelocity
-                        vt.recycle()
-                    }
-                    velocityTracker = null
+                    // 释放速度：由局部位移 + eventTime 自行推算，
+                    // 不再依赖 VelocityTracker（它同样建立在 raw 坐标上，语义不稳定）。
+                    val releaseVx = velocityX
+                    val releaseVy = velocityY
 
                     if (isLongPressing) {
                         isLongPressing = false
@@ -2101,21 +2196,26 @@ class FloatingPetService : Service() {
 
         var fishStartX = fParams.x
         var fishStartY = fParams.y
-        var downRawX = 0f
-        var downRawY = 0f
+        // 与宠物本体同一套算法：手指屏幕绝对位置 = 窗口位置 + 窗口局部坐标。
+        // 不用 ev.rawX —— 悬浮窗上 raw 坐标的语义（屏幕绝对 / 窗口内）并不稳定，
+        // 用它算位移会让小鱼干只跟第一帧就卡住。
+        var downFingerX = 0f
+        var downFingerY = 0f
 
         fish.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     fishStartX = fParams.x
                     fishStartY = fParams.y
-                    downRawX = ev.rawX
-                    downRawY = ev.rawY
+                    downFingerX = fParams.x + ev.x
+                    downFingerY = fParams.y + ev.y
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    fParams.x = (fishStartX + (ev.rawX - downRawX)).toInt()
-                    fParams.y = (fishStartY + (ev.rawY - downRawY)).toInt()
+                    val fingerX = fParams.x + ev.x
+                    val fingerY = fParams.y + ev.y
+                    fParams.x = (fishStartX + (fingerX - downFingerX)).toInt()
+                    fParams.y = (fishStartY + (fingerY - downFingerY)).toInt()
                     try {
                         windowManager?.updateViewLayout(fish, fParams)
                     } catch (_: Exception) {}

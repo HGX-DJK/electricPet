@@ -436,6 +436,179 @@ void main() {
           reason: '看门狗发现脱挂后必须真正重挂');
     });
 
+    test('拖拽位移必须用窗口局部坐标，不能依赖 event.rawX 的坐标语义', () {
+      // 这是「有时候可以拖动、有时候又拖不动」的机制性原因：
+      //
+      //   `MotionEvent.getRawX()` 对 `WindowManager.addView()` 挂上去的悬浮窗，
+      //   "原始坐标"到底是**屏幕绝对坐标**还是**窗口内坐标**，在不同 ROM / 版本上并不一致。
+      //   旧实现把整个拖拽数学建在 rawX 上（dx = rawX - initialTouchX），
+      //   窗口一旦在拖拽过程中自己移动，dx 就会归零：
+      //     · rawX 是屏幕绝对坐标 → 手指没动、窗口动了 → dx 恒为 0；
+      //     · rawX 是窗口内坐标   → 窗口移动后 rawX 跟着变 → dx 也只生效一帧。
+      //   两种情况都是「**窗口只跟第一帧就卡住**」，
+      //   能不能看出"动了"完全取决于第一帧位移有没有超过 touchSlop。
+      //
+      // 现在改成**增量跟随**：窗口要移动的距离 = 手指**相对窗口**移动的距离。
+      // 只依赖 event.x / event.y（View 局部坐标，定义上没有歧义），
+      // 以及我们自己写的 params —— 两种 raw 语义下结果都正确。
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      final moveCode = _stripLiteralsAndComments(moveBranch);
+
+      expect(moveCode, contains('val fingerX = params.x + event.x'),
+          reason: '必须先算出「手指此刻的屏幕绝对位置」= 窗口位置 + 窗口局部坐标；'
+              '这个等式恒成立，且不依赖 event.rawX 的语义');
+      expect(moveCode, contains('initialX + (fingerX - initialFingerX)'),
+          reason: '窗口新位置 = 按下时的位置 + 手指的累计位移，'
+              '这才是"窗口跟着手指走"的正确表达');
+      expect(moveCode, isNot(contains('event.rawX')),
+          reason: '拖拽数学不得依赖 event.rawX —— 对 WindowManager 悬浮窗，'
+              'raw 坐标在"屏幕绝对"和"窗口内"之间语义不稳定，'
+              '用它算位移会让窗口只跟第一帧就卡住（时好时坏）');
+      expect(moveCode, isNot(contains('event.rawY')),
+          reason: '同上，纵向位移也不能依赖 rawY');
+      expect(moveCode, contains('val clampedX = wantedX.coerceIn(0, maxX)'),
+          reason: '窗口位置必须先算出"想去的位置"再钳制在屏幕内');
+      expect(moveCode, contains('initialFingerX += (wantedX - clampedX)'),
+          reason: '被边界吃掉的位移必须消费掉，否则往回拉时宠物会粘在屏幕边缘，'
+              '用户感知就是「拖不动 / 粘手」');
+    });
+
+    test('拖拽释放速度也必须由局部坐标推算，惯性方向才可靠', () {
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP -> {',
+        'private fun refreshPetVisibility',
+      );
+      expect(_stripLiteralsAndComments(upBranch), isNot(contains('VelocityTracker')),
+          reason: 'VelocityTracker 同样建立在 raw 坐标上，'
+              '在悬浮窗上算出来的甩动方向可能与手指相反');
+      expect(upBranch, contains('velocityX'),
+          reason: '释放速度必须用局部坐标 + eventTime 自行推算');
+      expect(serviceSource, contains('event.eventTime'),
+          reason: '时间基准必须用 event.eventTime（语义明确），不能靠墙钟时间');
+    });
+
+    test('手势被系统中断时必须彻底复位状态，否则下一把拖拽会走错分支', () {
+      final cancelBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_CANCEL -> {',
+        'MotionEvent.ACTION_UP -> {',
+      );
+      final cancelCode = _stripLiteralsAndComments(cancelBranch);
+
+      expect(cancelCode, contains('isClick = false'),
+          reason: '中断后必须复位 isClick，否则松手会被误判成单击');
+      expect(cancelCode, contains('hasDragged = false'),
+          reason: '中断后必须复位 hasDragged');
+      expect(cancelCode, contains('isPinching = false'),
+          reason: '中断后必须复位捏合状态');
+    });
+
+  group('拖拽数学：行为级模拟（不依赖真机）', () {
+    // 这一组不再断言源码长什么样，而是**把算法原样复刻出来跑数值**。
+    //
+    // 原因：源码断言只能证明"代码写成了某个样子"，证明不了"算出来对不对"；
+    // 而这次的问题恰恰是算法本身错（依赖 rawX 语义），
+    // 源码长得再规范，算错还是错。
+    //
+    // 复刻的公式（与 FloatingPetService.ACTION_MOVE 一致）：
+    //   手指屏幕绝对位置 F = 窗口位置 W + 窗口局部坐标 l
+    //   窗口新位置 W' = W_0 + (F_now - F_0)
+    test('窗口位移必须始终等于手指位移（不能只跟第一帧）', () {
+      final sim = _DragSim(
+        windowX: 0,
+        windowY: 0,
+        windowSize: 82,
+        screenWidth: 400,
+        screenHeight: 800,
+      );
+      sim.down(50, 50);
+
+      // 手指的屏幕位置依次 100 / 150 / 200 / 250
+      for (final target in [100.0, 150.0, 200.0, 250.0]) {
+        // 事件里的局部坐标 = 手指屏幕位置 - 此刻的窗口位置
+        sim.move(target - sim.windowX, 50 - sim.windowY);
+      }
+
+      // 手指从 50 走到 250 → 位移 200 → 窗口必须也移动 200
+      expect(sim.windowX, 200.0,
+          reason: '窗口必须一路跟着手指走；'
+              '旧实现（用 rawX 算位移）在窗口动过之后就再也算不出位移，'
+              '表现为"只跟第一帧然后卡住"');
+    });
+
+    test('旧算法（rawX 语义为窗口内坐标）在窗口动过之后就卡住 —— 这就是时好时坏的来源', () {
+      final sim = _DragSim(
+        windowX: 0,
+        windowY: 0,
+        windowSize: 82,
+        screenWidth: 400,
+        screenHeight: 800,
+        useRawCoordinateFormula: true,
+      );
+      sim.down(50, 50);
+
+      for (final target in [100.0, 150.0, 200.0, 250.0]) {
+        sim.move(target - sim.windowX, 50 - sim.windowY);
+      }
+
+      // 复刻旧算法：dx = rawX - initialRawX，rawX 取窗口内坐标
+      expect(sim.windowX, lessThan(200.0),
+          reason: '旧算法在这里明显跟不上手指（这正是用户看到的"拖到一半卡住"）。'
+              '本测试的作用是把"为什么必须换掉 rawX"钉死，'
+              '防止以后有人又把位移改回 rawX。');
+    });
+
+    test('拖到屏幕边缘被钳制后再往回拖，窗口必须平滑跟回，不能粘在边缘', () {
+      final sim = _DragSim(
+        windowX: 300,
+        windowY: 300,
+        windowSize: 82,
+        screenWidth: 400,
+        screenHeight: 800,
+      );
+      sim.down(50, 50);
+
+      // 往右下拖到屏幕外（会被钳制在 318 / 718）
+      for (final target in [350.0, 420.0, 500.0]) {
+        sim.move(target - sim.windowX, 50 - sim.windowY);
+      }
+      expect(sim.windowX, 318.0, reason: '窗口必须被钳在屏幕内');
+
+      // 往回拖 60px：被边界吃掉的位移必须被"消费掉"，
+      // 窗口必须立刻跟回 60px，而不是先粘在边缘上一段距离。
+      for (final target in [470.0, 440.0]) {
+        sim.move(target - sim.windowX, 50 - sim.windowY);
+      }
+      expect(sim.windowX, closeTo(258.0, 0.001),
+          reason: '回拖必须 1:1 跟回（318 - 60 = 258）；'
+              '若窗口还粘在 318，说明被边界吃掉的位移没有消费掉，'
+              '用户感知就是"拖到边缘就粘住、拉不回来"');
+    });
+
+    test('纵向拖动同样必须跟手（不能只跟横向）', () {
+      final sim = _DragSim(
+        windowX: 100,
+        windowY: 100,
+        windowSize: 82,
+        screenWidth: 400,
+        screenHeight: 800,
+      );
+      sim.down(40, 40);
+
+      // 手指的横向保持 140 不变，纵向依次走到 200 / 260 / 320
+      for (final target in [200.0, 260.0, 320.0]) {
+        sim.move(140 - sim.windowX, target - sim.windowY);
+      }
+      expect(sim.windowY, 280.0,
+          reason: '手指纵向从 140 走到 320 → 窗口必须同步下移 180（100 → 280）');
+    });
+  });
+
     test('拉起主 App 不得留下悬空的前台标记（悬空 = 悬浮猫永久不可触摸）', () {
       expect(serviceSource, contains('var isMainActivityResumed: Boolean'),
           reason: '缺少「主 Activity 是否真的在前台」这一交叉校验用的真值；'
@@ -718,8 +891,10 @@ void main() {
 
       expect(moveBranch, contains('pokoView?.peekOffsetX = overflow.toFloat()'),
           reason: '边缘溢出必须走绘制偏移');
-      expect(moveBranch, contains('params.x = wantedX.coerceIn(0, maxX)'),
+      expect(moveBranch, contains('params.x = clampedX'),
           reason: '窗口坐标必须始终被钳制在屏幕内，否则会重现拖不动的老问题');
+      expect(moveBranch, contains('val clampedX = wantedX.coerceIn(0, maxX)'),
+          reason: '钳制必须显式落在 wantedX 上');
     });
 
     test('拖拽溢出偏移必须在滑行与落位时收回，否则宠物会歪在窗口旁', () {
@@ -2661,6 +2836,92 @@ List<String> _findJvmSignatureClashes(String source) {
   }
 
   return problems;
+}
+
+/// 拖拽算法的行为级模拟器。
+///
+/// 把原生侧 `FloatingPetService` 的拖拽数学原样复刻出来跑数值：
+///   · 手指屏幕绝对位置 F = 窗口位置 W + 窗口局部坐标 l
+///   · 窗口新位置 W' = W_0 + (F_now - F_0)（W_0 / F_0 是按下时的基线）
+///
+/// [useRawCoordinateFormula] 打开后改用**旧算法**（dx = rawX - initialRawX，
+/// rawX 取窗口内坐标），用来证明旧算法确实会卡住。
+class _DragSim {
+  _DragSim({
+    required this.windowX,
+    required this.windowY,
+    required this.windowSize,
+    required this.screenWidth,
+    required this.screenHeight,
+    this.useRawCoordinateFormula = false,
+  });
+
+  double windowX;
+  double windowY;
+  final double windowSize;
+  final double screenWidth;
+  final double screenHeight;
+
+  /// 是否改用旧算法（依赖 raw 坐标语义）
+  final bool useRawCoordinateFormula;
+
+  late double initialX;
+  late double initialY;
+  late double initialFingerX;
+  late double initialFingerY;
+  late double initialRawX;
+  late double initialRawY;
+  late double lastFingerX;
+  late double lastFingerY;
+  late double totalDx;
+  late double totalDy;
+
+  /// 手指按下
+  void down(double localX, double localY) {
+    initialX = windowX;
+    initialY = windowY;
+    initialFingerX = windowX + localX;
+    initialFingerY = windowY + localY;
+    initialRawX = localX;
+    initialRawY = localY;
+    lastFingerX = initialFingerX;
+    lastFingerY = initialFingerY;
+    totalDx = 0;
+    totalDy = 0;
+  }
+
+  /// 手指移动到新的局部坐标处
+  void move(double localX, double localY) {
+    double wantedX;
+    double wantedY;
+    if (useRawCoordinateFormula) {
+      // 旧算法：位移来自 raw 坐标（这里按"窗口内坐标"这一语义模拟）
+      wantedX = initialX + (localX - initialRawX);
+      wantedY = initialY + (localY - initialRawY);
+    } else {
+      // 新算法：先还原手指的屏幕绝对位置，再算累计位移
+      final fingerX = windowX + localX;
+      final fingerY = windowY + localY;
+      totalDx += fingerX - lastFingerX;
+      totalDy += fingerY - lastFingerY;
+      lastFingerX = fingerX;
+      lastFingerY = fingerY;
+      wantedX = initialX + (fingerX - initialFingerX);
+      wantedY = initialY + (fingerY - initialFingerY);
+    }
+
+    final maxX = (screenWidth - windowSize).clamp(0.0, double.infinity);
+    final maxY = (screenHeight - windowSize).clamp(0.0, double.infinity);
+    final clampedX = wantedX.clamp(0.0, maxX);
+    final clampedY = wantedY.clamp(0.0, maxY);
+    if (!useRawCoordinateFormula) {
+      // 被边界吃掉的位移必须消费掉，否则往回拉时会"粘"在边缘
+      initialFingerX += wantedX - clampedX;
+      initialFingerY += wantedY - clampedY;
+    }
+    windowX = clampedX;
+    windowY = clampedY;
+  }
 }
 
 /// 截取以 [marker] 开头的那一对括号内的内容（按括号配平查找）。
