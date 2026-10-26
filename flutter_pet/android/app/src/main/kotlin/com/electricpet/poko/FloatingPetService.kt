@@ -236,7 +236,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v4"
+        const val DRAG_FIX_VERSION = "drag-fix-v5"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -582,15 +582,28 @@ class FloatingPetService : Service() {
         initActionMenu(layoutType, density)
         initSoundEffects()
 
-        // 5. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
+        // 5. 绑定触控、拖拽、果冻回弹挤压与自由停驻事件
+        setupTouchListener(density)
+
+        try {
+            if (pokoView?.parent == null) {
+                windowManager?.addView(pokoView, pokoParams)
+            }
+            pokoView?.alpha = petOpacity
+            Log.i(TAG, "悬浮宠服务启动 · 交互增强版 $DRAG_FIX_VERSION · sizeDp=$petSizeDp")
+            Toast.makeText(this, "🐾 波可已跃上手机桌面！(v3) 摸摸头试试～", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            stopSelf()
+            return
+        }
+
+        // 6. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
         screenOn = isScreenInteractive()
         refreshPetVisibility()
 
-        // 6. 监听息屏 / 亮屏: 看不见的时候停掉动画, 别白烧电
+        // 7. 监听息屏 / 亮屏: 看不见的时候停掉动画, 别白烧电
         registerScreenReceiver()
-
-        // 7. 绑定触控、拖拽、果冻回弹挤压与自由停驻事件
-        setupTouchListener(density)
         scheduleEdgePeeking(savedDockLeft)
 
         // 8. 把饱食度 / 心情同步给悬浮猫，让表情与自主动作跟着状态走
@@ -605,16 +618,6 @@ class FloatingPetService : Service() {
 
         // 11. 夜间配色：跟随 App 的昼夜节律（收不到时退回系统深色模式）
         applyNightMode(resolveNightMode())
-
-        try {
-            windowManager?.addView(pokoView, pokoParams)
-            pokoView?.alpha = petOpacity
-            Log.i(TAG, "悬浮宠服务启动 · 交互增强版 $DRAG_FIX_VERSION · sizeDp=$petSizeDp")
-            Toast.makeText(this, "🐾 波可已跃上手机桌面！(v3) 摸摸头试试～", Toast.LENGTH_SHORT).show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            stopSelf()
-        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -655,6 +658,12 @@ class FloatingPetService : Service() {
                 recallPet()
                 return START_STICKY
             }
+        }
+
+        // 若波可之前被收进通知栏，App 侧或小组件再次启动时自动召回桌面
+        if (isPetRecalled) {
+            isPetRecalled = false
+            refreshPetVisibility()
         }
 
         val skinId = intent?.getStringExtra("skinId")
@@ -1308,6 +1317,18 @@ class FloatingPetService : Service() {
             // 恢复可见前先确认窗口还挂在 WindowManager 上：
             // "看得见但按不动"比"看不见"更难排查，这里顺手自愈一次。
             ensurePetWindowAttached()
+            // ⚠️ 关掉 App 重开后拖不动的核心修复：
+            // View 从 View.GONE 变为 View.VISIBLE 之后，Android 的 InputDispatcher
+            // 往往仍保留 0x0 的触控响应区（尤其在 Standalone Window / 国产 ROM 上）。
+            // 必须显式向 WindowManager 提交一次 updateViewLayout，并执行 requestLayout()，
+            // 强制系统 WMS 重新计算物理触控热区（Touchable Region），确保手势立即跟手！
+            val params = pokoParams
+            if (params != null && view.parent != null) {
+                try {
+                    windowManager?.updateViewLayout(view, params)
+                } catch (_: Exception) {}
+            }
+            view.requestLayout()
             mainHandler.removeCallbacks(edgeStrollRunnable)
             mainHandler.postDelayed(edgeStrollRunnable, 7000)
             scheduleEdgePeeking(!view.facingLeft)

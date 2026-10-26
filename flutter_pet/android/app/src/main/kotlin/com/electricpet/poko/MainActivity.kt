@@ -41,6 +41,11 @@ class MainActivity: FlutterActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        FloatingPetService.notifyAppForegroundChanged(false)
+        super.onStop()
+    }
+
     override fun onDestroy() {
         // Activity 真正被销毁时（不是切后台）再复位一次前台标记。
         // onPause 正常情况下已经复位过，这里是兜底：

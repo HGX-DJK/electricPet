@@ -452,6 +452,40 @@ void main() {
       expect(downBranch, contains('screen='),
           reason: '按下日志必须带出屏幕尺寸，便于核对坐标钳制范围');
     });
+
+    test('主 Activity 停止 (onStop) 时必须兜底复位前台标记', () {
+      expect(activitySource, contains('override fun onStop()'),
+          reason: '缺少 onStop 兜底；全面屏手势退出或直接杀死时可能不走 onDestroy 但走 onStop');
+      final stop = _braceBlock(activitySource, 'override fun onStop()');
+      expect(stop, contains('notifyAppForegroundChanged(false)'),
+          reason: 'Activity 停止时必须复位前台标记');
+    });
+
+    test('恢复可见时必须更新布局并刷新物理触控热区（防止 InputDispatcher 保留 0x0 响应区）', () {
+      final refreshVis = _braceBlock(serviceSource, 'private fun refreshPetVisibility()');
+      expect(refreshVis, contains('updateViewLayout'),
+          reason: 'View.VISIBLE 恢复时必须显式调用 updateViewLayout，强制 WMS 重新计算物理触控热区');
+      expect(refreshVis, contains('requestLayout()'),
+          reason: '恢复可见时必须调用 requestLayout() 强制重测');
+    });
+
+    test('服务 onCreate 必须先挂载窗口再刷新可见性，防止后台启动重复 addView 崩溃', () {
+      final onCreateBlock = _braceBlock(serviceSource, 'override fun onCreate()');
+      final addViewIdx = onCreateBlock.indexOf('addView(pokoView');
+      final refreshIdx = onCreateBlock.indexOf('refreshPetVisibility()');
+      expect(addViewIdx, isNonNegative, reason: 'onCreate 必须执行 addView');
+      expect(refreshIdx, isNonNegative, reason: 'onCreate 必须执行 refreshPetVisibility');
+      expect(addViewIdx, lessThan(refreshIdx),
+          reason: 'addView 必须在 refreshPetVisibility 之前，否则 refreshPetVisibility 会提前触发 reattachPetWindow 导致后续 addView 抛 IllegalStateException 并 stopSelf() 自杀');
+    });
+
+    test('onStartCommand 在 App 侧重新启动时自动重置 isPetRecalled 标记', () {
+      final startCommand = _braceBlock(serviceSource, 'override fun onStartCommand');
+      expect(startCommand, contains('isPetRecalled'),
+          reason: 'onStartCommand 必须检查并重置 isPetRecalled');
+      expect(startCommand, contains('isPetRecalled = false'),
+          reason: '重新启动悬浮窗时必须解除召回隐匿状态');
+    });
   });
 
   group('悬浮窗族标志位一致性', () {
