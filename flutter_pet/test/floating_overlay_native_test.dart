@@ -236,12 +236,20 @@ void main() {
           reason: '绘制管线未应用探头偏移');
     });
 
-    test('探头偏移必须画在朝向镜像之后，否则猫身会滑出窗口变成按不到的死区', () {
-      // 背景：探头偏移量是在「窗口坐标系」里给的（往左躲 = 负值，往右躲 = 正值）。
-      // 早期实现先平移偏移、再做朝向镜像，于是偏移被镜像反了号：
-      // 贴右边缘的波可本该往屏幕外躲，却反而往屏幕内侧滑，
-      // 有一截身子被画到了**悬浮窗之外** —— 那截身子落在可触达区域之外，
-      // 手指按上去系统压根收不到，用户看到的就是「按不动 / 拖不动」。
+    test('探头偏移必须画在朝向镜像之前（屏幕坐标系位移，不被镜像反号）', () {
+      // 背景（这里曾经反复改错，是"探头方向反了 / 拖到边缘就不跟手"的历史根源）：
+      //
+      // 水平镜像 x' = 2*cx - x 会把**任何**水平位移反号，
+      // 无论平移写在镜像之前还是之后：
+      //   · 先平移后镜像：M = T·S → 屏幕位移 = +tx
+      //   · 先镜像后平移：M = S·T → 屏幕位移 = -tx
+      //
+      // 也就是说"换个顺序"根本改不掉反号 —— 正确做法是让偏移量本身与镜像无关：
+      // 把 peekOffsetX 定义成**屏幕坐标系**的位移，并**先平移后镜像**。
+      //
+      // 旧实现是"先镜像后平移"（M = S·T，屏幕位移 = -tx），
+      // 于是贴右边躲的波可会往屏幕**内侧**滑：
+      // 探头完全反了向，拖拽时还会朝着手指的反方向跑，看起来就像"拖不动"。
       final drawBlock = _between(
         petViewSource,
         'override fun onDraw',
@@ -254,10 +262,53 @@ void main() {
       expect(mirrorAt, greaterThan(0), reason: 'onDraw 里找不到朝向镜像');
       expect(peekAt, greaterThan(0), reason: 'onDraw 里找不到探头偏移平移');
       expect(
-        mirrorAt,
-        lessThan(peekAt),
-        reason: '朝向镜像必须先于探头偏移平移，否则探头方向会被镜像反号，'
-            '猫身会滑到窗口外变成按不到的死区（拖不动的直接原因）',
+        peekAt,
+        lessThan(mirrorAt),
+        reason: '探头偏移必须在朝向镜像**之前**平移（M = T·S），'
+            '这样 peekOffsetX 才是屏幕坐标系的位移（正 = 向屏幕右侧），'
+            '镜像只翻"猫面朝哪边"、不翻偏移方向；'
+            '写成"先镜像后平移"会让贴右边的波可往屏幕内侧躲，'
+            '拖到边缘时猫还会朝手指的反方向跑 —— 直接表现为"拖不动"',
+      );
+    });
+
+    test('探头偏移的方向约定必须是屏幕坐标系，并在服务层与绘制层保持一致', () {
+      expect(petViewSource, contains('屏幕坐标系'),
+          reason: 'peekOffsetX 的方向约定必须写清楚：它一旦被当成"局部坐标"理解，'
+              '镜像就会把方向反掉');
+
+      // 服务层：贴左躲 -> 负值（往屏幕左），贴右躲 -> 正值（往屏幕右）
+      final peekBlock = _between(
+        serviceSource,
+        'private fun scheduleEdgePeeking',
+        'private fun isPetDockedAtEdge',
+      );
+      expect(peekBlock, contains('if (isLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)'),
+          reason: '探头偏移必须是屏幕方向：左侧为负、右侧为正，'
+              '这样"往哪边躲就往哪边藏"，与猫面朝哪边无关');
+
+      // 拖拽溢出偏移同理：手指往右推，猫就往右被推出屏幕边缘
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      expect(moveBranch, contains('val overflow = (wantedX - params.x)'),
+          reason: '拖拽溢出偏移必须直接来自"手指把窗口推出了多远"，'
+              '否则猫会朝手指的反方向跑，表现为跟手性极差');
+
+      // 状态徽标画在镜像矩阵**之外**，所以它必须自己再平移一次探头偏移。
+      // 少了这一次，猫往屏幕边缘躲的时候徽标会留在原地不跟猫走。
+      final drawBlock = _between(
+        petViewSource,
+        'override fun onDraw',
+        'private fun drawTail',
+      );
+      expect(
+        drawBlock.split('canvas.translate(peekOffsetX, 0f)').length - 1,
+        greaterThanOrEqualTo(2),
+        reason: '状态徽标画在镜像矩阵之外，必须单独再平移一次探头偏移，'
+            '否则探头时徽标会留在原地、与猫身错开一整个偏移量',
       );
     });
 
@@ -461,12 +512,56 @@ void main() {
           reason: 'Activity 停止时必须复位前台标记');
     });
 
-    test('恢复可见时必须更新布局并刷新物理触控热区（防止 InputDispatcher 保留 0x0 响应区）', () {
+    test('悬浮窗从隐藏恢复后必须重建窗口，保证触控热区被重新计算', () {
+      // 用户反馈原文：
+      // 「关闭 app，再打开这个桌面悬浮宠物，在拖动好多时候都拖不动」
+      //
+      // 关键事实：View.GONE 的视图不参与触摸分发。
+      // 恢复成 VISIBLE 之后能不能被按住，取决于系统给这个窗口算出来的
+      // **可触达区域（Touchable Region）**是否已经刷新。
+      //
+      // 只 updateViewLayout 走的是 relayout：窗口 frame 没变，
+      // WMS 就没有理由重算热区，部分 ROM（尤其国产 ROM）会保留旧热区 ——
+      // 结果就是"看得见、点不动"。上一版（drag-fix-v5）就栽在这里。
+      //
+      // 真正可靠的做法是**重建窗口**（removeView + addView）：
+      // WMS 会建一个全新的 WindowState，热区从头算一遍。
+      final restore = _braceBlock(serviceSource, 'private fun restorePetWindowForInteraction()');
+
+      expect(restore, contains('reattachPetWindow()'),
+          reason: '从隐藏恢复时必须重建悬浮窗（removeView + addView），'
+              '让 WMS 重新计算可触达区域；只 updateViewLayout 不会重算热区');
+      expect(restore, contains('clampPetPositionToScreen'),
+          reason: '重建前必须把窗口坐标钳回屏幕范围内：'
+              '屏幕外的窗口看得见也摸不到（热区同样在屏幕外）');
+      expect(restore, contains('setAnimationEnabled(true)'),
+          reason: '重建会让 View 走一遍 detach/attach，onDetachedFromWindow 会停掉动画器，'
+              '必须重新启动，否则猫会僵在桌面上不动');
+      expect(restore, contains('Log.e'),
+          reason: '重建失败必须写日志，不允许静默吞掉 —— '
+              '否则线上出现"按不动"时完全无从定位');
+    });
+
+    test('恢复可见时必须区分「刚恢复」与「一直可见」，只在刚恢复时重建窗口', () {
       final refreshVis = _braceBlock(serviceSource, 'private fun refreshPetVisibility()');
-      expect(refreshVis, contains('updateViewLayout'),
-          reason: 'View.VISIBLE 恢复时必须显式调用 updateViewLayout，强制 WMS 重新计算物理触控热区');
-      expect(refreshVis, contains('requestLayout()'),
-          reason: '恢复可见时必须调用 requestLayout() 强制重测');
+
+      expect(refreshVis, contains('val wasVisible = view.visibility == View.VISIBLE'),
+          reason: '必须先记录恢复前是否可见，才能区分「刚从 GONE 恢复」和「一直可见」');
+      expect(refreshVis, contains('restorePetWindowForInteraction()'),
+          reason: '刚从隐藏恢复的那一次必须走重建窗口的路径');
+      expect(refreshVis, contains('ensurePetWindowAttached()'),
+          reason: '一直可见的路径仍要体检窗口是否还挂在 WindowManager 上');
+    });
+
+    test('悬浮窗坐标必须能被钳回当前屏幕范围', () {
+      expect(serviceSource, contains('private fun clampPetPositionToScreen'),
+          reason: '缺少屏幕范围钳制；旋转 / 分屏 / 存档坐标失效后，'
+              '窗口会停在屏幕外，可触达区域也在屏幕外，用户看得见却拖不动');
+      final clamp = _braceBlock(serviceSource, 'private fun clampPetPositionToScreen');
+      expect(clamp, contains('getScreenDimensions()'),
+          reason: '钳制必须基于当前屏幕尺寸，而不是缓存的旧值');
+      expect(clamp, contains('getSafeVerticalBounds'),
+          reason: '纵向钳制必须避开状态栏与手势条');
     });
 
     test('服务 onCreate 必须先挂载窗口再刷新可见性，防止后台启动重复 addView 崩溃', () {

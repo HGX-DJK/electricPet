@@ -68,6 +68,15 @@ class PokoPetView(context: Context) : View(context) {
      * 而拖拽的坐标钳制范围是 [0, screenWidth - sizePx]，
      * 于是拖拽起始坐标被钳制回屏幕边缘，宠物在边缘"钉死"不动 —— 表现为拖不动。
      * 改为绘制偏移后，窗口始终在屏幕内，拖拽起点与手指位移始终一一对应。
+     *
+     * ⚠️ 方向约定：**屏幕坐标系**的水平位移（正 = 向屏幕右侧）。
+     *
+     * 这个约定很关键：朝向镜像 x' = 2*cx - x 会把水平位移反号，
+     * 如果偏移量是在"镜像之后的局部坐标系"里给出的，
+     * 贴右边时探头就会往屏幕**内侧**滑 —— 猫不但没藏到屏幕边后面，
+     * 拖拽时还会朝着手指的反方向跑，看起来就像"拖不动"。
+     * 定义成屏幕坐标并在 [onDraw] 里**先平移后镜像**，方向就与朝向彻底解耦：
+     * 贴哪边躲就往哪边躲，拖到屏幕边缘时猫也会顺着手指被"推出"半只。
      */
     var peekOffsetX: Float = 0f
         set(value) {
@@ -1157,8 +1166,13 @@ class PokoPetView(context: Context) : View(context) {
         val cx = width / 2f
         val cy = height * 0.53f + jumpOffsetY
         // 画面被朝向镜像翻转过，命中判定必须跟着一起翻，否则摸左边会摸到尾巴。
-        // 探头偏移是在镜像**之后**平移的，所以命中判定也要先把偏移减掉再翻，
-        // 这样"看到的部位"和"摸到的部位"始终是同一个。
+        //
+        // 探头偏移是**屏幕坐标系**的位移（见 [peekOffsetX]），
+        // 绘制时是"先平移后镜像"（M = T·S），所以屏幕坐标 x 对应的绘制坐标是：
+        //   · 未镜像：p = x - tx
+        //   · 已镜像：p = 2*cx - (x - tx) = 2*cx - x + tx
+        // 下面这两行正是上面两个式子的直译，
+        // 保证「看到的部位」和「摸到的部位」始终是同一个。
         val rawX = x - peekOffsetX
         val lx = if (facingLeft) 2f * cx - rawX else rawX
 
@@ -1448,31 +1462,43 @@ class PokoPetView(context: Context) : View(context) {
 
         canvas.save()
 
-        // 1. 边缘停驻朝向镜像 (贴在屏幕右边缘时面向内测左方)
+        // 1. 探头避让 / 拖拽溢出偏移：只在窗口内部平移绘制内容，窗口位置保持不变
+        //    （窗口一动，拖拽起始坐标就会落到屏幕外被钳制，宠物被钉死在边缘 —— 拖不动）
         //
-        // ⚠️ 镜像必须**先于**探头偏移做，否则探头方向会被镜像反号：
-        // 偏移量是在"窗口坐标系"里给的（左边躲 -> 负值、右边躲 -> 正值），
-        // 先平移再镜像的话，贴右边的波可会往屏幕**内侧**滑，
-        // 结果它并没有藏到屏幕边后面，反而有一截身子画到了**窗口之外** ——
-        // 那截身子落在悬浮窗的可触达区域之外，手指按上去系统根本收不到，
-        // 表现出来就是「按不动 / 拖不动」。
-        if (facingLeft) {
-            canvas.scale(-1f, 1f, w / 2f, h / 2f)
-        }
-
-        // 2. 探头避让：只在窗口内部平移绘制内容，窗口位置保持不变（保证拖拽坐标稳定）
+        // ⚠️ 这一步必须**放在朝向镜像之前**。
         //
-        // 放在镜像之后，偏移方向才与"往哪一侧屏幕边缘躲"保持一致：
-        // 露在外面的部分永远朝向屏幕边缘（画到屏外），
-        // 屏幕上看得见的那部分始终落在窗口的可触达区域里。
+        // 原因（这里曾经反复改错，是"宠物拖不动/探头方向反了"的历史根源）：
+        // 水平镜像 x' = 2*cx - x 会把**任何**水平位移反号，
+        // 无论平移写在镜像之前还是之后：
+        //   · 先平移后镜像：M = T·S  → 屏幕位移 = +tx
+        //   · 先镜像后平移：M = S·T  → 屏幕位移 = -tx
+        // 也就是说"换顺序"根本改不掉反号，必须让偏移量本身与镜像无关。
+        //
+        // 所以这里把 peekOffsetX 定义成**屏幕坐标系**的位移（正 = 向屏幕右侧），
+        // 并且**先平移再镜像**（M = T·S，屏幕位移恒为 +tx）：
+        //   · 贴右边躲 → tx 为正 → 猫往屏幕外侧躲 ✓
+        //   · 贴左边躲 → tx 为负 → 猫往屏幕外侧躲 ✓
+        //   · 朝向翻转只影响猫自身的左右朝向，不影响偏移方向 ✓
+        //
+        // 这样一来，命中判定 [hitTest] 里"先减偏移再镜像"那套算法正好成立：
+        // 屏幕坐标 x 对应的绘制坐标 = 2*cx - (x - tx) = 2*cx - x + tx，
+        // 与 hitTest 的 rawX = x - peekOffsetX; lx = 2*cx - rawX 完全一致，
+        // 「看到的部位」和「摸到的部位」永远是同一个。
         if (peekOffsetX != 0f) {
             canvas.translate(peekOffsetX, 0f)
+        }
+
+        // 2. 边缘停驻朝向镜像 (贴在屏幕右边缘时面向内测左方)
+        //
+        // 镜像只负责"猫面朝哪边"，不参与探头偏移的方向计算（见上面的推导）。
+        if (facingLeft) {
+            canvas.scale(-1f, 1f, w / 2f, h / 2f)
         }
 
         val cx = w / 2f
         val cy = h * 0.53f + jumpOffsetY
 
-        // 2. 独立物理环境阴影 (跳跃或悬空时阴影变小虚化)
+        // 3. 独立物理环境阴影 (跳跃或悬空时阴影变小虚化)
         val shadowScale = (1f + jumpOffsetY / (30f * density)).coerceIn(0.4f, 1.2f)
         val shadowAlpha = (28 * shadowScale).toInt().coerceIn(6, 35)
         shadowPaint.color = Color.argb(shadowAlpha, 15, 23, 42)
@@ -1484,33 +1510,33 @@ class PokoPetView(context: Context) : View(context) {
             shadowPaint
         )
 
-        // 3. 骨骼与动作形变坐标变换
+        // 4. 骨骼与动作形变坐标变换
         canvas.save()
         canvas.translate(cx, cy + breathY)
         canvas.rotate(bodyLeanAngle + spinAngle)
         canvas.scale(scaleXVal * squishScaleX * bodyStretchX, scaleYVal * squishScaleY * bodyStretchY)
         canvas.translate(-cx, -cy)
 
-        // 4. 灵动猫尾 (位于身体后侧摇曳)
+        // 5. 灵动猫尾 (位于身体后侧摇曳)
         drawTail(canvas, cx, cy)
 
-        // 5. 浑圆身躯与腹部花纹
+        // 6. 浑圆身躯与腹部花纹
         drawBody(canvas, cx, cy)
 
-        // 6. 呆萌大头与动态歪头/眨眼/双耳
+        // 7. 呆萌大头与动态歪头/眨眼/双耳
         drawHead(canvas, cx, cy)
 
-        // 7. 灵巧动态肉爪 (洗脸/踩奶/悬空乱蹬/伸懒腰)
+        // 8. 灵巧动态肉爪 (洗脸/踩奶/悬空乱蹬/伸懒腰)
         drawPaws(canvas, cx, cy)
 
         canvas.restore() // 恢复身体变换
 
-        // 8. 绘制漂浮上升的粒子群 (爱心 / 闪烁星芒 / 梦幻 Zzz)
+        // 9. 绘制漂浮上升的粒子群 (爱心 / 闪烁星芒 / 梦幻 Zzz)
         drawParticles(canvas)
 
         canvas.restore() // 恢复朝向矩阵
 
-        // 9. 状态徽标画在镜像矩阵之外 ——
+        // 10. 状态徽标画在镜像矩阵之外 ——
         //    emoji 文字被水平镜像会变成反字，必须在恢复朝向之后再画。
         //    探头偏移也一并还原：徽标要跟着猫一起探头，不能留在原地。
         if (statusBadge != null) {

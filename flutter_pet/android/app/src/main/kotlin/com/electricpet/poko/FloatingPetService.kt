@@ -236,7 +236,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v5"
+        const val DRAG_FIX_VERSION = "drag-fix-v6"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -992,6 +992,10 @@ class FloatingPetService : Service() {
 
                     // 拖出屏幕的部分用"绘制偏移"表现：窗口本身绝不越界，
                     // 既能拖出半只猫，又不会重现坐标钳制把宠物钉死在边缘的问题
+                    //
+                    // ⚠️ overflow 是**屏幕坐标系**的位移（正 = 往屏幕右侧），
+                    // 所以手指往右推时猫就往右被"推出"屏幕边缘，
+                    // 不会因为猫面朝左而反向跑 —— 跟手方向必须和手指一致。
                     val maxOverflow = (petSizePx * 0.4f).toInt()
                     val overflow = (wantedX - params.x).coerceIn(-maxOverflow, maxOverflow)
                     pokoView?.peekOffsetX = overflow.toFloat()
@@ -1117,6 +1121,11 @@ class FloatingPetService : Service() {
      *
      * 挂之前先摘一次，避免 "View already added" 抛异常被静默吞掉、
      * 结果窗口再也挂不上去的情况。
+     *
+     * ⚠️ 重新挂载等价于"开一扇新窗"：WMS 会为它建一个新的 WindowState，
+     * 可触达区域（Touchable Region）从头算一遍。
+     * 这正是"悬浮窗从 View.GONE 恢复后按不动"这类问题的解药 ——
+     * 只 updateViewLayout 走的是 relayout，frame 没变就不会重算热区。
      */
     private fun reattachPetWindow(): Boolean {
         val view = pokoView ?: return false
@@ -1126,7 +1135,7 @@ class FloatingPetService : Service() {
         } catch (_: Exception) {}
         try {
             windowManager?.addView(view, params)
-            Log.w(TAG, "悬浮窗已重新挂载，拖拽链路恢复")
+            Log.i(TAG, "悬浮窗已重新挂载，拖拽链路恢复")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "悬浮窗重新挂载失败", e)
@@ -1306,6 +1315,9 @@ class FloatingPetService : Service() {
         // 注意 isPetRecalled：用户主动"收进通知栏"之后，
         // 不能再因为 App 前后台切换就把猫自己放回桌面 —— 那等于收回无效。
         val visible = screenOn && !isAppForeground && !isPetRecalled
+        // 记录"恢复之前是不是不可见"，用来区分「刚恢复」和「一直可见」两种路径：
+        // 刚恢复的那一次必须重建窗口（见 restorePetWindowForInteraction）。
+        val wasVisible = view.visibility == View.VISIBLE
         val target = if (visible) View.VISIBLE else View.GONE
         if (view.visibility != target) {
             view.visibility = target
@@ -1314,21 +1326,36 @@ class FloatingPetService : Service() {
         view.setAnimationEnabled(visible)
 
         if (visible) {
-            // 恢复可见前先确认窗口还挂在 WindowManager 上：
-            // "看得见但按不动"比"看不见"更难排查，这里顺手自愈一次。
-            ensurePetWindowAttached()
-            // ⚠️ 关掉 App 重开后拖不动的核心修复：
-            // View 从 View.GONE 变为 View.VISIBLE 之后，Android 的 InputDispatcher
-            // 往往仍保留 0x0 的触控响应区（尤其在 Standalone Window / 国产 ROM 上）。
-            // 必须显式向 WindowManager 提交一次 updateViewLayout，并执行 requestLayout()，
-            // 强制系统 WMS 重新计算物理触控热区（Touchable Region），确保手势立即跟手！
-            val params = pokoParams
-            if (params != null && view.parent != null) {
-                try {
-                    windowManager?.updateViewLayout(view, params)
-                } catch (_: Exception) {}
+            if (wasVisible) {
+                // 一直可见：窗口理应还挂着，位置也得在屏内。
+                // 这里只做体检，不重建窗口（重建会让猫闪一下）。
+                ensurePetWindowAttached()
+                val params = pokoParams
+                if (params != null) {
+                    clampPetPositionToScreen(params)
+                    try {
+                        windowManager?.updateViewLayout(view, params)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "悬浮窗位置刷新失败", e)
+                    }
+                }
+            } else {
+                // ⚠️ 关掉 App 再打开悬浮宠后拖不动 的核心修复点：
+                //
+                // 悬浮窗在这段时间是 View.GONE，GONE 的视图不参与触摸分发。
+                // 恢复成 VISIBLE 之后，**能不能被按住取决于系统给这个窗口算出来的
+                // 可触达区域（Touchable Region）是否已经刷新**。
+                //
+                // 上一版（drag-fix-v5）用的是 updateViewLayout + requestLayout，
+                // 实际只是触发了一次 relayout：窗口的 frame 没变，
+                // WMS 也就没有理由重算可触达区域，部分 ROM（尤其国产 ROM）上
+                // 旧的可触达区域会被保留下来 —— 于是"看得见、点不动"。
+                //
+                // 真正可靠的做法是**重建窗口**（removeView + addView）：
+                // WMS 会为它创建一个全新的 WindowState，可触达区域从头算一遍。
+                // 这和"窗口脱挂后重新挂载"是同一条已经被验证过的自愈路径。
+                restorePetWindowForInteraction()
             }
-            view.requestLayout()
             mainHandler.removeCallbacks(edgeStrollRunnable)
             mainHandler.postDelayed(edgeStrollRunnable, 7000)
             scheduleEdgePeeking(!view.facingLeft)
@@ -1346,6 +1373,71 @@ class FloatingPetService : Service() {
             hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
             bubbleView?.visibility = View.GONE
             hideActionMenu(animated = false)
+        }
+    }
+
+    /**
+     * 把悬浮窗恢复到"可交互"状态：重建窗口 + 位置归位。
+     *
+     * 什么时候用：悬浮窗刚从 View.GONE 恢复成 VISIBLE 的时候。
+     *
+     * 为什么必须重建窗口而不是只 updateViewLayout：
+     *   可触达区域是 WMS 按窗口的 frame 算出来的，
+     *   updateViewLayout 走的是 relayout —— frame 没变就不会重算。
+     *   removeView + addView 则会在 WMS 里建一个全新的 WindowState，
+     *   可触达区域从头算，"看得见但按不动"的状态被彻底清掉。
+     *
+     * 重建还会顺带修好两件事：
+     *   - 位置跑到屏幕外（旋转 / 分屏 / 存下来的坐标失效）→ 重新钳回屏内；
+     *   - 重建会触发 View 的 detach/attach，动画需要重新启动（见末尾）。
+     */
+    private fun restorePetWindowForInteraction() {
+        val view = pokoView ?: return
+        val params = pokoParams ?: return
+
+        // 位置先归位：窗口在屏幕外的话，可触达区域也在屏幕外，用户根本碰不到它
+        clampPetPositionToScreen(params)
+
+        // 重建窗口
+        val rebuilt = reattachPetWindow()
+        if (rebuilt) {
+            Log.i(TAG, "悬浮窗已重建，触控热区刷新，拖拽链路恢复 (v$DRAG_FIX_VERSION)")
+        } else {
+            // 重建失败（多半是悬浮窗权限被收回）：退一步至少把布局刷一次
+            Log.e(TAG, "悬浮窗重建失败，退化为 updateViewLayout")
+            try {
+                windowManager?.updateViewLayout(view, params)
+                view.requestLayout()
+            } catch (e: Exception) {
+                Log.e(TAG, "悬浮窗恢复失败，悬浮宠将无法交互", e)
+            }
+        }
+
+        // 重建会让 View 走一遍 detach/attach，onDetachedFromWindow 会停掉动画，
+        // 这里必须重新把动画拉起来，否则猫会"僵"在桌面上不动。
+        view.setAnimationEnabled(true)
+    }
+
+    /**
+     * 把悬浮窗坐标钳回当前屏幕范围内。
+     *
+     * 窗口跑到屏幕外的情况比想象中常见：旋转、分屏、折叠屏展开，
+     * 或者上次存下来的横向比例在新的屏幕宽度下已经失效。
+     * 屏幕外的窗口看得见（如果只露一条边）却摸不到，
+     * 因为它的可触达区域同样在屏幕之外。
+     */
+    private fun clampPetPositionToScreen(params: WindowManager.LayoutParams) {
+        val density = resources.displayMetrics.density
+        val sizePx = if (params.width > 0) params.width else petSizePx
+        val (screenWidth, screenHeight) = getScreenDimensions()
+        val maxX = (screenWidth - sizePx).coerceAtLeast(0)
+        val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
+        val clampedX = params.x.coerceIn(0, maxX)
+        val clampedY = params.y.coerceIn(minY, maxY)
+        if (clampedX != params.x || clampedY != params.y) {
+            Log.w(TAG, "悬浮窗坐标超出屏幕范围，已钳回 ($clampedX, $clampedY)")
+            params.x = clampedX
+            params.y = clampedY
         }
     }
 
@@ -2894,6 +2986,12 @@ class FloatingPetService : Service() {
             }
 
             // 向屏幕边缘外侧避让收纳 32%：左侧边缘向左藏、右侧边缘向右藏
+            //
+            // ⚠️ peekOffsetX 是**屏幕坐标系**的位移（正 = 向屏幕右侧），
+            // 与猫面朝哪边无关（见 PokoPetView.peekOffsetX 的约定说明）。
+            // 镜像只翻"猫面朝哪边"，不翻偏移方向 ——
+            // 否则贴右边躲的波可会往屏幕内侧滑，探头完全反了向。
+            //
             // 偏移发生在绘制层，窗口坐标不变 —— 拖拽起点与手指位移始终一一对应
             val peekOffset = if (isLeft) (-sizePx * 0.32f) else (sizePx * 0.32f)
 
