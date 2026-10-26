@@ -1197,6 +1197,99 @@ void main() {
     });
   });
 
+  group('「拖不动」可定位性：触摸送达心跳 + 用户自助修复', () {
+    // 跨了好几轮都在猜"为什么有时候拖不动"，根子在于日志里只有
+    // **有反应时**的记录，没有"该有反应却没有"的记录。
+    //
+    // 「拖不动」至少有两种完全不同的成因，日志长得很像：
+    //   ① 触摸**根本没进窗口**（可触达区域陈旧 / 被别的窗口盖住 / 视图不可见）
+    //   ② 触摸进来了，但拖拽算法没跟上
+    // 没有心跳做基线，就永远分不出是哪一种。
+
+    test('必须有「触摸送达」心跳，给拖不动留下一条可对照的基线', () {
+      expect(serviceSource, contains('private val touchHeartbeat'),
+          reason: '缺少触摸心跳；没有它就分不清'
+              '"触摸没进窗口"和"算法没跟上"');
+      final heartbeat = _braceBlock(serviceSource, 'private val touchHeartbeat');
+      expect(heartbeat, contains('距上次触摸='),
+          reason: '心跳必须报告"上一次收到触摸是什么时候"');
+      expect(heartbeat, contains('isAttachedToWindow'),
+          reason: '心跳必须报告窗口是否还挂着');
+      expect(heartbeat, contains('vis='),
+          reason: '心跳必须报告视图可见性（不可见的窗口收不到触摸）');
+      expect(serviceSource, contains('mainHandler.postDelayed(touchHeartbeat, 30000)'),
+          reason: '心跳必须真的被调度起来，否则等于没有');
+      expect(serviceSource, contains('mainHandler.removeCallbacks(touchHeartbeat)'),
+          reason: '服务销毁时必须把心跳撤掉，否则会泄漏');
+    });
+
+    test('通知栏与快捷菜单的「摸摸」必须兼做热区重建，给用户自助修复入口', () {
+      // 「看得见但点不动」在部分国产 ROM 上只有重建窗口才能治好：
+      // 可触达区域是 WMS 按 frame 算的，updateViewLayout 只走 relayout，
+      // frame 没变就不会重算热区。
+      //
+      // 而通知栏 / 快捷菜单是**完全不依赖宠物能被按住**的入口 ——
+      // 猫按不动的时候，只有它们还能用。
+      expect(serviceSource, contains('private fun repairPetWindowForUser()'),
+          reason: '缺少用户自助修复入口');
+      final repair = _braceBlock(serviceSource, 'private fun repairPetWindowForUser()');
+      expect(repair, contains('restorePetWindowForInteraction()'),
+          reason: '自助修复必须走那条已验证的"重建窗口"路径');
+      expect(repair, contains('if (hasTouchDown) return false'),
+          reason: '绝不能在手势进行中重建窗口');
+
+      // 重建必须真的发生（removeView + addView），只 updateViewLayout 不会重算热区
+      final restore =
+          _braceBlock(serviceSource, 'private fun restorePetWindowForInteraction()');
+      expect(restore, contains('reattachPetWindow()'),
+          reason: '自助修复必须真的重建窗口（removeView + addView），'
+              '只 updateViewLayout 只走 relayout，frame 没变就不会重算可触达区域');
+      expect(restore, contains('if (hasTouchDown)'),
+          reason: '重建路径本身也必须挡下手势进行中的调用');
+
+      final notif = _braceBlock(serviceSource, 'private fun handleNotificationPet()');
+      expect(notif, contains('repairPetWindowForUser()'),
+          reason: '通知栏的「摸摸」必须顺带修一次热区');
+      final desktop = _braceBlock(serviceSource, 'private fun handleDesktopPet()');
+      expect(desktop, contains('repairPetWindowForUser()'),
+          reason: '快捷菜单的「摸摸」也必须顺带修一次热区');
+    });
+
+    test('拖拽进行中不得旁路复位探头偏移，否则猫会在手指底下跳一下', () {
+      // MOVE 分支每帧都会把 peekOffsetX 写成"拖出屏幕的那一段"。
+      // 气泡弹出时如果顺手把探头偏移清零，猫就会在用户手指底下突然弹回原位。
+      final showBubble = _braceBlock(serviceSource, 'private fun showCustomSpeechBubble(');
+      expect(showBubble, contains('!hasTouchDown'),
+          reason: '拖拽进行中不得复位探头偏移');
+      expect(showBubble, contains('restoreFromPeeking()'),
+          reason: '非拖拽状态下仍然要正常复位探头');
+    });
+
+    test('拖拽中窗口纹丝不动必须触发自愈（重建窗口）', () {
+      // 这是「有时拖不动」唯一可靠的自动修复路径：
+      // 手指在动、位置没被钳制、窗口却一帧没动
+      // → 说明窗口的布局更新 / 可触达区域已经陈旧
+      // → 收手时打上待重挂标记，看门狗在无手势时重建窗口
+      final moveBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_MOVE ->',
+        'MotionEvent.ACTION_UP',
+      );
+      expect(_stripLiteralsAndComments(moveBranch), contains('windowStuckWhileMoving = true'),
+          reason: '必须识别出"该动却没动"这个特征');
+      expect(moveBranch, contains('wantedX == clampedX'),
+          reason: '判定必须排除"被屏幕边界钳住"这种正常情况，否则贴边拖会误触发');
+
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP -> {',
+        'else -> false',
+      );
+      expect(_stripLiteralsAndComments(upBranch), contains('petWindowNeedsReattach = true'),
+          reason: '收手时必须打上待重挂标记，让看门狗重建窗口');
+    });
+  });
+
     test('拉起主 App 不得留下悬空的前台标记（悬空 = 悬浮猫永久不可触摸）', () {
       expect(serviceSource, contains('var isMainActivityResumed: Boolean'),
           reason: '缺少「主 Activity 是否真的在前台」这一交叉校验用的真值；'

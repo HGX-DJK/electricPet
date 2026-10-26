@@ -335,6 +335,38 @@ class FloatingPetService : Service() {
         }
     }
 
+    // 触摸可达性心跳：定期把"窗口现在健不健康"和"上一次收到触摸是什么时候"打出来。
+    //
+    // 为什么必须有它：
+    //   「拖不动」有两种完全不同的成因，日志长得很像，光看现象分不出来 ——
+    //     ① 触摸**根本没进窗口**（可触达区域陈旧 / 被别的窗口盖住 / 视图不可见）
+    //        → 日志里只有心跳，压根没有「触摸按下」
+    //     ② 触摸进来了但算法没跟上 → 日志里有「触摸按下」「进入拖拽」
+    //        → 再看「手势轨迹」里的 winTravel 就能定论
+    //
+    // 之前好几轮都在猜是哪一种，因为日志里只有"有反应时"的记录，
+    // 没有"该有反应却没有"的记录 —— 缺了这一半就永远定位不了。
+    private val touchHeartbeat = object : Runnable {
+        override fun run() {
+            mainHandler.postDelayed(this, 30000)
+            try {
+                val view = pokoView ?: return
+                if (!screenOn || view.visibility != View.VISIBLE) return
+                val params = pokoParams ?: return
+                val idleMs = System.currentTimeMillis() - lastTouchDownAt
+                Log.i(
+                    TAG,
+                    "触摸心跳: attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
+                        "vis=${view.visibility} win=(${params.x},${params.y}) " +
+                        "peekOffset=${view.peekOffsetX} " +
+                        "距上次触摸=${idleMs / 1000}s"
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "触摸心跳异常", e)
+            }
+        }
+    }
+
     // 屏幕点亮状态: 息屏时悬浮猫不可见, 顺带停掉动画省电
     private var screenOn = true
     private val screenReceiver = object : BroadcastReceiver() {
@@ -360,7 +392,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v10"
+        const val DRAG_FIX_VERSION = "drag-fix-v11"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -728,6 +760,12 @@ class FloatingPetService : Service() {
         mainHandler.removeCallbacks(attachWatchdog)
         mainHandler.postDelayed(attachWatchdog, 1500)
 
+        // 启动触摸心跳：给"拖不动"留下一条可对照的基线
+        // （没有它就分不清"触摸没进窗口"和"算法没跟上"）
+        lastTouchDownAt = System.currentTimeMillis()
+        mainHandler.removeCallbacks(touchHeartbeat)
+        mainHandler.postDelayed(touchHeartbeat, 30000)
+
         // 6. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
         screenOn = isScreenInteractive()
         refreshPetVisibility()
@@ -1053,6 +1091,10 @@ class FloatingPetService : Service() {
         // 上一帧真正写进窗口的坐标（用于诊断"进入了拖拽但窗口纹丝不动"）
         var lastAppliedX = 0
         var lastAppliedY = 0
+
+        // 本次手势里是否出现过"手指在动、窗口却一帧没动"（且不是被屏幕边界钳住）
+        // —— 这是窗口布局更新失效的特征，收手时据此触发一次重建自愈。
+        var windowStuckWhileMoving = false
 
         // ⚠️ event.rawX 的语义判定结果（见 ACTION_DOWN 里的详细说明）
         // true  = rawX 是屏幕绝对坐标 → 用 rawX 算位移（不会被"窗口落后一帧"带偏）
@@ -1434,9 +1476,15 @@ class FloatingPetService : Service() {
                                 "窗口=(${params.x}, ${params.y}) 期望=($clampedX, $clampedY) " +
                                 "attached=${pokoView?.isAttachedToWindow} wm=$isPetWindowAttached"
                         )
+                        // 🔧 记一笔：**手指在动、位置没被钳制、窗口却一帧没动** ——
+                        // 这说明窗口的布局更新根本没生效（热区 / frame 陈旧）。
+                        // 收手时据此打上"待重挂"标记，让看门狗重建窗口，
+                        // 下一次按就能恢复 —— 这就是"有时拖不动"的自愈路径。
+                        windowStuckWhileMoving = true
                     }
                     lastAppliedX = params.x
                     lastAppliedY = params.y
+                    windowStuckWhileMoving = false
 
                     // 拖出屏幕的部分用"绘制偏移"表现：窗口本身绝不越界，
                     // 既能拖出半只猫，又不会重现坐标钳制把宠物钉死在边缘的问题
@@ -1530,6 +1578,16 @@ class FloatingPetService : Service() {
                         if (rawIsScreenAbsolute) "raw" else "local",
                         trace, params.x, params.y
                     )
+
+                    // 🔧 自愈：这次手势里窗口"该动却一帧没动"过
+                    // （且不是被屏幕边界钳住造成的）——
+                    // 说明窗口的布局更新失效了，很可能就是可触达区域 / frame 陈旧。
+                    // 打个待重挂标记，等手势结束后由看门狗重建窗口，
+                    // 下一次按就能恢复 —— 这是"有时拖不动"唯一可靠的自动修复路径。
+                    if (windowStuckWhileMoving) {
+                        Log.w(TAG, "本次拖拽窗口始终没动，标记待重挂（下次按就能恢复）")
+                        petWindowNeedsReattach = true
+                    }
 
                     if (isLongPressing) {
                         isLongPressing = false
@@ -2511,8 +2569,35 @@ class FloatingPetService : Service() {
         isActionMenuAttached = false
     }
 
+    /**
+     * 重建悬浮窗以刷新可触达区域（Touchable Region）。
+     *
+     * 「看得见、但按不动」在部分国产 ROM 上只有**重建窗口**才能治好：
+     * 可触达区域是 WMS 按窗口 frame 算出来的，
+     * updateViewLayout 走的是 relayout —— frame 没变就不会重算；
+     * removeView + addView 则会在 WMS 里建一个全新的 WindowState，热区从头算。
+     *
+     * 触发场景（都不依赖"宠物能被按住"，所以是个真正可用的自救入口）：
+     *   · 用户从通知栏点「摸摸波可」→ 顺手把窗口重建一次
+     *   · 用户从快捷菜单点「摸摸」→ 同上
+     *
+     * @return true 表示确实重建了
+     */
+    private fun repairPetWindowForUser(): Boolean {
+        if (hasTouchDown) return false
+        if (pokoView == null || pokoParams == null) return false
+        // 复用"显隐恢复"那条已经验证过的重建路径：
+        // 它会 removeView + addView 重建窗口（WMS 重新计算可触达区域），
+        // 再把坐标钳回屏内、把动画重新拉起来。
+        restorePetWindowForInteraction()
+        Log.i(TAG, "已重建悬浮窗（v$DRAG_FIX_VERSION），触控热区已刷新")
+        return true
+    }
+
     private fun handleDesktopPet() {
         hideActionMenu()
+        // 快捷菜单的「摸摸」也是不依赖宠物可触摸的入口，顺手修一次热区
+        repairPetWindowForUser()
         haptic(Companion.HAPTIC_PET_BODY)
         playSound("meow")
         pokoView?.onPetTapped()
@@ -2784,7 +2869,11 @@ class FloatingPetService : Service() {
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
         if (pokoParams == null) return
-        if (isPeeking) {
+        // ⚠️ 拖拽进行中**不能**复位探头偏移：
+        //   MOVE 分支每帧都会把 peekOffsetX 写成"拖出屏幕的那一段"，
+        //   这里要是把它清零，猫就会在手指底下突然弹回原位 ——
+        //   用户看到的是"按着按着猫自己跳了一下"。
+        if (isPeeking && !hasTouchDown) {
             restoreFromPeeking()
         }
 
@@ -2852,6 +2941,13 @@ class FloatingPetService : Service() {
     }
 
     private fun handleNotificationPet() {
+        // ⚠️ 通知栏的「摸摸」是**完全不依赖宠物能被按住**的唯一入口，
+        // 所以它必须兼做一件别的事：把悬浮窗重建一次，刷新可触达区域。
+        // 「看得见但点不动」只有重建窗口才能治好（见 repairPetWindowForUser）。
+        //
+        // 这给用户留了一条自救通道：猫按不动的时候，
+        // 下拉通知栏点一下「摸摸波可」，猫就又能拖了。
+        repairPetWindowForUser()
         haptic(Companion.HAPTIC_TAP)
         playSound("meow")
         pokoView?.onPetTapped()
@@ -3885,6 +3981,7 @@ class FloatingPetService : Service() {
         instance = null
         isPetWindowAttached = false
         mainHandler.removeCallbacks(attachWatchdog)
+        mainHandler.removeCallbacks(touchHeartbeat)
         cancelEdgePeeking()
         isPeeking = false
         unregisterPetDataListener()
