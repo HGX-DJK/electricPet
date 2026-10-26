@@ -1687,6 +1687,58 @@ class Demo {
     });
   });
 
+  group('Kotlin 空安全：宿主类回调参数必须显式收窄', () {
+    // 真实事故：CI 上 :app:compileReleaseKotlin 报
+    //   Argument type mismatch: actual type is 'Runnable?', but 'Runnable' was expected.
+    // 原因是 Android SDK 里 Handler.removeCallbacks(Runnable) 的参数声明为**非空**，
+    // 而本机没有 android.jar，kotlinc 分不出宿主类成员的真实签名 ——
+    // 这类问题本地永远查不出来，只能等 CI 炸（一次往返 4 分半）。
+    // 所以这里用源码断言提前拦住。
+
+    test('可空 Runnable 不得直接传给 Handler.removeCallbacks / postDelayed', () {
+      final problems = <String>[];
+      final sources = <String, String>{
+        'FloatingPetService.kt': serviceSource,
+        'MainActivity.kt': activitySource,
+        'PokoPetView.kt': petViewSource,
+        'PokoWidgetProvider.kt': widgetProviderSource,
+      };
+      for (final entry in sources.entries) {
+        for (final p in _findNullableCallbackArgs(entry.value)) {
+          problems.add('${entry.key}: $p');
+        }
+      }
+
+      expect(problems, isEmpty,
+          reason: '可空回调被直接传给 Handler/View 的回调方法，'
+              'Android SDK 里这些参数是非空的，CI 会报 '
+              '"Argument type mismatch: actual type is \'Runnable?\', but \'Runnable\' was expected." '
+              '必须写成 name!! 或 name?.let { ... }');
+    });
+
+    test('检测器本身必须有效：能识别人造的可空回调误用样本', () {
+      const bad = '''
+        private var tick: Runnable? = null
+        fun boom(handler: Handler) {
+          handler.removeCallbacks(tick)
+          handler.postDelayed(tick, 100)
+        }
+      ''';
+      expect(_findNullableCallbackArgs(bad), isNotEmpty,
+          reason: '检测器对「可空 Runnable 直接传入」的样本必须报警，否则等于没检测');
+
+      const good = '''
+        private var tick: Runnable? = null
+        fun ok(handler: Handler) {
+          tick?.let { handler.removeCallbacks(it) }
+          handler.postDelayed(tick!!, 100)
+        }
+      ''';
+      expect(_findNullableCallbackArgs(good), isEmpty,
+          reason: '合法的显式收窄写法不应被误报');
+    });
+  });
+
   group('通知权限与耗电约束', () {
     test('Android 13+ 必须在运行时申请通知权限', () {
       expect(activitySource, contains('OverlayChannel.REQUEST_NOTIFICATION_PERMISSION'),
@@ -2915,6 +2967,38 @@ String _fileOf(String source) {
   if (source.contains('PokoPetView')) return 'PokoPetView.kt';
   if (source.contains('MainActivity')) return 'MainActivity.kt';
   return 'FloatingPetService.kt';
+}
+
+/// 找出「可空回调被直接传给 Handler/View 的回调方法」的空安全问题。
+///
+/// Android SDK 里 `Handler.removeCallbacks(Runnable)` / `postDelayed(Runnable, long)`
+/// 的参数声明为**非空**，把可空变量直接塞进去就是编译错误：
+/// `Argument type mismatch: actual type is 'Runnable?', but 'Runnable' was expected.`
+///
+/// 本机没有 android.jar 时 kotlinc 无法区分宿主类成员的真实签名（宿主类连同它的成员
+/// 一起 unresolved），所以这类问题本地永远查不出来，只有 CI 能炸出来。
+/// 这里用源码断言提前拦，别再拿一次 CI 往返去换一条编译错误。
+List<String> _findNullableCallbackArgs(String source) {
+  final problems = <String>[];
+
+  // 1. 找出声明为可空的 Runnable 变量（成员与局部都算）
+  final nullableNames = <String>{};
+  for (final m
+      in RegExp(r'\b(?:var|val)\s+(\w+)\s*:\s*Runnable\?\s*=').allMatches(source)) {
+    nullableNames.add(m.group(1)!);
+  }
+  if (nullableNames.isEmpty) return problems;
+
+  // 2. 检查这些名字有没有被直接塞进回调方法
+  for (final name in nullableNames) {
+    // 后面紧跟 "!!" 才算显式收窄；
+    // "name?.let { handler.removeCallbacks(it) }" 里的实参是 it，天然匹配不到。
+    final re = RegExp(r'\b(?:removeCallbacks|postDelayed)\(\s*' + name + r'\b(?!\s*!)');
+    for (final _ in re.allMatches(source)) {
+      problems.add('$name 被直接传给回调方法（应写成 $name!! 或 $name?.let { ... }）');
+    }
+  }
+  return problems;
 }
 
 /// 取出形如 `val edgeThreshold = (10 * density)` 中紧跟左括号后的整数。

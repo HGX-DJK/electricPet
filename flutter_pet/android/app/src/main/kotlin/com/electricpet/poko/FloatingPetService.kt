@@ -2657,7 +2657,9 @@ class FloatingPetService : Service() {
             // 而 GONE 的视图根本不参与触摸分发，用户只会看到「关掉 App 再打开悬浮宠后拖不动」。
             //
             // 这里兜底：超时后如果主 Activity 从未 resume 过，就把悬空标记收回。
-            mainHandler.removeCallbacks(foregroundWatchdog)
+            // ⚠️ Handler.removeCallbacks 的参数在 Android SDK 里是**非空**的，
+            // 直接把可空的 foregroundWatchdog 传进去会编译失败（CI 上就是这么炸的）。
+            foregroundWatchdog?.let { mainHandler.removeCallbacks(it) }
             foregroundWatchdog = Runnable {
                 if (!isMainActivityResumed) {
                     Log.w(TAG, "主 Activity 未真正前台化，收回悬空的前台标记，悬浮猫恢复可触摸")
