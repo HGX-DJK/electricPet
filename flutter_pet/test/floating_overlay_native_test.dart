@@ -458,21 +458,23 @@ void main() {
           reason: '看门狗发现脱挂后必须真正重挂');
     });
 
-    test('拖拽位移必须用窗口局部坐标，不能依赖 event.rawX 的坐标语义', () {
-      // 这是「有时候可以拖动、有时候又拖不动」的机制性原因：
+    test('拖拽位移必须用不受「窗口落后一帧」影响的坐标口径', () {
+      // ⚠️ v10 推翻了 v8 的结论。
       //
-      //   `MotionEvent.getRawX()` 对 `WindowManager.addView()` 挂上去的悬浮窗，
-      //   "原始坐标"到底是**屏幕绝对坐标**还是**窗口内坐标**，在不同 ROM / 版本上并不一致。
-      //   旧实现把整个拖拽数学建在 rawX 上（dx = rawX - initialTouchX），
-      //   窗口一旦在拖拽过程中自己移动，dx 就会归零：
-      //     · rawX 是屏幕绝对坐标 → 手指没动、窗口动了 → dx 恒为 0；
-      //     · rawX 是窗口内坐标   → 窗口移动后 rawX 跟着变 → dx 也只生效一帧。
-      //   两种情况都是「**窗口只跟第一帧就卡住**」，
-      //   能不能看出"动了"完全取决于第一帧位移有没有超过 touchSlop。
+      // v8 认为「窗口位置 + 窗口局部坐标」是无歧义的、绝对安全的算法。**它是错的**：
+      //   · params.x 是我们**请求**的窗口位置 —— 同一帧内它就会被改写；
+      //   · event.x 是相对窗口**真实**位置算出来的 —— 而窗口真正挪到新位置
+      //     要等下一帧的 traversal（updateViewLayout 是跨进程异步的）。
       //
-      // 现在改成**增量跟随**：窗口要移动的距离 = 手指**相对窗口**移动的距离。
-      // 只依赖 event.x / event.y（View 局部坐标，定义上没有歧义），
-      // 以及我们自己写的 params —— 两种 raw 语义下结果都正确。
+      // 于是同一帧里再来第 2、第 3 个 MOVE 事件时，
+      // 新的 params.x 配旧的 event.x，算出来的"手指位置"凭空多出一整帧的位移，
+      // 窗口每帧都往前冲一截 —— 表现就是**拖拽乱飞**；
+      // 贴边时被钳制吃掉，就变成**拖不动**。
+      //
+      // 正确做法：优先用 event.rawX —— 它是输入管线里的屏幕绝对坐标，
+      // **完全不受窗口什么时候真正挪过去的影响**，同一帧来几个 MOVE 都不会错位。
+      // 同时在 ACTION_DOWN 那一刻**自校准**判定 rawX 的语义，
+      // 万一某台机器上 rawX 不是屏幕绝对坐标，再退回局部坐标算法（并记进日志）。
       final moveBranch = _between(
         serviceSource,
         'MotionEvent.ACTION_MOVE ->',
@@ -480,23 +482,40 @@ void main() {
       );
       final moveCode = _stripLiteralsAndComments(moveBranch);
 
-      expect(moveCode, contains('val fingerX = params.x + event.x'),
-          reason: '必须先算出「手指此刻的屏幕绝对位置」= 窗口位置 + 窗口局部坐标；'
-              '这个等式恒成立，且不依赖 event.rawX 的语义');
+      expect(moveCode, contains('event.rawX + rawAnchorX'),
+          reason: '首选必须用 raw 坐标口径：它是屏幕绝对坐标，'
+              '不受「窗口真正挪过去要等下一帧」的影响');
+      expect(moveCode, contains('params.x + event.x'),
+          reason: '必须保留局部坐标算法作为兜底：'
+              '万一某台机器上 rawX 不是屏幕绝对坐标');
+      expect(moveCode, contains('if (rawIsScreenAbsolute)'),
+          reason: '必须由 ACTION_DOWN 的自校准结果来决定用哪一种口径，'
+              '而不是拍脑袋写死');
       expect(moveCode, contains('initialX + (fingerX - initialFingerX)'),
-          reason: '窗口新位置 = 按下时的位置 + 手指的累计位移，'
-              '这才是"窗口跟着手指走"的正确表达');
-      expect(moveCode, isNot(contains('event.rawX')),
-          reason: '拖拽数学不得依赖 event.rawX —— 对 WindowManager 悬浮窗，'
-              'raw 坐标在"屏幕绝对"和"窗口内"之间语义不稳定，'
-              '用它算位移会让窗口只跟第一帧就卡住（时好时坏）');
-      expect(moveCode, isNot(contains('event.rawY')),
-          reason: '同上，纵向位移也不能依赖 rawY');
+          reason: '窗口新位置 = 按下时的位置 + 手指的累计位移');
       expect(moveCode, contains('val clampedX = wantedX.coerceIn(0, maxX)'),
           reason: '窗口位置必须先算出"想去的位置"再钳制在屏幕内');
       expect(moveCode, contains('initialFingerX += (wantedX - clampedX)'),
           reason: '被边界吃掉的位移必须消费掉，否则往回拉时宠物会粘在屏幕边缘，'
               '用户感知就是「拖不动 / 粘手」');
+
+      // 自校准：按下这一刻 params.x 就是窗口真实的屏幕原点，
+      // 所以 rawX - event.x 要么等于窗口原点（rawX 是屏幕绝对坐标），要么等于 0。
+      final downBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_DOWN ->',
+        'MotionEvent.ACTION_POINTER_DOWN',
+      );
+      final downCode = _stripLiteralsAndComments(downBranch);
+      expect(downCode, contains('val rawOriginX = event.rawX - event.x'),
+          reason: '必须靠「rawX - 局部坐标」反推 rawX 的语义，这是唯一可靠的判据');
+      expect(downCode, contains('rawIsScreenAbsolute ='),
+          reason: '必须在按下这一刻就把语义判出来，'
+              '整段手势才能用同一种口径');
+      expect(downCode, contains('rawAnchorX = initialFingerX - event.rawX'),
+          reason: '必须用锚点把 rawX 换算到窗口坐标系，'
+              '顺手吸收状态栏 / 挖孔带来的常量偏移，'
+              '保证窗口位移等于 rawX 的纯增量');
     });
 
     test('拖拽释放速度也必须由局部坐标推算，惯性方向才可靠', () {
@@ -956,6 +975,225 @@ void main() {
           reason: '手指真实行程已经超过阈值，必须进入拖拽态；'
               '旧实现用"窗口位移"判阈值，贴边时永远进不去 —— '
               '用户看到的就是"有时候好像没有进入"');
+    });
+  });
+
+  group('拖拽口径：行为级模拟（不依赖真机）', () {
+    // 这一组针对的是 v10 的核心结论：
+    // 「窗口位置 + 窗口局部坐标」不是无歧义的算法，它会把
+    // "我们请求的位置"和"窗口真实位置"混在一起算，
+    // 于是每帧都冲过头 —— 这就是**拖拽乱飞**。
+    //
+    // 复刻的两个平台事实：
+    //   ① updateViewLayout 跨进程异步，窗口真正挪过去要等下一帧；
+    //   ② 事件里的局部坐标相对窗口**真实**位置。
+
+    test('v8 的局部坐标算法会冲过头，raw 坐标算法与手指严格 1:1', () {
+      final stale = _DragAlgoSim(
+        mode: 'local',
+        startWindowX: 100,
+        windowSize: 82,
+        screenWidth: 400,
+        startFingerX: 150,
+      );
+      final raw = _DragAlgoSim(
+        mode: 'raw',
+        startWindowX: 100,
+        windowSize: 82,
+        screenWidth: 400,
+        startFingerX: 150,
+      );
+      stale.begin();
+      raw.begin();
+
+      // 同一帧里来了 3 个 MOVE 事件：手指 150 → 180 → 210 → 240
+      for (final fx in [180.0, 210.0, 240.0]) {
+        stale.moveFingerTo(fx);
+        raw.moveFingerTo(fx);
+      }
+      stale.advanceFrame();
+      raw.advanceFrame();
+
+      // 手指一共走了 90px → 窗口必须正好挪 90px（100 → 190）
+      expect(raw.requestedX, closeTo(190.0, 0.001),
+          reason: 'raw 坐标口径下窗口必须严格跟着手指走');
+      expect(stale.requestedX, isNot(closeTo(190.0, 0.001)),
+          reason: '局部坐标口径会把"请求的位置"和"真实位置"混在一起算，'
+              '每帧都冲过头 —— 这就是拖拽乱飞的机制。'
+              '本测试的作用是把"为什么必须换掉它"钉死。');
+      expect(stale.requestedX, greaterThan(raw.requestedX),
+          reason: '旧口径只会冲过头，不会冲得不够');
+    });
+
+    test('raw 口径在连着多帧拖拽后依然与手指严格同步', () {
+      final raw = _DragAlgoSim(
+        mode: 'raw',
+        startWindowX: 0,
+        windowSize: 82,
+        screenWidth: 400,
+        startFingerX: 40,
+      );
+      raw.begin();
+
+      var finger = 40.0;
+      for (var frame = 0; frame < 8; frame++) {
+        for (var i = 0; i < 3; i++) {
+          finger += 7.0;
+          raw.moveFingerTo(finger);
+        }
+        raw.advanceFrame();
+      }
+
+      // 手指一共走了 8*3*7 = 168px
+      expect(raw.requestedX, closeTo(168.0, 0.001),
+          reason: '无论一帧来几个 MOVE，窗口都必须严格等于手指的累计位移');
+      expect(raw.requestedX - raw.actualX, closeTo(0.0, 0.001),
+          reason: '帧结束时窗口真实位置必须已经追上请求的位置');
+    });
+
+    test('自校准判据：能区分 rawX 是屏幕绝对坐标还是窗口内坐标', () {
+      // 复刻 ACTION_DOWN 里的判定：
+      //   rawOrigin = rawX - event.x
+      //   屏幕绝对坐标 → rawOrigin ≈ 窗口原点（params.x）
+      //   窗口内坐标   → rawOrigin ≈ 0
+      bool isScreenAbsolute(double rawX, double eventX, double windowX) {
+        final rawOrigin = rawX - eventX;
+        final xEvidence = windowX.abs();
+        final yEvidence = 100.0; // 纵向更远离边，判据更硬
+        if (xEvidence >= yEvidence) {
+          return (rawOrigin - windowX).abs() <= rawOrigin.abs();
+        }
+        return false;
+      }
+
+      // rawX 是屏幕绝对坐标：rawX = 窗口原点 + 局部坐标
+      expect(isScreenAbsolute(100 + 30, 30, 100), isTrue,
+          reason: 'rawX 明显带着窗口原点，必须判定为"屏幕绝对坐标"');
+      // rawX 是窗口内坐标：rawX ≈ 局部坐标
+      expect(isScreenAbsolute(30, 30, 100), isFalse,
+          reason: 'rawX 不带窗口原点，必须判定为"窗口内坐标"并退回局部算法');
+    });
+  });
+
+  group('气泡必须贴着猫（不能离猫老远）', () {
+    // 用户反馈原文：「弹窗和宠物偏离老远」。
+    //
+    // 两个成因：
+    //   ① 气泡按**窗口**位置摆，而猫是用**绘制偏移**画在窗口之外的
+    //      （探头避让 / 把猫推出屏幕边缘）→ 贴边时气泡离猫老远；
+    //   ② 气泡（最多 200dp）比猫（82dp）宽得多，一律"与猫居中对齐"，
+    //      再被屏幕边界钳一下，气泡就被推得离猫更远。
+
+    test('气泡必须跟着猫的「绘制位置」走，而不是窗口位置', () {
+      final compute = _braceBlock(serviceSource, 'private fun computeBubblePosition(');
+      expect(compute, contains('peekOffsetX'),
+          reason: '猫在探头 / 拖出屏幕时是用绘制偏移画在窗口之外的，'
+              '气泡必须按绘制位置摆，否则贴边时气泡离猫老远');
+      expect(compute, contains('val catX = pParams.x + (pokoView?.peekOffsetX ?: 0f)'),
+          reason: '气泡的横向基准必须是"猫实际画出来的位置"');
+    });
+
+    test('气泡的显示与跟随必须共用同一套位置算法', () {
+      expect(serviceSource, contains('private fun computeBubblePosition('),
+          reason: '必须把位置算法抽成独立函数');
+      final showBubble = _braceBlock(serviceSource, 'private fun showCustomSpeechBubble(');
+      expect(_stripLiteralsAndComments(showBubble), contains('computeBubblePosition('),
+          reason: '弹气泡时也必须用统一算法，'
+              '否则会出现"刚弹出来贴着猫，拖两步就离猫老远"');
+      final updateBubble = _braceBlock(serviceSource, 'private fun updateBubblePosition()');
+      expect(_stripLiteralsAndComments(updateBubble), contains('computeBubblePosition('),
+          reason: '拖拽跟随也必须用同一套算法');
+    });
+
+    test('气泡放不下时必须贴到猫的边缘，不能只是把居中位置钳进屏幕', () {
+      // ⚠️ 这一条必须用**源码断言**钉住，不能只靠行为模拟：
+      //    行为模拟复刻的是"规则应该是什么"，它证明不了"代码确实是这么实现的"。
+      //    没有源码断言的话，把实现改回"直接钳制"这个回归就抓不住。
+      final compute = _braceBlock(serviceSource, 'private fun computeBubblePosition(');
+      final computeCode = _stripLiteralsAndComments(compute);
+
+      expect(computeCode, contains('catX.toInt()'),
+          reason: '猫在左半屏时，气泡左边缘必须与猫的左边缘对齐');
+      expect(computeCode, contains('catRight - bubbleW'),
+          reason: '猫在右半屏时，气泡右边缘必须与猫的右边缘对齐');
+      expect(computeCode, isNot(contains('centered.coerceIn')),
+          reason: '放不下时的兜底不能是"把居中位置直接钳进屏幕" —— '
+              '那正是气泡被屏幕边界推离猫、离猫老远的成因');
+    });
+
+    test('行为级模拟：气泡放不下时要贴着猫，而不是被屏幕边界推离猫', () {
+      // 1080px 宽的屏、3 倍密度 → 猫 246px（82dp）、气泡最多 600px（200dp）
+      final sim = _BubbleSim(
+        screenWidth: 1080,
+        catWidth: 246,
+        bubbleWidth: 600,
+        density: 3.0,
+      );
+
+      // ① 猫在屏幕中间：气泡应当与猫居中对齐
+      sim.catWindowX = 400;
+      expect(sim.place(), closeTo(400 + 246 / 2 - 600 / 2, 0.001),
+          reason: '猫在中间时气泡应当与猫居中对齐');
+      expect(sim.overlapsCat(), isTrue, reason: '气泡必须与猫有重叠');
+
+      // ② 猫在右半屏：居中放不下，气泡必须**贴着猫的右边缘**，
+      //    而不是被屏幕右边界推走
+      sim.catWindowX = 700;
+      expect(sim.overlapsCat(), isTrue,
+          reason: '气泡必须仍然与猫重叠，不能被屏幕边界推离猫');
+      expect(sim.rightEdgeGap(), lessThanOrEqualTo(2.0),
+          reason: '放不下时气泡的右边缘应当与猫的右边缘对齐（贴住猫），'
+              '而不是留一大段空隙 —— 那正是用户说的"偏离老远"');
+
+      // ③ 猫在左半屏：气泡贴着猫的左边缘
+      sim.catWindowX = 100;
+      expect(sim.overlapsCat(), isTrue,
+          reason: '气泡必须仍然与猫重叠');
+      expect(sim.place(), closeTo(100, 0.001),
+          reason: '左半屏时气泡左边缘应当与猫左边缘对齐');
+
+      // ④ 猫被探头偏移推到窗口外：气泡必须跟着绘制位置走
+      //    （偏移 80px → 气泡必须同样偏移 80px，否则就会离猫老远）
+      sim.catWindowX = 400;
+      sim.peekOffsetX = 80;
+      expect(sim.place(), closeTo(400 + 80 + 246 / 2 - 600 / 2, 0.001),
+          reason: '猫的绘制位置整体挪了 80px，气泡必须跟着挪 80px，'
+              '否则气泡会离猫老远');
+    });
+  });
+
+  group('手势轨迹日志：让真机问题一击可定位', () {
+    test('必须打出手势轨迹对账日志（手指走了多远 vs 窗口挪了多远）', () {
+      expect(serviceSource, contains('private class GestureTrace'),
+          reason: '缺少手势轨迹账本');
+      expect(serviceSource, contains('private fun logGestureTrace('),
+          reason: '缺少轨迹对账日志');
+      final trace = _braceBlock(serviceSource, 'private class GestureTrace');
+      expect(trace, contains('rawTravel='),
+          reason: '必须记录 raw 口径下手指走了多远');
+      expect(trace, contains('winTravel='),
+          reason: '必须记录窗口**真的**挪了多远');
+      expect(trace, contains('localTravel='),
+          reason: '必须同时记录局部坐标口径下的手指位移，'
+              '两种口径一对比就能判定 rawX 语义');
+    });
+
+    test('收手与被中断时都要打出轨迹日志', () {
+      final upBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_UP -> {',
+        'else -> false',
+      );
+      expect(upBranch, contains('logGestureTrace('),
+          reason: '松手时必须打出轨迹对账');
+      final cancelBranch = _between(
+        serviceSource,
+        'MotionEvent.ACTION_CANCEL -> {',
+        'MotionEvent.ACTION_UP -> {',
+      );
+      expect(cancelBranch, contains('logGestureTrace('),
+          reason: '手势被系统中断时同样要打，'
+              '那一类"按下去没反应"的问题只能靠它定位');
     });
   });
 
@@ -3218,7 +3456,6 @@ class _DragSim {
 
   /// 进入拖拽的位移阈值（px）
   final double touchSlop;
-
   late double initialX;
   late double initialY;
   late double initialFingerX;
@@ -3268,6 +3505,9 @@ class _DragSim {
       wantedY = initialY + (localY - initialRawY);
     } else {
       // 新算法：先还原手指的屏幕绝对位置，再算累计位移
+      // ⚠️ 注意：这里复刻的是「窗口位置 + 窗口局部坐标」这一口径，
+      //    它在**窗口位置与真实位置同步**的前提下是对的（用来验证边界钳制等逻辑），
+      //    但真实拖拽里窗口位置会落后一帧 —— 那个坑由 [_DragAlgoSim] 专门复刻。
       final fingerX = windowX + localX;
       final fingerY = windowY + localY;
       totalDx += fingerX - lastFingerX;
@@ -3448,6 +3688,118 @@ String _onAnimationEndBody(String source) {
     }
   }
   fail('onAnimationEnd 的花括号不配平');
+}
+
+/// 复刻两种拖拽算法，跑同一串手指轨迹，看窗口最后停在哪。
+///
+/// 复刻的关键平台事实有两个：
+///   ① `updateViewLayout` 是**跨进程异步**的 —— 我们请求的新位置要等下一帧的
+///      traversal 才真正生效，所以同一帧里再来 MOVE 事件时，
+///      窗口的**真实**位置还是旧的；
+///   ② 事件里的局部坐标（event.x）是相对窗口**真实**位置算出来的。
+///
+/// 于是：
+///   mode = 'local' → v8 算法：finger = params.x（我们**请求**的位置） + event.x（相对**真实**位置）
+///                     两者差着一整帧的窗口位移 → 算出来的手指位置凭空多出一截
+///                     → 窗口每帧往前冲一截 = **拖拽乱飞**
+///   mode = 'raw'   → v10 算法：finger = raw 坐标（输入管线的屏幕绝对坐标）
+///                     完全不受窗口什么时候真正挪过去的影响 → 窗口与手指始终 1:1
+class _DragAlgoSim {
+  _DragAlgoSim({
+    required this.mode,
+    required this.startWindowX,
+    required this.windowSize,
+    required this.screenWidth,
+    required this.startFingerX,
+  });
+
+  /// 'raw' 或 'local'
+  final String mode;
+  final double startWindowX;
+  final double windowSize;
+  final double screenWidth;
+  final double startFingerX;
+
+  /// 窗口**真实**位置（系统那边已生效的）
+  double actualX = 0;
+
+  /// 我们**请求**的位置（params.x）
+  double requestedX = 0;
+
+  double initialX = 0;
+  double initialFingerX = 0;
+
+  void begin() {
+    actualX = startWindowX;
+    requestedX = startWindowX;
+    initialX = startWindowX;
+    initialFingerX = startFingerX;
+  }
+
+  /// 手指移动到屏幕位置 [fingerX]（真值）
+  void moveFingerTo(double fingerX) {
+    final localX = fingerX - actualX; // 事件里的局部坐标：相对窗口真实位置
+    final computed = mode == 'raw' ? fingerX : requestedX + localX;
+    final wanted = initialX + (computed - initialFingerX);
+    final maxX = (screenWidth - windowSize).clamp(0.0, double.infinity);
+    requestedX = wanted.clamp(0.0, maxX);
+  }
+
+  /// 一帧结束：traversal 生效，窗口真实位置追上我们请求的位置
+  void advanceFrame() {
+    actualX = requestedX;
+  }
+}
+
+/// 复刻 computeBubblePosition 的水平摆放规则。
+///
+/// 气泡比猫宽得多（猫 82dp，气泡最多 200dp），
+/// 一律"与猫居中对齐"再被屏幕边界钳一下，气泡就会被推离猫很远。
+/// 正确做法是：居中放不下时**贴着猫的那一侧**摆。
+class _BubbleSim {
+  _BubbleSim({
+    required this.screenWidth,
+    required this.catWidth,
+    required this.bubbleWidth,
+    required this.density,
+  });
+
+  final double screenWidth;
+  final double catWidth;
+  final double bubbleWidth;
+  final double density;
+
+  /// 猫所在窗口的 x
+  double catWindowX = 0;
+
+  /// 猫的绘制偏移（探头 / 拖出屏幕时，猫画在窗口之外）
+  double peekOffsetX = 0;
+
+  double get catLeft => catWindowX + peekOffsetX;
+  double get catRight => catLeft + catWidth;
+  double get catCenter => catLeft + catWidth / 2;
+
+  /// 气泡左边缘的最终位置
+  double place() {
+    final minX = 10 * density;
+    final maxX =
+        (screenWidth - bubbleWidth - 10 * density).clamp(minX, double.infinity);
+    final centered = catCenter - bubbleWidth / 2;
+    if (centered >= minX && centered <= maxX) return centered;
+    if (catCenter < screenWidth / 2) {
+      return catLeft.clamp(minX, maxX);
+    }
+    return (catRight - bubbleWidth).clamp(minX, maxX);
+  }
+
+  /// 气泡右边缘与猫右边缘的距离（越小越贴）
+  double rightEdgeGap() => (place() + bubbleWidth) - catRight;
+
+  /// 气泡与猫在水平方向是否还有重叠
+  bool overlapsCat() {
+    final left = place();
+    return left < catRight && (left + bubbleWidth) > catLeft;
+  }
 }
 
 /// 截取以 [marker] 开头的那一对括号内的内容（按括号配平查找）。

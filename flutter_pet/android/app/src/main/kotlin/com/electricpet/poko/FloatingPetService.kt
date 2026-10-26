@@ -360,7 +360,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v9"
+        const val DRAG_FIX_VERSION = "drag-fix-v10"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -920,6 +920,91 @@ class FloatingPetService : Service() {
         return if (isPeeking) petOpacity * PEEK_ALPHA_FACTOR else petOpacity
     }
 
+    /**
+     * 单次手势的"轨迹账本"。
+     *
+     * 拖拽到底正不正常，肉眼很难判断，但账本一算就清楚：
+     *   · rawTravel  —— 手指按 raw 坐标口径实际走了多远
+     *   · localTravel —— 手指按「窗口位置 + 局部坐标」口径实际走了多远
+     *   · winTravel  —— 窗口**真的**挪了多远
+     * 三者一对账，就能立刻分辨出四种情况：
+     *   ① 两者都 ≈ winTravel → 拖拽完全正常
+     *   ② rawTravel ≈ 0 而 localTravel ≠ 0 → 该 ROM 的 rawX 是窗口内坐标
+     *   ③ winTravel 明显大于 rawTravel → 窗口冲过头了（乱飞）
+     *   ④ winTravel ≈ 0 而手指明明走了 → 窗口压根没跟上（拖不动）
+     */
+    private class GestureTrace {
+        var rawStartX = 0f
+        var rawStartY = 0f
+        var rawEndX = 0f
+        var rawEndY = 0f
+        var localStartX = 0f
+        var localStartY = 0f
+        var localEndX = 0f
+        var localEndY = 0f
+        var winStartX = 0
+        var winStartY = 0
+        var moveCount = 0
+
+        fun reset(
+            rawX: Float, rawY: Float,
+            localX: Float, localY: Float,
+            winX: Int, winY: Int
+        ) {
+            rawStartX = rawX
+            rawStartY = rawY
+            rawEndX = rawX
+            rawEndY = rawY
+            localStartX = localX
+            localStartY = localY
+            localEndX = localX
+            localEndY = localY
+            winStartX = winX
+            winStartY = winY
+            moveCount = 0
+        }
+
+        fun move(rawX: Float, rawY: Float, localX: Float, localY: Float) {
+            rawEndX = rawX
+            rawEndY = rawY
+            localEndX = localX
+            localEndY = localY
+            moveCount++
+        }
+
+        fun summary(endWinX: Int, endWinY: Int): String {
+            val rawTravelX = (rawEndX - rawStartX).toInt()
+            val rawTravelY = (rawEndY - rawStartY).toInt()
+            val winTravelX = endWinX - winStartX
+            val winTravelY = endWinY - winStartY
+            val localTravelX = (endWinX + localEndX) - (winStartX + localStartX)
+            val localTravelY = (endWinY + localEndY) - (winStartY + localStartY)
+            return "moves=$moveCount " +
+                "rawTravel=($rawTravelX,$rawTravelY) " +
+                "localTravel=($localTravelX,$localTravelY) " +
+                "winTravel=($winTravelX,$winTravelY) " +
+                "win=($winStartX,$winStartY)->($endWinX,$endWinY)"
+        }
+    }
+
+    /**
+     * 把一次手势的轨迹账本打出来。
+     *
+     * 这是给真机排查留的"现场证据"：用户复现一次，把这一行贴回来就够定位了。
+     */
+    private fun logGestureTrace(
+        reason: String,
+        mode: String,
+        trace: GestureTrace,
+        endWinX: Int,
+        endWinY: Int
+    ) {
+        Log.i(
+            TAG,
+            "手势轨迹[$DRAG_FIX_VERSION] $reason mode=$mode ${trace.summary(endWinX, endWinY)}"
+        )
+    }
+
     private fun setupTouchListener(density: Float) {
         val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
         var initialX = 0
@@ -968,6 +1053,18 @@ class FloatingPetService : Service() {
         // 上一帧真正写进窗口的坐标（用于诊断"进入了拖拽但窗口纹丝不动"）
         var lastAppliedX = 0
         var lastAppliedY = 0
+
+        // ⚠️ event.rawX 的语义判定结果（见 ACTION_DOWN 里的详细说明）
+        // true  = rawX 是屏幕绝对坐标 → 用 rawX 算位移（不会被"窗口落后一帧"带偏）
+        // false = rawX 不是屏幕绝对坐标 → 退回「窗口位置 + 窗口局部坐标」
+        var rawIsScreenAbsolute = true
+        // rawX → 窗口坐标系的锚点（吸收状态栏 / 挖孔等常量偏移）
+        var rawAnchorX = 0f
+        var rawAnchorY = 0f
+
+        // ---------- 手势轨迹记录（给下一轮定位用，一次手势只打一行） ----------
+        val trace = GestureTrace()
+
         // 自行推算的释放速度（px/s）：由位移 + eventTime 得出，不依赖 rawX 语义
         var velocityX = 0f
         var velocityY = 0f
@@ -1037,9 +1134,51 @@ class FloatingPetService : Service() {
                     initialX = params.x
                     initialY = params.y
                     // 手指此刻的**屏幕绝对位置** = 窗口位置 + 窗口局部坐标。
-                    // 基线一律用这个量，不依赖 event.rawX 在不同 ROM 上的语义差异。
                     initialFingerX = params.x + event.x
                     initialFingerY = params.y + event.y
+
+                    // ⚠️⚠️⚠️ 判定 event.rawX 的语义 —— 这一步是拖拽跟不跟手的关键。
+                    //
+                    // 手指的屏幕绝对位置有两种拿法，各自的致命缺陷完全不同：
+                    //
+                    //   ① finger = params.x + event.x（窗口位置 + 窗口局部坐标）
+                    //      ⚠️ 缺陷：params.x 是**我们请求**的窗口位置，
+                    //         而 event.x 是相对**窗口真实位置**算出来的。
+                    //         updateViewLayout 是跨进程异步的 —— 窗口真正挪到新位置
+                    //         要等到下一帧的 traversal，而同一帧里可能还有 2~3 个 MOVE 事件。
+                    //         于是同一个 MOVE 事件里混进了两个时间点：
+                    //         新的 params.x 配旧的 event.x。
+                    //         算出来的"手指位置"凭空多出一大截，
+                    //         窗口每帧都往前冲一截 —— 这就是**拖拽乱飞**。
+                    //
+                    //   ② finger = event.rawX（原始坐标）
+                    //      ✅ 优点：rawX 是**输入管线里的屏幕绝对坐标**，
+                    //         完全不受窗口"什么时候真正挪过去"的影响，
+                    //         一帧内有几个 MOVE 都不会错位。
+                    //      ⚠️ 风险：个别 ROM / 特殊窗口下 rawX 的语义可能不是屏幕绝对坐标，
+                    //         这时用它算位移会得到"窗口相对位移"，窗口只跟第一帧就卡住。
+                    //
+                    // 所以：**按下这一刻就把语义判出来，之后整段手势都用对的那一种**。
+                    // 判定不靠猜，靠比对 ——
+                    // 按下这一刻 params.x 就是窗口真实的屏幕原点（还没动过），
+                    // 所以 rawX - event.x 必然等于"窗口原点"（rawX 是屏幕绝对坐标）
+                    // 或者 0（rawX 是窗口内坐标）。
+                    val rawOriginX = event.rawX - event.x
+                    val rawOriginY = event.rawY - event.y
+                    // 两个轴里挑判据更硬的那个来定夺：
+                    // 窗口越靠边，那个轴上"原点 ≈ 0"与"原点 ≈ params"越难区分。
+                    val xEvidence = abs(params.x)
+                    val yEvidence = abs(params.y)
+                    rawIsScreenAbsolute = if (xEvidence >= yEvidence) {
+                        abs(rawOriginX - params.x) <= abs(rawOriginX)
+                    } else {
+                        abs(rawOriginY - params.y) <= abs(rawOriginY)
+                    }
+                    // 锚点：把 rawX 换算到"窗口坐标系"，
+                    // 顺手吸收状态栏 / 挖孔 / 折叠屏带来的常量偏移。
+                    // 有了它，窗口位移就等于 rawX 的**纯增量**，绝不夹带任何常量偏差。
+                    rawAnchorX = initialFingerX - event.rawX
+                    rawAnchorY = initialFingerY - event.rawY
                     // 不可变的"手势起点"基线：只用于判定是否进入拖拽
                     gestureStartFingerX = initialFingerX
                     gestureStartFingerY = initialFingerY
@@ -1047,6 +1186,12 @@ class FloatingPetService : Service() {
                     lastFingerY = initialFingerY
                     lastAppliedX = params.x
                     lastAppliedY = params.y
+                    // 轨迹记录：给"窗口实际挪了多远"和"手指实际走了多远"各留一份账
+                    trace.reset(
+                        rawX = event.rawX, rawY = event.rawY,
+                        localX = event.x, localY = event.y,
+                        winX = params.x, winY = params.y
+                    )
                     velocityX = 0f
                     velocityY = 0f
                     lastEventTime = event.eventTime
@@ -1080,6 +1225,7 @@ class FloatingPetService : Service() {
                         TAG,
                         "触摸按下 local=(${event.x}, ${event.y}) raw=(${event.rawX}, ${event.rawY}) " +
                             "win=($initialX, $initialY) " +
+                            "raw语义=${if (rawIsScreenAbsolute) "屏幕绝对" else "窗口内"} " +
                             "peekOffset=${pokoView?.peekOffsetX} sizePx=$petSizePx " +
                             "vis=${pokoView?.visibility} attached=${pokoView?.isAttachedToWindow} " +
                             "wm=${isPetWindowAttached} " +
@@ -1112,8 +1258,17 @@ class FloatingPetService : Service() {
                         initialX = params.x
                         initialY = params.y
                         // 重新锚定：以此刻的手指屏幕绝对位置为新基线
-                        initialFingerX = params.x + event.x
-                        initialFingerY = params.y + event.y
+                        // （必须与 MOVE 分支用同一套算法，否则锚点会错位）
+                        initialFingerX = if (rawIsScreenAbsolute) {
+                            event.rawX + rawAnchorX
+                        } else {
+                            params.x + event.x
+                        }
+                        initialFingerY = if (rawIsScreenAbsolute) {
+                            event.rawY + rawAnchorY
+                        } else {
+                            params.y + event.y
+                        }
                         lastFingerX = initialFingerX
                         lastFingerY = initialFingerY
                     }
@@ -1152,11 +1307,33 @@ class FloatingPetService : Service() {
                     val screenWidth = gestureScreenWidth
                     val screenHeight = gestureScreenHeight
 
-                    // ⚠️⚠️ 手指此刻的屏幕绝对位置 = 窗口当前位置 + 窗口局部坐标。
-                    // 这个等式恒成立，且完全不依赖 event.rawX 的语义，
-                    // 因此在 rawX 到底是"屏幕绝对"还是"窗口内"的 ROM 上都正确。
-                    val fingerX = params.x + event.x
-                    val fingerY = params.y + event.y
+                    // ⚠️⚠️ 手指此刻的屏幕绝对位置。
+                    //
+                    // 首选 rawX：它是输入管线里的屏幕绝对坐标，
+                    // **不受窗口"真正挪过去要等下一帧"的影响** ——
+                    // 同一帧里来几个 MOVE 都不会算错位。
+                    //
+                    // 绝对不能用「params.x + event.x」当首选：
+                    // params.x 是我们**请求**的位置，event.x 却相对窗口**真实**位置算，
+                    // 两者差着一帧的窗口位移，
+                    // 算出来的手指位置会凭空多出一截 —— 窗口每帧往前冲一截，
+                    // 表现就是「拖拽乱飞」。
+                    //
+                    // 只有在个别 ROM 上 rawX 不是屏幕绝对坐标时，才退回局部坐标算法
+                    // （ACTION_DOWN 已经把语义判出来了）。
+                    val fingerX = if (rawIsScreenAbsolute) {
+                        event.rawX + rawAnchorX
+                    } else {
+                        params.x + event.x
+                    }
+                    val fingerY = if (rawIsScreenAbsolute) {
+                        event.rawY + rawAnchorY
+                    } else {
+                        params.y + event.y
+                    }
+
+                    // 轨迹：记下这一帧的原始坐标与局部坐标，收手时一次性打出来
+                    trace.move(event.rawX, event.rawY, event.x, event.y)
 
                     // 本帧手指移动了多少（真实位移，不受窗口是否被钳制影响）
                     val stepX = (fingerX - lastFingerX).toInt()
@@ -1323,6 +1500,11 @@ class FloatingPetService : Service() {
                     isPinching = false
                     velocityX = 0f
                     velocityY = 0f
+                    logGestureTrace(
+                        "CANCEL",
+                        if (rawIsScreenAbsolute) "raw" else "local",
+                        trace, params.x, params.y
+                    )
                     Log.w(
                         TAG,
                         "拖拽被系统中断 (ACTION_CANCEL)，波可保持原地不动 " +
@@ -1341,6 +1523,13 @@ class FloatingPetService : Service() {
                     // 不再依赖 VelocityTracker（它同样建立在 raw 坐标上，语义不稳定）。
                     val releaseVx = velocityX
                     val releaseVy = velocityY
+
+                    // 轨迹对账：这一行就是"这次拖拽正不正常"的答案
+                    logGestureTrace(
+                        "UP",
+                        if (rawIsScreenAbsolute) "raw" else "local",
+                        trace, params.x, params.y
+                    )
 
                     if (isLongPressing) {
                         isLongPressing = false
@@ -2594,7 +2783,7 @@ class FloatingPetService : Service() {
         if (isAppForeground || !screenOn) return
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
-        val pParams = pokoParams ?: return
+        if (pokoParams == null) return
         if (isPeeking) {
             restoreFromPeeking()
         }
@@ -2602,7 +2791,7 @@ class FloatingPetService : Service() {
         bubble.text = text
 
         val density = resources.displayMetrics.density
-        val (screenWidth, screenHeight) = getScreenDimensions()
+        val (screenWidth, _) = getScreenDimensions()
 
         // ⚠️ 必须用 AT_MOST 而不是 UNSPECIFIED 来测量：
         // TextView 的 maxWidth 在 UNSPECIFIED 下是不生效的，
@@ -2617,17 +2806,12 @@ class FloatingPetService : Service() {
 
         val bubbleW = bubble.measuredWidth
         val bubbleH = bubble.measuredHeight
-        val pokoW = pokoView?.width ?: petSizePx
 
-        val preferredY = pParams.y - bubbleH - (6 * density).toInt()
-        val minY = (28 * density).toInt()
-        bParams.x = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
-        bParams.y = if (preferredY < minY) {
-            // 贴近屏幕顶部时，气泡智能展示在宠物下方，避免遮挡宠物
-            (pParams.y + pokoW + (6 * density).toInt()).coerceAtMost(screenHeight - bubbleH - (16 * density).toInt())
-        } else {
-            preferredY
-        }
+        // ⚠️ 位置必须与 updateBubblePosition() 用**同一套**算法，
+        // 否则会出现"气泡刚弹出来贴着猫，拖两步就离猫老远"这种前后不一致。
+        val (bubbleX, bubbleY) = computeBubblePosition(bubbleW, bubbleH, density)
+        bParams.x = bubbleX
+        bParams.y = bubbleY
 
         if (!isBubbleAttached) {
             try {
@@ -3092,26 +3276,78 @@ class FloatingPetService : Service() {
         }
     }
 
-    private fun updateBubblePosition() {
-        val bubble = bubbleView ?: return
-        val bParams = bubbleParams ?: return
-        val pParams = pokoParams ?: return
-        if (bubble.visibility != View.VISIBLE || !isBubbleAttached) return
-
-        val density = resources.displayMetrics.density
+    /**
+     * 气泡该摆在哪：统一由这里算，**显示**与**跟随**两条路径共用同一套算法。
+     *
+     * ⚠️ 以前"弹出来的时候算一次位置"和"拖拽时更新位置"是两段各写各的代码，
+     * 规则还不一样 —— 于是会出现"气泡一出现就贴着猫，拖两步就离猫老远"。
+     *
+     * 两个必须处理好的点：
+     *
+     * ① **气泡要跟着"看得见的猫"走，而不是跟着窗口走**。
+     *    探头避让、把猫推出屏幕边缘时，猫是用**绘制偏移**画在窗口之外的
+     *    （见 PokoPetView.peekOffsetX），窗口坐标一点没动。
+     *    只按窗口坐标摆气泡，贴边时气泡就会离猫老远 —— 用户看到的就是"气泡和猫对不上"。
+     *
+     * ② **气泡比猫宽得多**（猫 82dp，气泡最多 200dp）。
+     *    一律"与猫居中对齐"的话，气泡会从猫身上歪出去一大截；
+     *    贴边时再被屏幕边界钳一下，气泡就被推得离猫更远。
+     *    所以放不下时要**贴着猫的那一侧**摆，而不是让屏幕边界把气泡推离猫。
+     */
+    private fun computeBubblePosition(
+        bubbleW: Int,
+        bubbleH: Int,
+        density: Float
+    ): Pair<Int, Int> {
+        val pParams = pokoParams ?: return 0 to 0
         val (screenWidth, screenHeight) = getScreenDimensions()
-        val bubbleW = bubble.width.coerceAtLeast((100 * density).toInt())
-        val bubbleH = bubble.height.coerceAtLeast((36 * density).toInt())
-        val pokoW = pokoView?.width ?: petSizePx
+        val pokoW = pokoView?.width?.takeIf { it > 0 } ?: petSizePx
 
-        val preferredY = pParams.y - bubbleH - (6 * density).toInt()
+        // 猫**实际画出来**的位置：窗口位置 + 绘制偏移
+        val catX = pParams.x + (pokoView?.peekOffsetX ?: 0f)
+        val catRight = catX + pokoW
+        val catCenter = catX + pokoW / 2f
+
+        // 上下：气泡挂在猫头顶上方；顶到屏幕上沿就翻到猫下方
         val minY = (28 * density).toInt()
-        val newX = (pParams.x + (pokoW - bubbleW) / 2).coerceIn((10 * density).toInt(), (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(0))
+        val preferredY = pParams.y - bubbleH - (6 * density).toInt()
         val newY = if (preferredY < minY) {
-            (pParams.y + pokoW + (6 * density).toInt()).coerceAtMost(screenHeight - bubbleH - (16 * density).toInt())
+            (pParams.y + pokoW + (6 * density).toInt())
+                .coerceAtMost((screenHeight - bubbleH - (16 * density).toInt()).coerceAtLeast(0))
         } else {
             preferredY
         }
+
+        // 左右：先尝试与猫居中对齐
+        val minX = (10 * density).toInt()
+        val maxX = (screenWidth - bubbleW - (10 * density).toInt()).coerceAtLeast(minX)
+        val centered = (catCenter - bubbleW / 2f).toInt()
+        val newX = if (centered in minX..maxX) {
+            centered
+        } else {
+            // 居中放不下：让气泡贴着猫的一侧，而不是被屏幕边界推离猫
+            if (catCenter < screenWidth / 2f) {
+                // 猫在左半屏：气泡左边缘与猫左边缘对齐
+                catX.toInt().coerceIn(minX, maxX)
+            } else {
+                // 猫在右半屏：气泡右边缘与猫右边缘对齐
+                (catRight - bubbleW).toInt().coerceIn(minX, maxX)
+            }
+        }
+        return newX to newY
+    }
+
+    private fun updateBubblePosition() {
+        val bubble = bubbleView ?: return
+        val bParams = bubbleParams ?: return
+        if (bubble.visibility != View.VISIBLE || !isBubbleAttached) return
+
+        val density = resources.displayMetrics.density
+        val (screenWidth, _) = getScreenDimensions()
+        val bubbleW = bubble.width.coerceAtLeast((100 * density).toInt())
+        val bubbleH = bubble.height.coerceAtLeast((36 * density).toInt())
+
+        val (newX, newY) = computeBubblePosition(bubbleW, bubbleH, density)
 
         // 位置没变就别再动窗口：拖拽时每帧都会调到这里，
         // 一次多余的 updateViewLayout 就多一次跨进程窗口重排
