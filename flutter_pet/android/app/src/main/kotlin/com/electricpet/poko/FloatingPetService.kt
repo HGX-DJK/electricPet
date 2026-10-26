@@ -73,9 +73,37 @@ class FloatingPetService : Service() {
     private var pokoView: PokoPetView? = null
     private var pokoParams: WindowManager.LayoutParams? = null
 
+    /**
+     * 悬浮宠窗口当前是否真的挂在 WindowManager 上。
+     *
+     * ⚠️ 必须用**显式标记**判断，不能用 [android.view.View.getParent]。
+     *
+     * 原因（这是"宠物根本拖不动"的直接原因）：
+     *   `WindowManager.addView()` 挂上去的视图，它的 parent 并不是常规意义上的父容器，
+     *   拿 `parent != null` 当"还挂着"的判据，会把**好好挂着**误判成"已脱挂"。
+     *   于是在 ACTION_DOWN 里调用 ensurePetWindowAttached() 时，
+     *   每次按下都会 removeView + addView **重建窗口** ——
+     *   而窗口一换，系统会把当前这根手指的触摸流一起丢掉（手势属于窗口，不属于屏幕）。
+     *   结果就是：按下第一个事件还没处理完，手势就断了，
+     *   后面 MOVE / UP 全部收不到 —— 表现为「按了完全没反应、宠物根本拖不动」。
+     *
+     * 同一个坑在快捷菜单上早就踩过（见 [isActionMenuAttached] 的注释），
+     * 这里必须用同样的显式标记。
+     */
+    private var isPetWindowAttached: Boolean = false
+
     // 专属悬浮对话气泡
     private var bubbleView: TextView? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
+    /**
+     * 气泡窗口是否已挂在 WindowManager 上。
+     *
+     * ⚠️ 和宠物窗口一样，不能用 `bubble.parent` 判断 ——
+     * WindowManager.addView 挂上去的视图，parent 不是可靠信号。
+     * 用 parent 判的话，每次弹气泡都会走 addView 分支（抛 "already added" 被吞掉），
+     * 气泡的位置就再也更新不了 —— 表现就是"对话气泡在真机上脱离猫咪"。
+     */
+    private var isBubbleAttached: Boolean = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var hideBubbleRunnable: Runnable? = null
 
@@ -211,6 +239,43 @@ class FloatingPetService : Service() {
         }
     }
 
+    // 悬浮窗挂载看门狗：定期体检，发现脱挂就在**手势之外**重挂。
+    //
+    // ⚠️ 为什么不能把"重挂"放进 ACTION_DOWN：
+    //   触摸手势属于窗口而不是屏幕，removeView + addView 换掉窗口的那一刻，
+    //   系统会把当前手势一起丢掉 —— MOVE / UP 再也收不到，宠物根本拖不动。
+    //   所以修复必须发生在没有任何手指按着的时候。
+    //
+    // 有了它，"窗口静默脱挂"这类问题也能自愈：
+    //   最多 1.5 秒内窗口就会回到 WindowManager 上，用户不必重装 App。
+    private val attachWatchdog = object : Runnable {
+        override fun run() {
+            mainHandler.postDelayed(this, 1500)
+            try {
+                if (hasTouchDown) return          // 手势进行中绝不碰窗口
+                val view = pokoView ?: return
+                if (isPetWindowAttached && view.isAttachedToWindow) return
+                Log.w(TAG, "看门狗发现悬浮窗脱挂，准备重新挂载")
+                if (ensurePetWindowAttached()) {
+                    // 重挂后位置可能被系统重置，重新钳回屏内并刷一次布局
+                    val params = pokoParams
+                    if (params != null) {
+                        clampPetPositionToScreen(params)
+                        try {
+                            windowManager?.updateViewLayout(view, params)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "看门狗重挂后刷新布局失败", e)
+                        }
+                    }
+                    refreshPetVisibility()
+                }
+            } catch (e: Exception) {
+                // 看门狗抛异常会直接掀掉前台服务，绝不能发生
+                Log.e(TAG, "挂载看门狗执行异常", e)
+            }
+        }
+    }
+
     // 屏幕点亮状态: 息屏时悬浮猫不可见, 顺带停掉动画省电
     private var screenOn = true
     private val screenReceiver = object : BroadcastReceiver() {
@@ -236,7 +301,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v6"
+        const val DRAG_FIX_VERSION = "drag-fix-v7"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -586,8 +651,9 @@ class FloatingPetService : Service() {
         setupTouchListener(density)
 
         try {
-            if (pokoView?.parent == null) {
+            if (!isPetWindowAttached) {
                 windowManager?.addView(pokoView, pokoParams)
+                isPetWindowAttached = true
             }
             pokoView?.alpha = petOpacity
             Log.i(TAG, "悬浮宠服务启动 · 交互增强版 $DRAG_FIX_VERSION · sizeDp=$petSizeDp")
@@ -597,6 +663,11 @@ class FloatingPetService : Service() {
             stopSelf()
             return
         }
+
+        // 启动挂载看门狗：窗口万一静默脱挂，最多 1.5 秒内自愈，
+        // 而且修复发生在**没有任何手指按着**的时候，不会打断正在进行的拖拽。
+        mainHandler.removeCallbacks(attachWatchdog)
+        mainHandler.postDelayed(attachWatchdog, 1500)
 
         // 6. 初始可见性与动画状态: 屏幕点亮 且 小窝不在前台
         screenOn = isScreenInteractive()
@@ -826,11 +897,26 @@ class FloatingPetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     hasTouchDown = true
                     lastInteractionAt = System.currentTimeMillis()
-                    // ⚠️ 按下第一件事先给悬浮窗做体检：
-                    // 「View 还在、窗口却已经从 WindowManager 脱挂」是"时好时坏"的经典成因 ——
+                    // ⚠️ 按下第一件事先给悬浮窗做体检 —— 但这里**只看不修**。
+                    //
+                    // 「View 还在、窗口却已经从 WindowManager 脱挂」是"时好时坏"的经典成因，
                     // 此时所有触摸都收不到，而且永远不会自愈。
-                    // 这里掉了就当场重挂，保证这一把一定能拖。
-                    ensurePetWindowAttached()
+                    //
+                    // ⚠️⚠️ 绝对不能在这里重建窗口（removeView + addView）：
+                    // 触摸手势是**跟着窗口**走的，窗口一换，
+                    // 系统会把当前这根手指的触摸流一起丢掉 ——
+                    // MOVE / UP 全部收不到，表现为「按下完全没反应、宠物根本拖不动」。
+                    //
+                    // 以前这里直接调 ensurePetWindowAttached()，而它又是拿
+                    // `view.parent != null` 判"是否还挂着"（对 WindowManager 挂上去的视图不可靠），
+                    // 于是**每次按下都重建一次窗口**，手势在第一个事件就断了 ——
+                    // 这就是"宠物完全拖不动"的直接原因。
+                    //
+                    // 现在：这里只记录状态，真正的重建交给手势之外的看门狗
+                    // （attachWatchdog）去做。
+                    if (!isPetWindowAttached || pokoView?.isAttachedToWindow != true) {
+                        Log.w(TAG, "按下时发现悬浮窗未挂载，本次手势不重建（交给看门狗处理）")
+                    }
                     cancelEdgePeeking()
                     // 按下瞬间立即完全露出（只复位绘制偏移，窗口坐标一动不动），
                     // 保证下面采集到的 initialX/initialY 就是宠物真实落点
@@ -882,6 +968,7 @@ class FloatingPetService : Service() {
                         "触摸按下 raw=(${event.rawX}, ${event.rawY}) win=($initialX, $initialY) " +
                             "peekOffset=${pokoView?.peekOffsetX} sizePx=$petSizePx " +
                             "vis=${pokoView?.visibility} attached=${pokoView?.isAttachedToWindow} " +
+                            "wm=${isPetWindowAttached} " +
                             "screen=($gestureScreenWidth, $gestureScreenHeight)"
                     )
                     true
@@ -1107,11 +1194,19 @@ class FloatingPetService : Service() {
      * 历史上 updateViewLayout 抛异常只被记一行日志就吞掉，
      * 窗口从此脱挂，用户只能靠重装 App 才能救回来。
      *
+     * ⚠️ 判据只能用 [isPetWindowAttached] + [android.view.View.isAttachedToWindow]，
+     * **绝不能用 `view.parent`**：
+     *   WindowManager.addView 挂上去的视图，parent 不是"是否挂在窗口上"的可靠信号，
+     *   拿它判定会把"好好挂着"误判成"已脱挂"，
+     *   结果每次按下都重建窗口 —— 手势在第一个事件就被打断，宠物根本拖不动。
+     *
+     * ⚠️ 本方法**绝不能在手势进行中被调用**（见 ACTION_DOWN 分支的说明）。
+     *
      * @return true 表示窗口健在（或已当场修好）
      */
     private fun ensurePetWindowAttached(): Boolean {
         val view = pokoView ?: return false
-        if (view.parent != null && view.isAttachedToWindow) return true
+        if (isPetWindowAttached && view.isAttachedToWindow) return true
         Log.w(TAG, "悬浮窗已从 WindowManager 脱挂，准备重新挂载")
         return reattachPetWindow()
     }
@@ -1133,8 +1228,10 @@ class FloatingPetService : Service() {
         try {
             windowManager?.removeView(view)
         } catch (_: Exception) {}
+        isPetWindowAttached = false
         try {
             windowManager?.addView(view, params)
+            isPetWindowAttached = true
             Log.i(TAG, "悬浮窗已重新挂载，拖拽链路恢复")
             return true
         } catch (e: Exception) {
@@ -2252,9 +2349,10 @@ class FloatingPetService : Service() {
             preferredY
         }
 
-        if (bubble.parent == null) {
+        if (!isBubbleAttached) {
             try {
                 windowManager?.addView(bubble, bParams)
+                isBubbleAttached = true
             } catch (_: Exception) {}
         } else {
             try {
@@ -2718,7 +2816,7 @@ class FloatingPetService : Service() {
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
         val pParams = pokoParams ?: return
-        if (bubble.visibility != View.VISIBLE || bubble.parent == null) return
+        if (bubble.visibility != View.VISIBLE || !isBubbleAttached) return
 
         val density = resources.displayMetrics.density
         val (screenWidth, screenHeight) = getScreenDimensions()
@@ -3223,6 +3321,8 @@ class FloatingPetService : Service() {
         super.onDestroy()
         isRunning = false
         instance = null
+        isPetWindowAttached = false
+        mainHandler.removeCallbacks(attachWatchdog)
         cancelEdgePeeking()
         isPeeking = false
         unregisterPetDataListener()
@@ -3258,6 +3358,7 @@ class FloatingPetService : Service() {
             } catch (_: Exception) {}
         }
         bubbleView = null
+        isBubbleAttached = false
 
         pokoView?.let {
             try {

@@ -386,8 +386,10 @@ void main() {
         'MotionEvent.ACTION_DOWN ->',
         'MotionEvent.ACTION_POINTER_DOWN',
       );
-      expect(downBranch, contains('ensurePetWindowAttached()'),
-          reason: '按下时必须先体检窗口是否还挂着，否则「看得见但按不动」永远无法自愈');
+      expect(_stripLiteralsAndComments(downBranch), isNot(contains('ensurePetWindowAttached()')),
+          reason: '按下分支里绝不能调用挂载自愈（它会重建窗口）：'
+              '触摸手势属于窗口而不是屏幕，removeView + addView 会把当前手势一起丢掉，'
+              '表现为「按下完全没反应、宠物根本拖不动」');
 
       final moveBranch = _between(
         serviceSource,
@@ -397,6 +399,41 @@ void main() {
       expect(moveBranch, contains('reattachPetWindow()'),
           reason: '窗口位置更新失败（绝大多数情况就是窗口已脱挂）后必须立刻重挂，'
               '否则后续所有触摸都收不到，且再也不会恢复');
+    });
+
+    test('挂载体检绝不能用 View.parent 判断，且不得在手势进行中重建窗口', () {
+      // 这条是"宠物完全拖不动"的直接原因 —— 而且它是被当成"修复"引进来的：
+      //
+      //   1. `WindowManager.addView()` 挂上去的视图，它的 parent 不是"是否还挂在窗口上"
+      //      的可靠信号；拿 parent 判定会把**好好挂着**误判成"已脱挂"。
+      //      （同一个坑在快捷菜单上早就踩过，所以那边用的是显式标记 isActionMenuAttached。）
+      //   2. 于是 ACTION_DOWN 里调 ensurePetWindowAttached() 时，
+      //      **每次按下都会 removeView + addView 重建窗口**。
+      //   3. 触摸手势是跟着**窗口**走的：窗口一换，系统就把当前这根手指的触摸流一起丢掉，
+      //      MOVE / UP 全部收不到 —— 按下完全没反应，宠物根本拖不动。
+      //
+      // 正确做法：用显式标记记录挂载状态，并且**绝不在手势进行中重建窗口**。
+      final ensure = _braceBlock(serviceSource, 'private fun ensurePetWindowAttached()');
+      expect(ensure, isNot(contains('view.parent')),
+          reason: '挂载体检不能依赖 View.parent —— 对 WindowManager.addView 挂上去的视图，'
+              'parent 不是"是否还挂着"的可靠信号，用它判定会把正常状态误判成脱挂');
+      expect(serviceSource, contains('private var isPetWindowAttached: Boolean = false'),
+          reason: '必须用显式标记记录悬浮窗的挂载状态'
+              '（快捷菜单的 isActionMenuAttached 就是同样的做法），不能依赖 View.parent');
+      expect(ensure, contains('isPetWindowAttached'),
+          reason: '挂载体检必须基于显式标记');
+      expect(_stripLiteralsAndComments(ensure), contains('isAttachedToWindow'),
+          reason: '还必须叠加 View 自己的挂载状态，才能覆盖"被系统悄悄摘掉"的情况');
+
+      // 看门狗必须在没有手指按着的时候才动手
+      expect(serviceSource, contains('private val attachWatchdog'),
+          reason: '缺少挂载看门狗；窗口静默脱挂时需要有人负责把它挂回去');
+      final watchdog = _braceBlock(serviceSource, 'private val attachWatchdog');
+      expect(watchdog, contains('if (hasTouchDown) return'),
+          reason: '看门狗必须在没有任何手指按着的时候才动手，'
+              '绝不能在手势进行中重建窗口');
+      expect(watchdog, contains('ensurePetWindowAttached()'),
+          reason: '看门狗发现脱挂后必须真正重挂');
     });
 
     test('拉起主 App 不得留下悬空的前台标记（悬空 = 悬浮猫永久不可触摸）', () {
