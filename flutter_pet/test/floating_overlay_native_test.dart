@@ -1294,23 +1294,17 @@ void main() {
           reason: '收手时必须打上待重挂标记，让看门狗重建窗口');
     });
 
-    test('App 回到后台必须显式重建悬浮窗，不能靠 wasVisible 猜', () {
+    test('App 前后台切换必须走统一入口 + 去抖刷新（v15：显隐即窗口挂/摘）', () {
       // 用户实测的正是这条路径：
       // 「第一次桌面的宠物是可以拖动的，再打开关闭 app，桌面宠物就不能拖动了」
       //
-      // App 在前台时悬浮窗是「藏起来」的 —— 恢复之后能不能被按住，
-      // 取决于系统给这个窗口算出来的可触达区域（Touchable Region）
-      // 有没有跟着新 frame 重算一遍。
+      // v15 的显隐模型变了：显示 = addView，隐藏 = removeView。
+      // 所以「回到后台要不要重建」不再是重点 ——
+      // **回到后台时窗口本来就被摘掉了，再挂上去必然是全新 WindowState**。
       //
-      // 之前这里靠 wasVisible 启发式判断"要不要重建"，
-      // 一旦漏判就只做了 updateViewLayout（只走 relayout，frame 没变不重算热区），
-      // 于是留下一只"看得见、但按不动"的宠物。
-      //
-      // 所以：回到后台时必须**显式要求重建**，不猜。
-      //
-      // ⚠️ 而且必须**去抖**：Activity 的 onPause → onStop → onDestroy
-      // 会连着来三次，三次都拆建悬浮窗既让猫连闪三下，
-      // 也正好撞上 App 窗口退场的那一刻 —— 那是最不该动窗口的时机。
+      // 但「前后台回调必须收敛到一个入口」这条不变：
+      //   Activity 自己的 onResume/onPause  与  框架派发的生命周期回调
+      //   是两条独立链路，必须都写进同一个入口，否则前台标记会悬空。
       final notify = _braceBlock(
         serviceSource,
         'fun notifyAppForegroundChanged(foreground: Boolean)',
@@ -1320,6 +1314,21 @@ void main() {
           reason: 'Activity 的前后台回调必须走统一入口，'
               '不能各写各的（两条链路一旦不一致，前台标记就会悬空）');
 
+      // ⚠️ 必须**逐个分支**断言：
+      //    进前台与回后台两处都写 svc.applyForegroundState，
+      //    只断言"整段包含"会漏掉其中一处被改坏（v15 变异实测漏过 1 次）。
+      final splitIdx = notify.indexOf('} else {');
+      expect(splitIdx, greaterThan(-1),
+          reason: '进前台与回后台必须分成两个分支');
+      final toForeground = notify.substring(0, splitIdx);
+      final toBackground = notify.substring(splitIdx);
+      expect(_stripLiteralsAndComments(toForeground),
+          contains('svc.applyForegroundState(true)'),
+          reason: '进前台这条分支必须走统一入口');
+      expect(_stripLiteralsAndComments(toBackground),
+          contains('svc.applyForegroundState(false)'),
+          reason: '回后台这条分支必须走统一入口');
+
       final applyState =
           _braceBlock(serviceSource, 'private fun applyForegroundState(');
       expect(_stripLiteralsAndComments(applyState),
@@ -1327,36 +1336,33 @@ void main() {
           reason: '统一入口必须真的把前台标记写进去 —— '
               '标记悬空 = 桌面宠物永远不再出现');
       expect(_stripLiteralsAndComments(applyState),
-          contains('schedulePetVisibilityRefreshAfterBackground()'),
-          reason: 'App 回到后台时必须走「延迟合并后的刷新」，不能就地连做三次');
-      expect(_stripLiteralsAndComments(applyState),
-          contains('refreshPetVisibility(forceRebuild = false)'),
-          reason: 'App 进前台时必须立刻把悬浮猫藏起来，否则 App 里会出现两只波可');
+          contains('scheduleVisibilityRefresh()'),
+          reason: '前后台切换必须走「延迟合并后的刷新」，不能就地连做三次');
 
-      final schedule = _braceBlock(
-        serviceSource,
-        'fun schedulePetVisibilityRefreshAfterBackground()',
-      );
+      // ⚠️ 去抖任务本身必须精确到 visibilityRefreshRunnable：
+      //    源码里还有巡检、屏幕广播等多处 refreshPetVisibility，
+      //    只断言"整份源码包含"会漏掉去抖任务被改坏。
+      final schedule =
+          _braceBlock(serviceSource, 'private fun scheduleVisibilityRefresh(');
       expect(_stripLiteralsAndComments(schedule), contains('removeCallbacks'),
-          reason: '回后台刷新必须去抖：三次回调只有最后一次生效');
-      // ⚠️ 必须精确到 backgroundRefreshRunnable 这一个任务：
-      //    巡检里也有 refreshPetVisibility(forceRebuild = true)，
-      //    只断言"整份源码包含"会漏掉回后台那次被改坏。
-      final backgroundRunnable =
-          _braceBlock(serviceSource, 'private val backgroundRefreshRunnable = Runnable');
-      expect(_stripLiteralsAndComments(backgroundRunnable),
-          contains('refreshPetVisibility(forceRebuild = true)'),
-          reason: '回后台的那一次刷新必须强制重建悬浮窗');
+          reason: '刷新必须去抖：onPause → onStop → onDestroy 三次回调只有最后一次生效');
+      expect(_stripLiteralsAndComments(schedule), contains('postDelayed'),
+          reason: '去抖必须真的延迟执行，而不是就地连做三次（猫会连闪）');
+
+      final runnable = _braceBlock(
+          serviceSource, 'private val visibilityRefreshRunnable = Runnable');
+      expect(_stripLiteralsAndComments(runnable),
+          contains('refreshPetVisibility(forceRebuild = force)'),
+          reason: '去抖任务必须把攒下来的 forceRebuild 传给显隐刷新');
 
       final visibility =
           _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
       expect(serviceSource, contains('forceRebuild: Boolean = false'),
           reason: '显隐刷新必须支持"强制重建"这个参数');
-      expect(_stripLiteralsAndComments(visibility),
-          contains('actuallyShowing && !forceRebuild'),
-          reason: '强制重建必须能绕过"一直可见"的判断');
+      expect(_stripLiteralsAndComments(visibility), contains('windowPresent'),
+          reason: '显隐判据必须落在"窗口挂不挂"这一个布尔量上');
       expect(visibility, contains('restorePetWindowForInteraction()'),
-          reason: '重建路径必须真正重建窗口（removeView + addView）');
+          reason: '强制重建必须走重建窗口的路径（removeView + addView）');
     });
 
     test('宠物尺寸变化必须重建窗口，否则热区会停在旧尺寸上', () {
@@ -1375,87 +1381,137 @@ void main() {
           reason: '绝不能用 params.width 判断尺寸变化：隐藏时它是 1x1');
     });
 
-    test('显隐切换日志必须带窗口状态，否则前后台切换时无从判断发生了什么', () {
+    test('显隐日志必须带窗口挂载状态与前台判定，否则前后台切换时无从判断发生了什么', () {
       // 排查"打开关闭 app 后就拖不动"时，唯一能用的线索就是这条日志。
-      // 它必须同时回答四个问题：
-      //   切换前可见吗 / View 还挂在窗口上吗 / 我们认为 WMS 里还有它吗 / 它现在在哪
-      // 少一个字段，就少一个可对照的判据 —— 这正是前面几轮排查卡住的原因。
+      // 它必须同时回答：
+      //   该不该露着 / 窗口挂着没有 / 我们认为 WMS 里还有它吗 / 它现在在哪 / 前台怎么判的
+      // 少一个字段，就少一个可对照的判据 —— 这正是前几轮排查卡住的原因。
       //
       // 注意：这里断言的是**原始文本**（不能用 _stripLiteralsAndComments，
       // 那个 helper 会把字符串字面量也剥掉，恰好把这几个字段一起抹掉）。
       final visibility =
           _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
       expect(visibility,
-          contains(r'悬浮猫显隐切换 visible=$visible actuallyShowing=$actuallyShowing'),
-          reason: '显隐日志必须记录切换前是否真的露着（区分"刚恢复"与"一直可见"）');
+          contains(r'悬浮猫显隐同步 shouldShow=$shouldShow windowPresent=$windowPresent'),
+          reason: '显隐日志必须同时记录"该露着"与"窗口挂着没有"两个判据');
       expect(visibility, contains(r'attached=${view.isAttachedToWindow}'),
           reason: '显隐日志必须记录 View 是否仍挂在窗口上');
       expect(visibility, contains(r'wm=$isPetWindowAttached'),
           reason: '显隐日志必须记录我们是否仍认为窗口挂在 WMS 里');
       expect(visibility, contains(r'win=(${pokoParams?.x},${pokoParams?.y})'),
           reason: '显隐日志必须记录窗口当前坐标');
+      expect(visibility, contains(r'生命周期=$activityLifecycleState'),
+          reason: '显隐日志必须记录生命周期信号（前台判定的第二信号源）');
     });
 
-    test('隐藏悬浮猫不得用 View.GONE，必须让窗口帧真的变一次', () {
-      // ⚠️ 这是 v13 的核心改动。
+    test('v15：隐藏必须靠摘掉窗口，不得再用 GONE / INVISIBLE / 1×1 / alpha 四份状态', () {
+      // ⚠️ 这是 v15 的**架构级**改动，也是前两轮（v13 / v14）都撞过的同一个坑。
       //
-      // View.GONE 会让 ViewRootImpl 销毁窗口的 surface，
-      // 部分 ROM 还会顺势把窗口从输入分发器里摘掉；
-      // 恢复成 VISIBLE 之后，可触达区域（Touchable Region）
-      // 如果没跟着重算，就会留下一只"看得见、按不动"的猫 ——
-      // 用户实测的正是这条路径：「第一次能拖，打开关闭 app 之后就拖不动」。
+      // v13 用「INVISIBLE + 1×1 + 透明」隐藏，v14 又加了巡检兜底，
+      // 两次都还是被用户报「打开 app 再关闭，桌面宠物就不显示了」。
       //
-      // 所以改成：隐藏时把窗口缩到 1x1 + 透明 + INVISIBLE，
-      // 恢复时撑回满尺寸 —— **窗口帧真的变了**，WMS 必须重算热区。
+      // 根因是：**同时维护四份状态**（视图可见性 / 透明度 / 窗口尺寸 / 隐藏标记），
+      // 任何一份失配就产生"该显示却没显示"或者"看得见却按不动"的怪状态。
+      //
+      // v15 只留**一个**状态：窗口挂着没有。
+      //   该露着 → addView（全新 WindowState，可触达区域从头算）
+      //   该藏着 → removeView（窗口压根不存在，桌面一个像素都不占）
       final visibility =
           _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
-      // ⚠️ 只禁宠物本体：气泡 / 快捷菜单是**另外的窗口**，
-      //    它们用 View.GONE 收起来没有任何问题（见 bubbleView?.visibility）。
+
+      // —— 四份旧状态必须**一个都不许有** ——
       expect(_stripLiteralsAndComments(visibility),
           isNot(contains(RegExp(r'view\.visibility\s*=\s*View\.GONE'))),
           reason: '悬浮猫本体绝不能用 View.GONE 隐藏：'
-              'GONE 会销毁 surface / 可能摘掉输入通道，'
-              '恢复时可触达区域容易停留在旧值上');
-      expect(visibility, contains('View.INVISIBLE'),
-          reason: '隐藏要用 INVISIBLE：窗口始终挂在 WindowManager 上，'
-              '不会出现"View 还在、窗口却脱挂"的状态');
-      expect(visibility, contains('applyPetWindowFrame(hidden = false)'),
-          reason: '恢复时必须把窗口尺寸撑回去 —— 帧变化才会触发热区重算');
-      expect(visibility, contains('applyPetWindowFrame(hidden = true)'),
-          reason: '隐藏时必须把窗口缩到 1x1');
+              'GONE 会销毁 surface / 可能摘掉输入通道');
+      expect(_stripLiteralsAndComments(visibility),
+          isNot(contains(RegExp(r'view\.visibility\s*=\s*View\.INVISIBLE'))),
+          reason: 'v15 不用 INVISIBLE：隐藏靠摘窗口，不靠改视图可见性');
+      expect(_stripLiteralsAndComments(visibility),
+          isNot(contains(RegExp(r'view\.alpha\s*=\s*0f'))),
+          reason: '不用 alpha=0 隐藏：透明度是"用户设置"，不是显隐手段');
+      expect(serviceSource, isNot(contains('applyPetWindowFrame')),
+          reason: 'v15 没有"改窗口尺寸"这套隐藏机制：窗口要么在，要么不在');
+      expect(serviceSource, isNot(contains('HIDDEN_WINDOW_SIZE_PX')),
+          reason: 'v15 没有 1×1 隐藏尺寸：摘掉窗口就是最彻底的隐藏');
+      expect(serviceSource, isNot(contains('petWindowHidden')),
+          reason: 'v15 没有隐藏标记：唯一状态就是"窗口挂不挂"');
 
-      final frame = _braceBlock(serviceSource, 'private fun applyPetWindowFrame(');
-      expect(_stripLiteralsAndComments(frame), contains('params.width = size'),
-          reason: '改尺寸必须真的改到 LayoutParams 上，否则 WMS 看不到帧变化');
-      expect(_stripLiteralsAndComments(frame), contains('updateViewLayout'),
-          reason: '尺寸变更必须提交给 WindowManager，否则帧不会变');
-      expect(serviceSource, contains('const val HIDDEN_WINDOW_SIZE_PX = 1'),
-          reason: '隐藏尺寸必须是 1x1：既不画东西，也不留可触达区域');
+      // —— 隐藏必须真的摘掉窗口 ——
+      expect(visibility, contains('detachPetWindow()'),
+          reason: '该藏着的时候必须把窗口整个摘掉');
+      final detach = _braceBlock(serviceSource, 'private fun detachPetWindow()');
+      expect(_stripLiteralsAndComments(detach), contains('removeView'),
+          reason: '隐藏必须是 removeView：窗口不存在 = 桌面上一个像素都不占');
+      expect(_stripLiteralsAndComments(detach), contains('isPetWindowAttached = false'),
+          reason: '摘掉之后必须把"窗口挂着"这个唯一状态同步成 false');
+      expect(_stripLiteralsAndComments(detach), contains('removeViewImmediate'),
+          reason: '摘除必须**同步**摘干净：removeView 是异步的'
+              '（只投一条 die 消息），视图在消息处理前还挂在旧 WindowState 上，'
+              '紧接着 addView 会抛 "View already added" → 宠物再也不出现');
     });
 
-    test('恢复时必须先撑回尺寸、再置为可见（热区要在"可见+满尺寸"下算）', () {
+    test('v15：显示必须靠挂上一个全新窗口（attachPetWindow），不能只改布局参数', () {
+      // 旧做法（v13 / v14）：窗口一直在 WMS 里，只改它的尺寸 / 可见性。
+      //   → WMS 不会为它建新的 WindowState，可触达区域不一定重算
+      //   → 「看得见、点不动」。
+      //
+      // v15：显示 = removeView 之后 addView，WMS 建全新 WindowState，
+      //   可触达区域从头算一遍 —— 这才是「看得见却按不动」的真正解药。
       final visibility =
           _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
-      final resizeAt = visibility.indexOf('applyPetWindowFrame(hidden = false)');
-      final visibleAt = visibility.indexOf('view.visibility = View.VISIBLE');
-      expect(resizeAt, greaterThan(-1), reason: '恢复路径必须把窗口尺寸撑回去');
-      expect(visibleAt, greaterThan(-1), reason: '恢复路径必须把视图置为 VISIBLE');
-      expect(resizeAt, lessThan(visibleAt),
-          reason: '顺序：先把尺寸撑回满尺寸（帧变化），再置为可见 —— '
-              '这样可触达区域一定是在"可见 + 满尺寸"的状态下算出来的，'
-              '反过来的话中间会经过一个"可见但只有 1 像素"的窗口');
+      expect(visibility, contains('attachPetWindow()'),
+          reason: '该露着但窗口没挂着时，必须真的挂上去');
+
+      // ⚠️ 必须精确到"挂上去"这条分支：
+      //    整个 refreshPetVisibility 里还有别处也调 clampPetPositionToScreen，
+      //    整体断言会漏掉挂载分支被改坏。
+      final attachBranch = _between(
+        visibility,
+        'if (!windowPresent) {',
+        '} else if (forceRebuild) {',
+      );
+      expect(_stripLiteralsAndComments(attachBranch),
+          contains('clampPetPositionToScreen'),
+          reason: '挂上去之前必须把坐标钳回屏内：旋转 / 分屏 / 存档坐标失效之后，'
+              '窗口挂在屏幕外就又看不见也摸不到');
+
+      final attach = _braceBlock(serviceSource, 'private fun attachPetWindow()');
+      expect(_stripLiteralsAndComments(attach), contains('addView'),
+          reason: '挂载必须是真正的 addView：全新窗口 = 全新可触达区域');
+      // ⚠️ 必须精确到"首次挂载成功"这条路径：
+      //    attachPetWindow 里有两处 addView（首次 + 失败后强制重试），
+      //    只断言"函数体里包含 isPetWindowAttached = true"会漏掉其中一条被改坏
+      //    （v15 变异实测漏过 1 次）。
+      final okPath = _between(
+        attach,
+        'windowManager?.addView(view, params)',
+        'Log.i(TAG, "悬浮窗已挂载")',
+      );
+      expect(_stripLiteralsAndComments(okPath), contains('isPetWindowAttached = true'),
+          reason: '首次挂载成功后必须同步"窗口挂着"这个唯一状态');
+      final retryPath = _between(
+        attach,
+        'Log.w(TAG, "悬浮窗挂载失败，强制摘除后重试", e)',
+        'Log.i(TAG, "悬浮窗强制重挂成功")',
+      );
+      expect(_stripLiteralsAndComments(retryPath), contains('isPetWindowAttached = true'),
+          reason: '强制重挂成功后同样必须同步"窗口挂着"这个唯一状态');
+      expect(_stripLiteralsAndComments(attach), contains('removeViewImmediate'),
+          reason: 'addView 失败（View already added）时必须强制摘一次再重试');
     });
 
     test('坐标钳制必须用宠物真实尺寸，不能用窗口当前尺寸', () {
-      // 窗口藏起来时 width 是 1x1 —— 拿它当宠物尺寸会把位置钳到屏幕最右边，
-      // 猫就再也拖不回来了。
+      // params.width 只是"窗口当前尺寸"，它有可能落后于真实宠物尺寸
+      // （刚改完设置、还没提交到 WMS 的那一瞬间）。
+      // 拿它当宠物尺寸会把位置钳到屏幕最右边，猫就再也拖不回来了。
       final clamp =
           _braceBlock(serviceSource, 'private fun clampPetPositionToScreen(');
       expect(_stripLiteralsAndComments(clamp), contains('petSizePx'),
           reason: '钳制必须基于宠物真实尺寸 petSizePx');
       expect(_stripLiteralsAndComments(clamp),
           isNot(contains('params.width > 0')),
-          reason: '绝不能用 params.width 当宠物尺寸：隐藏时它是 1x1');
+          reason: '绝不能用 params.width 当宠物尺寸');
     });
 
     test('必须有一份触摸诊断快照，能直接回答"触摸到底进没进窗口"', () {
@@ -1466,6 +1522,10 @@ void main() {
       //   DOWN=0        → 触摸没进窗口（热区 / 层级 / 被别的窗口挡住）
       //   DOWN>0 MOVE=0 → 进了窗口但手势被吃掉
       //   MOVE>0        → 触摸链路正常，问题在窗口位移上
+      //
+      // v15 还必须能回答"为什么宠物不显示"：
+      //   判定在前台=true 而用户已经退出 App → 前台标记悬空
+      //   attached=false                          → 窗口没挂着
       final diag =
           _braceBlock(serviceSource, 'private fun buildTouchDiagnostic()');
       expect(diag, contains(r'DOWN=$touchDownCount'),
@@ -1476,8 +1536,10 @@ void main() {
           reason: '诊断必须带上窗口挂载状态');
       expect(diag, contains(r'wm=$isPetWindowAttached'),
           reason: '诊断必须带上我们认为的窗口挂载状态');
-      expect(diag, contains(r'隐藏=$petWindowHidden'),
-          reason: '诊断必须带上隐藏状态');
+      expect(diag, contains(r'判定在前台=${isAppActuallyInForeground()}'),
+          reason: '诊断必须带前台判定结果（前台标记悬空时宠物永远不出现）');
+      expect(diag, contains(r'生命周期=$activityLifecycleState'),
+          reason: '诊断必须带生命周期状态（前台判定的第二信号源）');
       // 计数器必须真的在触摸链路里累加，否则诊断永远是 0
       expect(serviceSource, contains('touchDownCount++'),
           reason: '按下时必须累加计数');
@@ -1502,26 +1564,31 @@ void main() {
           reason: '诊断必须随心跳保持新鲜');
     });
 
-    test('收进通知栏也必须用同一套隐藏机制，不能用 View.GONE', () {
+    test('收进通知栏也必须用同一套隐藏机制（v15：摘掉窗口）', () {
       // 「收回 → 召回」这条路径同样会遇到热区陈旧，
-      // 必须和前后台切换共用同一套（缩到 1x1 + INVISIBLE），
+      // 必须和前后台切换共用同一套（摘掉窗口），
       // 否则用户"收一次再召回来"就再也拖不动了。
       final tray = _braceBlock(serviceSource, 'private fun hidePetToTray(');
+      expect(tray, contains('detachPetWindow()'),
+          reason: '收进通知栏时必须把窗口整个摘掉');
       expect(_stripLiteralsAndComments(tray),
           isNot(contains(RegExp(r'view\.visibility\s*=\s*View\.GONE'))),
           reason: '收回时不能用 View.GONE：'
               'GONE 会销毁 surface / 可能摘掉输入通道，'
               '召回时可触达区域会停留在旧值上');
-      expect(tray, contains('applyPetWindowFrame(hidden = true)'),
-          reason: '收进通知栏时也必须让窗口帧变一次');
-      expect(tray, contains('petWindowHidden = true'),
-          reason: '必须同步维护隐藏标记，否则召回时走错分支');
+      expect(tray, contains('isPetRecalled = true'),
+          reason: '必须同步维护召回标记，否则召回时走错分支');
+
+      // 召回必须交给统一入口：它才知道"该露着"，也才会真的挂一个全新窗口
+      final recall = _braceBlock(serviceSource, 'private fun recallPet(');
+      expect(recall, contains('refreshPetVisibility('),
+          reason: '召回必须走统一显隐入口，由它挂上全新窗口（热区从头算）');
     });
 
-    test('【行为模拟】帧不变热区就陈旧；让帧变一次才能治好"看得见却按不动"', () {
+    test('【行为模拟】v15：摘掉再挂 = 全新窗口 = 热区从头算', () {
       const petSize = 200;
 
-      // —— 旧做法：隐藏/恢复只切可见性，窗口帧一动不动 ——
+      // —— 旧做法：只切可见性，窗口一直挂在 WMS 里（帧不动）——
       final legacy = _OverlayFrameSim(petSize);
       legacy.applyFrame(petSize, visible: true);
       legacy.fingerDown();
@@ -1534,16 +1601,27 @@ void main() {
           reason: '帧没变 → WMS 不重算可触达区域 → 触摸进不来，'
               '这正是"看得见却按不动"的用户症状');
 
-      // —— 新做法：隐藏时缩到 1x1，恢复时撑回满尺寸 → 帧变了一次 ——
+      // —— v15：摘掉窗口 = 桌面上一个像素都不占；挂回去 = 全新 WindowState ——
       final fixed = _OverlayFrameSim(petSize);
-      fixed.applyFrame(petSize, visible: true);
-      fixed.hideWithFrameChange();
-      fixed.showWithFrameChange();
+      fixed.attachWindow();
+      fixed.fingerDown();
+      expect(fixed.touchDownCount, 1, reason: '刚挂上去必须能接到触摸');
+      expect(fixed.touchableRegion, petSize,
+          reason: '新挂上去的窗口，热区必须覆盖整个宠物');
+
+      fixed.detachWindow();
+      expect(fixed.touchableRegion, 0,
+          reason: '摘掉之后桌面一个像素都碰不到 —— App 里的按钮全都能点到');
       fixed.fingerDown();
       expect(fixed.touchDownCount, 1,
-          reason: '帧变化会让 WMS 重算可触达区域，触摸重新送达');
+          reason: '摘掉之后触摸根本进不来（这是设计如此，不是故障）');
+
+      fixed.attachWindow();
+      fixed.fingerDown();
+      expect(fixed.touchDownCount, 2,
+          reason: '重新挂上去 = 全新 WindowState = 热区从头算 = 触摸重新送达');
       expect(fixed.touchableRegion, petSize,
-          reason: '恢复后热区必须重新覆盖整个宠物');
+          reason: '重新挂上后热区必须重新覆盖整个宠物');
     });
   });
 
@@ -1690,37 +1768,54 @@ void main() {
               '否则线上出现"按不动"时完全无从定位');
     });
 
-    test('恢复可见时必须区分「刚恢复」与「一直可见」，只在刚恢复时重建窗口', () {
-      final refreshVis = _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
+    test('v15：显隐判据只有「窗口挂不挂」一个布尔量，不许再有第二份状态', () {
+      // v14 的判据是「视图可见性 + 窗口尺寸」两份，
+      // 两份只要有一份失配，就会产生"看得见却按不动"或"该显示却没显示"。
+      // v15 收敛成一个布尔量：isPetWindowAttached && view.isAttachedToWindow。
+      final refreshVis =
+          _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
 
-      // ⚠️ "之前是不是真的露着"必须看**实际状态**（视图可见性 + 窗口尺寸），
-      //    不能看某个标记 —— 标记会失配，实际状态不会骗人。
-      expect(refreshVis, contains('val actuallyShowing = view.visibility == View.VISIBLE'),
-          reason: '必须先记录"之前是不是真的露着"，才能区分「刚恢复」和「一直可见」；'
-              '看实际状态而不是看标记，标记失配会让宠物永远不再出现');
-      expect(refreshVis, contains('pokoParams?.width == petSizePx'),
-          reason: '实际状态还要看窗口尺寸：尺寸停在 1x1 的宠物同样是"没露着"');
+      expect(refreshVis,
+          contains('val windowPresent = isPetWindowAttached && view.isAttachedToWindow'),
+          reason: '显隐判据必须落在这一个布尔量上');
+      expect(_stripLiteralsAndComments(refreshVis),
+          isNot(contains('actuallyShowing')),
+          reason: '不再有"实际显示状态"这第二份状态');
+      expect(_stripLiteralsAndComments(refreshVis),
+          isNot(contains('pokoParams?.width == petSizePx')),
+          reason: '不再用窗口尺寸推断"有没有露着"');
+
+      // 该露着却没挂着 → 挂；挂着但要求重建 → 重建；该藏着却挂着 → 摘
+      expect(refreshVis, contains('attachPetWindow()'),
+          reason: '该露着却没挂着时必须挂上去');
       expect(refreshVis, contains('restorePetWindowForInteraction()'),
-          reason: '刚从隐藏恢复的那一次必须走重建窗口的路径');
-      expect(refreshVis, contains('ensurePetWindowAttached()'),
-          reason: '一直可见的路径仍要体检窗口是否还挂在 WindowManager 上');
+          reason: '强制重建必须走重建窗口的路径');
+      expect(refreshVis, contains('detachPetWindow()'),
+          reason: '该藏着却还挂着时必须摘掉');
+
+      // 「该露着」的判定必须同时看三个条件：亮屏 / 不在前台 / 没被收回
+      expect(_stripLiteralsAndComments(refreshVis),
+          contains('val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled'),
+          reason: '"该露着"的判定必须同时看亮屏 / 前台 / 召回三个条件，'
+              '漏掉任何一个都会让宠物在该出现时消失、或在该消失时占着桌面');
     });
 
-    test('显隐必须是幂等赋值，不能靠"状态翻转"才动窗口', () {
+    test('v15：显隐必须是「该露着就挂、该藏着就摘」的幂等赋值', () {
       // ⚠️⚠️ v13 的回归就出在这里：
       // 当时显隐是"只有 visible 与 wasVisible 不同才动窗口"，
-      // 只要有一次判断失配（标记说该露着、窗口其实还是 1x1 + INVISIBLE），
-      // 宠物就永远不再出现，而且没有任何机制会纠正它 ——
+      // 只要有一次判断失配，宠物就永远不再出现 ——
       // 用户实测原文：「打开 app，再关闭，桌面悬浮宠物就不显示了」。
       //
-      // 现在必须是**每次都把窗口摆成应该的样子**（幂等）：
-      // 这样任何一次意外都会在下一次调用（或巡检）时自动纠正。
+      // v15 必须是**每次都把窗口摆成应该的样子**（幂等）：
+      // 该露着 → 没挂就挂；该藏着 → 还挂着就摘。
+      // 任何一次意外都会在下一次调用（或巡检）时自动纠正。
       final visibility =
           _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
-      final hiddenBlock = visibility.indexOf('applyPetWindowFrame(hidden = true)');
-      final shownBlock = visibility.indexOf('applyPetWindowFrame(hidden = false)');
-      expect(hiddenBlock, greaterThan(-1), reason: '必须有一条"藏起来"的分支');
-      expect(shownBlock, greaterThan(-1), reason: '必须有一条"露出来"的分支');
+
+      final attachAt = visibility.indexOf('attachPetWindow()');
+      final detachAt = visibility.indexOf('detachPetWindow()');
+      expect(attachAt, greaterThan(-1), reason: '必须有一条"挂上去"的分支');
+      expect(detachAt, greaterThan(-1), reason: '必须有一条"摘掉"的分支');
 
       // 两条分支都必须**无条件执行**，不能被"是否发生翻转"包着
       final flipGuard = RegExp(r'if\s*\(\s*wasVisible\s*!=\s*visible\s*\)');
@@ -1728,19 +1823,93 @@ void main() {
           reason: '显隐绝不能再被"状态翻转"包着 —— '
               '一次失配就会让宠物永久消失（v13 回归）');
 
-      // 两条分支都必须真的把状态摆对
-      expect(visibility, contains('view.visibility = View.VISIBLE'),
-          reason: '"露出来"这条分支必须真的把视图置为 VISIBLE');
-      expect(visibility, contains('view.visibility = View.INVISIBLE'),
-          reason: '"藏起来"这条分支必须真的把视图置为 INVISIBLE');
+      // 透明度是"用户设置"，不是显隐手段
       expect(visibility, contains('view.alpha = currentPetAlpha()'),
-          reason: '恢复时必须把透明度摆回正常值');
-
-      // 也不允许用 alpha=0 来隐藏：透明度是第三份需要同步的状态
+          reason: '透明度必须始终是用户设置值，不能被拿来当显隐手段');
       expect(_stripLiteralsAndComments(visibility),
           isNot(contains(RegExp(r'view\.alpha\s*=\s*0f'))),
-          reason: '隐藏用 INVISIBLE + 1x1 就够了；'
-              '再加一份 alpha 状态就多一处可能失配的地方');
+          reason: '绝不用 alpha=0 隐藏：多一份会失配的状态');
+    });
+
+    test('v15：前台判定必须是三态，且「任一信号说不在前台就不在前台」', () {
+      // 前台标记一旦悬空（说"在前台"、其实已经退到后台），
+      // 桌面宠物就**永远不再出现** —— 用户实测过「打开 app 再关闭，宠物就不显示了」。
+      //
+      // 所以判定必须同时看两个信号源，并且规则是
+      //   **任一信号说"不在前台"，就认为不在前台**：
+      //   误以为"还在前台" → 宠物永远不出现（不可接受）
+      //   误以为"已退后台" → 短暂多露一只猫（可容忍）
+      expect(serviceSource, contains('private enum class ActivityState'),
+          reason: '必须有一个三态的生命周期枚举'
+              '（UNKNOWN / RESUMED / NOT_RESUMED）');
+      expect(serviceSource, contains('ActivityState.UNKNOWN'),
+          reason: '必须有 UNKNOWN 态：服务比 Activity 晚启动是常态');
+      expect(serviceSource, contains('ActivityState.RESUMED'),
+          reason: '必须有 RESUMED 态');
+      expect(serviceSource, contains('ActivityState.NOT_RESUMED'),
+          reason: '必须有 NOT_RESUMED 态：确定不在前台');
+
+      final judge =
+          _braceBlock(serviceSource, 'private fun isAppActuallyInForeground()');
+      expect(_stripLiteralsAndComments(judge),
+          contains('if (!isAppForeground) return false'),
+          reason: '静态标记说不在前台，就一定不在前台');
+      expect(_stripLiteralsAndComments(judge),
+          contains('if (activityLifecycleState == ActivityState.NOT_RESUMED) return false'),
+          reason: '生命周期说不在前台，就一定不在前台（这一条治的是标记悬空）');
+      // ⚠️ 顺序必须固定：先看静态标记，再看生命周期。
+      expect(judge.indexOf('!isAppForeground'),
+          lessThan(judge.indexOf('ActivityState.NOT_RESUMED')),
+          reason: '先看静态标记，再看生命周期（顺序固定，避免以后改乱）');
+    });
+
+    test('v15：手势进行中绝不许摘窗口（手势属于窗口，换窗口即丢手势）', () {
+      final detach = _braceBlock(serviceSource, 'private fun detachPetWindow()');
+      expect(_stripLiteralsAndComments(detach), contains('if (hasTouchDown)'),
+          reason: '手势进行中必须拒绝摘除：'
+              '系统会把当前这根手指的 MOVE / UP 一起丢掉');
+      final guardAt = detach.indexOf('hasTouchDown');
+      final removeAt = detach.indexOf('removeView');
+      expect(guardAt, greaterThan(-1), reason: '必须有人势总闸');
+      expect(removeAt, greaterThan(guardAt), reason: '总闸必须写在 removeView 之前');
+      expect(detach, contains('return false'),
+          reason: '总闸命中时必须直接返回，不能继续摘窗口');
+    });
+
+    test('v15：所有「要不要在桌面上做事」的判定都必须走统一前台判定', () {
+      // 静态标记 isAppForeground 会悬空（openMainActivity 会手工置 true）。
+      // 只要有一处"要不要做桌面上的事"直接看它，
+      // 悬空时的症状就是「猫明明在桌面上，却不冒泡 / 不探头 / 不搭话」。
+      //
+      // ⚠️ 必须**逐个函数**断言，不能只断言"整份源码包含"：
+      //    这几处都会用到 isAppForeground 这个词，整体断言等于没断言。
+      final gates = <String, String>{
+        '气泡弹出': 'private fun showCustomSpeechBubble(',
+        '快捷菜单弹出': 'private fun showActionMenu()',
+        '边缘探头': 'private fun scheduleEdgePeeking(',
+        '边缘踱步': 'private val edgeStrollRunnable = object',
+        '主动搭话': 'private val autoChatRunnable = object',
+      };
+      gates.forEach((label, marker) {
+        final block = _braceBlock(serviceSource, marker);
+        expect(_stripLiteralsAndComments(block),
+            contains('isAppActuallyInForeground()'),
+            reason: '「$label」的前台判定必须走统一判定，'
+                '不能直接看静态标记（标记会悬空）');
+        // ⚠️ 必须断言"不再出现裸的 isAppForeground"，而不只是"包含统一判定"：
+        //    一个函数里往往有好几处前台判定，改坏一处、另一处还在，
+        //    整体包含会漏检（v15 变异实测漏过 1 次）。
+        expect(_stripLiteralsAndComments(block),
+            isNot(contains('isAppForeground')),
+            reason: '「$label」里还有地方在直接看静态标记，'
+                '标记一旦悬空就会出现「猫在桌面上却不冒泡 / 不探头 / 不搭话」');
+      });
+    });
+
+    test('v15：版本标记必须升级（用户一眼就知道手机上跑的是哪一版）', () {
+      expect(serviceSource, contains('const val DRAG_FIX_VERSION = "drag-fix-v15"'),
+          reason: 'v15 改了显隐架构，版本标记必须跟着升 —— '
+              '用户反馈问题时我们才能确认手机上跑的是哪一版');
     });
 
     test('前台状态必须有第二条独立信号源：服务自己监听 Activity 生命周期', () {
@@ -1779,17 +1948,20 @@ void main() {
           reason: 'Activity 销毁时前台标记绝不能留在 true（否则宠物永远不出现）');
     });
 
-    test('必须有窗口状态巡检兜底，保证宠物不会永久消失', () {
+    test('窗口状态巡检必须只按「窗口挂不挂」判缺，保证宠物不会永久消失', () {
       // 幂等赋值是主防线，巡检是最后一道保险：
-      // 只要"该露着"却没真正露着，2 秒内就修回来。
+      // 只要"该露着"却没挂着，2 秒内就修回来；
+      // 反过来"该藏着"却还挂着，也必须立刻摘掉（否则它挡着 App 里的按钮）。
       final watchdog =
           _braceBlock(serviceSource, 'private val windowStateWatchdog = object');
-      expect(watchdog, contains('refreshPetVisibility(forceRebuild = true)'),
-          reason: '巡检发现状态不对时必须强制恢复');
-      expect(watchdog, contains('view.visibility != View.VISIBLE'),
-          reason: '巡检必须检查视图可见性');
-      expect(watchdog, contains('params.width != petSizePx'),
-          reason: '巡检必须检查窗口尺寸是否停在 1x1');
+      expect(watchdog, contains('shouldShow && !windowPresent'),
+          reason: '巡检必须能识别"该露着却没挂着"');
+      expect(watchdog, contains('!shouldShow && windowPresent'),
+          reason: '巡检必须能识别"该藏着却还挂着"');
+      expect(watchdog, contains('refreshPetVisibility('),
+          reason: '巡检发现状态不对时必须走统一显隐入口去纠正');
+      expect(watchdog, contains('mainHandler.postDelayed(this, 2000)'),
+          reason: '巡检必须自己续期，否则跑一轮就停了');
       expect(serviceSource, contains('mainHandler.postDelayed(windowStateWatchdog, 2000)'),
           reason: '巡检必须真的被启动起来（onCreate）');
       expect(serviceSource, contains('mainHandler.removeCallbacks(windowStateWatchdog)'),
@@ -4282,6 +4454,9 @@ class _OverlayFrameSim {
   /// 视图当前是否可见
   bool viewVisible = false;
 
+  /// 窗口当前是否还挂在 WindowManager 上（v15 的唯一显隐状态）
+  bool attached = false;
+
   /// WMS 手里那个可触达区域的边长
   int touchableRegion = 0;
 
@@ -4323,6 +4498,21 @@ class _OverlayFrameSim {
   /// 新做法：恢复时把窗口撑回满尺寸 —— **帧变了**
   void showWithFrameChange() {
     applyFrame(petSize, visible: true);
+  }
+
+  /// v15：把窗口整个摘掉（removeView）—— 桌面上一个像素都不占。
+  void detachWindow() {
+    attached = false;
+    viewVisible = false;
+    touchableRegion = 0;
+  }
+
+  /// v15：挂上一个**全新**窗口（addView）——
+  /// WMS 会为它建一个新的 WindowState，可触达区域从头算一遍。
+  void attachWindow() {
+    attached = true;
+    viewVisible = true;
+    touchableRegion = petSize;
   }
 
   /// 手指按在宠物身上

@@ -223,12 +223,70 @@ class FloatingPetService : Service() {
     /** 服务启动时刻 */
     private var serviceStartAt: Long = 0L
     /**
-     * 悬浮窗当前是否处于"藏起来"状态。
+     * Activity 生命周期的真实状态（框架派发出来的）。
      *
-     * ⚠️ 藏起来 ≠ View.GONE，而是把窗口缩到 1x1 且整体透明
-     * （原因见 refreshPetVisibility 的注释）。这个标记就是这套机制的开关。
+     * ⚠️ 为什么不用 Activity 自己的 onResume/onPause 就够了？
+     * 因为那是一条**单点链路**：一旦某次 onPause 没跑到，
+     * `isAppForeground` 就会永远停在 true，
+     * 桌面宠物就**永远不再出现** —— 这正是用户连续两轮实测报的现象。
+     *
+     * 框架派发的生命周期回调是更底层、更可靠的那一条，
+     * 两者互为备份。
      */
-    private var petWindowHidden: Boolean = false
+    private enum class ActivityState {
+        /** 还没收到过任何生命周期回调（服务比 Activity 晚启动时的常态） */
+        UNKNOWN,
+        /** Activity 已恢复 */
+        RESUMED,
+        /** Activity 已暂停 / 已销毁 —— 确定不在前台 */
+        NOT_RESUMED
+    }
+
+    private var activityLifecycleState: ActivityState = ActivityState.UNKNOWN
+
+    /**
+     * App 到底在前台吗？
+     *
+     * 两个信号源：
+     *   ① Activity 自己的 onResume/onPause → 静态标记 isAppForeground
+     *   ② 框架派发的生命周期回调 → activityLifecycleState
+     *
+     * ⚠️ 规则：**任一信号说"不在前台"，就认为不在前台**。
+     * 因为"误以为还在前台"的后果是宠物永远不出现（用户报过的那个 bug），
+     * 而"误以为已经退到后台"的后果只是短暂地多露一只猫 —— 后者可以忍。
+     */
+    private fun isAppActuallyInForeground(): Boolean {
+        if (!isAppForeground) return false
+        if (activityLifecycleState == ActivityState.NOT_RESUMED) return false
+        return true
+    }
+
+    /**
+     * 显隐刷新的去抖任务。
+     *
+     * Activity 的 onResume / onPause 与框架的生命周期回调会**成对且几乎同时**到达，
+     * 中间还夹着 onStop / onDestroy / onActivityDestroyed。
+     * 每次都立刻刷新的话，窗口会被反复拆建（猫连闪），
+     * 而且可能在状态还没稳定时就把窗口摘了。
+     * 所以统一延迟一小会儿，等状态稳定了再刷新。
+     */
+    private var pendingForceRebuild = false
+    private val visibilityRefreshRunnable = Runnable {
+        val force = pendingForceRebuild
+        pendingForceRebuild = false
+        refreshPetVisibility(forceRebuild = force)
+    }
+
+    /**
+     * 安排一次显隐刷新（去抖）。
+     *
+     * 连续调用只会生效最后一次 —— 这就是"状态稳定后再动手"。
+     */
+    private fun scheduleVisibilityRefresh(forceRebuild: Boolean = false) {
+        if (forceRebuild) pendingForceRebuild = true
+        mainHandler.removeCallbacks(visibilityRefreshRunnable)
+        mainHandler.postDelayed(visibilityRefreshRunnable, VISIBILITY_REFRESH_DELAY_MS)
+    }
 
     /**
      * 波可是否被用户"收进通知栏"。
@@ -308,7 +366,8 @@ class FloatingPetService : Service() {
     // 自主在桌面边缘漫步溜达定时任务 (支持省电低功耗模式动态降频)
     private val edgeStrollRunnable = object : Runnable {
         override fun run() {
-            if (screenOn && !isAppForeground && !isStrolling && edgeSnapAnimator?.isRunning != true && !hasTouchDown) {
+            if (screenOn && !isAppActuallyInForeground() && !isStrolling &&
+                edgeSnapAnimator?.isRunning != true && !hasTouchDown) {
                 val isLowPower = isLowPowerMode()
                 if (!isLowPower || Math.random() > 0.5) {
                     maybeStrollAlongEdge()
@@ -408,35 +467,29 @@ class FloatingPetService : Service() {
             try {
                 val view = pokoView ?: return
                 val params = pokoParams ?: return
-                val shouldShow = screenOn && !isAppForeground && !isPetRecalled
-                if (!shouldShow) {
-                    // 该藏着：必须真的藏干净（1x1 + INVISIBLE），别占着整块热区
-                    if (view.visibility != View.INVISIBLE ||
-                        params.width != HIDDEN_WINDOW_SIZE_PX ||
-                        params.height != HIDDEN_WINDOW_SIZE_PX
-                    ) {
-                        Log.w(
-                            TAG,
-                            "巡检发现悬浮窗没有藏干净，强制收起：vis=${view.visibility} " +
-                                "frame=${params.width}x${params.height}"
-                        )
-                        view.visibility = View.INVISIBLE
-                        applyPetWindowFrame(hidden = true)
-                    }
+                // ⚠️ v15：状态只有一个 —— 窗口挂着没有。
+                val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled
+                val windowPresent = isPetWindowAttached && view.isAttachedToWindow
+                if (shouldShow && !windowPresent) {
+                    // 该露着却没挂着 —— 立刻挂上去
+                    Log.w(
+                        TAG,
+                        "巡检发现悬浮窗没挂着，强制挂上：attached=${view.isAttachedToWindow} " +
+                            "wm=$isPetWindowAttached 前台标记=$isAppForeground " +
+                            "生命周期=$activityLifecycleState 亮屏=$screenOn"
+                    )
+                    refreshPetVisibility(forceRebuild = false)
                     return
                 }
-                // 该露着：视图必须可见，窗口尺寸必须是满的
-                val broken = view.visibility != View.VISIBLE ||
-                    params.width != petSizePx || params.height != petSizePx
-                if (!broken) return
-                Log.w(
-                    TAG,
-                    "巡检发现悬浮窗状态不对，强制恢复：vis=${view.visibility} " +
-                        "frame=${params.width}x${params.height} 期望=${petSizePx}px " +
-                        "attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
-                        "前景=$isAppForeground 亮屏=$screenOn"
-                )
-                refreshPetVisibility(forceRebuild = true)
+                if (!shouldShow && windowPresent) {
+                    // 该藏着却还挂着 —— 立刻摘掉
+                    Log.w(
+                        TAG,
+                        "巡检发现该藏着的悬浮窗还挂着，强制摘掉：前台标记=$isAppForeground " +
+                            "生命周期=$activityLifecycleState 亮屏=$screenOn 收回=$isPetRecalled"
+                    )
+                    refreshPetVisibility(forceRebuild = false)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "窗口状态巡检异常", e)
             }
@@ -504,7 +557,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v14"
+        const val DRAG_FIX_VERSION = "drag-fix-v15"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -718,20 +771,14 @@ class FloatingPetService : Service() {
         const val FOREGROUND_NOTIFICATION_ID = 1001
 
         /**
-         * 悬浮窗"藏起来"时的窗口尺寸（像素）。
+         * 显隐刷新的去抖延迟（毫秒）。
          *
-         * 1x1 而不是 View.GONE：窗口帧真的变了一次，
-         * WMS 才会重新计算可触达区域（见 applyPetWindowFrame 的说明）。
+         * 只为让前后台那串回调（onResume/onPause/onStop/onDestroy
+         * 以及框架的生命周期回调）先稳定下来，
+         * 120ms 足够让它们全部到齐，又短到用户完全察觉不到。
          */
-        const val HIDDEN_WINDOW_SIZE_PX = 1
+        const val VISIBILITY_REFRESH_DELAY_MS = 120L
 
-        /**
-         * 回后台后延迟刷新的等待时间（毫秒）。
-         *
-         * 只为让 App 的窗口彻底退场 —— 那一刻是最不适合拆建悬浮窗的时机。
-         * 180ms 足够让窗口退干净，又短到用户完全察觉不到。
-         */
-        const val BACKGROUND_REFRESH_DELAY_MS = 180L
 
         /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
         @Volatile
@@ -1129,16 +1176,14 @@ class FloatingPetService : Service() {
         //    于是每改一次设置就重建一次窗口。
         val sizeChanged = petSizePx != newSize
         petSizePx = newSize
-        // 隐藏状态下窗口保持 1x1，等它露出来时再撑回去
-        if (!petWindowHidden) {
-            params.width = newSize
-            params.height = newSize
-        }
+        // 窗口尺寸始终跟着宠物尺寸走：
+        // 窗口摘着的时候也一样 —— 这样挂上去的第一帧就是对的尺寸，
+        // 而那是一个全新窗口，可触达区域本来就是从头算的。
+        params.width = newSize
+        params.height = newSize
 
         // 透明度是"底色"，探头时的半透明要在它之上再叠一层
-        if (!petWindowHidden) {
-            pokoView?.alpha = currentPetAlpha()
-        }
+        pokoView?.alpha = currentPetAlpha()
 
         if (sizeChanged) {
             // 尺寸变大后要保证窗口仍在屏幕内，否则会有一半跑到屏幕外抓不到
@@ -1156,10 +1201,9 @@ class FloatingPetService : Service() {
             // 于是留下一只"看得见、但只在新尺寸的一半区域里能按到"的宠物。
             // 这里直接重建窗口，让 WMS 按新 frame 从头算一次热区。
             //
-            // ⚠️ 窗口正藏着的时候不用重建：等它露出来时，
-            //    applyPetWindowFrame 会把尺寸撑到新的 petSizePx，
-            //    那一次帧变化同样会触发热区重算。
-            if (!petWindowHidden) {
+            // ⚠️ 窗口正摘着的时候不用重建：它挂上去时就是一个全新窗口，
+            //    尺寸也是新的 petSizePx，热区本来就是从头算的。
+            if (isPetWindowAttached) {
                 Log.i(TAG, "宠物尺寸变化 ($newSize px)，重建窗口刷新可触达区域")
                 repairPetWindowForUser()
             }
@@ -2141,52 +2185,42 @@ class FloatingPetService : Service() {
         val view = pokoView ?: return
         // 注意 isPetRecalled：用户主动"收进通知栏"之后，
         // 不能再因为 App 前后台切换就把猫自己放回桌面 —— 那等于收回无效。
-        val visible = screenOn && !isAppForeground && !isPetRecalled
+        val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled
 
-        // ⚠️⚠️ 这里**不再判断"要不要改"**，而是每次都把窗口摆成应该的样子。
+        // ⚠️⚠️⚠️ v15 架构：显隐不再是"改视图的可见性"，
+        // 而是**窗口挂不挂在 WindowManager 上**。
         //
-        // 之前是"状态翻转才改"：只有 visible 与 wasVisible 不同时才动窗口。
-        // 结果只要有一次判断失配（标记说该露着、窗口其实还是 1x1 + INVISIBLE），
-        // 宠物就永远不再出现，而且没有任何机制会纠正它 —— v13 的回归就出在这。
+        // 之前用 View.GONE / View.INVISIBLE / 1x1 窗口 / alpha=0 来"藏"宠物，
+        // 等于同时维护四份状态（视图可见性、透明度、窗口尺寸、隐藏标记），
+        // 任何一份失配都会留下"退出 app 后宠物不显示"或者"看得见却按不动"的怪状态 ——
+        // 用户连续两轮实测都撞在这上面（v13、v14 都报了"退出 app 后宠物不显示"）。
         //
-        // 改成幂等赋值之后：每次调用都无条件把状态摆对，
-        // 任何一次意外都会在下一次调用（或窗口状态巡检）里自动纠正。
+        // 现在只剩**一个**状态：窗口挂着没有。
+        //   该露着 → addView（全新窗口，可触达区域从头算）
+        //   该藏着 → removeView（窗口压根不存在，桌面一个像素都碰不到）
         //
-        // "之前是不是真的露着"改看**实际状态**（视图可见性 + 窗口尺寸），
-        // 而不是看标记 —— 实际状态不会骗人。
-        val actuallyShowing = view.visibility == View.VISIBLE &&
-            pokoParams?.width == petSizePx && pokoParams?.height == petSizePx
+        // 没有 GONE、没有 INVISIBLE、没有 1x1、没有 alpha=0，
+        // 也就没有"该显示却没显示"这种可能失配的状态。
+        val windowPresent = isPetWindowAttached && view.isAttachedToWindow
 
-        petWindowHidden = !visible
-        if (visible) {
-            // 恢复：先把窗口撑回满尺寸（帧变化 → WMS 重算可触达区域），再置为可见。
-            // ⚠️ 顺序不能反：可触达区域是"在可见状态下按 frame 算"的，
-            //    尺寸变更必须发生在可见期里，否则 WMS 未必拿新 frame 重算热区。
-            applyPetWindowFrame(hidden = false)
-            view.visibility = View.VISIBLE
-            view.alpha = currentPetAlpha()
-        } else {
-            // 隐藏：INVISIBLE + 1x1 —— 既不画东西，也不留任何可触达区域。
-            // ⚠️ 不用 alpha=0：透明度是第三份需要保持同步的状态，
-            //    多一份就多一处可能失配的地方。INVISIBLE 已经足够隐藏了。
-            view.visibility = View.INVISIBLE
-            applyPetWindowFrame(hidden = true)
-        }
-        Log.d(
-            TAG,
-            "悬浮猫显隐切换 visible=$visible actuallyShowing=$actuallyShowing " +
-                "attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
-                "win=(${pokoParams?.x},${pokoParams?.y}) " +
-                "frame=${pokoParams?.width}x${pokoParams?.height} " +
-                "前景=$isAppForeground 亮屏=$screenOn"
-        )
-        view.setAnimationEnabled(visible)
-
-        if (visible) {
-            if (actuallyShowing && !forceRebuild) {
+        if (shouldShow) {
+            if (!windowPresent) {
+                // ⚠️ 挂上去之前必须把坐标钳回屏内：
+                //    旋转 / 分屏 / 存档坐标失效之后，窗口挂在屏幕外的话，
+                //    桌面上一个像素都看不到，用户也根本摸不到它。
+                //    （手势进行中不写坐标：手势属于窗口，换位置就丢手势。）
+                if (!hasTouchDown) {
+                    pokoParams?.let { clampPetPositionToScreen(it) }
+                }
+                // 窗口不在 → 挂上去（全新 WindowState，热区从头算）
+                attachPetWindow()
+            } else if (forceRebuild) {
+                // 强制重建：摘掉再挂，换一个全新的 WindowState
+                Log.i(TAG, "触发悬浮窗重建（窗口已在，强制换新）")
+                restorePetWindowForInteraction()
+            } else {
                 // 一直可见：窗口理应还挂着，位置也得在屏内。
                 // 这里只做体检，不重建窗口（重建会让猫闪一下）。
-                ensurePetWindowAttached()
                 // ⚠️ 手势进行中绝不碰窗口坐标：
                 // 一旦在这里改了位置，宠物就会从用户的手指底下跳走。
                 if (!hasTouchDown) {
@@ -2200,32 +2234,21 @@ class FloatingPetService : Service() {
                         }
                     }
                 }
-            } else {
-                // ⚠️ 关掉 App 再打开悬浮宠后拖不动 的核心修复点：
-                //
-                // 悬浮窗在这段时间是"藏起来"的（缩到 1x1 + INVISIBLE）。
-                // 恢复时除了重建窗口，还必须让**窗口帧真的变一次**
-                // （1x1 ↔ 满尺寸），WMS 才会重算可触达区域（Touchable Region）。
-                //
-                // 上一版（drag-fix-v5）用的是 updateViewLayout + requestLayout，
-                // 实际只是触发了一次 relayout：窗口的 frame 没变，
-                // WMS 也就没有理由重算可触达区域，部分 ROM（尤其国产 ROM）上
-                // 旧的可触达区域会被保留下来 —— 于是"看得见、点不动"。
-                //
-                // 现在是双保险：
-                //   ① 帧变化（applyPetWindowFrame）→ 强制重算热区
-                //   ② 重建窗口（removeView + addView）→ 全新 WindowState
-                // 两条都走，才不留死角。
-                Log.i(
-                    TAG,
-                    "触发悬浮窗重建（actuallyShowing=$actuallyShowing forceRebuild=$forceRebuild）"
-                )
-                restorePetWindowForInteraction()
             }
+            // 透明度是"用户设置"，不是显隐手段：
+            // 探头时淡一点，平时正常，永远不会变成 0。
+            view.alpha = currentPetAlpha()
+            view.visibility = View.VISIBLE
             mainHandler.removeCallbacks(edgeStrollRunnable)
             mainHandler.postDelayed(edgeStrollRunnable, 7000)
             scheduleEdgePeeking(!view.facingLeft)
         } else {
+            if (windowPresent) {
+                // 该藏着 → 把窗口整个摘掉。
+                // 这样它在桌面上一个像素都不占，也不留任何可触达区域，
+                // App 里的按钮全都能点到。
+                detachPetWindow()
+            }
             cancelEdgePeeking()
             isPeeking = false
             peekOffsetAnimator?.cancel()
@@ -2239,29 +2262,16 @@ class FloatingPetService : Service() {
             bubbleView?.visibility = View.GONE
             hideActionMenu(animated = false)
         }
-    }
-
-    /**
-     * 回后台后的延迟刷新任务。
-     *
-     * Activity 的 onPause → onStop → onDestroy 会连着触发三次，
-     * 三次都拆建悬浮窗既会让猫连闪三下，
-     * 也正好撞上 App 窗口退场的过程 —— 那个时刻最不适合动窗口。
-     *
-     * 所以合并成一次：等 App 的窗口彻底退干净，再一次性恢复并重建。
-     */
-    private val backgroundRefreshRunnable = Runnable {
-        refreshPetVisibility(forceRebuild = true)
-    }
-
-    /**
-     * 安排一次「回到后台」的可见性刷新（带强制重建）。
-     *
-     * 连续调用会互相顶掉，只有最后一次生效 —— 这就是去抖。
-     */
-    fun schedulePetVisibilityRefreshAfterBackground() {
-        mainHandler.removeCallbacks(backgroundRefreshRunnable)
-        mainHandler.postDelayed(backgroundRefreshRunnable, BACKGROUND_REFRESH_DELAY_MS)
+        view.setAnimationEnabled(shouldShow)
+        Log.d(
+            TAG,
+            "悬浮猫显隐同步 shouldShow=$shouldShow windowPresent=$windowPresent " +
+                "attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
+                "win=(${pokoParams?.x},${pokoParams?.y}) " +
+                "frame=${pokoParams?.width}x${pokoParams?.height} " +
+                "前台标记=$isAppForeground 生命周期=$activityLifecycleState " +
+                "亮屏=$screenOn 收回=$isPetRecalled"
+        )
     }
 
     /**
@@ -2281,13 +2291,9 @@ class FloatingPetService : Service() {
     private fun applyForegroundState(foreground: Boolean) {
         isAppForeground = foreground
         isMainActivityResumed = foreground
-        if (foreground) {
-            // 进前台：必须立刻把猫藏起来，迟一点 App 里就会同时出现两只波可
-            refreshPetVisibility(forceRebuild = false)
-        } else {
-            // 回后台：等 App 的窗口彻底退干净，再一次性恢复并重建
-            schedulePetVisibilityRefreshAfterBackground()
-        }
+        // 去抖刷新：前后台那串回调会连着来好几次，
+        // 等它们全部到齐、状态稳定了再统一动手，猫就不会连闪。
+        scheduleVisibilityRefresh()
     }
 
     /**
@@ -2297,16 +2303,19 @@ class FloatingPetService : Service() {
      */
     private val activityLifecycleCallbacks = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(activity: Activity) {
+            activityLifecycleState = ActivityState.RESUMED
             Log.i(TAG, "生命周期回调：Activity 已恢复")
             applyForegroundState(true)
         }
 
         override fun onActivityPaused(activity: Activity) {
+            activityLifecycleState = ActivityState.NOT_RESUMED
             Log.i(TAG, "生命周期回调：Activity 已暂停")
             applyForegroundState(false)
         }
 
         override fun onActivityDestroyed(activity: Activity) {
+            activityLifecycleState = ActivityState.NOT_RESUMED
             // 兜底：Activity 被销毁时前台标记绝不能留在 true
             applyForegroundState(false)
         }
@@ -2317,42 +2326,79 @@ class FloatingPetService : Service() {
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
     }
 
+
+
     /**
-     * 真正改变悬浮窗的"可见尺寸"。
+     * 把悬浮窗挂到 WindowManager 上。
      *
-     * ⚠️ 隐藏时**刻意不用 View.GONE**，而是把窗口缩到 1x1 且整体透明。
-     *
-     * 原因：View.GONE 会让 ViewRootImpl 销毁窗口的 surface，
-     * 部分 ROM 还会顺势把窗口从输入分发器里摘掉；
-     * 恢复成 VISIBLE 之后，可触达区域（Touchable Region）
-     * 如果没跟着重算，就会留下一只"看得见、按不动"的猫 ——
-     * 这正是「第一次能拖，打开关闭 app 之后就拖不动」的典型形态。
-     *
-     * 改成"窗口帧真的发生变化"（1x1 ↔ 满尺寸）之后，
-     * WMS 必须重新计算可触达区域，这条死路就被从根上堵住了。
-     *
-     * 附带好处：窗口始终挂在 WindowManager 上，
-     * 也就不会出现"View 还在、窗口却脱挂"那种连触摸都收不到的状态。
-     *
-     * @param hidden true = 缩到 1x1 藏起来；false = 恢复成满尺寸
+     * 挂上去的是一个**全新的窗口**，WMS 会为它建新的 WindowState，
+     * 可触达区域（Touchable Region）从头算一遍 ——
+     * 这正是"看得见但按不动"的解药。
      */
-    private fun applyPetWindowFrame(hidden: Boolean) {
-        val params = pokoParams ?: return
-        val size = if (hidden) HIDDEN_WINDOW_SIZE_PX else petSizePx
-        if (params.width == size && params.height == size) return
-        params.width = size
-        params.height = size
+    private fun attachPetWindow(): Boolean {
+        val view = pokoView ?: return false
+        val params = pokoParams ?: return false
+        if (isPetWindowAttached && view.isAttachedToWindow) return true
         try {
-            windowManager?.updateViewLayout(pokoView, params)
+            windowManager?.addView(view, params)
+            isPetWindowAttached = true
+            // 挂载会让 View 走一遍 detach/attach，动画被停掉了，这里重新拉起来
+            view.setAnimationEnabled(true)
+            Log.i(TAG, "悬浮窗已挂载")
+            return true
         } catch (e: Exception) {
-            Log.e(TAG, "悬浮窗尺寸切换失败（hidden=$hidden size=$size）", e)
+            // ⚠️ addView 失败的最常见原因：视图其实还挂在旧窗口上
+            //（"View already added"）。那就强制摘一次再来。
+            Log.w(TAG, "悬浮窗挂载失败，强制摘除后重试", e)
+            try {
+                windowManager?.removeViewImmediate(view)
+            } catch (_: Exception) {}
+            try {
+                windowManager?.addView(view, params)
+                isPetWindowAttached = true
+                view.setAnimationEnabled(true)
+                Log.i(TAG, "悬浮窗强制重挂成功")
+                return true
+            } catch (e2: Exception) {
+                Log.e(TAG, "悬浮窗挂载彻底失败", e2)
+                isPetWindowAttached = false
+                return false
+            }
         }
+    }
+
+    /**
+     * 把悬浮窗从 WindowManager 上整个摘掉。
+     *
+     * 这是"藏起来"的唯一手段：**窗口不存在 = 桌面上一个像素都不占**。
+     *
+     * ⚠️ 手势进行中绝不摘：手势属于窗口，
+     * 窗口一换，系统会把当前这根手指的 MOVE / UP 一起丢掉。
+     */
+    private fun detachPetWindow(): Boolean {
+        val view = pokoView ?: return false
+        if (hasTouchDown) {
+            Log.w(TAG, "手势进行中不能摘除悬浮窗，等手势结束再处理")
+            return false
+        }
+        if (!isPetWindowAttached && !view.isAttachedToWindow) return true
+        try {
+            // ⚠️ 必须用 removeViewImmediate（**同步**摘干净）：
+            //    removeView 是异步的 —— 它只是往 Handler 里投一条 die(false) 消息，
+            //    消息被处理之前视图还挂在旧 WindowState 上。
+            //    紧接着 addView 就会抛 "View already added"，
+            //    于是"摘 + 挂"变成"只摘不挂"，宠物就再也不出现了。
+            windowManager?.removeViewImmediate(view)
+        } catch (_: Exception) {}
+        isPetWindowAttached = false
+        Log.i(TAG, "悬浮窗已摘除（桌面不再显示）")
+        return true
     }
 
     /**
      * 把悬浮窗恢复到"可交互"状态：重建窗口 + 位置归位。
      *
-     * 什么时候用：悬浮窗刚从 View.GONE 恢复成 VISIBLE 的时候。
+     * 什么时候用：窗口已经被摘掉 / 需要换一个全新 WindowState 的时候。
      *
      * 为什么必须重建窗口而不是只 updateViewLayout：
      *   可触达区域是 WMS 按窗口的 frame 算出来的，
@@ -2409,7 +2455,8 @@ class FloatingPetService : Service() {
     private fun clampPetPositionToScreen(params: WindowManager.LayoutParams) {
         val density = resources.displayMetrics.density
         // ⚠️ 必须用 petSizePx，**不能用 params.width**：
-        //    窗口藏起来时 width 是 1x1（见 applyPetWindowFrame），
+        //    params.width 只是"窗口当前尺寸"，它有可能落后于真实宠物尺寸
+        //    （刚改完设置、还没提交到 WMS 的那一瞬间），
         //    拿它当宠物尺寸会把位置钳到屏幕最右边，猫就再也拖不回来了。
         val sizePx = if (petSizePx > 0) petSizePx else params.width
         val (screenWidth, screenHeight) = getScreenDimensions()
@@ -2846,7 +2893,7 @@ class FloatingPetService : Service() {
     }
 
     private fun showActionMenu() {
-        if (isAppForeground || !screenOn) return
+        if (isAppActuallyInForeground() || !screenOn) return
         val menu = actionMenuView ?: return
         val mParams = actionMenuParams ?: return
         val pParams = pokoParams ?: return
@@ -3166,21 +3213,19 @@ class FloatingPetService : Service() {
      * 把波可"收进通知栏"：桌面上不再显示，但服务与通知都留着，
      * 用户点通知栏的「召回波可」就能立刻把它叫回桌面。
      *
-     * ⚠️ 必须与 [refreshPetVisibility] 用**同一套**隐藏机制
-     * （缩到 1x1 + 透明 + INVISIBLE），不能用 View.GONE：
-     * GONE 会销毁 surface / 可能摘掉输入通道，
-     * 召回时可触达区域会停留在旧值上，猫就变成"看得见、点不动"。
+     * ⚠️ 必须与 [refreshPetVisibility] 用**同一套**隐藏机制（v15：摘掉窗口）：
+     * 窗口压根不存在 = 桌面上一个像素都不占，也不可能留有陈旧的可触达区域。
+     * 绝不能用 View.GONE —— GONE 会销毁 surface / 可能摘掉输入通道，
+     * 召回后可触达区域会停留在旧值上，猫就变成"看得见、点不动"。
      *
-     * 窗口对象和坐标原封不动，召回时只要把尺寸撑回去就行，
-     * 彻底避开"重新 addView 可能抛异常 / 位置丢失"这一类窗口生命周期问题。
+     * 坐标原封不动：窗口摘掉时布局参数不变，召回时挂上去就是原来的位置。
      */
     private fun hidePetToTray() {
         val view = pokoView ?: return
         cancelEdgePeeking()
         isPeeking = false
-        petWindowHidden = true
-        view.visibility = View.INVISIBLE
-        applyPetWindowFrame(hidden = true)
+        // 收进通知栏 = 把窗口整个摘掉（桌面上一个像素都不占）
+        detachPetWindow()
         isPetRecalled = true
         // 通知栏按钮要跟着变（召回 / 关闭），所以重新发一次前台通知
         startAsForeground()
@@ -3265,7 +3310,7 @@ class FloatingPetService : Service() {
 
     private fun showCustomSpeechBubble(text: String) {
         // 悬浮猫隐身时 (小窝在前台 / 息屏) 不弹气泡
-        if (isAppForeground || !screenOn) return
+        if (isAppActuallyInForeground() || !screenOn) return
         val bubble = bubbleView ?: return
         val bParams = bubbleParams ?: return
         if (pokoParams == null) return
@@ -3347,11 +3392,10 @@ class FloatingPetService : Service() {
         //
         // ⚠️⚠️ 这里必须走 refreshPetVisibility（幂等的**完整恢复**），
         //    不能只调 repairPetWindowForUser（那只是重建窗口）：
-        //    万一窗口卡在「1x1 + INVISIBLE」这个状态里，
-        //    只重建窗口会把那个状态原样保留下来 —— 用户点了「摸摸」，
-        //    猫还是看不见，等于这条自救通道形同虚设。
+        //    万一窗口根本没挂在 WindowManager 上（脱挂），
+        //    只重建窗口救不回来 —— 必须由 refreshPetVisibility 重新挂一个上去。
         //
-        // refreshPetVisibility 会把尺寸撑回满尺寸、视图置为可见，并重建窗口，
+        // refreshPetVisibility 会按「该露着就挂、该藏着就摘」把窗口摆对，
         // 一次就把「看不见」和「按不动」两种毛病一起治好。
         //
         // 这给用户留了一条自救通道：猫不见了 / 按不动的时候，
@@ -3399,9 +3443,9 @@ class FloatingPetService : Service() {
             appendLine("服务已运行 ${(now - serviceStartAt) / 1000}s ｜ 重建 $rebuildCount 次（最近 $rebuild）")
             appendLine("触摸 DOWN=$touchDownCount MOVE=$touchMoveCount UP=$touchUpCount CANCEL=$touchCancelCount")
             appendLine("最近一次触摸 $since ｜ 坐标口径 $lastTouchMode")
-            appendLine("窗口 attached=${view?.isAttachedToWindow} wm=$isPetWindowAttached 隐藏=$petWindowHidden 尺寸=${params?.width}x${params?.height}")
-            appendLine("视图 vis=${view?.visibility} 期望尺寸=${petSizePx}px 实际尺寸=${params?.width}x${params?.height}")
-            appendLine("前台=$isAppForeground 亮屏=$screenOn 收回=$isPetRecalled")
+            appendLine("窗口 attached=${view?.isAttachedToWindow} wm=$isPetWindowAttached 尺寸=${params?.width}x${params?.height}")
+            appendLine("前台标记=$isAppForeground 生命周期=$activityLifecycleState 判定在前台=${isAppActuallyInForeground()}")
+            appendLine("亮屏=$screenOn 收回=$isPetRecalled 视图vis=${view?.visibility}")
             appendLine("位置 win=(${params?.x},${params?.y}) 屏幕=${cachedScreenWidth}x${cachedScreenHeight}")
             appendLine("边界钳制 $clampCount 次 ｜ 拖拽卡住 $stuckMoveCount 次")
             appendLine("判读：DOWN=0 → 触摸没进窗口；DOWN>0 且 MOVE=0 → 手势被吃；MOVE>0 → 触摸链路正常")
@@ -3797,7 +3841,7 @@ class FloatingPetService : Service() {
      */
     private val autoChatRunnable = object : Runnable {
         override fun run() {
-            if (screenOn && !isAppForeground && enableAutoChat) {
+            if (screenOn && !isAppActuallyInForeground() && enableAutoChat) {
                 val now = System.currentTimeMillis()
                 val idleMs = now - lastInteractionAt
                 val sinceChat = now - lastAutoChatAt
@@ -4153,7 +4197,7 @@ class FloatingPetService : Service() {
 
     private fun scheduleEdgePeeking(isLeft: Boolean) {
         cancelEdgePeeking()
-        if (!screenOn || isAppForeground) return
+        if (!screenOn || isAppActuallyInForeground()) return
         // 设置里关掉探头就永远不探头
         if (!enablePeeking) return
 
@@ -4167,7 +4211,7 @@ class FloatingPetService : Service() {
         peekScheduledY = scheduledParams?.y ?: 0
 
         peekingRunnable = Runnable {
-            if (!screenOn || isAppForeground || isStrolling || hasTouchDown) return@Runnable
+            if (!screenOn || isAppActuallyInForeground() || isStrolling || hasTouchDown) return@Runnable
             val params = pokoParams ?: return@Runnable
             val view = pokoView ?: return@Runnable
             val (screenWidth, _) = getScreenDimensions()
@@ -4481,11 +4525,11 @@ class FloatingPetService : Service() {
             "从未"
         }
         val windowState = when {
-            !isPetWindowAttached -> "窗口已脱挂"
-            petWindowHidden -> "窗口隐藏中"
+            !isPetWindowAttached -> "窗口未挂载"
             else -> "窗口正常"
         }
-        return "触摸 DOWN=$touchDownCount MOVE=$touchMoveCount ｜ 最近 $since ｜ $windowState ｜ 点「📋 诊断」复制详情"
+        val appState = if (isAppActuallyInForeground()) "App在前台" else "App在后台"
+        return "触摸 DOWN=$touchDownCount MOVE=$touchMoveCount ｜ 最近 $since ｜ $windowState ｜ $appState ｜ 点「📋 诊断」复制详情"
     }
 
     /**
@@ -4525,7 +4569,7 @@ class FloatingPetService : Service() {
         mainHandler.removeCallbacks(attachWatchdog)
         mainHandler.removeCallbacks(touchHeartbeat)
         mainHandler.removeCallbacks(windowStateWatchdog)
-        mainHandler.removeCallbacks(backgroundRefreshRunnable)
+        mainHandler.removeCallbacks(visibilityRefreshRunnable)
         try {
             (application as? Application)?.unregisterActivityLifecycleCallbacks(
                 activityLifecycleCallbacks

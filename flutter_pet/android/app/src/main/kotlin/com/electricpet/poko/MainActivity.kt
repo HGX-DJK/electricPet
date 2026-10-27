@@ -50,7 +50,7 @@ class MainActivity: FlutterActivity() {
         // Activity 真正被销毁时（不是切后台）再复位一次前台标记。
         // onPause 正常情况下已经复位过，这里是兜底：
         // 万一这条链路没走到，前台标记就会悬空，
-        // 桌面悬浮猫会永久停在不可见 / 不可触摸状态（View.GONE 不参与触摸分发）。
+        // 桌面悬浮猫就会**永远不再出现**（前台判定一旦悬空，窗口永远被摘着）。
         FloatingPetService.notifyAppForegroundChanged(false)
         super.onDestroy()
     }
