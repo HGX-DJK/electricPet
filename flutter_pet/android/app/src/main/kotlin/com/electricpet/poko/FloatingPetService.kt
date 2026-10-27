@@ -10,6 +10,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.app.UiModeManager
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -177,6 +179,53 @@ class FloatingPetService : Service() {
      * 宠物就变成"永久拖不动"。看门狗靠这个时间戳把卡死的手势强制复位。
      */
     private var lastTouchDownAt: Long = 0L
+
+    // ---------- 触摸诊断（让"看不见的故障"能被用户直接看到） ----------
+    //
+    // 为什么需要这一整套计数器：
+    //   前几轮排查反复卡住，根因是**日志只记录"有反应的时候"**，
+    //   一旦触摸根本没进窗口，日志上就是一片空白 —— 无法区分
+    //   「触摸没送达」和「送达了但窗口没动」这两种完全不同的故障。
+    //
+    // 现在这几个计数直接决定结论：
+    //   DOWN = 0  → 触摸压根没进窗口（热区 / 层级 / 被别的窗口挡住）
+    //   DOWN > 0 且 MOVE = 0 → 进了窗口，但手势被别的东西吃掉了
+    //   DOWN > 0 且 MOVE > 0 → 触摸链路是好的，问题在窗口位移上
+    //
+    // 这些数字会显示在通知栏里（还能一键复制到剪贴板），
+    // 用户下拉通知栏看一眼就能告诉我们答案，不必再连电脑抓 logcat。
+
+    /** 按下次数：判断"触摸到底有没有送达窗口" */
+    private var touchDownCount = 0
+    /** 移动次数 */
+    private var touchMoveCount = 0
+    /** 松手次数 */
+    private var touchUpCount = 0
+    /** 系统中断次数 */
+    private var touchCancelCount = 0
+    /** 最近一次收到任意触摸事件的时刻 */
+    private var lastTouchAt: Long = 0L
+    /** 最近一次手势采用的坐标口径：raw（屏幕绝对）/ local（窗口局部） */
+    private var lastTouchMode: String = "-"
+    /** 悬浮窗重建次数 */
+    private var rebuildCount = 0
+    /** 最近一次重建的时刻 */
+    private var lastRebuildAt: Long = 0L
+    /** 最近一次重建是否成功 */
+    private var lastRebuildOk = false
+    /** 被屏幕边界钳制过多少次 */
+    private var clampCount = 0
+    /** 拖拽中"手指在动但窗口没动"命中过多少次 */
+    private var stuckMoveCount = 0
+    /** 服务启动时刻 */
+    private var serviceStartAt: Long = 0L
+    /**
+     * 悬浮窗当前是否处于"藏起来"状态。
+     *
+     * ⚠️ 藏起来 ≠ View.GONE，而是把窗口缩到 1x1 且整体透明
+     * （原因见 refreshPetVisibility 的注释）。这个标记就是这套机制的开关。
+     */
+    private var petWindowHidden: Boolean = false
 
     /**
      * 波可是否被用户"收进通知栏"。
@@ -350,6 +399,9 @@ class FloatingPetService : Service() {
         override fun run() {
             mainHandler.postDelayed(this, 30000)
             try {
+                // 通知栏里的诊断必须一直保持新鲜 ——
+                // 用户什么时候下拉通知栏，看到的都应该是当下的真实状态。
+                refreshNotificationDiagnostic()
                 val view = pokoView ?: return
                 if (!screenOn || view.visibility != View.VISIBLE) return
                 val params = pokoParams ?: return
@@ -359,6 +411,7 @@ class FloatingPetService : Service() {
                     "触摸心跳: attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
                         "vis=${view.visibility} win=(${params.x},${params.y}) " +
                         "peekOffset=${view.peekOffsetX} " +
+                        "DOWN=$touchDownCount MOVE=$touchMoveCount UP=$touchUpCount CANCEL=$touchCancelCount " +
                         "距上次触摸=${idleMs / 1000}s"
                 )
             } catch (e: Exception) {
@@ -392,7 +445,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v11"
+        const val DRAG_FIX_VERSION = "drag-fix-v13"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -585,6 +638,42 @@ class FloatingPetService : Service() {
          */
         const val ACTION_NOTIFICATION_RECALL = "com.electricpet.poko.ACTION_NOTIFICATION_RECALL"
 
+        /**
+         * 通知栏「📋 诊断」：把悬浮窗的触摸诊断快照复制到剪贴板。
+         *
+         * 前几轮排查反复卡住的根因是**日志只记录"有反应的时候"**：
+         * 触摸压根没进窗口时，日志上就是一片空白，
+         * 谁也分不清"触摸没送达"和"送达了但窗口没动"。
+         *
+         * 这个动作让用户在不连电脑、不懂 adb 的前提下，
+         * 就能把"触摸到底进没进窗口"直接告诉我们。
+         */
+        const val ACTION_NOTIFICATION_DIAGNOSTIC = "com.electricpet.poko.ACTION_NOTIFICATION_DIAGNOSTIC"
+
+        /**
+         * 常驻前台通知的 ID。
+         *
+         * ⚠️ 必须和 startForeground 用的 ID 完全一致，
+         * 否则刷新诊断时会多出一条通知。
+         */
+        const val FOREGROUND_NOTIFICATION_ID = 1001
+
+        /**
+         * 悬浮窗"藏起来"时的窗口尺寸（像素）。
+         *
+         * 1x1 而不是 View.GONE：窗口帧真的变了一次，
+         * WMS 才会重新计算可触达区域（见 applyPetWindowFrame 的说明）。
+         */
+        const val HIDDEN_WINDOW_SIZE_PX = 1
+
+        /**
+         * 回后台后延迟刷新的等待时间（毫秒）。
+         *
+         * 只为让 App 的窗口彻底退场 —— 那一刻是最不适合拆建悬浮窗的时机。
+         * 180ms 足够让窗口退干净，又短到用户完全察觉不到。
+         */
+        const val BACKGROUND_REFRESH_DELAY_MS = 180L
+
         /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
         @Volatile
         var isAppForeground: Boolean = false
@@ -613,7 +702,28 @@ class FloatingPetService : Service() {
         fun notifyAppForegroundChanged(foreground: Boolean) {
             isAppForeground = foreground
             isMainActivityResumed = foreground
-            instance?.refreshPetVisibility()
+            val svc = instance ?: return
+            // ⚠️⚠️ App 回到后台 = 悬浮窗重新露出来 = **可触达区域最可能已经陈旧的时刻**。
+            //
+            // 用户实测的正是这条路径：「第一次桌面的宠物可以拖动，
+            // 再打开关闭 app，桌面宠物就不能拖动了」。
+            //
+            // 之前这里靠 wasVisible 启发式判断"要不要重建"，
+            // 而 wasVisible 依赖 view.visibility 是否恰好被翻过 —— 一旦漏判，
+            // 窗口就只做了 updateViewLayout（只走 relayout，frame 没变就不重算热区），
+            // 于是留下一只"看得见、但按不动"的悬浮窗。
+            //
+            // 所以：回到后台时**显式要求重建**，不猜。
+            if (foreground) {
+                // 进前台：必须立刻把猫藏起来，迟一点 App 里就会同时出现两只波可
+                svc.refreshPetVisibility(forceRebuild = false)
+            } else {
+                // 回后台：Activity 的 onPause → onStop → onDestroy 会连着来三次。
+                // 三次都拆建悬浮窗既会让猫连闪三下，
+                // 也正好撞上 App 窗口退场的过程 —— 那个时刻最不适合动窗口。
+                // 所以合并成一次：等 App 的窗口彻底退干净，再一次性恢复并重建。
+                svc.schedulePetVisibilityRefreshAfterBackground()
+            }
         }
 
         /**
@@ -662,6 +772,8 @@ class FloatingPetService : Service() {
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         instance = this
+        // 诊断基准时刻：诊断快照里要能看出"服务跑了多久"
+        serviceStartAt = System.currentTimeMillis()
 
         // 屏幕尺寸与系统栏避让边距先算好缓存起来（拖拽时每帧都要用）
         invalidateScreenCache()
@@ -826,6 +938,10 @@ class FloatingPetService : Service() {
                 recallPet()
                 return START_STICKY
             }
+            ACTION_NOTIFICATION_DIAGNOSTIC -> {
+                handleNotificationDiagnostic()
+                return START_STICKY
+            }
         }
 
         // 若波可之前被收进通知栏，App 侧或小组件再次启动时自动召回桌面
@@ -932,13 +1048,21 @@ class FloatingPetService : Service() {
         val params = pokoParams ?: return
         val density = resources.displayMetrics.density
         val newSize = (petSizeDp * density).toInt()
-        val sizeChanged = params.width != newSize || params.height != newSize
-        params.width = newSize
-        params.height = newSize
+        // ⚠️ 用 petSizePx 判断"尺寸变没变"，不能看 params.width：
+        //    窗口藏起来时 width 是 1x1，拿它比会每次都判成"变了"，
+        //    于是每改一次设置就重建一次窗口。
+        val sizeChanged = petSizePx != newSize
         petSizePx = newSize
+        // 隐藏状态下窗口保持 1x1，等它露出来时再撑回去
+        if (!petWindowHidden) {
+            params.width = newSize
+            params.height = newSize
+        }
 
         // 透明度是"底色"，探头时的半透明要在它之上再叠一层
-        pokoView?.alpha = currentPetAlpha()
+        if (!petWindowHidden) {
+            pokoView?.alpha = currentPetAlpha()
+        }
 
         if (sizeChanged) {
             // 尺寸变大后要保证窗口仍在屏幕内，否则会有一半跑到屏幕外抓不到
@@ -950,6 +1074,19 @@ class FloatingPetService : Service() {
             try {
                 windowManager?.updateViewLayout(pokoView, params)
             } catch (_: Exception) {}
+
+            // ⚠️ 尺寸变了 = 窗口 frame 变了 = 可触达区域必须跟着重算。
+            // 而 updateViewLayout 只走 relayout，部分 ROM 上热区不一定刷新，
+            // 于是留下一只"看得见、但只在新尺寸的一半区域里能按到"的宠物。
+            // 这里直接重建窗口，让 WMS 按新 frame 从头算一次热区。
+            //
+            // ⚠️ 窗口正藏着的时候不用重建：等它露出来时，
+            //    applyPetWindowFrame 会把尺寸撑到新的 petSizePx，
+            //    那一次帧变化同样会触发热区重算。
+            if (!petWindowHidden) {
+                Log.i(TAG, "宠物尺寸变化 ($newSize px)，重建窗口刷新可触达区域")
+                repairPetWindowForUser()
+            }
         }
     }
 
@@ -1141,6 +1278,9 @@ class FloatingPetService : Service() {
                     hasTouchDown = true
                     lastTouchDownAt = System.currentTimeMillis()
                     lastInteractionAt = System.currentTimeMillis()
+                    // 诊断计数：DOWN 的增量直接回答"触摸有没有送达窗口"
+                    touchDownCount++
+                    lastTouchAt = System.currentTimeMillis()
                     // ⚠️ 按下第一件事先给悬浮窗做体检 —— 但这里**只看不修**。
                     //
                     // 「View 还在、窗口却已经从 WindowManager 脱挂」是"时好时坏"的经典成因，
@@ -1221,6 +1361,9 @@ class FloatingPetService : Service() {
                     // 有了它，窗口位移就等于 rawX 的**纯增量**，绝不夹带任何常量偏差。
                     rawAnchorX = initialFingerX - event.rawX
                     rawAnchorY = initialFingerY - event.rawY
+                    // 记录本次手势采用的坐标口径：诊断里要能看到，
+                    // 因为"raw 还是 local"决定了整套位移算法走哪一条路。
+                    lastTouchMode = if (rawIsScreenAbsolute) "raw" else "local"
                     // 不可变的"手势起点"基线：只用于判定是否进入拖拽
                     gestureStartFingerX = initialFingerX
                     gestureStartFingerY = initialFingerY
@@ -1317,6 +1460,9 @@ class FloatingPetService : Service() {
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    // 诊断计数：MOVE 的增量回答"手势有没有被吃掉"
+                    touchMoveCount++
+                    lastTouchAt = System.currentTimeMillis()
                     // 视线跟随：眼珠始终追着指尖
                     pokoView?.setGazeTarget(event.x, event.y)
 
@@ -1481,6 +1627,7 @@ class FloatingPetService : Service() {
                         // 收手时据此打上"待重挂"标记，让看门狗重建窗口，
                         // 下一次按就能恢复 —— 这就是"有时拖不动"的自愈路径。
                         windowStuckWhileMoving = true
+                        stuckMoveCount++
                     }
                     lastAppliedX = params.x
                     lastAppliedY = params.y
@@ -1534,6 +1681,8 @@ class FloatingPetService : Service() {
                     // 系统中断手势（来电、通知栏下拉、系统导航手势）时绝不能当成松手处理，
                     // 否则宠物会被误判为"拖拽结束"而吸附回边缘，看起来又像拖不动
                     hasTouchDown = false
+                    touchCancelCount++
+                    lastTouchAt = System.currentTimeMillis()
                     longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
                     pokoView?.clearGazeTarget()
@@ -1564,6 +1713,8 @@ class FloatingPetService : Service() {
                 MotionEvent.ACTION_UP -> {
                     hasTouchDown = false
                     lastInteractionAt = System.currentTimeMillis()
+                    touchUpCount++
+                    lastTouchAt = System.currentTimeMillis()
                     longPressRunnable?.let { mainHandler.removeCallbacks(it) }
                     pokoView?.onDragStateChanged(false)
                     pokoView?.clearGazeTarget()
@@ -1695,9 +1846,15 @@ class FloatingPetService : Service() {
         try {
             windowManager?.addView(view, params)
             isPetWindowAttached = true
+            rebuildCount++
+            lastRebuildAt = System.currentTimeMillis()
+            lastRebuildOk = true
             Log.i(TAG, "悬浮窗已重新挂载，拖拽链路恢复")
             return true
         } catch (e: Exception) {
+            rebuildCount++
+            lastRebuildAt = System.currentTimeMillis()
+            lastRebuildOk = false
             Log.e(TAG, "悬浮窗重新挂载失败", e)
             return false
         }
@@ -1889,23 +2046,50 @@ class FloatingPetService : Service() {
      * - 息屏时隐藏, 因为没人看得见
      * - 隐藏期间同时停掉 60fps 呼吸动画与眨眼定时器: 前台服务常驻, 这部分功耗纯属浪费
      */
-    private fun refreshPetVisibility() {
+    private fun refreshPetVisibility(forceRebuild: Boolean = false) {
         val view = pokoView ?: return
         // 注意 isPetRecalled：用户主动"收进通知栏"之后，
         // 不能再因为 App 前后台切换就把猫自己放回桌面 —— 那等于收回无效。
         val visible = screenOn && !isAppForeground && !isPetRecalled
-        // 记录"恢复之前是不是不可见"，用来区分「刚恢复」和「一直可见」两种路径：
-        // 刚恢复的那一次必须重建窗口（见 restorePetWindowForInteraction）。
-        val wasVisible = view.visibility == View.VISIBLE
-        val target = if (visible) View.VISIBLE else View.GONE
-        if (view.visibility != target) {
-            view.visibility = target
-            Log.d(TAG, "悬浮猫显隐切换 visible=$visible")
+        // ⚠️ 判断"之前是不是露着"必须看 petWindowHidden，**不能看 view.visibility**：
+        //    藏起来时 view 是 INVISIBLE（不是 GONE），
+        //    而且这里的 visible 说的是"桌面上有没有一只猫"，
+        //    跟 View 的可见性枚举根本不是一回事。
+        val wasVisible = !petWindowHidden
+        if (wasVisible != visible) {
+            petWindowHidden = !visible
+            if (visible) {
+                // 恢复的**顺序很关键**：
+                //   ① 先让 view 可见（此时 alpha 仍是 0，肉眼完全无感）
+                //   ② 再把窗口从 1x1 撑回满尺寸
+                //   ③ 最后恢复正常透明度
+                //
+                // 可触达区域是"在可见状态下按 frame 算"的，
+                // 所以必须让**尺寸变更发生在可见期里**，
+                // 否则那次尺寸变更可能落在不可见期，WMS 未必拿新 frame 重算热区。
+                view.visibility = View.VISIBLE
+                applyPetWindowFrame(hidden = false)
+                view.alpha = currentPetAlpha()
+            } else {
+                // 隐藏：先彻底透明（肉眼立刻看不见），
+                // 再把窗口缩到 1x1（可触达区域随之缩成一个点），
+                // 最后置为 INVISIBLE —— 全程不用 View.GONE。
+                view.alpha = 0f
+                applyPetWindowFrame(hidden = true)
+                view.visibility = View.INVISIBLE
+            }
+            Log.d(
+                TAG,
+                "悬浮猫显隐切换 visible=$visible wasVisible=$wasVisible " +
+                    "attached=${view.isAttachedToWindow} wm=$isPetWindowAttached " +
+                    "win=(${pokoParams?.x},${pokoParams?.y}) " +
+                    "frame=${pokoParams?.width}x${pokoParams?.height}"
+            )
         }
         view.setAnimationEnabled(visible)
 
         if (visible) {
-            if (wasVisible) {
+            if (wasVisible && !forceRebuild) {
                 // 一直可见：窗口理应还挂着，位置也得在屏内。
                 // 这里只做体检，不重建窗口（重建会让猫闪一下）。
                 ensurePetWindowAttached()
@@ -1925,18 +2109,23 @@ class FloatingPetService : Service() {
             } else {
                 // ⚠️ 关掉 App 再打开悬浮宠后拖不动 的核心修复点：
                 //
-                // 悬浮窗在这段时间是 View.GONE，GONE 的视图不参与触摸分发。
-                // 恢复成 VISIBLE 之后，**能不能被按住取决于系统给这个窗口算出来的
-                // 可触达区域（Touchable Region）是否已经刷新**。
+                // 悬浮窗在这段时间是"藏起来"的（缩到 1x1 + 透明 + INVISIBLE）。
+                // 恢复时除了重建窗口，还必须让**窗口帧真的变一次**
+                // （1x1 ↔ 满尺寸），WMS 才会重算可触达区域（Touchable Region）。
                 //
                 // 上一版（drag-fix-v5）用的是 updateViewLayout + requestLayout，
                 // 实际只是触发了一次 relayout：窗口的 frame 没变，
                 // WMS 也就没有理由重算可触达区域，部分 ROM（尤其国产 ROM）上
                 // 旧的可触达区域会被保留下来 —— 于是"看得见、点不动"。
                 //
-                // 真正可靠的做法是**重建窗口**（removeView + addView）：
-                // WMS 会为它创建一个全新的 WindowState，可触达区域从头算一遍。
-                // 这和"窗口脱挂后重新挂载"是同一条已经被验证过的自愈路径。
+                // 现在是双保险：
+                //   ① 帧变化（applyPetWindowFrame）→ 强制重算热区
+                //   ② 重建窗口（removeView + addView）→ 全新 WindowState
+                // 两条都走，才不留死角。
+                Log.i(
+                    TAG,
+                    "触发悬浮窗重建（wasVisible=$wasVisible forceRebuild=$forceRebuild）"
+                )
                 restorePetWindowForInteraction()
             }
             mainHandler.removeCallbacks(edgeStrollRunnable)
@@ -1945,7 +2134,6 @@ class FloatingPetService : Service() {
         } else {
             cancelEdgePeeking()
             isPeeking = false
-            view.alpha = petOpacity
             peekOffsetAnimator?.cancel()
             view.peekOffsetX = 0f
             mainHandler.removeCallbacks(edgeStrollRunnable)
@@ -1956,6 +2144,61 @@ class FloatingPetService : Service() {
             hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
             bubbleView?.visibility = View.GONE
             hideActionMenu(animated = false)
+        }
+    }
+
+    /**
+     * 回后台后的延迟刷新任务。
+     *
+     * Activity 的 onPause → onStop → onDestroy 会连着触发三次，
+     * 三次都拆建悬浮窗既会让猫连闪三下，
+     * 也正好撞上 App 窗口退场的过程 —— 那个时刻最不适合动窗口。
+     *
+     * 所以合并成一次：等 App 的窗口彻底退干净，再一次性恢复并重建。
+     */
+    private val backgroundRefreshRunnable = Runnable {
+        refreshPetVisibility(forceRebuild = true)
+    }
+
+    /**
+     * 安排一次「回到后台」的可见性刷新（带强制重建）。
+     *
+     * 连续调用会互相顶掉，只有最后一次生效 —— 这就是去抖。
+     */
+    fun schedulePetVisibilityRefreshAfterBackground() {
+        mainHandler.removeCallbacks(backgroundRefreshRunnable)
+        mainHandler.postDelayed(backgroundRefreshRunnable, BACKGROUND_REFRESH_DELAY_MS)
+    }
+
+    /**
+     * 真正改变悬浮窗的"可见尺寸"。
+     *
+     * ⚠️ 隐藏时**刻意不用 View.GONE**，而是把窗口缩到 1x1 且整体透明。
+     *
+     * 原因：View.GONE 会让 ViewRootImpl 销毁窗口的 surface，
+     * 部分 ROM 还会顺势把窗口从输入分发器里摘掉；
+     * 恢复成 VISIBLE 之后，可触达区域（Touchable Region）
+     * 如果没跟着重算，就会留下一只"看得见、按不动"的猫 ——
+     * 这正是「第一次能拖，打开关闭 app 之后就拖不动」的典型形态。
+     *
+     * 改成"窗口帧真的发生变化"（1x1 ↔ 满尺寸）之后，
+     * WMS 必须重新计算可触达区域，这条死路就被从根上堵住了。
+     *
+     * 附带好处：窗口始终挂在 WindowManager 上，
+     * 也就不会出现"View 还在、窗口却脱挂"那种连触摸都收不到的状态。
+     *
+     * @param hidden true = 缩到 1x1 藏起来；false = 恢复成满尺寸
+     */
+    private fun applyPetWindowFrame(hidden: Boolean) {
+        val params = pokoParams ?: return
+        val size = if (hidden) HIDDEN_WINDOW_SIZE_PX else petSizePx
+        if (params.width == size && params.height == size) return
+        params.width = size
+        params.height = size
+        try {
+            windowManager?.updateViewLayout(pokoView, params)
+        } catch (e: Exception) {
+            Log.e(TAG, "悬浮窗尺寸切换失败（hidden=$hidden size=$size）", e)
         }
     }
 
@@ -2018,7 +2261,10 @@ class FloatingPetService : Service() {
      */
     private fun clampPetPositionToScreen(params: WindowManager.LayoutParams) {
         val density = resources.displayMetrics.density
-        val sizePx = if (params.width > 0) params.width else petSizePx
+        // ⚠️ 必须用 petSizePx，**不能用 params.width**：
+        //    窗口藏起来时 width 是 1x1（见 applyPetWindowFrame），
+        //    拿它当宠物尺寸会把位置钳到屏幕最右边，猫就再也拖不回来了。
+        val sizePx = if (petSizePx > 0) petSizePx else params.width
         val (screenWidth, screenHeight) = getScreenDimensions()
         val maxX = (screenWidth - sizePx).coerceAtLeast(0)
         val (minY, maxY) = getSafeVerticalBounds(density, screenHeight, sizePx)
@@ -2028,6 +2274,7 @@ class FloatingPetService : Service() {
             Log.w(TAG, "悬浮窗坐标超出屏幕范围，已钳回 ($clampedX, $clampedY)")
             params.x = clampedX
             params.y = clampedY
+            clampCount++
         }
     }
 
@@ -2772,15 +3019,22 @@ class FloatingPetService : Service() {
      * 把波可"收进通知栏"：桌面上不再显示，但服务与通知都留着，
      * 用户点通知栏的「召回波可」就能立刻把它叫回桌面。
      *
-     * 用 setVisibility(GONE) 而不是 removeView：
-     * 窗口对象和坐标原封不动，召回时只要改回 VISIBLE 就行，
+     * ⚠️ 必须与 [refreshPetVisibility] 用**同一套**隐藏机制
+     * （缩到 1x1 + 透明 + INVISIBLE），不能用 View.GONE：
+     * GONE 会销毁 surface / 可能摘掉输入通道，
+     * 召回时可触达区域会停留在旧值上，猫就变成"看得见、点不动"。
+     *
+     * 窗口对象和坐标原封不动，召回时只要把尺寸撑回去就行，
      * 彻底避开"重新 addView 可能抛异常 / 位置丢失"这一类窗口生命周期问题。
      */
     private fun hidePetToTray() {
         val view = pokoView ?: return
         cancelEdgePeeking()
         isPeeking = false
-        view.visibility = View.GONE
+        petWindowHidden = true
+        view.alpha = 0f
+        applyPetWindowFrame(hidden = true)
+        view.visibility = View.INVISIBLE
         isPetRecalled = true
         // 通知栏按钮要跟着变（召回 / 关闭），所以重新发一次前台通知
         startAsForeground()
@@ -2964,6 +3218,83 @@ class FloatingPetService : Service() {
         applyFeeding(15)
 
         showCustomSpeechBubble("吧唧吧唧~ 收到主人投喂的小鱼干！饱食度+15 🐟✨")
+    }
+
+    /**
+     * 悬浮窗触摸诊断快照（纯文本）。
+     *
+     * 这段文字会放进通知栏的大字区，也能一键复制到剪贴板。
+     * 用户下拉通知栏看一眼（或直接粘给我们）就能定位问题，
+     * **不需要 adb、不需要连电脑、不需要懂日志**。
+     *
+     * 每个字段都对应一个明确的判读结论，见 [buildTouchDiagnostic] 里的注释。
+     */
+    private fun buildTouchDiagnostic(): String {
+        val view = pokoView
+        val params = pokoParams
+        val now = System.currentTimeMillis()
+        val since = if (lastTouchAt > 0L) "${(now - lastTouchAt) / 1000}s 前" else "从未"
+        val rebuild = if (lastRebuildAt > 0L) {
+            "${(now - lastRebuildAt) / 1000}s 前 成功=$lastRebuildOk"
+        } else {
+            "无"
+        }
+        return buildString {
+            appendLine("【波可悬浮窗 · 触摸诊断 v$DRAG_FIX_VERSION】")
+            appendLine("服务已运行 ${(now - serviceStartAt) / 1000}s ｜ 重建 $rebuildCount 次（最近 $rebuild）")
+            appendLine("触摸 DOWN=$touchDownCount MOVE=$touchMoveCount UP=$touchUpCount CANCEL=$touchCancelCount")
+            appendLine("最近一次触摸 $since ｜ 坐标口径 $lastTouchMode")
+            appendLine("窗口 attached=${view?.isAttachedToWindow} wm=$isPetWindowAttached 隐藏=$petWindowHidden 尺寸=${params?.width}x${params?.height}")
+            appendLine("位置 win=(${params?.x},${params?.y}) 屏幕=${cachedScreenWidth}x${cachedScreenHeight} 宠物=${petSizePx}px")
+            appendLine("边界钳制 $clampCount 次 ｜ 拖拽卡住 $stuckMoveCount 次")
+            appendLine("判读：DOWN=0 → 触摸没进窗口；DOWN>0 且 MOVE=0 → 手势被吃；MOVE>0 → 触摸链路正常")
+        }
+    }
+
+    /**
+     * 通知栏「📋 诊断」按钮：把诊断快照复制到剪贴板。
+     *
+     * 用户只要下拉通知栏点一下，再把剪贴板内容粘给我们就够了。
+     * 剪贴板在部分系统上可能写不进去（后台限制），
+     * 所以诊断全文同时放在通知栏的大字区里，点开通知就能直接看。
+     */
+    private fun handleNotificationDiagnostic() {
+        val snapshot = buildTouchDiagnostic()
+        val copied = try {
+            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("波可触摸诊断", snapshot))
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "诊断快照写入剪贴板失败", e)
+            false
+        }
+        // 复制成功与否都要留一份日志，方便对照
+        Log.i(TAG, "触摸诊断快照：\n$snapshot")
+        Toast.makeText(
+            this,
+            if (copied) "诊断已复制到剪贴板，粘贴给我即可 🐾" else "诊断已生成，点开通知看全文 🐾",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    /**
+     * 刷新通知栏里的触摸诊断。
+     *
+     * 通知是常驻的，所以诊断信息可以就地更新 ——
+     * 用户什么时候下拉通知栏，看到的都是当下的真实状态。
+     */
+    private fun refreshNotificationDiagnostic() {
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+            val notification = buildServiceNotification() ?: return
+            nm.notify(FOREGROUND_NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.w(TAG, "刷新通知栏诊断失败", e)
+        }
     }
 
     /**
@@ -3876,74 +4207,128 @@ class FloatingPetService : Service() {
                 notificationManager.createNotificationChannel(channel)
             }
 
-            val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            }
-            val pendingIntent = PendingIntent.getActivity(
-                this,
-                0,
-                launchIntent,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-            )
-
-            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-            val petIntent = Intent(this, FloatingPetService::class.java).apply {
-                action = ACTION_NOTIFICATION_PET
-            }
-            val pendingPetIntent = PendingIntent.getService(this, 101, petIntent, flags)
-
-            val feedIntent = Intent(this, FloatingPetService::class.java).apply {
-                action = ACTION_NOTIFICATION_FEED
-            }
-            val pendingFeedIntent = PendingIntent.getService(this, 102, feedIntent, flags)
-
-            val stopIntent = Intent(this, FloatingPetService::class.java).apply {
-                action = ACTION_NOTIFICATION_STOP
-            }
-            val pendingStopIntent = PendingIntent.getService(this, 103, stopIntent, flags)
-
-            val recallIntent = Intent(this, FloatingPetService::class.java).apply {
-                action = ACTION_NOTIFICATION_RECALL
-            }
-            val pendingRecallIntent = PendingIntent.getService(this, 104, recallIntent, flags)
-
-            // 通知栏按钮跟着当前状态走：
-            // 猫在桌面上 -> 摸摸 / 喂食 / 收回
-            // 猫被收进通知栏 -> 召回 / 关闭（这样"收回"不等于"消失不见"）
-            val builder = Notification.Builder(this, channelId)
-                .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentIntent(pendingIntent)
-                .setOngoing(true)
-
-            if (isPetRecalled) {
-                builder.setContentTitle("波可在小窝里休息中~ 🐾")
-                    .setContentText("点「召回」把它叫回桌面，点「关闭」彻底收起")
-                    .addAction(Notification.Action.Builder(0, "🐾 召回", pendingRecallIntent).build())
-                    .addAction(Notification.Action.Builder(0, "✕ 关闭", pendingStopIntent).build())
-            } else {
-                builder.setContentTitle("波可正在桌面上陪着您~ 🐾")
-                    .setContentText("点击返回小窝，也可在下方快捷互动！")
-                    .addAction(Notification.Action.Builder(0, "🐾 摸摸", pendingPetIntent).build())
-                    .addAction(Notification.Action.Builder(0, "🐟 喂食", pendingFeedIntent).build())
-                    .addAction(Notification.Action.Builder(0, "🏠 收回", pendingStopIntent).build())
-            }
-
-            val notification = builder.build()
+            val notification = buildServiceNotification() ?: return
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     startForeground(
-                        1001,
+                        FOREGROUND_NOTIFICATION_ID,
                         notification,
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                     )
                 } else {
-                    startForeground(1001, notification)
+                    startForeground(FOREGROUND_NOTIFICATION_ID, notification)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
+    }
+
+    /**
+     * 构建常驻通知。
+     *
+     * ⚠️ 这条通知同时承担两个角色：
+     *   1. 前台服务的合规通知；
+     *   2. **触摸诊断面板** —— 常驻通知是用户唯一"随时能看见、又不依赖宠物可触摸"的界面。
+     *
+     * 所以标题栏放一行紧凑诊断（不用展开就能看到 DOWN/MOVE 计数），
+     * 展开后是完整诊断全文，再配一个「📋 诊断」按钮把全文复制到剪贴板。
+     * 用户下拉通知栏点一下、粘给我们，就能定位"触摸到底进没进窗口"。
+     */
+    private fun buildServiceNotification(): Notification? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null
+        val channelId = "floating_pet_channel"
+
+        // ⚠️ getLaunchIntentForPackage 理论上可能返回 null，
+        //    而 PendingIntent.getActivity 传 null intent 会抛 NPE ——
+        //    这里兜底指向 MainActivity，绝不让通知构建把服务带崩。
+        val launchIntent = (packageManager.getLaunchIntentForPackage(packageName)
+            ?: Intent(this, MainActivity::class.java)).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            launchIntent,
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        )
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+        val petIntent = Intent(this, FloatingPetService::class.java).apply {
+            action = ACTION_NOTIFICATION_PET
+        }
+        val pendingPetIntent = PendingIntent.getService(this, 101, petIntent, flags)
+
+        val feedIntent = Intent(this, FloatingPetService::class.java).apply {
+            action = ACTION_NOTIFICATION_FEED
+        }
+        val pendingFeedIntent = PendingIntent.getService(this, 102, feedIntent, flags)
+
+        val stopIntent = Intent(this, FloatingPetService::class.java).apply {
+            action = ACTION_NOTIFICATION_STOP
+        }
+        val pendingStopIntent = PendingIntent.getService(this, 103, stopIntent, flags)
+
+        val recallIntent = Intent(this, FloatingPetService::class.java).apply {
+            action = ACTION_NOTIFICATION_RECALL
+        }
+        val pendingRecallIntent = PendingIntent.getService(this, 104, recallIntent, flags)
+
+        // 「📋 诊断」：把完整诊断复制到剪贴板
+        val diagnosticIntent = Intent(this, FloatingPetService::class.java).apply {
+            action = ACTION_NOTIFICATION_DIAGNOSTIC
+        }
+        val pendingDiagnosticIntent = PendingIntent.getService(this, 105, diagnosticIntent, flags)
+
+        // 通知栏按钮跟着当前状态走：
+        // 猫在桌面上 -> 摸摸 / 喂食 / 收回
+        // 猫被收进通知栏 -> 召回 / 关闭（这样"收回"不等于"消失不见"）
+        val builder = Notification.Builder(this, channelId)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+
+        if (isPetRecalled) {
+            builder.setContentTitle("波可在小窝里休息中~ 🐾")
+                .setContentText("点「召回」把它叫回桌面，点「关闭」彻底收起")
+                .addAction(Notification.Action.Builder(0, "🐾 召回", pendingRecallIntent).build())
+                .addAction(Notification.Action.Builder(0, "✕ 关闭", pendingStopIntent).build())
+        } else {
+            builder.setContentTitle("波可正在桌面上陪着您~ 🐾")
+                .setContentText(buildCompactDiagnosticLine())
+                .addAction(Notification.Action.Builder(0, "🐾 摸摸", pendingPetIntent).build())
+                .addAction(Notification.Action.Builder(0, "🐟 喂食", pendingFeedIntent).build())
+                .addAction(Notification.Action.Builder(0, "🏠 收回", pendingStopIntent).build())
+        }
+
+        // 展开后是完整诊断全文
+        builder.setStyle(Notification.BigTextStyle().bigText(buildTouchDiagnostic()))
+        // 诊断按钮：唯一不依赖"宠物可触摸"就能拿到的诊断入口
+        builder.addAction(Notification.Action.Builder(0, "📋 诊断", pendingDiagnosticIntent).build())
+
+        return builder.build()
+    }
+
+    /**
+     * 通知栏标题下那一行紧凑诊断。
+     *
+     * 不用展开通知就能看到最关键的判据：触摸事件计数。
+     * DOWN=0 = 触摸压根没进窗口；DOWN>0 而 MOVE=0 = 手势被吃掉；
+     * MOVE>0 = 触摸链路正常，问题在窗口位移上。
+     */
+    private fun buildCompactDiagnosticLine(): String {
+        val since = if (lastTouchAt > 0L) {
+            "${(System.currentTimeMillis() - lastTouchAt) / 1000}s 前"
+        } else {
+            "从未"
+        }
+        val windowState = when {
+            !isPetWindowAttached -> "窗口已脱挂"
+            petWindowHidden -> "窗口隐藏中"
+            else -> "窗口正常"
+        }
+        return "触摸 DOWN=$touchDownCount MOVE=$touchMoveCount ｜ 最近 $since ｜ $windowState ｜ 点「📋 诊断」复制详情"
     }
 
     /**
