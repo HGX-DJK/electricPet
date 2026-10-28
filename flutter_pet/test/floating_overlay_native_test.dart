@@ -1655,9 +1655,13 @@ void main() {
 
     test('服务启动必须交叉校验前后台标记，防止标记失同步', () {
       final startCommand = _braceBlock(serviceSource, 'override fun onStartCommand');
-      expect(startCommand, contains('isAppForeground != isMainActivityResumed'),
+      expect(startCommand, contains('reallyForeground'),
           reason: '服务被系统重建（START_STICKY）或被 App 重新拉起后，'
               '前后台标记可能失同步，必须交叉校验并纠正');
+      expect(startCommand,
+          contains('ActivityState.RESUMED, ActivityState.RESUMING -> true'),
+          reason: '交叉校验必须以框架生命周期状态为权威 —— '
+              '静态标记会被「拉起主 App」手工置 true，那不是真实状态');
       expect(startCommand, contains('refreshPetVisibility()'),
           reason: '纠正标记后必须立刻刷新悬浮猫显隐');
     });
@@ -1795,9 +1799,10 @@ void main() {
 
       // 「该露着」的判定必须同时看三个条件：亮屏 / 不在前台 / 没被收回
       expect(_stripLiteralsAndComments(refreshVis),
-          contains('val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled'),
-          reason: '"该露着"的判定必须同时看亮屏 / 前台 / 召回三个条件，'
-              '漏掉任何一个都会让宠物在该出现时消失、或在该消失时占着桌面');
+          contains('val shouldShow = shouldShowPetNow()'),
+          reason: '"该露着"的判定必须走唯一判据 shouldShowPetNow()，'
+              '看门狗 / 巡检 / 显隐同步必须问同一个 —— '
+              '各写各的就会互相打架（v16 回归的根因）');
     });
 
     test('v15：显隐必须是「该露着就挂、该藏着就摘」的幂等赋值', () {
@@ -1844,6 +1849,14 @@ void main() {
               '（UNKNOWN / RESUMED / NOT_RESUMED）');
       expect(serviceSource, contains('ActivityState.UNKNOWN'),
           reason: '必须有 UNKNOWN 态：服务比 Activity 晚启动是常态');
+      // ⚠️ 必须精确到**字段的初始值**：
+      //    ActivityState.UNKNOWN 这个词在交叉校验的 when 分支里也出现过，
+      //    只断言"整份源码包含"会漏掉初始态被改坏
+      //    （服务晚启动时一开始就不能假设"在前台"，否则猫一启动就消失）。
+      expect(serviceSource,
+          contains('private var activityLifecycleState: ActivityState = ActivityState.UNKNOWN'),
+          reason: '生命周期初始态必须是 UNKNOWN：'
+              '服务比 Activity 晚启动是常态，一开始就不能假设"在前台"');
       expect(serviceSource, contains('ActivityState.RESUMED'),
           reason: '必须有 RESUMED 态');
       expect(serviceSource, contains('ActivityState.NOT_RESUMED'),
@@ -1907,7 +1920,7 @@ void main() {
     });
 
     test('v15：版本标记必须升级（用户一眼就知道手机上跑的是哪一版）', () {
-      expect(serviceSource, contains('const val DRAG_FIX_VERSION = "drag-fix-v15"'),
+      expect(serviceSource, contains('const val DRAG_FIX_VERSION = "drag-fix-v16"'),
           reason: 'v15 改了显隐架构，版本标记必须跟着升 —— '
               '用户反馈问题时我们才能确认手机上跑的是哪一版');
     });
@@ -1946,6 +1959,182 @@ void main() {
       expect(_stripLiteralsAndComments(onDestroyed),
           contains('applyForegroundState(false)'),
           reason: 'Activity 销毁时前台标记绝不能留在 true（否则宠物永远不出现）');
+    });
+
+    test('v16：显隐必须有唯一裁决入口，看门狗 / 巡检 / 显隐同步全都问它', () {
+      // ⚠️ v16 回归的根因就是"各判各的"：
+      //   挂载看门狗看到"窗口没挂着" → 认定脱挂 → 强行重挂
+      //   显隐同步看到"App 在前台"   → 认定该藏   → 把窗口摘掉
+      //   两边对着干 → 猫每 1.5 秒在桌面上闪一次，
+      //   而且重挂的那一瞬间 App 里 + 桌面上就是两只猫。
+      //
+      // 所以必须只有**一个**判据函数，三处都调它。
+      expect(serviceSource, contains('private fun shouldShowPetNow(): Boolean'),
+          reason: '缺少唯一的可见性裁决入口');
+
+      final predicate =
+          _braceBlock(serviceSource, 'private fun shouldShowPetNow()');
+      expect(_stripLiteralsAndComments(predicate), contains('screenOn'),
+          reason: '息屏时不该显示');
+      expect(_stripLiteralsAndComments(predicate),
+          contains('isAppActuallyInForeground()'),
+          reason: 'App 在前台时不该显示（否则和 App 内的猫叠成两只）');
+      expect(_stripLiteralsAndComments(predicate), contains('isPetRecalled'),
+          reason: '用户收回通知栏后不该显示');
+
+      // 三处必须**都**问它，不许自己另写一套
+      final visibility =
+          _braceBlock(serviceSource, 'private fun refreshPetVisibility(');
+      expect(_stripLiteralsAndComments(visibility),
+          contains('val shouldShow = shouldShowPetNow()'),
+          reason: '显隐同步必须用唯一判据');
+      final watchdog =
+          _braceBlock(serviceSource, 'private val windowStateWatchdog = object');
+      expect(_stripLiteralsAndComments(watchdog),
+          contains('val shouldShow = shouldShowPetNow()'),
+          reason: '窗口状态巡检必须用同一个判据');
+      final attachWd =
+          _braceBlock(serviceSource, 'private val attachWatchdog = object');
+      expect(_stripLiteralsAndComments(attachWd),
+          contains('shouldShowPetNow()'),
+          reason: '挂载看门狗必须用同一个判据');
+    });
+
+    test('v16：挂载看门狗绝不能无条件重挂（否则猫每 1.5 秒闪一次）', () {
+      // v15 把「藏起来」改成了「摘掉窗口」，
+      // 于是 App 在前台时窗口是**故意**摘着的 ——
+      // 看门狗若不分青红皂白就重挂，用户看到的正是
+      // 「打开 app 之后桌面宠物一会儿出现一会儿消失」。
+      final attachWd =
+          _braceBlock(serviceSource, 'private val attachWatchdog = object');
+      expect(_stripLiteralsAndComments(attachWd),
+          isNot(contains('ensurePetWindowAttached()')),
+          reason: '看门狗绝不能无条件重挂：'
+              '该藏着的窗口被挂上来 = 桌面上闪出一只猫（和 App 内的猫叠成两只）');
+      expect(_stripLiteralsAndComments(attachWd),
+          contains('refreshPetVisibility()'),
+          reason: '看门狗必须把"该不该挂着"交给显隐同步裁决');
+      // 待重挂标记同理：当前不该显示时必须保留，不能硬着头皮重挂
+      expect(_stripLiteralsAndComments(attachWd), contains('if (!shouldShow)'),
+          reason: '待重挂标记也必须先问判据：'
+              '不该显示时保留标记，等下次该显示时再处理');
+    });
+
+    test('v16：进前台必须立刻藏猫，不能等去抖', () {
+      // App 拉起的过渡动画期间，桌面上留着猫就会看到两只波可。
+      // 去抖是为"回后台"准备的（onPause → onStop → onDestroy 要合并），
+      // 套到"进前台"上，就是让猫在 App 打开时多赖在桌面上几百毫秒。
+      final applyState =
+          _braceBlock(serviceSource, 'private fun applyForegroundState(');
+      final fgIdx = applyState.indexOf('if (foreground) {');
+      final bgIdx = applyState.indexOf('} else {');
+      expect(fgIdx, greaterThan(-1), reason: '必须有"进前台"这一支');
+      expect(bgIdx, greaterThan(fgIdx), reason: '必须有"回后台"这一支');
+
+      final toForeground = applyState.substring(fgIdx, bgIdx);
+      expect(_stripLiteralsAndComments(toForeground),
+          contains('refreshPetVisibility()'),
+          reason: '进前台必须**立刻**刷新显隐（藏猫），不能走去抖');
+      expect(_stripLiteralsAndComments(toForeground),
+          isNot(contains('scheduleVisibilityRefresh()')),
+          reason: '进前台绝不能等去抖：App 过渡动画里会出现两只猫');
+
+      final toBackground = applyState.substring(bgIdx);
+      expect(_stripLiteralsAndComments(toBackground),
+          contains('scheduleVisibilityRefresh()'),
+          reason: '回后台必须去抖：'
+              'onPause → onStop → onDestroy 连着来，不合并会让猫连闪');
+      expect(_stripLiteralsAndComments(toBackground),
+          contains('activityLifecycleState = ActivityState.NOT_RESUMED'),
+          reason: '回后台必须把生命周期状态置成 NOT_RESUMED —— '
+              '否则它停在 RESUMED，服务重启时的交叉校验会误判成"还在前台"，'
+              '桌面猫就永远不再出现（用户连报两轮的那个坑）');
+    });
+
+    test('v16：必须有 RESUMING 态（"正在起来" ≠ "已经在后台"）', () {
+      // 「App 正在被拉起」和「App 已经在后台」这两个时刻，
+      // 框架那边的生命周期状态长得一模一样（都是 NOT_RESUMED），
+      // 但我们要做的事完全相反：
+      //   正在起来 → 立刻藏猫（否则过渡动画里两只猫）
+      //   已在后台 → 放猫出来
+      expect(serviceSource, contains('ActivityState.RESUMING'),
+          reason: '缺少 RESUMING 态："正在起来"会被误判成"已在后台"');
+      final applyState =
+          _braceBlock(serviceSource, 'private fun applyForegroundState(');
+      expect(_stripLiteralsAndComments(applyState),
+          contains('activityLifecycleState = ActivityState.RESUMING'),
+          reason: '收到进前台信号时必须记成 RESUMING，'
+              '否则陈旧的 NOT_RESUMED 会把这次藏猫否决掉');
+      // 拉起主 App 的那条路径也必须记 RESUMING
+      final openMain =
+          _braceBlock(serviceSource, 'private fun openMainActivity()');
+      expect(_stripLiteralsAndComments(openMain),
+          contains('activityLifecycleState = ActivityState.RESUMING'),
+          reason: '拉起主 App 之前必须先记 RESUMING，猫才会立刻藏起来');
+      // 拉起失败 / 看门狗回收时必须把 RESUMING 一起收回，
+      // 否则它会一直把"App 在前台"记成悬空，猫再也回不来。
+      // ⚠️ 必须精确到「拉起失败」这一段：
+      //    openMainActivity 里有两个回收点（拉起失败 + 看门狗超时），
+      //    两处都写 NOT_RESUMED，只断言"整段包含"会漏掉其中一处被改坏。
+      final failBlock = _between(
+        openMain,
+        'Log.e(TAG, "拉起主应用失败", e)',
+        'foregroundWatchdog?.let { mainHandler.removeCallbacks(it) }',
+      );
+      expect(_stripLiteralsAndComments(failBlock),
+          contains('activityLifecycleState = ActivityState.NOT_RESUMED'),
+          reason: '拉起失败必须把 RESUMING 一起收回，'
+              '否则它会一直把"App 在前台"记成悬空，猫再也回不到桌面');
+      // ⚠️ 必须精确到「看门狗回收」那一段：
+      //    openMainActivity 里还有"拉起失败"的回收点，两处都写 NOT_RESUMED，
+      //    只断言"整段包含"会漏掉看门狗那处被改坏。
+      final recoverBlock = _between(
+        openMain,
+        'foregroundWatchdog = Runnable {',
+        'mainHandler.postDelayed(foregroundWatchdog!!',
+      );
+      expect(_stripLiteralsAndComments(recoverBlock),
+          contains('activityLifecycleState = ActivityState.NOT_RESUMED'),
+          reason: '看门狗回收悬空前台标记时必须把 RESUMING 一起收回，'
+              '否则它会一直把"App 在前台"记成悬空，猫再也回不到桌面');
+    });
+
+    test('【行为模拟】v16：App 在前台时看门狗不得把猫挂上来', () {
+      // 复刻 v16 回归的机制：
+      //   App 在前台 → 显隐同步把窗口摘掉（这是**故意的**）
+      //   挂载看门狗看到"窗口没挂着" → 误判成脱挂 → 重挂
+      //   → 桌面上冒出一只猫（和 App 内的猫叠成两只）
+      //   → 显隐同步再摘掉 → 猫消失
+      //   → 1.5 秒后重复
+      //
+      // —— 旧实现（v15）确实会闪，先证明模拟器不是空转 ——
+      final legacy = _LegacyWatchdogSim();
+      legacy.enterAppForeground();
+      legacy.runAttachWatchdog();
+      expect(legacy.attachCalls, 1,
+          reason: '旧实现：看门狗确实多挂了一次 —— 这就是闪烁的来源');
+      expect(legacy.petOnScreen, isFalse,
+          reason: '旧实现：挂上来之后又被显隐同步摘掉，所以是"闪一下就没"');
+
+      // —— v16：看门狗只把决定权交给显隐同步，一轮都不许把猫挂上来 ——
+      final v16 = _VisibilitySim();
+      v16.enterAppForeground();
+      expect(v16.petOnScreen, isFalse,
+          reason: 'App 在前台时桌面不该有猫');
+
+      for (var i = 0; i < 3; i++) {
+        v16.runAttachWatchdog();
+        expect(v16.petOnScreen, isFalse,
+            reason: '第 $i 轮看门狗之后，桌面仍然不该有猫'
+                '（旧实现这里会冒出一只猫）');
+      }
+      expect(v16.attachCalls, 0,
+          reason: '看门狗在 App 前台时一次都不许去挂窗口');
+
+      // App 退到后台 → 猫才回来
+      v16.leaveAppForeground();
+      expect(v16.petOnScreen, isTrue,
+          reason: 'App 退到后台后桌面宠物必须回来');
     });
 
     test('窗口状态巡检必须只按「窗口挂不挂」判缺，保证宠物不会永久消失', () {
@@ -4520,6 +4709,68 @@ class _OverlayFrameSim {
     if (viewVisible && touchableRegion >= petSize) {
       touchDownCount++;
     }
+  }
+}
+
+
+/// 模拟「显隐同步 + 挂载看门狗」这两个角色在 v16 下的行为。
+///
+/// 复刻的规则：
+///   · 显隐同步：问 shouldShowPetNow()，该露着就挂、该藏着就摘；
+///   · 挂载看门狗（v16）：只把决定权交给显隐同步，不再自己动手挂。
+class _VisibilitySim {
+  /// App 是否在前台
+  bool appForeground = false;
+
+  /// 窗口是否挂在 WindowManager 上
+  bool windowAttached = false;
+
+  /// 挂载看门狗真正去挂窗口的次数
+  int attachCalls = 0;
+
+  /// 桌面上能不能看到猫（= 窗口挂着）
+  bool get petOnScreen => windowAttached;
+
+  /// 唯一裁决入口
+  bool shouldShowPetNow() => !appForeground;
+
+  /// 显隐同步
+  void refreshPetVisibility() {
+    if (shouldShowPetNow()) {
+      if (!windowAttached) {
+        windowAttached = true;
+        attachCalls++;
+      }
+    } else {
+      windowAttached = false;
+    }
+  }
+
+  void enterAppForeground() {
+    appForeground = true;
+    refreshPetVisibility();
+  }
+
+  void leaveAppForeground() {
+    appForeground = false;
+    refreshPetVisibility();
+  }
+
+  /// 挂载看门狗（v16：只把决定权交给显隐同步）
+  void runAttachWatchdog() {
+    refreshPetVisibility();
+  }
+}
+
+/// v15 的旧看门狗：看到"窗口没挂着"就无条件重挂 —— 这就是 v16 回归的根因。
+class _LegacyWatchdogSim extends _VisibilitySim {
+  @override
+  void runAttachWatchdog() {
+    if (!windowAttached) {
+      windowAttached = true;
+      attachCalls++;
+    }
+    refreshPetVisibility();
   }
 }
 

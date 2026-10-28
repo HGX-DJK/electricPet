@@ -236,6 +236,19 @@ class FloatingPetService : Service() {
     private enum class ActivityState {
         /** 还没收到过任何生命周期回调（服务比 Activity 晚启动时的常态） */
         UNKNOWN,
+        /**
+         * Activity **正在起来**：已经收到"进前台"的信号，
+         * 但框架的 onActivityResumed 还没派发。
+         *
+         * ⚠️ 为什么要单独一个态：
+         * 「App 正在被拉起」和「App 已经在后台」这两个时刻，
+         * 框架那边的生命周期状态**长得一模一样**（都是 NOT_RESUMED），
+         * 但我们要做的事完全相反 ——
+         *   正在起来 → 必须**立刻**把桌面猫藏起来（否则过渡动画里出现两只猫）
+         *   已经在后台 → 必须把桌面猫放出来
+         * 所以不能只靠生命周期状态，得记住"我们刚刚收到过进前台信号"。
+         */
+        RESUMING,
         /** Activity 已恢复 */
         RESUMED,
         /** Activity 已暂停 / 已销毁 —— 确定不在前台 */
@@ -259,6 +272,28 @@ class FloatingPetService : Service() {
         if (!isAppForeground) return false
         if (activityLifecycleState == ActivityState.NOT_RESUMED) return false
         return true
+    }
+
+    /**
+     * 现在**应该**把悬浮猫挂在桌面上吗？
+     *
+     * ⚠️ 这是显隐的**唯一裁决入口**。
+     * 显隐同步、窗口状态巡检、挂载看门狗全都必须问它，
+     * 谁也不许自己另写一套判断 ——
+     * v16 回归的根因就是「挂载看门狗」和「显隐同步」各判各的：
+     * 一个认为窗口脱挂要重挂，另一个认为该藏着要摘掉，
+     * 于是猫每 1.5 秒在桌面上闪一次。
+     *
+     * 三个条件缺一不可：
+     *   亮屏（息屏没人看得见）
+     *   App 不在前台（前台时桌面上不该有猫，否则和 App 内的猫叠成两只）
+     *   没被用户收进通知栏
+     */
+    private fun shouldShowPetNow(): Boolean {
+        // ⚠️ 这里刻意写成**块体**而不是表达式体（`=` 那一行）：
+        //    守护测试要按函数体做源码断言，表达式体后面没有花括号，
+        //    断言工具会取到后面别的函数块上去（v16 首轮就踩了这个坑）。
+        return screenOn && !isAppActuallyInForeground() && !isPetRecalled
     }
 
     /**
@@ -405,8 +440,29 @@ class FloatingPetService : Service() {
                 if (hasTouchDown) return          // 手势进行中绝不碰窗口
                 val view = pokoView ?: return
 
+                // ⚠️⚠️ 下面两条路径都**绝不能**无条件重挂悬浮窗！
+                //
+                // v15 把「藏起来」改成了「摘掉窗口」之后，
+                // 「窗口没挂着」有**两种**完全不同的含义：
+                //   ① 窗口**故意**摘掉的（App 在前台 / 用户收进了通知栏）
+                //   ② 窗口**意外**脱挂的（被系统悄悄摘掉，触摸再也收不到）
+                //
+                // 无差别重挂的后果：App 在前台时，看门狗每 1.5 秒就把猫挂上来一次，
+                // 显隐同步紧接着又把它摘掉 ——
+                // 用户看到的正是「打开 app 之后桌面宠物一会儿出现一会儿消失」，
+                // 而且重挂的那一瞬间 App 里 + 桌面上就是**两只猫**。
+                //
+                // 所以：该不该挂着，一律交给 shouldShowPetNow() 裁决。
+                val shouldShow = shouldShowPetNow()
+
                 // 上一段手势里 updateViewLayout 失败过 → 手势已结束，现在可以安全重挂
                 if (petWindowNeedsReattach) {
+                    if (!shouldShow) {
+                        // 当前不该显示（例如 App 正在前台），
+                        // 待重挂标记**保留**，等下次该显示时再处理。
+                        Log.w(TAG, "看门狗：当前不该显示悬浮窗，待重挂标记保留到下次")
+                        return
+                    }
                     petWindowNeedsReattach = false
                     Log.w(TAG, "看门狗接手：上一段手势中窗口位置更新失败，现在重挂悬浮窗")
                     if (reattachPetWindow()) {
@@ -425,20 +481,15 @@ class FloatingPetService : Service() {
                 }
 
                 if (isPetWindowAttached && view.isAttachedToWindow) return
-                Log.w(TAG, "看门狗发现悬浮窗脱挂，准备重新挂载")
-                if (ensurePetWindowAttached()) {
-                    // 重挂后位置可能被系统重置，重新钳回屏内并刷一次布局
-                    val params = pokoParams
-                    if (params != null) {
-                        clampPetPositionToScreen(params)
-                        try {
-                            windowManager?.updateViewLayout(view, params)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "看门狗重挂后刷新布局失败", e)
-                        }
-                    }
-                    refreshPetVisibility()
-                }
+                // ⚠️ 这里**不能**直接 ensurePetWindowAttached()：
+                //    必须是「该露着却没挂着」才重挂。
+                //    交给 refreshPetVisibility()，它内部会先问 shouldShowPetNow()。
+                Log.w(
+                    TAG,
+                    "看门狗发现悬浮窗未挂载，交由显隐同步裁决：shouldShow=$shouldShow " +
+                        "attached=${view.isAttachedToWindow} wm=$isPetWindowAttached"
+                )
+                refreshPetVisibility()
             } catch (e: Exception) {
                 // 看门狗抛异常会直接掀掉前台服务，绝不能发生
                 Log.e(TAG, "挂载看门狗执行异常", e)
@@ -468,7 +519,9 @@ class FloatingPetService : Service() {
                 val view = pokoView ?: return
                 val params = pokoParams ?: return
                 // ⚠️ v15：状态只有一个 —— 窗口挂着没有。
-                val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled
+                //    判据必须与显隐同步用同一个（shouldShowPetNow），
+                //    否则巡检和显隐会各判各的（v16 回归的根因）。
+                val shouldShow = shouldShowPetNow()
                 val windowPresent = isPetWindowAttached && view.isAttachedToWindow
                 if (shouldShow && !windowPresent) {
                     // 该露着却没挂着 —— 立刻挂上去
@@ -557,7 +610,7 @@ class FloatingPetService : Service() {
          * 拖拽修复版本标记：启动日志会带上它，
          * 用户一看就知道手机上跑的是不是包含拖拽修复的新包。
          */
-        const val DRAG_FIX_VERSION = "drag-fix-v15"
+        const val DRAG_FIX_VERSION = "drag-fix-v16"
 
         /**
          * 「拉起主 App」后回收悬空前台标记的看门狗超时（毫秒）。
@@ -777,7 +830,7 @@ class FloatingPetService : Service() {
          * 以及框架的生命周期回调）先稳定下来，
          * 120ms 足够让它们全部到齐，又短到用户完全察觉不到。
          */
-        const val VISIBILITY_REFRESH_DELAY_MS = 120L
+        const val VISIBILITY_REFRESH_DELAY_MS = 300L
 
 
         /** 主 App 是否正处于前台：前台时悬浮猫需要让位，避免与 App 内的同一只波可重叠成两只 */
@@ -1031,16 +1084,26 @@ class FloatingPetService : Service() {
         // 服务可能被系统重建（START_STICKY），也可能被 App 侧重新拉起，
         // 这时全局静态的前台标记有可能与主 Activity 的真实状态对不上
         //（比如"关掉 App 再打开悬浮宠"这条路上，标记悬空留在 true）。
-        // 标记一旦悬空，悬浮猫就会一直停在 View.GONE ——
-        // 而 GONE 的视图根本不参与触摸分发，用户只会看到"拖不动"。
-        // 这里用 Activity 的真实 resume 状态做一次交叉校验并纠正。
-        if (isAppForeground != isMainActivityResumed) {
+        // 标记一旦悬空，桌面悬浮猫就**永远不再出现** ——
+        // 这正是用户连报两轮的那个坑。
+        //
+        // 判据优先级：框架生命周期状态 > Activity 自己的 resume 标记 > 静态标记。
+        // ⚠️ 静态标记**不能**单独当权威：「拉起主 App」会手工把它置 true，
+        //    而那之后 Activity 要过一会儿才真的 resume —— 那段窗口里
+        //    桌面猫必须保持藏起来，否则过渡动画里会同时出现两只波可。
+        val reallyForeground = when (activityLifecycleState) {
+            ActivityState.RESUMED, ActivityState.RESUMING -> true
+            ActivityState.NOT_RESUMED -> false
+            ActivityState.UNKNOWN -> isMainActivityResumed
+        }
+        if (isAppForeground != reallyForeground) {
             Log.w(
                 TAG,
                 "前后台标记失同步（isAppForeground=$isAppForeground " +
-                    "isMainActivityResumed=$isMainActivityResumed），按 Activity 真实状态纠正"
+                    "isMainActivityResumed=$isMainActivityResumed " +
+                    "生命周期=$activityLifecycleState），按真实状态纠正"
             )
-            isAppForeground = isMainActivityResumed
+            isAppForeground = reallyForeground
             refreshPetVisibility()
         }
 
@@ -2183,9 +2246,9 @@ class FloatingPetService : Service() {
      */
     private fun refreshPetVisibility(forceRebuild: Boolean = false) {
         val view = pokoView ?: return
-        // 注意 isPetRecalled：用户主动"收进通知栏"之后，
-        // 不能再因为 App 前后台切换就把猫自己放回桌面 —— 那等于收回无效。
-        val shouldShow = screenOn && !isAppActuallyInForeground() && !isPetRecalled
+        // ⚠️ 判据只能来自 shouldShowPetNow()（唯一裁决入口），
+        //    巡检 / 看门狗也问它 —— 各写各的就会打架（v16 回归的根因）。
+        val shouldShow = shouldShowPetNow()
 
         // ⚠️⚠️⚠️ v15 架构：显隐不再是"改视图的可见性"，
         // 而是**窗口挂不挂在 WindowManager 上**。
@@ -2291,9 +2354,28 @@ class FloatingPetService : Service() {
     private fun applyForegroundState(foreground: Boolean) {
         isAppForeground = foreground
         isMainActivityResumed = foreground
-        // 去抖刷新：前后台那串回调会连着来好几次，
-        // 等它们全部到齐、状态稳定了再统一动手，猫就不会连闪。
-        scheduleVisibilityRefresh()
+        if (foreground) {
+            // ⚠️⚠️ 进前台必须**立刻**把猫藏起来，**不能**等去抖！
+            //
+            // App 拉起的过渡动画期间，桌面上如果还留着猫，
+            // 用户就会看到**两只波可**（App 内一只 + 桌面一只）。
+            // 去抖是为"回后台"准备的（那几次回调要合并），
+            // 拿它套到"进前台"上，就是让猫在 App 打开时多赖在桌面上几百毫秒。
+            //
+            // RESUMING：框架的 onActivityResumed 还没派发，
+            // 此刻生命周期状态可能还停在 NOT_RESUMED（那是**上一次**暂停留下的陈旧值）。
+            // 不记成 RESUMING 的话，这一下就等于白藏 —— 猫又留到桌面上。
+            if (activityLifecycleState == ActivityState.NOT_RESUMED) {
+                activityLifecycleState = ActivityState.RESUMING
+            }
+            refreshPetVisibility()
+        } else {
+            // 回后台：Activity 的 onPause → onStop → onDestroy 会连着来好几次，
+            // 等它们全部到齐、状态稳定了再统一动手，猫就不会连闪，
+            // 也不会在 App 窗口退场动画里跟 App 叠成两只。
+            activityLifecycleState = ActivityState.NOT_RESUMED
+            scheduleVisibilityRefresh()
+        }
     }
 
     /**
@@ -3994,13 +4076,19 @@ class FloatingPetService : Service() {
         }
         if (launchIntent != null) {
             // 先让悬浮猫隐身，避免 Activity 拉起动画期间与 App 内的波可重叠成两只
+            //
+            // ⚠️ 必须同时把生命周期状态记成 RESUMING：
+            //    此刻框架那边还停在"上一次暂停"的 NOT_RESUMED，
+            //    那个值是**陈旧的**，照它判断的话猫根本不会被藏起来。
             isAppForeground = true
+            activityLifecycleState = ActivityState.RESUMING
             refreshPetVisibility()
             try {
                 startActivity(launchIntent)
             } catch (e: Exception) {
                 Log.e(TAG, "拉起主应用失败", e)
                 isAppForeground = false
+                activityLifecycleState = ActivityState.NOT_RESUMED
                 refreshPetVisibility()
                 return
             }
@@ -4019,6 +4107,12 @@ class FloatingPetService : Service() {
                 if (!isMainActivityResumed) {
                     Log.w(TAG, "主 Activity 未真正前台化，收回悬空的前台标记，悬浮猫恢复可触摸")
                     isAppForeground = false
+                    // ⚠️ RESUMING 也必须一起收回：
+                    //    否则它会一直把"App 在前台"这件事记成悬空，
+                    //    猫就再也回不到桌面上了（这正是用户报的那个 bug）。
+                    if (activityLifecycleState == ActivityState.RESUMING) {
+                        activityLifecycleState = ActivityState.NOT_RESUMED
+                    }
                     refreshPetVisibility()
                 }
             }
