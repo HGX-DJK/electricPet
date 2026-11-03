@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_pet/main.dart';
+import 'package:flutter_pet/services/minimax_service.dart';
 import 'package:flutter_pet/services/sound_service.dart';
 import 'package:flutter_pet/services/solar_service.dart';
 import 'package:flutter_pet/views/dialogs/action_dialog.dart';
 
 void main() {
+  setUp(() {
+    // flutter_test 用 HttpOverrides 拦掉所有 HTTP 并统一返回 400，
+    // 主界面 initState 里的语音预热会让每个用例刷 5 条 "T2A error status: 400" 噪音日志。
+    MinimaxService.networkEnabled = false;
+  });
+
   testWidgets('Poko Pet App smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(const DesktopElectricPetApp());
     await tester.pump(const Duration(milliseconds: 100));

@@ -1,0 +1,66 @@
+name: Python Quality Gate (桌面萌宠 · 波可)
+
+# 桌面萌宠的 Python (PyQt6) 侧目前完全没有 CI —— 所有回归都靠人肉发现。
+# 这个工作流补上两道闸门：
+#   1) 纯逻辑单元测试（标准库 unittest，不需要 Qt，ubuntu 上秒级跑完）
+#   2) 全仓语法编译 + Qt 模块导入冒烟（抓「漏 import / 语法错」这类本地看不出来的问题）
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    name: Python Unit Tests (纯逻辑, 无需 Qt)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Byte-compile every Python file (抓语法错)
+        run: |
+          python -m compileall -q pet tool tests main.py build_exe.py build_installer.py installer_gui.py installer
+
+      - name: Run unit tests
+        # pet/model.py + pet/audio.py + pet/system_monitor.py 全是标准库实现
+        # （winsound 有 try/except 兜底），所以这里不需要装 PyQt6。
+        run: python -m unittest discover -s tests -t . -v
+
+  import-smoke:
+    name: Qt Module Import Smoke Test (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install runtime dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "PyQt6>=6.6" "Pillow>=10.0"
+
+      - name: Import every Qt module (抓漏 import / 顶层崩溃)
+        # 只 import，不创建 QApplication —— 无头环境下不需要显示器。
+        run: |
+          python -c "import pet.model, pet.audio, pet.system_monitor; print('core ok')"
+          python -c "import pet.renderer; print('renderer ok')"
+          python -c "import pet.dialogue; print('dialogue ok')"
+          python -c "import pet.menus; print('menus ok')"
+          python -c "import pet.dock; print('dock ok')"
+          python -c "import pet.memo; print('memo ok')"
+          python -c "import pet.tray; print('tray ok')"
+          python -c "import pet.window; print('window ok')"
+          python -c "import main; print('main ok')"

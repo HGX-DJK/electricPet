@@ -7,6 +7,36 @@ class SolarService {
   // 基准参考纬度：31.5°N (代表性温带/亚热带平原纬度，无需申请 GPS 隐私权限即可获得极高真实度)
   static const double defaultLatitude = 31.5;
 
+  // ---------------------------------------------------------------------
+  // 缓存层
+  //
+  // 背景：主界面 pet_screen 每帧（~41fps）都会调一次 getSkyTheme()，
+  // 而 getSkyTheme 内部要跑 NOAA 太阳天文学三角函数 + 12 段渐变插值 + 建 3 个 List。
+  // 这些结果的变化频率远低于帧率：
+  //   · calculateSolarTimes 只依赖「一年中的第几天」，一天内恒定不变；
+  //   · 天空色按本方法文档所述就是「基于分钟的平滑流转」。
+  // 所以按「日」缓存日升日落、按「分钟」缓存天空主题是无损的，
+  // 能把每帧的开销降到接近零。
+  // ---------------------------------------------------------------------
+
+  /// 日升日落缓存（按年内第几天索引）
+  static int _solarCacheDay = -1;
+  static SolarTimes? _solarCache;
+
+  /// 天空主题缓存（按 手动模式 + 年内第几天 + 时:分 索引）
+  static int _themeCacheKey = -1;
+  static int _themeCacheManualMode = -2;
+  static SkyTheme? _themeCache;
+
+  /// 清空缓存（仅供测试与「手动改光影模式」这类显式失效场景使用）
+  static void invalidateCache() {
+    _solarCacheDay = -1;
+    _solarCache = null;
+    _themeCacheKey = -1;
+    _themeCacheManualMode = -2;
+    _themeCache = null;
+  }
+
   /// 计算公历一年中的第几天 (Day of Year 1..366)
   static int dayOfYear(DateTime date) {
     final startOfYear = DateTime(date.year, 1, 1);
@@ -52,6 +82,17 @@ class SolarService {
     return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
   }
 
+  /// 按年内第几天缓存的日升日落（太阳赤纬只与 doy 有关，一天内恒定）
+  static SolarTimes _cachedSolarTimes(DateTime now) {
+    final doy = dayOfYear(now);
+    final cached = _solarCache;
+    if (cached != null && _solarCacheDay == doy) return cached;
+    final computed = calculateSolarTimes(now);
+    _solarCacheDay = doy;
+    _solarCache = computed;
+    return computed;
+  }
+
   /// 24 小时连续基于分钟的 Color.lerp 平滑光影流转
   /// manualMode: -1: 自动真实自然天文, 0: 破晓晨曦, 1: 澄澈晴空, 2: 落日晚霞, 3: 静谧星夜
   static SkyTheme getSkyTheme({
@@ -59,10 +100,38 @@ class SolarService {
     DateTime? customTime,
   }) {
     final now = customTime ?? DateTime.now();
-    final solar = calculateSolarTimes(now);
+    final solar = _cachedSolarTimes(now);
     final sunrise = solar.sunriseHours;
     final sunset = solar.sunsetHours;
 
+    // 分钟级主题缓存：把每帧的三角函数 + 渐变插值降到每分钟一次。
+    final cacheKey = (dayOfYear(now) * 1440) + (now.hour * 60) + now.minute;
+    if (manualMode == _themeCacheManualMode && cacheKey == _themeCacheKey) {
+      final cached = _themeCache;
+      if (cached != null) return cached;
+    }
+
+    final theme = _buildSkyTheme(
+      now: now,
+      solar: solar,
+      manualMode: manualMode,
+      sunrise: sunrise,
+      sunset: sunset,
+    );
+    _themeCacheManualMode = manualMode;
+    _themeCacheKey = cacheKey;
+    _themeCache = theme;
+    return theme;
+  }
+
+  /// 真正构建天空主题（由 [getSkyTheme] 加缓存后调用）
+  static SkyTheme _buildSkyTheme({
+    required DateTime now,
+    required SolarTimes solar,
+    required int manualMode,
+    required double sunrise,
+    required double sunset,
+  }) {
     // 手动覆盖光影模式
     if (manualMode == 0) {
       return SkyTheme(

@@ -173,7 +173,9 @@ def install(silent=False, target_dir=None, create_desktop=True, create_startmenu
 
     if launch_after and not silent:
         print("正在启动萌宠...")
-        subprocess.Popen([target_exe], cwd=target_dir, shell=True)
+        # 不用 shell=True：目标路径带空格时 shell 解析会有歧义，且 shell=True
+        # 会让整条命令串经过 cmd.exe 二次解析。
+        subprocess.Popen([target_exe], cwd=target_dir)
 
 if __name__ == "__main__":
     silent_mode = "--silent" in sys.argv

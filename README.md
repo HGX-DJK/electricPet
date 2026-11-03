@@ -126,6 +126,24 @@ flutter build apk --release --no-tree-shake-icons
 
 ---
 
+## 🧪 测试与质量闸门
+
+```bash
+# Python 桌面版：纯逻辑单元测试（标准库 unittest，不需要 PyQt6）
+python -m unittest discover -s tests -t . -v
+
+# Flutter 跨端版：全量用例 + 静态分析
+cd flutter_pet
+flutter analyze --no-fatal-infos
+flutter test --concurrency=1
+```
+
+- **Python 依赖声明**见 `pyproject.toml`（`pip install -e .` 或 `pip install -e ".[build]"`）。
+- **CI 闸门**：`.github/workflows/build_apk.yml`（Flutter 分析 + 测试 + APK 构建）与
+  `.github/workflows/python_quality.yml`（Python 字节码编译 + 单元测试 + Qt 模块导入冒烟）。
+
+---
+
 ## 🎮 常用快捷操作
 
 - **鼠标右键点击宠物**：打开毛玻璃快捷互动菜单（喂食成长、萌宠衣橱、玩耍互动、沐浴、睡觉、专注、状态等）。

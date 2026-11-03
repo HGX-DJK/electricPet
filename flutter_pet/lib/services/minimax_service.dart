@@ -216,7 +216,10 @@ class MinimaxService {
     _trimHistory();
 
     // 若未配置 API Key，无缝回退至本地智能情感引擎
-    if (!hasApiKey) {
+    // 测试环境（networkEnabled = false）同样直接走本地引擎：flutter_test 会用
+    // HttpOverrides 拦掉所有 HTTP 并返回 400，走远端只会得到一个没有动作的失败响应，
+    // 让「点一句话 -> 触发 FEED 动作」这类用例变得依赖网络、极不稳定。
+    if (!hasApiKey || !networkEnabled) {
       final local = _generateLocalCompanionResponse(trimmedText);
       onAudioReady?.call(null);
       return local;
@@ -468,6 +471,10 @@ class MinimaxService {
 
   /// 调用 MiniMax T2A 语音合成 API (`speech-01-turbo`)
   Future<Uint8List?> synthesizeVoice(String textToSpeak) async {
+    // 测试环境下 flutter_test 会拦掉所有 HTTP 并返回 400，
+    // 这里直接短路，避免刷一屏无意义的 400 噪音日志。
+    if (!networkEnabled) return null;
+
     // 语音合成支持：若当前为 MiniMax 则用 _apiKey；若为其他模型且配置了内置 MiniMax Key，则借用 MiniMax 合成小奶音！
     final voiceKey = (_provider == 'minimax' && hasApiKey)
         ? _apiKey
@@ -777,8 +784,19 @@ class MinimaxService {
     }
   }
 
+  /// 是否允许语音合成 / 预热发起真实网络请求。
+  ///
+  /// flutter_test 会用 HttpOverrides 拦截所有 HTTP 并统一返回 400，
+  /// 于是每次 pump 主界面、或者触发一句带语音的台词，都会刷出
+  /// 无意义的 "T2A error status: 400" 日志，既污染输出又拖慢测试。
+  /// 测试里把它置 false 即可彻底安静下来。
+  /// 生产环境保持 true（预热是「零延迟小奶音」体验的关键）。
+  @visibleForTesting
+  static bool networkEnabled = true;
+
   /// 预热常用高频生活日常语录，实现零网络延迟小奶音交互
   Future<void> prewarmCommonVoices() async {
+    if (!networkEnabled) return;
     final commonLines = [
       '蹭蹭主人的手心！好喜欢主人~',
       '波可的小脑袋随时供主人揉揉~',

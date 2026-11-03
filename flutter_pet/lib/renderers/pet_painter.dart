@@ -5,6 +5,39 @@ import '../models/pet_model.dart';
 /// 桌面萌宠 · 波可 (Poko) 纯矢量 CustomPainter 渲染引擎
 /// 支持 14 种才艺绝活特技、灵动生物呼吸、机敏偶发抖耳、动态瞳孔追焦、自然双眨眼与物理道具
 class PetPainter extends CustomPainter {
+  // ---------------------------------------------------------------------
+  // 常量 shader 缓存
+  //
+  // createShader() 每次都会新建一个原生 ui.Gradient 对象，而 paint() 每帧
+  // 都要跑一次（呼吸动画 60fps）。下面这几个渐变的「颜色 + 矩形」都是编译期
+  // 常量，完全可以只建一次然后反复复用，省掉每帧的原生对象分配。
+  //
+  // 注意：只有当渐变参数确实是常量时才能这样缓存；凡是随动画/尺寸变化的
+  // 矩形（例如跟着身体呼吸缩放的躯干渐变），仍然必须每帧重算。
+  // ---------------------------------------------------------------------
+
+  /// 皇家披风背面主面料（金紫丝绒）
+  static final Shader _kCapeBackShader = const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
+  ).createShader(const Rect.fromLTRB(-42, 16, 42, 74));
+
+  /// 皇家披风正面丝绒主体
+  static final Shader _kVelvetCapeShader = const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
+  ).createShader(const Rect.fromLTRB(-66, 18, 66, 84));
+
+  /// 皇家披风外层深蓝披风
+  static final Shader _kOuterCapeShader = const LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF312E81)],
+    stops: [0.0, 0.55, 1.0],
+  ).createShader(const Rect.fromLTRB(-70, 16, 70, 88));
+
   final PetModel model;
   final double animTime; // 动画时间累计 (秒)
   final String state;    // IDLE, DRAGGING, PEEK_LEFT, PEEK_RIGHT, CARDBOARD_BOX, HAPPY_SPIN, CATCH_MOUSE, PLAY_YARN, WASH_FACE, STRETCH_YAWN, TILT_HEAD, LOOK_AROUND, SIT_WAG_TAIL, HEAD_BOB_MUSIC, CHASE_BUTTERFLY, DOZE_OFF, DIZZY, GLASS_BOOP
@@ -2574,11 +2607,7 @@ class PetPainter extends CustomPainter {
       if (isBackView) {
         // 背面视角：披风覆盖后背，展示威武金纹与丝绒褶皱
         final capePaint = Paint()
-          ..shader = const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
-          ).createShader(const Rect.fromLTRB(-42, 16, 42, 74));
+          ..shader = _kCapeBackShader; // 常量渐变 -> 复用缓存的 shader
         final goldTrim = Paint()
           ..color = const Color(0xFFF59E0B)
           ..style = PaintingStyle.stroke
@@ -2904,11 +2933,7 @@ class PetPainter extends CustomPainter {
         ..cubicTo(58 + waveR * 0.9, 56, 48 + waveR * 0.7, 40, 22, 18)
         ..close();
 
-      final velvetGradient = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFF4A044E), Color(0xFF581C87), Color(0xFF7E22CE)],
-      ).createShader(const Rect.fromLTRB(-66, 18, 66, 84));
+      final velvetGradient = _kVelvetCapeShader; // 常量渐变 -> 复用缓存的 shader
       canvas.drawPath(capePath, Paint()..shader = velvetGradient);
 
       // 纯金双层麦穗流苏滚边 (Gold Bullion Fringe & Trim)
@@ -2972,12 +2997,7 @@ class PetPainter extends CustomPainter {
         ..cubicTo(62 + waveR * 0.9, 54, 48 + waveR * 0.7, 36, 22, 16)
         ..close();
 
-      final capeGradient = const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Color(0xFF0F172A), Color(0xFF1E1B4B), Color(0xFF312E81)],
-        stops: [0.0, 0.55, 1.0],
-      ).createShader(const Rect.fromLTRB(-70, 16, 70, 88));
+      final capeGradient = _kOuterCapeShader; // 常量渐变 -> 复用缓存的 shader
       canvas.drawPath(outerCapePath, Paint()..shader = capeGradient);
 
       // --- 第 3 层：立体面料流线光泽折痕 (Volumetric Fabric Highlights) ---

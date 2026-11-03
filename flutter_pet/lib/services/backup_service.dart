@@ -78,6 +78,11 @@ class BackupService {
   }
 
   /// 静默双写备份到外部公共持久化目录
+  ///
+  /// ⚠️ 内容为 **明文 JSON**，写入用户可见的公共目录（Windows 文档目录 /
+  /// Android Download 目录）。这是刻意的取舍：目的是「卸载 App 后档案还在，
+  /// 重装能继承」，放在应用私有沙箱里会随卸载一起消失。
+  /// 若日后要存放任何敏感字段，请在此处加密后再落盘。
   static Future<void> writeSilentBackup(Map<String, dynamic> petData, {Map<String, dynamic>? memoData}) async {
     try {
       final payload = {
@@ -212,7 +217,12 @@ class BackupService {
     }
   }
 
-  /// 导出防丢文本存档码 (Base64 加密压缩口令，适用于跨手机迁移)
+  /// 导出防丢文本存档码 (Base64 编码的跨设备迁移口令)
+  ///
+  /// ⚠️ 安全说明：这是 **编码** 而不是 **加密**。Base64 不提供任何机密性，
+  /// 任何拿到这串码的人都能直接解出完整的宠物档案。它只用于「换手机时
+  /// 手抄一串文本就能把档案带走」的场景，不适合存放敏感信息。
+  /// 落盘备份同样是明文 JSON，见 [writeSilentBackup]。
   static String exportSaveCode(Map<String, dynamic> petData) {
     try {
       final jsonStr = jsonEncode({

@@ -100,6 +100,20 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   Timer? _dialogueTimer;
   Timer? _particleTimer;
 
+  /// 高频运动帧信号。
+  ///
+  /// 背景：本页面的 build() 有 1400+ 行组件树，而物理/粒子定时器每 24ms（约 41fps）
+  /// 会 setState 一次 —— 也就是每秒重建 40 次整棵树（背景、家具、顶栏、底栏、
+  /// 抽屉……全部重新 build + layout），只有真正在动的少数几个节点需要更新。
+  ///
+  /// 这里的做法：把「位置/粒子/脚印」这类**纯运动**更新收敛到这一个 notifier，
+  /// 由它单独驱动那几棵需要动的子树；只有当**结构态**真的变了（状态机切换、
+  /// 某个图层出现/消失等）时才退回整树 setState。
+  ///
+  /// 萌宠本体画面的呼吸动画本来就已经由 _idleAnimController（无限 repeat）
+  /// 通过 AnimatedBuilder 单独驱动，所以这里不会影响它的刷新率。
+  final ValueNotifier<int> _motionTick = ValueNotifier<int>(0);
+
   // 萌宠坐标 (默认在屏幕居中偏上舒适视线区域)
   double _petX = 200.0;
   double _petY = 320.0;
@@ -354,6 +368,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _particleTimer?.cancel();
     _particleTimer = Timer.periodic(const Duration(milliseconds: 24), (timer) {
       bool needRepaint = false;
+
+      // 结构态快照：这些字段的变化会影响**组件树结构**（而不是仅仅位置/粒子）。
+      // 快照前后一致 => 本帧只是「动了一下」，走 _motionTick 局部刷新即可，
+      // 不必重建整棵树；一旦有结构变化，仍然退回整树 setState（行为与从前完全一致）。
+      final structBefore = _structuralSnapshot();
+
       if (_particles.isNotEmpty) {
         _particles.removeWhere((p) {
           p.progress += 0.035;
@@ -588,9 +608,34 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
 
       if (needRepaint && mounted) {
-        setState(() {});
+        // 结构态没变 => 本帧只是位置/粒子在动，走局部刷新（只重建会动的子树）。
+        // 结构态变了 => 仍然整树重建，保证状态机切换、图层增删等行为与从前完全一致。
+        if (_structuralSnapshot() == structBefore) {
+          _motionTick.value++;
+        } else {
+          setState(() {});
+        }
       }
     });
+  }
+
+  /// 采集「结构态」快照。
+  ///
+  /// 只包含那些**会改变组件树结构**的字段：状态机、图层增删、关键道具出现/消失。
+  /// 纯坐标/粒子/脚印这类不影响树结构的变化不在其中，
+  /// 这样运动帧就能走 _motionTick 局部刷新，而不是重建整棵 1400 行的组件树。
+  ({String state, bool yarnFlying, bool chasingYarn, bool laserMode, bool fishPopping, bool laserVisible, bool footprintsVisible, bool particlesVisible, bool comboVisible}) _structuralSnapshot() {
+    return (
+      state: _state,
+      yarnFlying: _isYarnFlying,
+      chasingYarn: _isChasingYarn,
+      laserMode: _isLaserMode,
+      fishPopping: _fishPopping,
+      laserVisible: _laserPos != null,
+      footprintsVisible: _footprints.isNotEmpty,
+      particlesVisible: _particles.isNotEmpty,
+      comboVisible: _petCombo >= 2,
+    );
   }
 
   /// 启动状态自然衰减与自言自语及自主微动作定时器
@@ -1001,6 +1046,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _idleAnimController.dispose();
     _squishController.dispose();
     _focusController.dispose();
+    _motionTick.dispose();
     _decayTimer?.cancel();
     _dialogueTimer?.cancel();
     _particleTimer?.cancel();
@@ -3528,11 +3574,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
               // 维度二：飞跃弹跳的小鱼 (弧线投喂到猫咪嘴边)
               if (_fishPopping && _poppingFishPos != null)
-                Positioned(
-                  left: _poppingFishPos!.dx,
-                  top: _poppingFishPos!.dy,
-                  child: const IgnorePointer(
-                    child: Text('🐟', style: TextStyle(fontSize: 22)),
+                ValueListenableBuilder<int>(
+                  valueListenable: _motionTick,
+                  builder: (context, _, __) => Positioned(
+                    left: _poppingFishPos!.dx,
+                    top: _poppingFishPos!.dy,
+                    child: const IgnorePointer(
+                      child: Text('🐟', style: TextStyle(fontSize: 22)),
+                    ),
                   ),
                 ),
 
@@ -3636,13 +3685,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
               // 地板粉嫩小猫爪印层 (2.5D 木地板巡视与冲刺追球时淡隐脚印)
               if (_footprints.isNotEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        painter: FootprintPainter(
-                          _footprints,
-                          habitat: widget.petModel.habitat,
+                ValueListenableBuilder<int>(
+                  valueListenable: _motionTick,
+                  builder: (context, _, __) => Positioned.fill(
+                    child: IgnorePointer(
+                      child: RepaintBoundary(
+                        child: CustomPaint(
+                          painter: FootprintPainter(
+                            _footprints,
+                            habitat: widget.petModel.habitat,
+                          ),
                         ),
                       ),
                     ),
@@ -3693,208 +3745,211 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               ),
 
               // 3. 萌宠主窗体 (维度一：部位差异化触感与猫咪打呼噜；维度三：剧烈晃动眩晕；维度五：亲密连击与贴贴)
-              Positioned(
-                left: _petX - 100,
-                top: _petY - 100,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (details) => _handleBodyPartTouch(details.localPosition, screenSize),
-                  onTap: () {},
-                  onDoubleTap: _onPetDoubleTap,
-                  onLongPressStart: (_) => _startPeekABoo(),
-                  onLongPressEnd: (_) => _finishPeekABoo(),
-                  onScaleStart: (details) {
-                    _baseScale = _userScale;
-                    if (details.pointerCount == 1) {
+              ValueListenableBuilder<int>(
+                valueListenable: _motionTick,
+                builder: (context, _, __) => Positioned(
+                  left: _petX - 100,
+                  top: _petY - 100,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (details) => _handleBodyPartTouch(details.localPosition, screenSize),
+                    onTap: () {},
+                    onDoubleTap: _onPetDoubleTap,
+                    onLongPressStart: (_) => _startPeekABoo(),
+                    onLongPressEnd: (_) => _finishPeekABoo(),
+                    onScaleStart: (details) {
+                      _baseScale = _userScale;
+                      if (details.pointerCount == 1) {
+                        _dragTotalDistance = 0.0;
+                        _hasExceededDragThreshold = false;
+                        _strokeDistance = 0.0;
+                        _dragDirectionReversals = 0;
+                        _lastDragDirection = 0.0;
+                        _lastDragTime = DateTime.now();
+                        _touchPos = details.localFocalPoint;
+                      }
+                    },
+                    onScaleUpdate: (details) {
+                      // 双指捏合无级缩放 (0.75x ~ 1.45x)
+                      if (details.pointerCount >= 2) {
+                        final newScale = (_baseScale * details.scale).clamp(0.75, 1.45);
+                        if ((newScale - _userScale).abs() > 0.015) {
+                          setState(() {
+                            _userScale = newScale;
+                          });
+                          _vibrate('selection');
+                        }
+                        return;
+                      }
+
+                      // 单指拖拽与抚摸 (带位移阈值阻尼防误触)
+                      final now = DateTime.now();
+                      final dt = now.difference(_lastDragTime).inMilliseconds;
+                      _lastDragTime = now;
+
+                      final deltaDist = details.focalPointDelta.distance;
+                      _dragTotalDistance += deltaDist;
+
+                      // 移动超过 16 像素阈值才正式认定为悬空拖拽，彻底解决原地顺毛/揉肚子被误抓起的痛点
+                      if (!_hasExceededDragThreshold && _dragTotalDistance > 16.0) {
+                        _hasExceededDragThreshold = true;
+                        _isDragging = true;
+                        _stopRoaming();
+                        // 主人把猫抓起来了，任何"对着家具"的互动都到此为止
+                        _setFocusLean(false);
+                        _isChasingYarn = false;
+                        _isYarnFlying = false;
+                        if (_state != 'DIZZY') {
+                          _state = 'DANGLING';
+                        }
+                      }
+
+                      setState(() {
+                        if (_hasExceededDragThreshold) {
+                          _petX += details.focalPointDelta.dx;
+                          _petY += details.focalPointDelta.dy;
+
+                          // 限制萌宠不出屏幕
+                          _petX = _petX.clamp(35.0, screenSize.width - 35.0);
+                          _petY = _petY.clamp(minSafeY, maxSafeY);
+
+                          _facingLeft = (details.focalPointDelta.dx < -0.8);
+                        }
+                        _touchPos = details.localFocalPoint;
+
+                        // 高频剧烈左右晃动眩晕检测 (仅在真正悬空拖拽中生效)
+                        if (_hasExceededDragThreshold) {
+                          final curDx = details.focalPointDelta.dx;
+                          if (curDx.abs() > 4.5 && dt < 80) {
+                            final dir = curDx > 0 ? 1.0 : -1.0;
+                            if (_lastDragDirection != 0.0 && dir != _lastDragDirection) {
+                              _dragDirectionReversals++;
+                              if (_dragDirectionReversals >= 5 && _state != 'DIZZY') {
+                                _state = 'DIZZY';
+                                _dragDirectionReversals = 0;
+                                _vibrate('heavy');
+                                _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 1);
+                                _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
+                                Timer(const Duration(milliseconds: 3500), () {
+                                  if (mounted && _state == 'DIZZY') {
+                                    setState(() => _state = 'IDLE');
+                                  }
+                                });
+                              }
+                            }
+                            _lastDragDirection = dir;
+                          }
+                        }
+
+                        // 抚摸交互：慢速拂过累加抚摸进度，触发呼噜微震与爱心漫溢
+                        if (deltaDist > 1.5 && deltaDist < 14.0) {
+                          _strokeDistance += deltaDist;
+                          if (_strokeDistance > 46.0) {
+                            _strokeDistance = 0.0;
+                            _petProgress = 1.0;
+                            _vibrate('selection');
+                            if (!_isPurring) {
+                              _triggerPurringState(customDialogue: '呼噜噜... 好舒服呀，最喜欢主人的温柔抚摸啦~ 💕🐾');
+                            }
+                            final emojis = ['💕', '✨', '🌸', '🐾'];
+                            final pickedEmoji = emojis[math.Random().nextInt(emojis.length)];
+                            _spawnParticles(
+                              Offset(_petX, _petY - 40),
+                              emoji: pickedEmoji,
+                              count: 1,
+                            );
+                          }
+                        }
+                      });
+                    },
+                    onScaleEnd: (details) {
+                      _baseScale = _userScale;
+                      widget.petModel.setUserScale(_userScale);
+                      widget.petModel.saveToDisk();
+
+                      final wasDragging = _hasExceededDragThreshold;
                       _dragTotalDistance = 0.0;
                       _hasExceededDragThreshold = false;
-                      _strokeDistance = 0.0;
-                      _dragDirectionReversals = 0;
-                      _lastDragDirection = 0.0;
-                      _lastDragTime = DateTime.now();
-                      _touchPos = details.localFocalPoint;
-                    }
-                  },
-                  onScaleUpdate: (details) {
-                    // 双指捏合无级缩放 (0.75x ~ 1.45x)
-                    if (details.pointerCount >= 2) {
-                      final newScale = (_baseScale * details.scale).clamp(0.75, 1.45);
-                      if ((newScale - _userScale).abs() > 0.015) {
-                        setState(() {
-                          _userScale = newScale;
-                        });
-                        _vibrate('selection');
-                      }
-                      return;
-                    }
 
-                    // 单指拖拽与抚摸 (带位移阈值阻尼防误触)
-                    final now = DateTime.now();
-                    final dt = now.difference(_lastDragTime).inMilliseconds;
-                    _lastDragTime = now;
+                      setState(() {
+                        _isDragging = false;
+                        _touchPos = null;
+                        _petProgress = 0.0;
+                        _dragDirectionReversals = 0;
 
-                    final deltaDist = details.focalPointDelta.distance;
-                    _dragTotalDistance += deltaDist;
-
-                    // 移动超过 16 像素阈值才正式认定为悬空拖拽，彻底解决原地顺毛/揉肚子被误抓起的痛点
-                    if (!_hasExceededDragThreshold && _dragTotalDistance > 16.0) {
-                      _hasExceededDragThreshold = true;
-                      _isDragging = true;
-                      _stopRoaming();
-                      // 主人把猫抓起来了，任何"对着家具"的互动都到此为止
-                      _setFocusLean(false);
-                      _isChasingYarn = false;
-                      _isYarnFlying = false;
-                      if (_state != 'DIZZY') {
-                        _state = 'DANGLING';
-                      }
-                    }
-
-                    setState(() {
-                      if (_hasExceededDragThreshold) {
-                        _petX += details.focalPointDelta.dx;
-                        _petY += details.focalPointDelta.dy;
-
-                        // 限制萌宠不出屏幕
-                        _petX = _petX.clamp(35.0, screenSize.width - 35.0);
-                        _petY = _petY.clamp(minSafeY, maxSafeY);
-
-                        _facingLeft = (details.focalPointDelta.dx < -0.8);
-                      }
-                      _touchPos = details.localFocalPoint;
-
-                      // 高频剧烈左右晃动眩晕检测 (仅在真正悬空拖拽中生效)
-                      if (_hasExceededDragThreshold) {
-                        final curDx = details.focalPointDelta.dx;
-                        if (curDx.abs() > 4.5 && dt < 80) {
-                          final dir = curDx > 0 ? 1.0 : -1.0;
-                          if (_lastDragDirection != 0.0 && dir != _lastDragDirection) {
-                            _dragDirectionReversals++;
-                            if (_dragDirectionReversals >= 5 && _state != 'DIZZY') {
-                              _state = 'DIZZY';
-                              _dragDirectionReversals = 0;
-                              _vibrate('heavy');
-                              _spawnParticles(Offset(_petX, _petY - 45), emoji: '💫', count: 1);
-                              _showDialogueBubble('哎呀呀~ 晃得波可晕乎乎啦，头顶都在转圈圈！(@_@)', duration: const Duration(seconds: 4));
-                              Timer(const Duration(milliseconds: 3500), () {
-                                if (mounted && _state == 'DIZZY') {
-                                  setState(() => _state = 'IDLE');
-                                }
-                              });
-                            }
-                          }
-                          _lastDragDirection = dir;
+                        if (!wasDragging) {
+                          if (_state == 'DANGLING') _state = 'IDLE';
+                          return;
                         }
-                      }
 
-                      // 抚摸交互：慢速拂过累加抚摸进度，触发呼噜微震与爱心漫溢
-                      if (deltaDist > 1.5 && deltaDist < 14.0) {
-                        _strokeDistance += deltaDist;
-                        if (_strokeDistance > 46.0) {
-                          _strokeDistance = 0.0;
-                          _petProgress = 1.0;
-                          _vibrate('selection');
-                          if (!_isPurring) {
-                            _triggerPurringState(customDialogue: '呼噜噜... 好舒服呀，最喜欢主人的温柔抚摸啦~ 💕🐾');
-                          }
-                          final emojis = ['💕', '✨', '🌸', '🐾'];
-                          final pickedEmoji = emojis[math.Random().nextInt(emojis.length)];
-                          _spawnParticles(
-                            Offset(_petX, _petY - 40),
-                            emoji: pickedEmoji,
-                            count: 1,
-                          );
+                        // 贴边探头偷看判定 (靠屏幕边缘 < 50px 自动贴边)
+                        if (_petX < 55) {
+                          _state = 'PEEK_LEFT';
+                          _petX = 35;
+                          _showDialogueBubble('探头偷看~ 主人在看什么呀？👀');
+                          return;
+                        } else if (_petX > screenSize.width - 55) {
+                          _state = 'PEEK_RIGHT';
+                          _petX = screenSize.width - 35;
+                          _showDialogueBubble('探头偷看~ 报告主人，屏幕右侧安全！🐾');
+                          return;
                         }
-                      }
-                    });
-                  },
-                  onScaleEnd: (details) {
-                    _baseScale = _userScale;
-                    widget.petModel.setUserScale(_userScale);
-                    widget.petModel.saveToDisk();
 
-                    final wasDragging = _hasExceededDragThreshold;
-                    _dragTotalDistance = 0.0;
-                    _hasExceededDragThreshold = false;
+                        // 拖放于暖绒圆垫中心时，直接触发幸福踩奶特技
+                        if ((_petX - nestX).abs() < 42.0 && (_petY - nestY).abs() < 42.0) {
+                          _onBedTap(nestX, nestY);
+                          return;
+                        }
 
-                    setState(() {
-                      _isDragging = false;
-                      _touchPos = null;
-                      _petProgress = 0.0;
-                      _dragDirectionReversals = 0;
-
-                      if (!wasDragging) {
-                        if (_state == 'DANGLING') _state = 'IDLE';
-                        return;
-                      }
-
-                      // 贴边探头偷看判定 (靠屏幕边缘 < 50px 自动贴边)
-                      if (_petX < 55) {
-                        _state = 'PEEK_LEFT';
-                        _petX = 35;
-                        _showDialogueBubble('探头偷看~ 主人在看什么呀？👀');
-                        return;
-                      } else if (_petX > screenSize.width - 55) {
-                        _state = 'PEEK_RIGHT';
-                        _petX = screenSize.width - 35;
-                        _showDialogueBubble('探头偷看~ 报告主人，屏幕右侧安全！🐾');
-                        return;
-                      }
-
-                      // 拖放于暖绒圆垫中心时，直接触发幸福踩奶特技
-                      if ((_petX - nestX).abs() < 42.0 && (_petY - nestY).abs() < 42.0) {
-                        _onBedTap(nestX, nestY);
-                        return;
-                      }
-
-                      // 拖拽释放平稳平滑着陆，回归自然待机状态
-                      if (_state != 'DIZZY') {
-                        _state = 'IDLE';
-                        _squishController.forward(from: 0.0);
-                        _vibrate('light');
-                        _spawnParticles(Offset(_petX, _petY + 28), emoji: '💨', count: 2);
-                        _spawnParticles(Offset(_petX, _petY + 28), emoji: '🐾', count: 2);
-                      }
-                    });
-                  },
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_idleAnimController, _squishController, _focusController]),
-                    builder: (context, child) {
-                      return Transform.rotate(
-                        angle: _bodyTiltAngle,
-                        child: Transform.scale(
-                          scaleX: _squishScaleX.value,
-                          scaleY: _squishScaleY.value,
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              size: const Size(200, 200),
-                              painter: PetPainter(
-                                model: widget.petModel,
-                                animTime: _idleAnimController.value * 10,
-                                state: _state,
-                                touchPos: (_isYarnFlying || _isYarnDragging)
-                                    ? Offset(_yarnX - _petX, _yarnY - _petY)
-                                    : (_touchPos ?? _lookTargetPos),
-                                facingLeft: _facingLeft,
-                                petProgress: _petProgress,
-                                isPurring: _isPurring,
-                                twitchEar: _twitchEar,
-                                isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null || _showFoodTray || (widget.petModel.hunger < 50 && _state == 'IDLE')),
-                                isTailPuffed: _isTailPuffed,
-                                isAirplaneEars: _isAirplaneEars,
-                                isBlep: _isBlep,
-                                isSlowBlink: _isSlowBlink,
-                                winkEye: _winkEye,
-                                isNight: isNight,
-                                userScale: _userScale,
-                                tiltX: _tiltX,
-                                focusLean: _focusController.value,
+                        // 拖拽释放平稳平滑着陆，回归自然待机状态
+                        if (_state != 'DIZZY') {
+                          _state = 'IDLE';
+                          _squishController.forward(from: 0.0);
+                          _vibrate('light');
+                          _spawnParticles(Offset(_petX, _petY + 28), emoji: '💨', count: 2);
+                          _spawnParticles(Offset(_petX, _petY + 28), emoji: '🐾', count: 2);
+                        }
+                      });
+                    },
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_idleAnimController, _squishController, _focusController]),
+                      builder: (context, child) {
+                        return Transform.rotate(
+                          angle: _bodyTiltAngle,
+                          child: Transform.scale(
+                            scaleX: _squishScaleX.value,
+                            scaleY: _squishScaleY.value,
+                            child: RepaintBoundary(
+                              child: CustomPaint(
+                                size: const Size(200, 200),
+                                painter: PetPainter(
+                                  model: widget.petModel,
+                                  animTime: _idleAnimController.value * 10,
+                                  state: _state,
+                                  touchPos: (_isYarnFlying || _isYarnDragging)
+                                      ? Offset(_yarnX - _petX, _yarnY - _petY)
+                                      : (_touchPos ?? _lookTargetPos),
+                                  facingLeft: _facingLeft,
+                                  petProgress: _petProgress,
+                                  isPurring: _isPurring,
+                                  twitchEar: _twitchEar,
+                                  isHunting: (_isLaserMode || _isChasingYarn || _state == 'PLAY_YARN' || _state == 'CATCH_MOUSE' || _draggingFoodPos != null || _showFoodTray || (widget.petModel.hunger < 50 && _state == 'IDLE')),
+                                  isTailPuffed: _isTailPuffed,
+                                  isAirplaneEars: _isAirplaneEars,
+                                  isBlep: _isBlep,
+                                  isSlowBlink: _isSlowBlink,
+                                  winkEye: _winkEye,
+                                  isNight: isNight,
+                                  userScale: _userScale,
+                                  tiltX: _tiltX,
+                                  focusLean: _focusController.value,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -4042,92 +4097,98 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
               // 维度二：开阔活动地板：实体物理毛线球 (在猫咪扑玩期间隐藏外部球，玩耍结束后恢复在猫爪旁)
               if (_state != 'PLAY_YARN')
-                Positioned(
-                  key: const ValueKey('floor_yarn_ball'),
-                  left: _yarnX - 22,
-                  top: _yarnY - 22,
-                  child: YarnBallWidget(
-                    rollAngle: _yarnRollAngle,
-                    isNight: isNight,
-                    isFlying: _isYarnFlying,
-                    onTap: () {
-                      SoundService.playPop();
-                      _vibrate('medium');
-                      _yarnBatCount = 0; // 重置拍球计数
-                      final rnd = math.Random();
-                      final vx = (rnd.nextDouble() * 10.0 + 4.0) * (rnd.nextBool() ? 1.0 : -1.0);
-                      final vy = -(rnd.nextDouble() * 9.0 + 7.0);
-                      setState(() {
-                        _isYarnFlying = true;
-                        _isChasingYarn = true;
-                        _yarnVx = vx;
-                        _yarnVy = vy;
-                      });
-                      _spawnParticles(Offset(_yarnX, _yarnY), emoji: '🧶', count: 3);
-                    },
-                    onPanStart: (details) {
-                      setState(() {
-                        _isYarnDragging = true;
-                        _isYarnFlying = false;
-                        _isChasingYarn = false;
-                        _yarnVx = 0.0;
-                        _yarnVy = 0.0;
-                        _yarnBatCount = 0;
-                      });
-                    },
-                    onPanUpdate: (details) {
-                      setState(() {
-                        _yarnX += details.delta.dx;
-                        _yarnY += details.delta.dy;
-                        _yarnRollAngle += details.delta.dx * 0.08;
-                        _yarnX = _yarnX.clamp(20.0, screenSize.width - 20.0);
-                        _yarnY = _yarnY.clamp(80.0, screenSize.height - 100.0);
-                      });
-                    },
-                    onPanEnd: (details) {
-                      final rawVx = details.velocity.pixelsPerSecond.dx / 60.0;
-                      final rawVy = details.velocity.pixelsPerSecond.dy / 60.0;
-                      final vx = rawVx.clamp(-18.0, 18.0);
-                      final vy = rawVy.clamp(-22.0, 18.0);
-                      setState(() {
-                        _isYarnDragging = false;
-                        _isYarnFlying = true;
-                        _isChasingYarn = true;
-                        _yarnVx = vx;
-                        _yarnVy = vy;
-                      });
-                    },
+                ValueListenableBuilder<int>(
+                  valueListenable: _motionTick,
+                  builder: (context, _, __) => Positioned(
+                    key: const ValueKey('floor_yarn_ball'),
+                    left: _yarnX - 22,
+                    top: _yarnY - 22,
+                    child: YarnBallWidget(
+                      rollAngle: _yarnRollAngle,
+                      isNight: isNight,
+                      isFlying: _isYarnFlying,
+                      onTap: () {
+                        SoundService.playPop();
+                        _vibrate('medium');
+                        _yarnBatCount = 0; // 重置拍球计数
+                        final rnd = math.Random();
+                        final vx = (rnd.nextDouble() * 10.0 + 4.0) * (rnd.nextBool() ? 1.0 : -1.0);
+                        final vy = -(rnd.nextDouble() * 9.0 + 7.0);
+                        setState(() {
+                          _isYarnFlying = true;
+                          _isChasingYarn = true;
+                          _yarnVx = vx;
+                          _yarnVy = vy;
+                        });
+                        _spawnParticles(Offset(_yarnX, _yarnY), emoji: '🧶', count: 3);
+                      },
+                      onPanStart: (details) {
+                        setState(() {
+                          _isYarnDragging = true;
+                          _isYarnFlying = false;
+                          _isChasingYarn = false;
+                          _yarnVx = 0.0;
+                          _yarnVy = 0.0;
+                          _yarnBatCount = 0;
+                        });
+                      },
+                      onPanUpdate: (details) {
+                        setState(() {
+                          _yarnX += details.delta.dx;
+                          _yarnY += details.delta.dy;
+                          _yarnRollAngle += details.delta.dx * 0.08;
+                          _yarnX = _yarnX.clamp(20.0, screenSize.width - 20.0);
+                          _yarnY = _yarnY.clamp(80.0, screenSize.height - 100.0);
+                        });
+                      },
+                      onPanEnd: (details) {
+                        final rawVx = details.velocity.pixelsPerSecond.dx / 60.0;
+                        final rawVy = details.velocity.pixelsPerSecond.dy / 60.0;
+                        final vx = rawVx.clamp(-18.0, 18.0);
+                        final vy = rawVy.clamp(-22.0, 18.0);
+                        setState(() {
+                          _isYarnDragging = false;
+                          _isYarnFlying = true;
+                          _isChasingYarn = true;
+                          _yarnVx = vx;
+                          _yarnVy = vy;
+                        });
+                      },
+                    ),
                   ),
                 ),
 
               // 维度五：亲密连击 Combo 胶囊徽章
               if (_petCombo >= 2)
-                Positioned(
-                  left: _petX - 60,
-                  top: _petY - 125,
-                  child: IgnorePointer(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFEC4899), Color(0xFFF43F5E)],
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFF43F5E).withValues(alpha: 0.32),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
+                ValueListenableBuilder<int>(
+                  valueListenable: _motionTick,
+                  builder: (context, _, __) => Positioned(
+                    left: _petX - 60,
+                    top: _petY - 125,
+                    child: IgnorePointer(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFEC4899), Color(0xFFF43F5E)],
                           ),
-                        ],
-                      ),
-                      child: Text(
-                        _petCombo >= 5 ? '🔥 MAX COMBO x$_petCombo' : '💖 COMBO x$_petCombo',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFF43F5E).withValues(alpha: 0.32),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          _petCombo >= 5 ? '🔥 MAX COMBO x$_petCombo' : '💖 COMBO x$_petCombo',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
@@ -4219,43 +4280,56 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               ],
 
               // 4. 浮空特效粒子层 (温润微光、柔和心芒与文字飘升)
-              for (final p in _particles)
-                Positioned(
-                  key: p.id,
-                  left: p.position.dx - (p.fontSize / 2),
-                  top: p.position.dy - (p.fontSize / 2),
-                  child: IgnorePointer(
-                    child: Opacity(
-                      opacity: (1.0 - math.pow(p.progress, 1.2)).clamp(0.0, 1.0),
-                      child: Transform.scale(
-                        scale: p.progress < 0.25
-                            ? (0.7 + p.progress * 1.4)
-                            : (1.05 - (p.progress - 0.25) * 0.25),
-                        child: Text(
-                          p.text,
-                          style: TextStyle(
-                            fontSize: p.fontSize,
-                            fontWeight: FontWeight.w600,
-                            color: p.color,
-                            shadows: p.color != null
-                                ? [
-                                    Shadow(
-                                      color: Colors.white.withValues(alpha: 0.85),
-                                      blurRadius: 3,
-                                    ),
-                                  ]
-                                : [
-                                    Shadow(
-                                      color: const Color(0xFFF472B6).withValues(alpha: 0.35),
-                                      blurRadius: 4,
-                                    ),
-                                  ],
+              //
+              // 粒子是逐帧飘升的，所以这里由 _motionTick 局部驱动：
+              // 粒子层自己重建即可，不必为此重建整棵组件树。
+              Positioned.fill(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _motionTick,
+                  builder: (context, _, __) => Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      for (final p in _particles)
+                        Positioned(
+                          key: p.id,
+                          left: p.position.dx - (p.fontSize / 2),
+                          top: p.position.dy - (p.fontSize / 2),
+                          child: IgnorePointer(
+                            child: Opacity(
+                              opacity: (1.0 - math.pow(p.progress, 1.2)).clamp(0.0, 1.0),
+                              child: Transform.scale(
+                                scale: p.progress < 0.25
+                                    ? (0.7 + p.progress * 1.4)
+                                    : (1.05 - (p.progress - 0.25) * 0.25),
+                                child: Text(
+                                  p.text,
+                                  style: TextStyle(
+                                    fontSize: p.fontSize,
+                                    fontWeight: FontWeight.w600,
+                                    color: p.color,
+                                    shadows: p.color != null
+                                        ? [
+                                            Shadow(
+                                              color: Colors.white.withValues(alpha: 0.85),
+                                              blurRadius: 3,
+                                            ),
+                                          ]
+                                        : [
+                                            Shadow(
+                                              color: const Color(0xFFF472B6).withValues(alpha: 0.35),
+                                              blurRadius: 4,
+                                            ),
+                                          ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
                 ),
+              ),
 
               // 5. 对话气泡 (层级在萌宠之上，永不遮挡，智能防越界，夜晚自适应柔和星空底色)
               if (_showDialogue)
@@ -4301,50 +4375,53 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   ),
                 ),
                 if (_laserPos != null)
-                  Positioned(
-                    left: _laserPos!.dx - 18,
-                    top: _laserPos!.dy - 18,
-                    child: IgnorePointer(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: RadialGradient(
-                                colors: [
-                                  const Color(0xFFEF4444).withValues(alpha: 0.55),
-                                  const Color(0xFFEF4444).withValues(alpha: 0.0),
+                  ValueListenableBuilder<int>(
+                    valueListenable: _motionTick,
+                    builder: (context, _, __) => Positioned(
+                      left: _laserPos!.dx - 18,
+                      top: _laserPos!.dy - 18,
+                      child: IgnorePointer(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    const Color(0xFFEF4444).withValues(alpha: 0.55),
+                                    const Color(0xFFEF4444).withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: 14,
+                              height: 14,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF2442),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Color(0xFFEF4444),
+                                    blurRadius: 10,
+                                    spreadRadius: 2,
+                                  ),
                                 ],
                               ),
                             ),
-                          ),
-                          Container(
-                            width: 14,
-                            height: 14,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFF2442),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0xFFEF4444),
-                                  blurRadius: 10,
-                                  spreadRadius: 2,
-                                ),
-                              ],
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                          Container(
-                            width: 5,
-                            height: 5,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -7,11 +7,16 @@ class AiConfig {
   static const String defaultMinimaxApiKey = 'sk-cp--z0tZzUFDt_oWtwHIYIPT_H8cFOOLJHboaE4bGTFIjRnkSbDGhtTTsUXr2brB1XneU18EM5246EtrMCRqxAJNwmqg56JadcCr_vKZchZ6ULPNZZtcokydLM';
 
   /// MiniMax 默认音色 (MiniMax T2A Voice ID)
-  /// 推荐音色选项：
+  ///
+  /// 推荐音色选项（均已实测可用, 接口返回 base_resp.status_code = 0）:
   /// - 'female-tianmei' : 甜美女性音 / 萌系小奶音 (默认推荐)
-  /// - 'child_female'   : 可爱软糯萝莉音
   /// - 'cute_boy'       : 呆萌小正太音
   /// - 'sweet_girl'     : 温柔治愈女声
+  /// - 'female-shaonv'  : 御姐音
+  ///
+  /// ⚠️ 不要再使用 'child_female'：它不是 MiniMax T2A 的合法 voice_id，
+  /// 接口会返回 HTTP 200 + base_resp.status_code = 2054 "voice id not exist"，
+  /// 音频字段长度为 0 —— 表现为「接口成功但完全没有声音」的静默失败。
   static const String defaultVoiceId = 'female-tianmei';
 
   /// 默认音调升降偏移 (-12 到 12，升调 2~3 可展现软糯幼态萌感)

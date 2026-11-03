@@ -20,6 +20,8 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // 关掉语音预热，避免 flutter_test 的 HttpOverrides 拦截后刷一屏 400 噪音日志。
+    MinimaxService.networkEnabled = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('dev.fluttercommunity.plus/sensors/method'),
       (MethodCall methodCall) async => null,
@@ -646,19 +648,25 @@ void main() {
     });
 
     test('MiniMax AI Service Configuration and Local Companion Engine Test', () async {
-      final ai = MinimaxService();
+      // 用 forTesting 构造器拿「独立实例」，不要用 MinimaxService()——
+      // 后者的工厂方法返回的是全局单例，在这里改配置会把
+      // _apiKey / _voiceId / _pitch / _speed 永久留在单例里，
+      // 污染后续测试文件（表现为别的用例莫名其妙拿到 test_minimax_key
+      // 和 child_female 音色）。
+      final ai = MinimaxService.forTesting();
       await ai.init();
 
-      // 测试配置持久化
+      // 测试配置持久化（音色用一个真实存在的 voice_id，
+      // 'child_female' 不是合法音色，接口会回 base_resp 2054 静默失败）
       await ai.updateConfig(
         apiKey: 'test_minimax_key',
-        voiceId: 'child_female',
+        voiceId: 'cute_boy',
         pitch: 3,
         speed: 1.15,
       );
 
       expect(ai.apiKey, equals('test_minimax_key'));
-      expect(ai.voiceId, equals('child_female'));
+      expect(ai.voiceId, equals('cute_boy'));
       expect(ai.pitch, equals(3));
       expect(ai.speed, equals(1.15));
       expect(ai.hasApiKey, isTrue);

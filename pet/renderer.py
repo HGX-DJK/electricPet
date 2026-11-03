@@ -40,6 +40,129 @@ class Particle:
         self.alpha = max(0, int(self.life * 255))
         return self.life > 0
 
+# 猫咪 3D 多级光源配色表（模块级常量：以前每帧都会重建一次这份大 dict）
+_CAT_PALETTES = {
+    "cat_golden_shaded": {
+        "body_hl": "#FFF8E1", "body_light": "#FFE082", "body_mid": "#FFB300", "body_dark": "#F57C00", "body_shadow": "#B75300",
+        "outline": "#5D4037", "ear_l_t": "#FFE082", "ear_l_b": "#F57C00", "ear_r_t": "#FFE082", "ear_r_b": "#F57C00",
+        "spot_t": QColor(62, 39, 35, 120), "spot_b": QColor(38, 24, 21, 150),
+        "tail_l": "#FFA000", "tail_d": "#4E342E", "paw_t": "#FFF8E1", "paw_b": "#FFD54F",
+        "inner_ear_t": "#FFAB91", "inner_ear_b": "#E64A19"
+    },
+    "cat_silver_shaded": {
+        "body_hl": "#FFFFFF", "body_light": "#F8FAFC", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
+        "outline": "#1E293B", "ear_l_t": "#F8FAFC", "ear_l_b": "#94A3B8", "ear_r_t": "#F8FAFC", "ear_r_b": "#94A3B8",
+        "spot_t": QColor(71, 85, 105, 100), "spot_b": QColor(30, 41, 59, 130),
+        "tail_l": "#E2E8F0", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
+        "inner_ear_t": "#FBCFE8", "inner_ear_b": "#F43F5E"
+    },
+    "cat_ragdoll": {
+        "body_hl": "#FFFFFF", "body_light": "#FDFCFF", "body_mid": "#F5F3FF", "body_dark": "#EDE9FE", "body_shadow": "#DDD6FE",
+        "outline": "#5B21B6", "ear_l_t": "#94A3B8", "ear_l_b": "#64748B", "ear_r_t": "#94A3B8", "ear_r_b": "#64748B",
+        "spot_t": QColor(148, 163, 184, 180), "spot_b": QColor(100, 116, 139, 210),
+        "tail_l": "#94A3B8", "tail_d": "#475569", "paw_t": "#FFFFFF", "paw_b": "#FAF5FF",
+        "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
+    },
+    "cat_tuxedo": {
+        "body_hl": "#64748B", "body_light": "#334155", "body_mid": "#1E293B", "body_dark": "#0F172A", "body_shadow": "#020617",
+        "outline": "#020617", "ear_l_t": "#334155", "ear_l_b": "#0F172A", "ear_r_t": "#334155", "ear_r_b": "#0F172A",
+        "spot_t": None, "spot_b": None,
+        "tail_l": "#334155", "tail_d": "#0F172A", "paw_t": "#FFFFFF", "paw_b": "#F8FAFC",
+        "inner_ear_t": "#F472B6", "inner_ear_b": "#9D174D"
+    },
+    "cat_maine_coon": {
+        "body_hl": "#D7CCC8", "body_light": "#BCAAA4", "body_mid": "#8D6E63", "body_dark": "#6D4C41", "body_shadow": "#3E2723",
+        "outline": "#271814", "ear_l_t": "#8D6E63", "ear_l_b": "#4E342E", "ear_r_t": "#8D6E63", "ear_r_b": "#4E342E",
+        "spot_t": QColor(46, 27, 22, 180), "spot_b": QColor(30, 16, 13, 220),
+        "tail_l": "#8D6E63", "tail_d": "#3E2723", "paw_t": "#EFEBE9", "paw_b": "#BCAAA4",
+        "inner_ear_t": "#FFCCBC", "inner_ear_b": "#D84315"
+    },
+    "cat_sakura_peach": {
+        "body_hl": "#FFFFFF", "body_light": "#FFF1F2", "body_mid": "#FFE4E6", "body_dark": "#FECDD3", "body_shadow": "#FDA4AF",
+        "outline": "#F43F5E", "ear_l_t": "#FFE4E6", "ear_l_b": "#FB7185", "ear_r_t": "#FFE4E6", "ear_r_b": "#FB7185",
+        "spot_t": QColor(251, 113, 133, 140), "spot_b": QColor(244, 63, 94, 160),
+        "tail_l": "#FDA4AF", "tail_d": "#F43F5E", "paw_t": "#FFFFFF", "paw_b": "#FFE4E6",
+        "inner_ear_t": "#FECDD3", "inner_ear_b": "#E11D48"
+    },
+    "cat_calico": {
+        "body_hl": "#FFFFFF", "body_light": "#FFFDF9", "body_mid": "#FFEAD8", "body_dark": "#F5D5BE", "body_shadow": "#E2B998",
+        "outline": "#7D6456", "ear_l_t": "#FFFBF7", "ear_l_b": "#E2C4B0", "ear_r_t": "#FFD1A4", "ear_r_b": "#E0853D",
+        "spot_t": QColor(255, 190, 120, 210), "spot_b": QColor(235, 140, 60, 200),
+        "tail_l": "#A1887F", "tail_d": "#6D4C41", "paw_t": "#FFFFFF", "paw_b": "#F0DFD1",
+        "inner_ear_t": "#FFA4A4", "inner_ear_b": "#D85A70"
+    },
+    "cat_orange": {
+        "body_hl": "#FFECC8", "body_light": "#FFD6A4", "body_mid": "#FFA854", "body_dark": "#F08928", "body_shadow": "#D66B12",
+        "outline": "#8C4614", "ear_l_t": "#FFC082", "ear_l_b": "#D66B12", "ear_r_t": "#FFC082", "ear_r_b": "#D66B12",
+        "spot_t": QColor(240, 115, 20, 150), "spot_b": QColor(190, 75, 0, 170),
+        "tail_l": "#FF9933", "tail_d": "#B84700", "paw_t": "#FFF5E6", "paw_b": "#F5CA9E",
+        "inner_ear_t": "#FFB8B8", "inner_ear_b": "#E06868"
+    },
+    "cat_black": {
+        "body_hl": "#666670", "body_light": "#46464C", "body_mid": "#2E2E32", "body_dark": "#1C1C20", "body_shadow": "#0F0F12",
+        "outline": "#0A0A0C", "ear_l_t": "#56565C", "ear_l_b": "#1C1C20", "ear_r_t": "#56565C", "ear_r_b": "#1C1C20",
+        "spot_t": None, "spot_b": None,
+        "tail_l": "#38383E", "tail_d": "#121214", "paw_t": "#4C4C54", "paw_b": "#222226",
+        "inner_ear_t": "#6E505E", "inner_ear_b": "#3E2B34"
+    },
+    "cat_white": {
+        "body_hl": "#FFFFFF", "body_light": "#FFFFFF", "body_mid": "#F2F6FA", "body_dark": "#DEE8F2", "body_shadow": "#C4D5E6",
+        "outline": "#7B92AB", "ear_l_t": "#FFFFFF", "ear_l_b": "#D2E0EE", "ear_r_t": "#FFFFFF", "ear_r_b": "#D2E0EE",
+        "spot_t": None, "spot_b": None,
+        "tail_l": "#F0F4F8", "tail_d": "#CBD7E4", "paw_t": "#FFFFFF", "paw_b": "#D8E4F0",
+        "inner_ear_t": "#FFB8C6", "inner_ear_b": "#E8768C"
+    },
+    "cat_british_blue": {
+        "body_hl": "#94A3B8", "body_light": "#64748B", "body_mid": "#475569", "body_dark": "#334155", "body_shadow": "#1E293B",
+        "outline": "#1E293B", "ear_l_t": "#64748B", "ear_l_b": "#334155", "ear_r_t": "#64748B", "ear_r_b": "#334155",
+        "spot_t": None, "spot_b": None,
+        "tail_l": "#64748B", "tail_d": "#334155", "paw_t": "#94A3B8", "paw_b": "#64748B",
+        "inner_ear_t": "#FDA4AF", "inner_ear_b": "#F43F5E"
+    },
+    "cat_american_tabby": {
+        "body_hl": "#FFFFFF", "body_light": "#F1F5F9", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
+        "outline": "#1E293B", "ear_l_t": "#E2E8F0", "ear_l_b": "#475569", "ear_r_t": "#E2E8F0", "ear_r_b": "#475569",
+        "spot_t": QColor(51, 65, 85, 190), "spot_b": QColor(30, 41, 59, 230),
+        "tail_l": "#94A3B8", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
+        "inner_ear_t": "#FECDD3", "inner_ear_b": "#FB7185"
+    },
+    "cat_persian_white": {
+        "body_hl": "#FFFFFF", "body_light": "#FFFFFF", "body_mid": "#F8FAFC", "body_dark": "#E2E8F0", "body_shadow": "#CBD5E1",
+        "outline": "#64748B", "ear_l_t": "#FFFFFF", "ear_l_b": "#E2E8F0", "ear_r_t": "#FFFFFF", "ear_r_b": "#E2E8F0",
+        "spot_t": None, "spot_b": None,
+        "tail_l": "#FFFFFF", "tail_d": "#E2E8F0", "paw_t": "#FFFFFF", "paw_b": "#F1F5F9",
+        "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
+    },
+    "cat_siamese": {
+        "body_hl": "#FFFFFF", "body_light": "#FAF5EF", "body_mid": "#F3E8DC", "body_dark": "#E5D5C5", "body_shadow": "#CBB59F",
+        "outline": "#3E2723", "ear_l_t": "#6D4C41", "ear_l_b": "#3E2723", "ear_r_t": "#6D4C41", "ear_r_b": "#3E2723",
+        "spot_t": QColor(92, 61, 46, 180), "spot_b": QColor(62, 39, 35, 220),
+        "tail_l": "#5C3D2E", "tail_d": "#2B1B14", "paw_t": "#8D6E63", "paw_b": "#4E342E",
+        "inner_ear_t": "#D7CCC8", "inner_ear_b": "#8D6E63"
+    }
+}
+
+
+# 柴犬 / 柯基 3D 多级光源配色表（模块级常量：以前每帧都会重建一次这份大 dict）
+_DOG_PALETTES = {
+    "dog_shiba": {
+        "fur_hl": "#FFC082", "fur_light": "#FFA858", "fur_mid": "#E88B43", "fur_dark": "#C96A20", "fur_shadow": "#A84E0C",
+        "outline": "#72482F", "muzzle_t": "#FFFFFF", "muzzle_b": "#F5EBE1", "brow": "#FFFFFF",
+        "tail_l": "#FFA858", "tail_d": "#C96A20", "paw_t": "#FFFFFF", "paw_b": "#F0E4D8"
+    },
+    "dog_black": {
+        "fur_hl": "#56565C", "fur_light": "#3C3C40", "fur_mid": "#29292B", "fur_dark": "#1A1A1C", "fur_shadow": "#0E0E10",
+        "outline": "#151516", "muzzle_t": "#F5E8DC", "muzzle_b": "#D8C5B2", "brow": "#D8A070",
+        "tail_l": "#3C3C40", "tail_d": "#1A1A1C", "paw_t": "#F5E8DC", "paw_b": "#D8C5B2"
+    },
+    "dog_corgi": {
+        "fur_hl": "#FFD073", "fur_light": "#FFB833", "fur_mid": "#EE9B00", "fur_dark": "#CA7A00", "fur_shadow": "#A65C00",
+        "outline": "#6B3D11", "muzzle_t": "#FFFFFF", "muzzle_b": "#F5EBE1", "brow": "#FFFFFF",
+        "tail_l": "#FFB833", "tail_d": "#CA7A00", "paw_t": "#FFFFFF", "paw_b": "#F0E4D8"
+    }
+}
+
+
 class PetRenderer:
     """
     电子宠物高精度矢量图形渲染引擎
@@ -901,106 +1024,7 @@ class PetRenderer:
     # ================= 猫咪皮肤绘制 (3D 立体手办质感) =================
     def _draw_cat(self, painter: QPainter, state, skin_id, spin_info=None):
         # 3D 渲染多级光源配色表
-        colors = {
-            "cat_golden_shaded": {
-                "body_hl": "#FFF8E1", "body_light": "#FFE082", "body_mid": "#FFB300", "body_dark": "#F57C00", "body_shadow": "#B75300",
-                "outline": "#5D4037", "ear_l_t": "#FFE082", "ear_l_b": "#F57C00", "ear_r_t": "#FFE082", "ear_r_b": "#F57C00",
-                "spot_t": QColor(62, 39, 35, 120), "spot_b": QColor(38, 24, 21, 150),
-                "tail_l": "#FFA000", "tail_d": "#4E342E", "paw_t": "#FFF8E1", "paw_b": "#FFD54F",
-                "inner_ear_t": "#FFAB91", "inner_ear_b": "#E64A19"
-            },
-            "cat_silver_shaded": {
-                "body_hl": "#FFFFFF", "body_light": "#F8FAFC", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
-                "outline": "#1E293B", "ear_l_t": "#F8FAFC", "ear_l_b": "#94A3B8", "ear_r_t": "#F8FAFC", "ear_r_b": "#94A3B8",
-                "spot_t": QColor(71, 85, 105, 100), "spot_b": QColor(30, 41, 59, 130),
-                "tail_l": "#E2E8F0", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
-                "inner_ear_t": "#FBCFE8", "inner_ear_b": "#F43F5E"
-            },
-            "cat_ragdoll": {
-                "body_hl": "#FFFFFF", "body_light": "#FDFCFF", "body_mid": "#F5F3FF", "body_dark": "#EDE9FE", "body_shadow": "#DDD6FE",
-                "outline": "#5B21B6", "ear_l_t": "#94A3B8", "ear_l_b": "#64748B", "ear_r_t": "#94A3B8", "ear_r_b": "#64748B",
-                "spot_t": QColor(148, 163, 184, 180), "spot_b": QColor(100, 116, 139, 210),
-                "tail_l": "#94A3B8", "tail_d": "#475569", "paw_t": "#FFFFFF", "paw_b": "#FAF5FF",
-                "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
-            },
-            "cat_tuxedo": {
-                "body_hl": "#64748B", "body_light": "#334155", "body_mid": "#1E293B", "body_dark": "#0F172A", "body_shadow": "#020617",
-                "outline": "#020617", "ear_l_t": "#334155", "ear_l_b": "#0F172A", "ear_r_t": "#334155", "ear_r_b": "#0F172A",
-                "spot_t": None, "spot_b": None,
-                "tail_l": "#334155", "tail_d": "#0F172A", "paw_t": "#FFFFFF", "paw_b": "#F8FAFC",
-                "inner_ear_t": "#F472B6", "inner_ear_b": "#9D174D"
-            },
-            "cat_maine_coon": {
-                "body_hl": "#D7CCC8", "body_light": "#BCAAA4", "body_mid": "#8D6E63", "body_dark": "#6D4C41", "body_shadow": "#3E2723",
-                "outline": "#271814", "ear_l_t": "#8D6E63", "ear_l_b": "#4E342E", "ear_r_t": "#8D6E63", "ear_r_b": "#4E342E",
-                "spot_t": QColor(46, 27, 22, 180), "spot_b": QColor(30, 16, 13, 220),
-                "tail_l": "#8D6E63", "tail_d": "#3E2723", "paw_t": "#EFEBE9", "paw_b": "#BCAAA4",
-                "inner_ear_t": "#FFCCBC", "inner_ear_b": "#D84315"
-            },
-            "cat_sakura_peach": {
-                "body_hl": "#FFFFFF", "body_light": "#FFF1F2", "body_mid": "#FFE4E6", "body_dark": "#FECDD3", "body_shadow": "#FDA4AF",
-                "outline": "#F43F5E", "ear_l_t": "#FFE4E6", "ear_l_b": "#FB7185", "ear_r_t": "#FFE4E6", "ear_r_b": "#FB7185",
-                "spot_t": QColor(251, 113, 133, 140), "spot_b": QColor(244, 63, 94, 160),
-                "tail_l": "#FDA4AF", "tail_d": "#F43F5E", "paw_t": "#FFFFFF", "paw_b": "#FFE4E6",
-                "inner_ear_t": "#FECDD3", "inner_ear_b": "#E11D48"
-            },
-            "cat_calico": {
-                "body_hl": "#FFFFFF", "body_light": "#FFFDF9", "body_mid": "#FFEAD8", "body_dark": "#F5D5BE", "body_shadow": "#E2B998",
-                "outline": "#7D6456", "ear_l_t": "#FFFBF7", "ear_l_b": "#E2C4B0", "ear_r_t": "#FFD1A4", "ear_r_b": "#E0853D",
-                "spot_t": QColor(255, 190, 120, 210), "spot_b": QColor(235, 140, 60, 200),
-                "tail_l": "#A1887F", "tail_d": "#6D4C41", "paw_t": "#FFFFFF", "paw_b": "#F0DFD1",
-                "inner_ear_t": "#FFA4A4", "inner_ear_b": "#D85A70"
-            },
-            "cat_orange": {
-                "body_hl": "#FFECC8", "body_light": "#FFD6A4", "body_mid": "#FFA854", "body_dark": "#F08928", "body_shadow": "#D66B12",
-                "outline": "#8C4614", "ear_l_t": "#FFC082", "ear_l_b": "#D66B12", "ear_r_t": "#FFC082", "ear_r_b": "#D66B12",
-                "spot_t": QColor(240, 115, 20, 150), "spot_b": QColor(190, 75, 0, 170),
-                "tail_l": "#FF9933", "tail_d": "#B84700", "paw_t": "#FFF5E6", "paw_b": "#F5CA9E",
-                "inner_ear_t": "#FFB8B8", "inner_ear_b": "#E06868"
-            },
-            "cat_black": {
-                "body_hl": "#666670", "body_light": "#46464C", "body_mid": "#2E2E32", "body_dark": "#1C1C20", "body_shadow": "#0F0F12",
-                "outline": "#0A0A0C", "ear_l_t": "#56565C", "ear_l_b": "#1C1C20", "ear_r_t": "#56565C", "ear_r_b": "#1C1C20",
-                "spot_t": None, "spot_b": None,
-                "tail_l": "#38383E", "tail_d": "#121214", "paw_t": "#4C4C54", "paw_b": "#222226",
-                "inner_ear_t": "#6E505E", "inner_ear_b": "#3E2B34"
-            },
-            "cat_white": {
-                "body_hl": "#FFFFFF", "body_light": "#FFFFFF", "body_mid": "#F2F6FA", "body_dark": "#DEE8F2", "body_shadow": "#C4D5E6",
-                "outline": "#7B92AB", "ear_l_t": "#FFFFFF", "ear_l_b": "#D2E0EE", "ear_r_t": "#FFFFFF", "ear_r_b": "#D2E0EE",
-                "spot_t": None, "spot_b": None,
-                "tail_l": "#F0F4F8", "tail_d": "#CBD7E4", "paw_t": "#FFFFFF", "paw_b": "#D8E4F0",
-                "inner_ear_t": "#FFB8C6", "inner_ear_b": "#E8768C"
-            },
-            "cat_british_blue": {
-                "body_hl": "#94A3B8", "body_light": "#64748B", "body_mid": "#475569", "body_dark": "#334155", "body_shadow": "#1E293B",
-                "outline": "#1E293B", "ear_l_t": "#64748B", "ear_l_b": "#334155", "ear_r_t": "#64748B", "ear_r_b": "#334155",
-                "spot_t": None, "spot_b": None,
-                "tail_l": "#64748B", "tail_d": "#334155", "paw_t": "#94A3B8", "paw_b": "#64748B",
-                "inner_ear_t": "#FDA4AF", "inner_ear_b": "#F43F5E"
-            },
-            "cat_american_tabby": {
-                "body_hl": "#FFFFFF", "body_light": "#F1F5F9", "body_mid": "#E2E8F0", "body_dark": "#CBD5E1", "body_shadow": "#94A3B8",
-                "outline": "#1E293B", "ear_l_t": "#E2E8F0", "ear_l_b": "#475569", "ear_r_t": "#E2E8F0", "ear_r_b": "#475569",
-                "spot_t": QColor(51, 65, 85, 190), "spot_b": QColor(30, 41, 59, 230),
-                "tail_l": "#94A3B8", "tail_d": "#334155", "paw_t": "#FFFFFF", "paw_b": "#E2E8F0",
-                "inner_ear_t": "#FECDD3", "inner_ear_b": "#FB7185"
-            },
-            "cat_persian_white": {
-                "body_hl": "#FFFFFF", "body_light": "#FFFFFF", "body_mid": "#F8FAFC", "body_dark": "#E2E8F0", "body_shadow": "#CBD5E1",
-                "outline": "#64748B", "ear_l_t": "#FFFFFF", "ear_l_b": "#E2E8F0", "ear_r_t": "#FFFFFF", "ear_r_b": "#E2E8F0",
-                "spot_t": None, "spot_b": None,
-                "tail_l": "#FFFFFF", "tail_d": "#E2E8F0", "paw_t": "#FFFFFF", "paw_b": "#F1F5F9",
-                "inner_ear_t": "#FFCCD5", "inner_ear_b": "#FB7185"
-            },
-            "cat_siamese": {
-                "body_hl": "#FFFFFF", "body_light": "#FAF5EF", "body_mid": "#F3E8DC", "body_dark": "#E5D5C5", "body_shadow": "#CBB59F",
-                "outline": "#3E2723", "ear_l_t": "#6D4C41", "ear_l_b": "#3E2723", "ear_r_t": "#6D4C41", "ear_r_b": "#3E2723",
-                "spot_t": QColor(92, 61, 46, 180), "spot_b": QColor(62, 39, 35, 220),
-                "tail_l": "#5C3D2E", "tail_d": "#2B1B14", "paw_t": "#8D6E63", "paw_b": "#4E342E",
-                "inner_ear_t": "#D7CCC8", "inner_ear_b": "#8D6E63"
-            }
-        }
+        colors = _CAT_PALETTES
         palette = colors.get(skin_id, colors["cat_calico"])
 
         # 3D 旋转背面绘制 (Back View，彻底告别纸片镜像)
@@ -1509,23 +1533,7 @@ class PetRenderer:
 
     # ================= 柴犬与柯基皮肤绘制 (3D 立体手办质感) =================
     def _draw_dog(self, painter: QPainter, state, skin_id, spin_info=None):
-        colors = {
-            "dog_shiba": {
-                "fur_hl": "#FFC082", "fur_light": "#FFA858", "fur_mid": "#E88B43", "fur_dark": "#C96A20", "fur_shadow": "#A84E0C",
-                "outline": "#72482F", "muzzle_t": "#FFFFFF", "muzzle_b": "#F5EBE1", "brow": "#FFFFFF",
-                "tail_l": "#FFA858", "tail_d": "#C96A20", "paw_t": "#FFFFFF", "paw_b": "#F0E4D8"
-            },
-            "dog_black": {
-                "fur_hl": "#56565C", "fur_light": "#3C3C40", "fur_mid": "#29292B", "fur_dark": "#1A1A1C", "fur_shadow": "#0E0E10",
-                "outline": "#151516", "muzzle_t": "#F5E8DC", "muzzle_b": "#D8C5B2", "brow": "#D8A070",
-                "tail_l": "#3C3C40", "tail_d": "#1A1A1C", "paw_t": "#F5E8DC", "paw_b": "#D8C5B2"
-            },
-            "dog_corgi": {
-                "fur_hl": "#FFD073", "fur_light": "#FFB833", "fur_mid": "#EE9B00", "fur_dark": "#CA7A00", "fur_shadow": "#A65C00",
-                "outline": "#6B3D11", "muzzle_t": "#FFFFFF", "muzzle_b": "#F5EBE1", "brow": "#FFFFFF",
-                "tail_l": "#FFB833", "tail_d": "#CA7A00", "paw_t": "#FFFFFF", "paw_b": "#F0E4D8"
-            }
-        }
+        colors = _DOG_PALETTES
         pal = colors.get(skin_id, colors["dog_shiba"])
 
         # 3D 旋转背面绘制 (Back View)

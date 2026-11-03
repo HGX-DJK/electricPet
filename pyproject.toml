@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "electric-pet"
+version = "1.0.40"
+description = "桌面萌宠 · 波可 (Desktop Pet Poko) —— PyQt6 透明桌面电子宠物与番茄钟伴侣"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# 运行时依赖。注意：桌宠主程序 (main.py / pet/*) 只需要 PyQt6；
+# Pillow 仅被图标生成器 (generate_icon.py) 与安装器 GUI (installer_gui.py) 使用。
+dependencies = [
+    "PyQt6>=6.6",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# 打包成 Windows exe / 安装包
+build = [
+    "pyinstaller>=6.0",
+]
+# 开发期依赖（测试本身只用标准库 unittest，无需 pytest）
+dev = [
+    "pyinstaller>=6.0",
+]
+
+[project.scripts]
+desktop-pet = "main:main"
+
+[tool.setuptools]
+packages = ["pet"]
+py-modules = ["main"]
+
+[tool.setuptools.package-data]
+pet = ["../assets/**/*"]
