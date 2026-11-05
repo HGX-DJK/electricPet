@@ -27,5 +27,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/app_icon.png
+    # ⚠️ 不要把 assets/app_icon.png 加回来：全项目零引用，纯死重（166 KB），
+    #    每个 APK 都白白背着它。桌面端图标走 assets/app.ico 那条线。
     - assets/audio/

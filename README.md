@@ -112,17 +112,51 @@
 
 ## 📱 Flutter 跨端版构建 (含 AI 语音陪伴功能)
 
-`flutter_pet/` 目录是与桌面版对齐的 Flutter 跨端实现 (Android / iOS / Windows / macOS / Web)。
+`flutter_pet/` 目录是与桌面版对齐的 Flutter 实现。
+
+> ⚠️ **目前只有 Android 平台**：`flutter_pet/` 下只有 `android/` 这一个 runner 目录，
+> iOS / Windows / macOS / Web 的脚手架**并不存在**（加平台需要跑
+> `flutter create --platforms=... .` 补出对应目录）。桌面端请用上面那个 PyQt 版。
 
 ```bash
 cd flutter_pet
 flutter build apk --release --no-tree-shake-icons
 ```
 
+- **CI 打包**：push 到 `main` / `master` 后由 `.github/workflows/build_apk.yml`
+  自动构建并把 APK 作为 artifact 上传（`Report APK Size` 步骤会在日志和
+  Job Summary 里给出体积数字）。
 - **AI 能力开箱即用**：MiniMax 云端大模型 + 萌系小奶音的密钥已内置在
   `flutter_pet/lib/config/ai_config.dart` 的 `defaultMinimaxApiKey` 中, 换密钥改这一行即可。
 - 也可在 App 内 **⚙️ 设置** 面板手动填写 Key (保存在本机 SharedPreferences), 优先级高于内置值。
 - 密钥来源：MiniMax 开放平台 <https://platform.minimaxi.com/> → 账户管理 → 接口密钥。
+
+---
+
+## 🏗️ 桌面版打包 (Windows EXE / 单文件安装包)
+
+> ⚠️ 打包用的 PyInstaller 配置**以仓库根的 `DesktopPet.spec` /
+> `DesktopPet_Setup.spec` 为唯一事实来源** —— `build_exe.py` / `build_installer.py`
+> 都直接调用这两份 spec。不要再往脚本里写命令行参数：那样 PyInstaller 会生成
+> 同名 spec 把仓库里手写的那份覆盖掉。
+
+```bash
+# 依赖：pip install -e ".[build]"   (PyQt6 + Pillow + PyInstaller)
+
+# 1) 只出免安装独立版 -> dist/DesktopPet/DesktopPet.exe
+python build_exe.py
+
+# 2) 再封装单文件安装包 -> dist/DesktopPet_Setup.exe（会先重编核心程序）
+python build_installer.py
+
+# 只封装、不重编核心程序
+python build_installer.py --quick
+```
+
+- 两份 spec 里的路径一律用 `SPECPATH` 拼绝对路径 —— **不写死任何机器路径**，
+  这样换机 / 上 CI 都不会崩。
+- `build_exe.py` 会在打包后自动注入 `assets/api-ms-win-core-path-l1-1-0.dll`
+  （Windows 7 兼容层）。
 
 ---
 
@@ -141,6 +175,9 @@ flutter test --concurrency=1
 - **Python 依赖声明**见 `pyproject.toml`（`pip install -e .` 或 `pip install -e ".[build]"`）。
 - **CI 闸门**：`.github/workflows/build_apk.yml`（Flutter 分析 + 测试 + APK 构建）与
   `.github/workflows/python_quality.yml`（Python 字节码编译 + 单元测试 + Qt 模块导入冒烟）。
+- **CI 供应链**：工作流里所有 action 都固定到 commit SHA（不是会移动的 tag），
+  Gradle 发行包也用 `distributionSha256Sum` 钉住校验和；
+  升级由 `.github/dependabot.yml` 自动开 PR 推进，人工 review 后再合。
 
 ---
 
