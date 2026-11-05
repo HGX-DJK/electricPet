@@ -17,7 +17,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^6.0.0
   record_platform_interface: ^2.1.0
   # 写盘合并回归测试要数「模型到底往 SharedPreferences 写了几次」，
   # 而 legacy API 最终都落在 SharedPreferencesStorePlatform.setValue 上，
