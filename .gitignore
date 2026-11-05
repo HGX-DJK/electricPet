@@ -27,7 +27,12 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+# PyInstaller 自动生成的 spec 是构建产物，默认忽略；
+# 但仓库里手写的这两份是要跟踪的（它们现在是打包的唯一事实来源，
+# 见 build_exe.py / build_installer.py）。必须写在 *.spec 之后才能重新纳入。
 *.spec
+!DesktopPet.spec
+!DesktopPet_Setup.spec
 payload.zip
 
 # PyInstaller

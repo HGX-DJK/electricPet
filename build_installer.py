@@ -24,6 +24,10 @@ def compress_payload(source_dir, output_zip):
 
 def build_installer_only():
     """编译最新核心程序并封装单文件安装包 DesktopPet_Setup.exe"""
+    # 统一以仓库根为工作目录（dist/ build/ 这些路径是相对 CWD 的）
+    root = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(root)
+
     dist_app = os.path.abspath("dist/DesktopPet")
     exe_app = os.path.join(dist_app, "DesktopPet.exe")
 
@@ -38,18 +42,14 @@ def build_installer_only():
     compress_payload(dist_app, payload_zip)
 
     print("\n[Packaging] 封装生成单文件完全独立安装程序 DesktopPet_Setup.exe...")
-    win7_dll = os.path.abspath("assets/api-ms-win-core-path-l1-1-0.dll")
+    # ⚠️ 直接用仓库里的 DesktopPet_Setup.spec，不走命令行参数。
+    #   原因同 build_exe.py：命令行参数路径会让 PyInstaller 生成同名 spec
+    #   并覆盖仓库里那份手写的，把 git 工作区弄脏。
+    #   spec 里已经写好了 win7 兼容 DLL、payload.zip 与 assets 三项打包内容。
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--name=DesktopPet_Setup",
         "--noconfirm",
-        "--onefile",
-        "--windowed",
-        "--icon=assets/app.ico",
-        f"--add-binary={win7_dll};.",
-        f"--add-data={payload_zip};.",
-        "--add-data=assets;assets",
-        "installer_gui.py"
+        os.path.join(root, "DesktopPet_Setup.spec"),
     ]
     print("Running:", " ".join(cmd))
     res = subprocess.run(cmd)
