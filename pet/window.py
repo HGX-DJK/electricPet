@@ -11,6 +11,7 @@ from pet.menus import QuickActionMenu
 from pet.dock import PetCompanionDock
 from pet.memo import PetStickyNote
 from pet.audio import sound_manager
+from pet.qt_safe import safe_slot
 
 class GlobalBossKeyFilter(QAbstractNativeEventFilter):
     """Windows 原生全局消息过滤器 (安全响应 Alt+P 全局老板键)"""
@@ -590,7 +591,7 @@ class PetWindow(QWidget):
                     self.vy = -self.vy * self.bounce_damping
                     self.vx = self.vx * 0.4
                     self.state = "BOUNCE"
-                    QTimer.singleShot(220, self._finish_bounce)
+                    QTimer.singleShot(220, safe_slot(self._finish_bounce))
                 elif abs(self.vy) > 160:
                     # 跌落产生轻微眩晕
                     self.vx = 0.0

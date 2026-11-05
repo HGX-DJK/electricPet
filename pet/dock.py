@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QColor, QCursor
 from pet.audio import sound_manager
 from pet.menus import FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialog, QuickActionMenu, FocusDialog
+from pet.qt_safe import safe_slot
 
 DOCK_PASTELS = {
     "feed": {
@@ -344,22 +345,22 @@ class PetCompanionDock(QWidget):
     def _on_feed(self):
         self.hide()
         self.is_dock_visible = False
-        QTimer.singleShot(30, lambda: FeedingDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: FeedingDialog(self.model, self.pet_window).exec()))
 
     def _on_wardrobe(self):
         self.hide()
         self.is_dock_visible = False
-        QTimer.singleShot(30, lambda: WardrobeDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: WardrobeDialog(self.model, self.pet_window).exec()))
 
     def _on_talent(self):
         self.hide()
         self.is_dock_visible = False
-        QTimer.singleShot(30, lambda: ActionShowDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: ActionShowDialog(self.model, self.pet_window).exec()))
 
     def _on_play(self):
         self.hide()
         self.is_dock_visible = False
-        QTimer.singleShot(30, lambda: PlayDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: PlayDialog(self.model, self.pet_window).exec()))
 
     def _on_bath(self):
         self.model.bath()
@@ -381,7 +382,7 @@ class PetCompanionDock(QWidget):
     def _on_focus(self):
         self.hide()
         self.is_dock_visible = False
-        QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: FocusDialog(self.model, self.pet_window).exec()))
 
     def _on_more(self):
         self.hide()

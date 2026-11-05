@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen, QLinearGradient, QRadialGradient
 from pet.audio import sound_manager
 from pet.renderer import PetRenderer
+from pet.qt_safe import safe_slot
 
 # 赛博高科技全息毛玻璃与霓虹全局 QSS
 MODERN_STYLE = """
@@ -666,22 +667,22 @@ class QuickActionMenu(QWidget):
     def _on_feed(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: FeedingDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: FeedingDialog(self.model, self.pet_window).exec()))
 
     def _on_wardrobe(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: WardrobeDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: WardrobeDialog(self.model, self.pet_window).exec()))
 
     def _on_talents(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: ActionShowDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: ActionShowDialog(self.model, self.pet_window).exec()))
 
     def _on_play(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: PlayDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: PlayDialog(self.model, self.pet_window).exec()))
 
     def _on_bath(self):
         sound_manager.play("click")
@@ -704,12 +705,12 @@ class QuickActionMenu(QWidget):
     def _on_focus(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: FocusDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: FocusDialog(self.model, self.pet_window).exec()))
 
     def _on_stats(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: StatusDialog(self.model).exec())
+        QTimer.singleShot(30, safe_slot(lambda: StatusDialog(self.model).exec()))
 
     def _on_memo(self):
         sound_manager.play("click")
@@ -726,7 +727,7 @@ class QuickActionMenu(QWidget):
     def _on_settings(self):
         sound_manager.play("click")
         self.close()
-        QTimer.singleShot(30, lambda: SettingsDialog(self.model, self.pet_window).exec())
+        QTimer.singleShot(30, safe_slot(lambda: SettingsDialog(self.model, self.pet_window).exec()))
 
     def _toggle_gravity_mode(self):
         sound_manager.play("pop")
@@ -1117,6 +1118,45 @@ class ModernBaseDialog(QDialog):
             event.accept()
         else:
             super().keyPressEvent(event)
+
+    # ------------------------------------------------------------------
+    #  关闭时的定时器收口
+    # ------------------------------------------------------------------
+
+    def done(self, result):
+        """关闭的统一收口点：停掉本对话框持有的所有定时器。
+
+        ⚠️ QDialog 的三条关闭路径（accept / reject / close）最终都会走到
+        done()，所以停表只需要在这一处做一次。
+
+        以前每个对话框得自己记得停表，而 FocusDialog 根本没停：
+        它的 1 秒刷新定时器在关闭后还在跑，每秒重建一遍整个**已经隐藏**的 UI。
+        而且这些对话框是以 ``FocusDialog(...).exec()`` 这种临时对象打开的，
+        父对象是主窗口 —— 临时 Python 对象被回收后，C++ 对象还活着，
+        于是每开一次专注面板就漏一个隐藏对话框 + 一个 1Hz 定时器。
+
+        基类统一收口之后，子类只要把定时器挂在对话框下（``QTimer(self)``）
+        就自动安全，不需要各自记得停。
+        """
+        for timer in self.findChildren(QTimer):
+            timer.stop()
+        super().done(result)
+
+    def _schedule_close(self, msec):
+        """延时自动关闭本对话框。
+
+        ⚠️ 不用 ``QTimer.singleShot(ms, self.accept)``：
+        singleShot 建的定时器**没有父对象**，对话框销毁后它照样会触发，
+        回调到已删除的 C++ 对象上会抛 RuntimeError，
+        而 PyQt6 里槽函数抛出的未捕获异常会直接 abort 掉整个进程。
+
+        这里用挂在对话框下的成员 QTimer，关闭时会被 done() 统一停掉。
+        """
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(self.accept)
+        timer.start(msec)
+        return timer
 
 
 class CyberGearCard(QFrame):
@@ -2329,7 +2369,7 @@ class PlayDialog(ModernBaseDialog):
         self.result_lbl.show()
         self.model.play_minigame("rps")
         self.pet_window.dialogue.say(f"【猜拳】{msg}")
-        QTimer.singleShot(1400, self.accept)
+        self._schedule_close(1400)
 
     def _play_dice(self):
         user_num = random.randint(1, 6)
@@ -2349,7 +2389,7 @@ class PlayDialog(ModernBaseDialog):
         self.result_lbl.show()
         self.model.play_minigame("dice")
         self.pet_window.dialogue.say(msg)
-        QTimer.singleShot(1400, self.accept)
+        self._schedule_close(1400)
 
     def _play_wand(self):
         self.result_lbl.setText("🪄 飞身扑击！波可欢快抓住了逗宠棒！(ฅ'ω'ฅ)")
@@ -2358,7 +2398,7 @@ class PlayDialog(ModernBaseDialog):
         self.model.play_minigame("wand")
         self.pet_window.renderer.trigger_pet()
         self.pet_window.dialogue.say("哇！看波可的飞身扑击！捉到逗宠棒啦！(扑腾🐾)")
-        QTimer.singleShot(1200, self.accept)
+        self._schedule_close(1200)
 
 class ActionShowDialog(ModernBaseDialog):
     """
@@ -3010,7 +3050,18 @@ class SettingsDialog(ModernBaseDialog):
         self.model.save_to_disk()
         self.accept()
         # 弹窗完全关闭后异步应用设置，彻底避免 Windows 句柄重建冲突与卡死
-        QTimer.singleShot(40, self.pet_window.apply_model_settings)
+        QTimer.singleShot(40, safe_slot(self._apply_settings_after_close))
+
+    def _apply_settings_after_close(self):
+        """弹窗关闭后再真正把设置应用到主窗口。
+
+        ⚠️ 这一步是延时执行的，此刻主窗口可能已经被销毁（用户点完确定就退出应用）。
+        调用绑定方法会抛 RuntimeError，而 PyQt6 里槽函数抛出的未捕获异常
+        会直接 abort 掉整个进程 —— 所以外面必须包一层 safe_slot。
+        """
+        if not self.pet_window:
+            return
+        self.pet_window.apply_model_settings()
 
     def _set_windows_autostart(self, enable):
         try:
