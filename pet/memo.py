@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QBrush, QPen, QCursor
 from pet.audio import sound_manager
+from pet.console_safe import safe_print
 
 # 便签柔和马卡龙色彩主题
 MEMO_THEMES = {
@@ -426,7 +427,7 @@ class PetStickyNote(QWidget):
         try:
             return int(value)
         except (TypeError, ValueError):
-            print(f"[Memo] 便签存档字段 {field!r} 不是合法数字，已忽略: {value!r}")
+            safe_print(f"[Memo] 便签存档字段 {field!r} 不是合法数字，已忽略: {value!r}")
             return None
 
     def load_data(self):
@@ -443,7 +444,7 @@ class PetStickyNote(QWidget):
             with open(self.memo_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
-            print(f"[Memo] 读取便签存档失败: {e}")
+            safe_print(f"[Memo] 读取便签存档失败: {e}")
             return
 
         # ---------- 内容与状态：必须无条件生效 ----------
@@ -496,7 +497,7 @@ class PetStickyNote(QWidget):
         except Exception as e:
             # ⚠️ 以前这里是 except Exception: pass —— 写盘失败完全静默，
             # 用户以为便签存上了，其实重启就没了。至少要留一行日志。
-            print(f"[Memo] 保存便签失败: {e}")
+            safe_print(f"[Memo] 保存便签失败: {e}")
 
     def hideEvent(self, event):
         self.save_data()

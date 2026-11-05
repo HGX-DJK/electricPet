@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon
 from pet.model import PetModel
 from pet.window import PetWindow
 from pet.tray import PetTrayIcon, create_app_icon
+from pet.console_safe import harden_console
 
 def set_windows_app_id():
     """设置 Windows 任务栏应用组唯一 AppUserModelID"""
@@ -62,6 +63,12 @@ def setup_crash_logger():
     sys.excepthook = handle_exception
 
 def main():
+    # 控制台编码兜底：Windows 控制台不是 UTF-8（cp936 / cp1252），
+    # 默认的 errors="strict" 会让「打印一条中文日志」直接抛 UnicodeEncodeError ——
+    # 也就是错误日志本身变成故障源，把真正想报的那个错盖掉。
+    # 这里一次性把 stdout/stderr 调成不会因此崩。
+    harden_console()
+
     # 确保运行工作目录始终对齐程序所在目录，防外部唤起相对路径丢失
     if getattr(sys, "frozen", False):
         base_dir = os.path.dirname(sys.executable)

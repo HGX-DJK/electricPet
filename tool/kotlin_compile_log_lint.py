@@ -54,6 +54,15 @@ import os
 import re
 import sys
 
+# 控制台编码兜底：Windows 控制台可能是 cp1252/cp936，
+# 直接 print 中文会抛 UnicodeEncodeError，把「打印一条日志」变成崩溃源。
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+from pet.console_safe import harden_console  # noqa: E402
+
+harden_console()
+
 # 纯 Kotlin / JDK 自带、不会因为缺 android.jar 而 unresolved 的包前缀
 LOCAL_PACKAGES = (
     'kotlin.', 'kotlinx.', 'java.', 'javax.', 'org.json.',

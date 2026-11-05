@@ -32,7 +32,15 @@ import subprocess
 import sys
 import tempfile
 
+# 控制台编码兜底：Windows 控制台可能是 cp1252/cp936，
+# 直接 print 中文会抛 UnicodeEncodeError，把「打印一条日志」变成崩溃源。
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+from pet.console_safe import harden_console  # noqa: E402
+
+harden_console()
+
 KT_DIR = os.path.join(REPO_ROOT, "flutter_pet", "android", "app", "src", "main", "kotlin")
 GRADLE_CACHE = os.path.expandvars(
     r"%USERPROFILE%\.gradle\caches\modules-2\files-2.1\org.jetbrains.kotlin"

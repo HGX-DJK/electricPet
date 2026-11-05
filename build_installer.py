@@ -4,12 +4,16 @@ import subprocess
 import shutil
 import zipfile
 
-# 保证控制台即使在 GBK 编码下也不会因为 emoji 报错
-if sys.stdout and hasattr(sys.stdout, "reconfigure"):
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
+# 仓库根目录（下面要 import pet.console_safe，得保证包能被发现）
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
+
+from pet.console_safe import harden_console
+
+# 保证控制台即使在 GBK / cp1252 编码下也不会因为中文或 emoji 报错。
+# 以前这段是就地手写的，现在统一走 pet/console_safe.py —— 只有一份实现。
+harden_console(encoding="utf-8")
 
 def compress_payload(source_dir, output_zip):
     print(f"[Compressing] Packaging {source_dir} -> {output_zip}...")

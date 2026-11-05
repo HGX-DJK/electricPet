@@ -63,6 +63,25 @@ jobs:
           $env:QT_QPA_PLATFORM = 'offscreen'
           python -m unittest discover -s tests -t . -v
 
+      # 把 stdout 编码显式压成 cp1252 再跑一遍。
+      #
+      # 为什么要专门加这一步：Windows 控制台不是 UTF-8（中文机 cp936、
+      # 西文机 cp1252），而 Python 的标准输出默认 errors="strict" ——
+      # 打印一条含中文的日志就会抛 UnicodeEncodeError。
+      # 后果是「打印错误日志」这个动作本身变成崩溃源，把真正想报的错盖掉。
+      #
+      # 真实事故：pet/memo.py 的字段兜底日志（中文）在 cp1252 上把整个
+      # 加载流程带崩，CI 上表现为「便签字段兜底」这条测试莫名 error，
+      # 而真正的问题（存档字段非法）一个字都没打出来。
+      #
+      # 之前它只在 runner 恰好用 cp1252 时才偶发暴露 —— 现在固定成一步，
+      # 不再指望 runner 的默认编码。
+      - name: Run tests under a non-UTF-8 console encoding (cp1252)
+        run: |
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $env:PYTHONIOENCODING = 'cp1252'
+          python -m unittest discover -s tests -t . -v
+
       - name: Import every Qt module (抓漏 import / 顶层崩溃)
         # 只 import，不创建 QApplication —— 无头环境下不需要显示器。
         run: |
