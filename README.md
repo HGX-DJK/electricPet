@@ -157,6 +157,14 @@ python build_installer.py --quick
   这样换机 / 上 CI 都不会崩。
 - `build_exe.py` 会在打包后自动注入 `assets/api-ms-win-core-path-l1-1-0.dll`
   （Windows 7 兼容层）。
+- **CI 打包**：push 到 `main` / `master` 后由 `.github/workflows/desktop_build.yml`
+  在 Windows runner 上真跑一遍完整打包链路，并把
+  `DesktopPet.exe`（免安装版目录）与 `DesktopPet_Setup.exe`（单文件安装包）
+  作为 artifact 上传（体积数字同样进 Job Summary）。
+  该工作流还会**校验打包前后两份 `.spec` 的 sha256 是否一致** ——
+  一旦有人把打包改回「命令行参数」写法、让 PyInstaller 重新生成同名 spec
+  把仓库里那份覆盖掉，CI 会直接失败。
+  想手动触发：`Actions` 页 → 该工作流 → `Run workflow`。
 
 ---
 
@@ -166,6 +174,11 @@ python build_installer.py --quick
 # Python 桌面版：纯逻辑单元测试（标准库 unittest，不需要 PyQt6）
 python -m unittest discover -s tests -t . -v
 
+# 需要 Qt 的那 9 个行为测试（对话框定时器收口 / 专注面板停表 / 便签字段兜底）
+# 无 PyQt6 的环境会自动跳过；无头环境需要 offscreen 平台插件
+QT_QPA_PLATFORM=offscreen python -m unittest discover -s tests -t . -v
+# Windows CMD 写法： set QT_QPA_PLATFORM=offscreen && python -m unittest discover -s tests -t . -v
+
 # Flutter 跨端版：全量用例 + 静态分析
 cd flutter_pet
 flutter analyze --no-fatal-infos
@@ -173,8 +186,9 @@ flutter test --concurrency=1
 ```
 
 - **Python 依赖声明**见 `pyproject.toml`（`pip install -e .` 或 `pip install -e ".[build]"`）。
-- **CI 闸门**：`.github/workflows/build_apk.yml`（Flutter 分析 + 测试 + APK 构建）与
-  `.github/workflows/python_quality.yml`（Python 字节码编译 + 单元测试 + Qt 模块导入冒烟）。
+- **CI 闸门**：`.github/workflows/build_apk.yml`（Flutter 分析 + 测试 + APK 构建）、
+  `.github/workflows/python_quality.yml`（Python 字节码编译 + 单元测试 + **Qt 行为测试**
+  + 模块导入冒烟）与 `.github/workflows/desktop_build.yml`（桌面端真实打包 + 产物体积上报）。
 - **CI 供应链**：工作流里所有 action 都固定到 commit SHA（不是会移动的 tag），
   Gradle 发行包也用 `distributionSha256Sum` 钉住校验和；
   升级由 `.github/dependabot.yml` 自动开 PR 推进，人工 review 后再合。
