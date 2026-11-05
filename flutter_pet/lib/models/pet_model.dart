@@ -465,6 +465,66 @@ class PetModel extends ChangeNotifier {
     isReady = loadFromDisk();
   }
 
+  // =====================================================================
+  //  写盘 / 通知合并
+  //
+  //  ⚠️ 为什么需要这一层：
+  //  一次用户操作（摸头 / 投喂 / 睡觉）会沿着调用链连着触发多次
+  //  notifyListeners() + saveToDisk()：
+  //
+  //    petHead() → addExp() → recordMemory() → addPersonalityPoint() → 它自己
+  //
+  //  实测一次 petHead() 会打出 **4 次 notifyListeners 和 4 次 saveToDisk**，
+  //  而这两边的代价都不小：
+  //
+  //    * notifyListeners() → pet_screen 的 setState(() {}) → 整棵 widget 树重建
+  //    * saveToDisk()      → SharedPreferences 写一次 + 公共目录文件写一次
+  //                         （writeSilentBackup 用 flush:true，是同步落盘）
+  //
+  //  更要命的是那 4 次写盘写进去的**是同一份数据**：快照是在第一个 await
+  //  之后才取的，而连锁调用全是同步的，等快照取到时状态早就是最终态了。
+  //  所以后 3 次纯属白写 —— 白白在公共目录反复落盘、反复唤醒磁盘。
+  //
+  //  下面把两者都收敛成「一次操作 = 一次通知 + 一次写盘」。
+  // =====================================================================
+
+  /// 写盘请求编号：每次 [saveToDisk] 自增。
+  ///
+  /// 用来判断「这次写盘取的快照之后，是不是又来了新请求」——
+  /// 来了就说明快照已经落后于模型状态，必须再补一次写盘，否则新状态会丢。
+  int _saveRequestId = 0;
+
+  /// 正在进行的写盘任务（单飞）。同一时刻只允许一个在跑。
+  Future<void>? _saveInFlight;
+
+  /// 通知是否已经排期到微任务里（合并用）。
+  bool _notifyScheduled = false;
+
+  /// 模型是否已销毁。排期的微任务回来时不能再去通知一个已销毁的 ChangeNotifier。
+  bool _disposed = false;
+
+  /// 合并通知：同一次操作里的连锁 notifyListeners() 只派发一次。
+  ///
+  /// 用微任务而不是立即派发，是因为一次操作里的所有变更都是**同步**发生的，
+  /// 微任务会在下一帧之前统一派发 —— 既不会漏掉任何一次变更，
+  /// 也不会让 widget 树为同一件事重建好几次。
+  @override
+  void notifyListeners() {
+    if (_notifyScheduled || _disposed) return;
+    _notifyScheduled = true;
+    scheduleMicrotask(() {
+      _notifyScheduled = false;
+      if (_disposed) return;
+      super.notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   /// 主导性格判定: HACKER (极客黑客喵), ATHLETE (元气运动喵), LAZY (佛系大懒喵), BALANCED (纯真萌体)
   String get personality {
     final tech = personalityStats['tech'] ?? 0;
@@ -1025,17 +1085,55 @@ class PetModel extends ChangeNotifier {
     );
   }
 
-  Future<void> saveToDisk() async {
+  /// 把当前状态落盘。
+  ///
+  /// 同一次操作里的连锁调用（feed → addExp → recordMemory → …）会被合并成
+  /// **一次**真实写盘：后来的调用复用同一个任务，不会各自再写一遍。
+  ///
+  /// 返回的 Future 在真正落盘完成后才 complete，所以 `await saveToDisk()`
+  /// 之后状态一定已经持久化 —— 对调用方的语义与合并前完全一致。
+  Future<void> saveToDisk() {
+    _saveRequestId++;
+    // 已经有写盘在跑 → 复用它。那一次写盘会把最新状态一起带上。
+    return _saveInFlight ??= _drainSaves();
+  }
+
+  /// 单飞写盘的循环体。
+  ///
+  /// 每次真正写盘都会回报「本次快照对应的请求编号」；
+  /// 只要这个编号追不上 [_saveRequestId]，就说明写盘期间又来了新请求，
+  /// 需要再补一次 —— 这就是「合并 + 尾随一次」的组合：
+  /// 一次操作内的连锁调用合并成 1 次，而跨操作的新状态绝不会丢。
+  Future<void> _drainSaves() async {
+    try {
+      var captured = 0;
+      while (captured < _saveRequestId) {
+        captured = await _writeNow();
+      }
+    } finally {
+      _saveInFlight = null;
+    }
+  }
+
+  /// 执行一次真实写盘，返回本次快照对应的请求编号。
+  Future<int> _writeNow() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       // 写盘即盖时间戳：这份状态值是"此刻"的真实值，
       // 桌面悬浮宠据此按 (now - stateSavedAt) 补算离线期间的衰减
       stateSavedAt = DateTime.now().millisecondsSinceEpoch;
       final data = toDataMap();
+      // 快照此刻的请求编号：快照之后若还有请求，说明模型又变了，得再写一次
+      final captured = _saveRequestId;
       await prefs.setString('poko_pet_data', jsonEncode(data));
       // 方案 B：静默双写到外部公用目录 (防卸载丢失)
       await BackupService.writeSilentBackup(data);
-    } catch (_) {}
+      return captured;
+    } catch (_) {
+      // 写盘失败不该把模型卡死；但也不能让循环无限重试，
+      // 所以把请求号当作已处理，让这一轮收尾。
+      return _saveRequestId;
+    }
   }
 
   Future<void> flushSave() async => saveToDisk();
