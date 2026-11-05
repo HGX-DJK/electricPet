@@ -9,7 +9,7 @@
 //   猫抓柱 ：站位 = 柱心 - 78，不下沉，探身 +1
 // 家具一律画在猫之后（前景层），与 App 内新分层一致。
 //
-// ⚠️ 跑完看到 PROBE_OUT=... 就 Ctrl+C 结束（探针不会自动退出）。
+// 产物路径会打印成 PROBE_OUT=<path>，探针跑完自动退出。
 //
 // ignore_for_file: invalid_use_of_visible_for_testing_member
 import 'dart:io';
@@ -136,19 +136,39 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // ⚠️ 这里**不能**用 tester.pumpAndSettle()。
+    //    场景里的猫草盆栽 / 猫抓柱都带常驻动画（摇摆），帧永远不会静止，
+    //    pumpAndSettle 会一直空转到 10 分钟超时才报错 —— 探针就此变成一个
+    //    「跑十分钟然后失败」的坑。
+    //    改成和姊妹探针 render_ui_probe.dart 一致的固定帧推进：
+    //    先让布局落定，再推进 2 秒让入场动画走到稳定姿态。
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 2));
 
     final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
-    final image = await boundary.toImage(pixelRatio: 2);
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
 
     final dir = Directory('${Directory.systemTemp.path}/poko_probe');
     dir.createSync(recursive: true);
     final out = File('${dir.path}/orientation.png');
-    out.writeAsBytesSync(data!.buffer.asUint8List());
-    // 必须释放图片，否则引擎一直占着，flutter test 进程不会退出
-    image.dispose();
+
+    // ⚠️ toImage 走引擎的异步通道，必须放进 tester.runAsync。
+    //    flutter_test 默认把用例包在 FakeAsync 里，引擎那边（光栅线程）回调回来的
+    //    Future 在 FakeAsync 里永远不会被推进 —— 于是这个 await 直接挂死，
+    //    探针既不报错也不结束，就是「按下去什么都没发生」。
+    //    （姊妹探针 render_ui_probe.dart 的 _capture() 就是这么写的。）
+    await tester.runAsync(() async {
+      final image = await boundary.toImage(pixelRatio: 2);
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      out.writeAsBytesSync(data!.buffer.asUint8List());
+      // 必须释放图片，否则引擎一直占着，flutter test 进程不会退出
+      image.dispose();
+    });
     // ignore: avoid_print
     print('PROBE_OUT=${out.path}');
+
+    // 拆掉 widget 树：场景里的猫草盆栽 / 猫抓柱都带常驻动画，
+    // 树不销毁的话用例收尾会一直等这些动画停下 → 又一次挂死。
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
   });
 }
