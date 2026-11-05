@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build Poko Flutter APK
     runs-on: ubuntu-latest
+    # 护栏: Gradle 卡死时不要无限期占用 CI 额度。正常构建约 10-15 分钟。
+    timeout-minutes: 60
 
     steps:
       - name: Checkout Code
@@ -19,6 +21,13 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+
+      # 缓存 Gradle 依赖与构建产物。
+      # ⚠️ flutter-action 的 cache 只覆盖 Flutter SDK 和 pub cache，**不含** ~/.gradle，
+      # 所以 Gradle 发行版(gradle-9.3.1-all.zip ≈ 224MB)+ AGP + 全部 AndroidX 依赖
+      # 此前每次 push 都要重新下载一遍。这是当前 CI 最耗时的一段。
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -62,6 +71,24 @@ jobs:
         run: |
           cd flutter_pet
           flutter build apk --release --no-tree-shake-icons
+
+      # 上报 APK 体积。
+      # ⚠️ 此前 CI 只上传产物、从不报体积，导致「开 R8 能省多少」「拆包能省多少」
+      # 这类问题在本地无法回答（打包在 CI 上做，本机没有 Android SDK）——
+      # 体积数字必须出现在 CI 日志和 Job Summary 里，才谈得上做体积闸门。
+      - name: Report APK Size
+        run: |
+          APK=flutter_pet/build/app/outputs/flutter-apk/app-release.apk
+          SIZE=$(stat -c%s "$APK")
+          MB=$(awk -v b="$SIZE" 'BEGIN{printf "%.2f", b/1048576}')
+          echo "APK size: ${MB} MB (${SIZE} bytes)"
+          {
+            echo "### 📦 Android APK 体积"
+            echo ""
+            echo "| 文件 | 体积 |"
+            echo "|---|---|"
+            echo "| app-release.apk | ${MB} MB (${SIZE} bytes) |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
