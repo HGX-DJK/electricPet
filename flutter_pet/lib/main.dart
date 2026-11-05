@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'models/pet_model.dart';
 import 'models/memo_model.dart';
+import 'services/overlay_service.dart';
 import 'theme/poko_theme.dart';
 import 'views/pet_screen.dart';
 
@@ -41,6 +42,9 @@ void main() {
 
   final petModel = PetModel();
   final memoModel = MemoModel();
+  // 桌面悬浮宠在 Flutter 引擎活着时，把「投喂」动作转交给 Dart 结算并写盘
+  // （原生侧不再抢写同一份存档，两边互不覆盖）
+  OverlayService.bindNativeCalls(petModel);
   // 秒开优化：立即执行 runApp 呈现首帧，杜绝异步 I/O 阻塞导致原生黑屏闪烁；本地存档在后台异步回填
 
   runApp(DesktopElectricPetApp(petModel: petModel, memoModel: memoModel));

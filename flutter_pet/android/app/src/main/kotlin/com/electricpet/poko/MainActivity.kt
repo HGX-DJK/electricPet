@@ -20,9 +20,23 @@ class MainActivity: FlutterActivity() {
 
     override fun getRenderMode(): RenderMode = RenderMode.texture
 
-    private companion object {
+    companion object {
         /** 通知权限申请的 requestCode */
-        const val REQUEST_NOTIFICATION_PERMISSION_CODE = 2002
+        private const val REQUEST_NOTIFICATION_PERMISSION_CODE = 2002
+
+        /**
+         * 当前活着的 Flutter 通道（引擎在的时候非空）。
+         *
+         * 桌面悬浮宠服务靠它判断「Dart 侧还在不在」：
+         *   · 在 → 投喂交给 Dart 结算并写盘（**原生让路**，两边不抢写同一份存档）
+         *   · 不在 → 原生自己结算写盘（App 被杀、悬浮宠独自运行时的兜底路径）
+         *
+         * 引擎活着 = MainActivity 还持有引擎。Activity 销毁时引擎随之销毁，
+         * 所以 onDestroy 里必须把它置空 —— 否则服务会对着一个死引擎发消息，
+         * 投喂既没被 Dart 收到、也没被原生兜住，等于凭空丢一次投喂。
+         */
+        @Volatile
+        var engineChannel: MethodChannel? = null
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -52,6 +66,9 @@ class MainActivity: FlutterActivity() {
         // 万一这条链路没走到，前台标记就会悬空，
         // 桌面悬浮猫就会**永远不再出现**（前台判定一旦悬空，窗口永远被摘着）。
         FloatingPetService.notifyAppForegroundChanged(false)
+        // 引擎随 Activity 一起没了：把通道撤掉，
+        // 让桌面悬浮宠服务知道「Dart 侧已经不在了」，投喂改走原生兜底写盘。
+        engineChannel = null
         super.onDestroy()
     }
 
@@ -72,7 +89,10 @@ class MainActivity: FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        // 引擎活着 → 把通道挂出去，桌面悬浮宠服务据此把投喂转交给 Dart 结算
+        engineChannel = channel
+        channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 OverlayChannel.CHECK_OVERLAY_PERMISSION -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

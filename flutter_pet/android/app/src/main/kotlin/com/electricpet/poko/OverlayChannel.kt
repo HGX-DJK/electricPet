@@ -59,6 +59,21 @@ object OverlayChannel {
     /** 打开系统的小组件选择界面 (用于添加「波可桌面萌宠」桌面小组件) */
     const val OPEN_WIDGET_PICKER = "openWidgetPicker"
 
+    /**
+     * 桌面悬浮宠请求 Dart 侧结算一次投喂（原生 → Dart 方向）。
+     *
+     * 背景：Dart 侧与原生侧共用同一份宠物存档（SharedPreferences 的
+     * `flutter.poko_pet_data`）。两边同时写就是「读-改-写」互相覆盖 ——
+     * 后写的赢，先写的那份改动直接丢，表现就是「App 里喂了，桌面上的猫没吃到」。
+     *
+     * 所以约定：**Flutter 引擎活着时由 Dart 独占写盘**，原生只把「投喂」这个
+     * *动作* 转交给 Dart 去结算；引擎不在（App 被杀、桌面悬浮宠独自运行）时，
+     * 才由原生自己结算并写盘（兜底路径）。
+     *
+     * 详见 `FloatingPetService.applyFeeding`。
+     */
+    const val APPLY_FEEDING = "applyFeeding"
+
     // ---------- 参数名 ----------
 
     /** 皮肤 / 品种 ID */
@@ -84,6 +99,9 @@ object OverlayChannel {
 
     /** 设置项集合 */
     const val ARG_SETTINGS = "settings"
+
+    /** 投喂带来的饱食度增量 (原生 → Dart 的 applyFeeding 用) */
+    const val ARG_HUNGER_DELTA = "hungerDelta"
 
     // ---------- 设置项字段名 (与 Dart 端 OverlaySettings 字段一一对应) ----------
     const val ARG_SETTING_SIZE_DP = "sizeDp"
@@ -114,6 +132,7 @@ object OverlayChannel {
         "GET_OVERLAY_SETTINGS" to GET_OVERLAY_SETTINGS,
         "UPDATE_OVERLAY_SETTINGS" to UPDATE_OVERLAY_SETTINGS,
         "OPEN_WIDGET_PICKER" to OPEN_WIDGET_PICKER,
+        "APPLY_FEEDING" to APPLY_FEEDING,
     )
 
     /**
@@ -127,6 +146,7 @@ object OverlayChannel {
         "ARG_DAY_START_MINUTE" to ARG_DAY_START_MINUTE,
         "ARG_NIGHT_START_MINUTE" to ARG_NIGHT_START_MINUTE,
         "ARG_SETTINGS" to ARG_SETTINGS,
+        "ARG_HUNGER_DELTA" to ARG_HUNGER_DELTA,
         "ARG_SETTING_SIZE_DP" to ARG_SETTING_SIZE_DP,
         "ARG_SETTING_OPACITY" to ARG_SETTING_OPACITY,
         "ARG_SETTING_PEEKING" to ARG_SETTING_PEEKING,

@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../models/overlay_settings.dart';
+import '../models/pet_model.dart';
 import 'overlay_channel.dart';
 
 /// Android 原生悬浮窗与系统交互通道服务
@@ -153,5 +154,36 @@ class OverlayService {
     } catch (_) {
       return false;
     }
+  }
+
+  // ---------- 原生 → Dart 方向（原生主动找 Dart 办事） ----------
+
+  /// 绑定原生侧回调：原生把「投喂」动作转交给 Dart 结算。
+  ///
+  /// 为什么要这条反向通道：
+  /// Dart 侧与原生侧共用同一份宠物存档（SharedPreferences 的
+  /// `flutter.poko_pet_data`）。两边同时写就是「读-改-写」互相覆盖 ——
+  /// 后写的赢，先写的那份改动直接丢，表现为「App 里喂了，桌面上的猫没吃到」。
+  /// 所以约定：**Flutter 引擎活着时由 Dart 独占写盘**，
+  /// 原生只把「投喂」这个*动作*转交过来，结算与写盘全在 Dart 这边完成。
+  ///
+  /// 引擎不在时（App 被杀）原生走自己的兜底写盘路径，不会调到这儿。
+  ///
+  /// 重复绑定是安全的（后一次覆盖前一次的 handler）。
+  static void bindNativeCalls(PetModel model) {
+    _channel.setMethodCallHandler((MethodCall call) async {
+      switch (call.method) {
+        case OverlayChannel.applyFeeding:
+          final Map<Object?, Object?>? args =
+              call.arguments as Map<Object?, Object?>?;
+          final int delta =
+              (args?[OverlayChannel.argHungerDelta] as num?)?.toInt() ?? 0;
+          await model.applyExternalFeeding(delta);
+          return true;
+        default:
+          // 未识别的原生调用：返回 null 让原生知道「这边没接住」
+          return null;
+      }
+    });
   }
 }

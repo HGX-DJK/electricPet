@@ -3507,6 +3507,108 @@ class Demo {
           reason: '未监听息屏, 屏幕熄灭后悬浮猫仍在空转');
     });
   });
+
+  group('存档单写方：引擎活着时由 Dart 独占写盘', () {
+    // 背景（Dart 侧与原生侧共用同一份 SharedPreferences 存档 `flutter.poko_pet_data`）：
+    // 两边都写就是「读-改-写」互相覆盖 —— 后写的赢，先写的那份改动直接丢，
+    // 表现为「App 里喂了，桌面上的猫却没吃到」。
+    // 约定：引擎活着时**原生让路**，由 Dart 独占写盘；
+    // 引擎不在（App 被杀）才由原生自己结算写盘兜底。
+
+    test('原生投喂必须优先转交 Dart，转交成功后绝不能再自己写盘', () {
+      final feedBlock = _between(
+        serviceSource,
+        'private fun applyFeeding(hungerDelta: Int) {',
+        'private fun dispatchFeedingToDart',
+      );
+
+      expect(feedBlock, contains('dispatchFeedingToDart(hungerDelta)'),
+          reason: '原生投喂没有转交 Dart，两边会抢写同一份存档');
+      expect(feedBlock, contains('return'),
+          reason: '转交成功后必须立刻返回，不能继续走原生写盘路径把 Dart 刚写的值盖掉');
+      expect(feedBlock, isNot(contains('putString')),
+          reason: '转交路径里出现写盘动作，两边会同时写同一份存档');
+      expect(feedBlock, contains('applyFeedingLocally(hungerDelta)'),
+          reason: '引擎不在时必须保留原生兜底写盘路径（App 被杀后桌面悬浮宠仍可投喂）');
+    });
+
+    test('原生兜底写盘必须是独立函数，且真的写盘', () {
+      final dispatchBlock = _between(
+        serviceSource,
+        'private fun dispatchFeedingToDart',
+        'private fun applyFeedingLocally',
+      );
+      expect(dispatchBlock, contains('MainActivity.engineChannel'),
+          reason: '未按引擎在线状态判断该不该转交');
+      expect(dispatchBlock, contains('OverlayChannel.APPLY_FEEDING'),
+          reason: '转交时没有调用协议里约定的 applyFeeding 方法');
+      expect(dispatchBlock, contains('OverlayChannel.ARG_HUNGER_DELTA'),
+          reason: '转交时没有把投喂增量传给 Dart');
+
+      final localBlock = _between(
+        serviceSource,
+        'private fun applyFeedingLocally',
+        'private fun syncPetMood',
+      );
+      expect(localBlock, contains('putString(KEY_PET_DATA'),
+          reason: '原生兜底路径必须真的写盘，否则 App 被杀后投喂就丢了');
+    });
+
+    test('引擎在线状态必须在引擎创建时挂上、Activity 销毁时摘掉', () {
+      expect(activitySource, contains('var engineChannel: MethodChannel?'),
+          reason: 'MainActivity 没有暴露引擎在线状态，服务无从判断 Dart 是否还在');
+      expect(activitySource, contains('engineChannel = channel'),
+          reason: '引擎创建后没有把通道挂出去，原生永远以为 Dart 不在了');
+      expect(activitySource, contains('engineChannel = null'),
+          reason: 'Activity 销毁后没有摘掉通道，服务会对着死引擎发消息，投喂凭空丢失');
+    });
+
+    test('Dart 侧必须实现等价的投喂结算，且结算前先等模型加载完', () {
+      expect(overlayServiceSource, contains('setMethodCallHandler'),
+          reason: 'Dart 侧没有接住原生回调的入口');
+      expect(overlayServiceSource, contains('OverlayChannel.applyFeeding'),
+          reason: 'Dart 侧没有接住原生的 applyFeeding 回调');
+      expect(overlayServiceSource, contains('applyExternalFeeding'),
+          reason: 'Dart 侧没有把投喂转交给模型结算');
+
+      expect(petModelSource, contains('Future<void> applyExternalFeeding'),
+          reason: 'PetModel 缺少外部投喂结算入口');
+      final dartBlock = _between(
+        petModelSource,
+        'Future<void> applyExternalFeeding',
+        'void petHead()',
+      );
+      expect(dartBlock, contains('await isReady'),
+          reason: '模型还没从磁盘加载完就结算，会用默认值覆盖存档里真实的状态');
+      expect(dartBlock, contains('applyOfflineDecay()'),
+          reason: '结算前必须先补算离线衰减，否则会把 App 攒下的状态抹掉');
+    });
+
+    test('两端投喂结算规则必须一致（App 开着喂与 App 关着喂要算出同一个状态）', () {
+      final dartBlock = _between(
+        petModelSource,
+        'Future<void> applyExternalFeeding',
+        'void petHead()',
+      );
+      final localBlock = _between(
+        serviceSource,
+        'private fun applyFeedingLocally',
+        'private fun syncPetMood',
+      );
+
+      // 心情 +10
+      expect(dartBlock, contains('mood + 10.0'),
+          reason: 'Dart 侧投喂后心情增量不是 +10，与原生兜底路径算出的状态会分叉');
+      expect(localBlock, contains('"mood", 80) + 10.0'),
+          reason: '原生兜底路径的投喂心情增量被改动');
+
+      // 亲密度 +5（封顶 100）
+      expect(dartBlock, contains('intimacy + 5'),
+          reason: 'Dart 侧投喂后亲密度增量不是 +5');
+      expect(localBlock, contains('"intimacy", 50) + 5'),
+          reason: '原生兜底路径的投喂亲密度增量被改动');
+    });
+  });
 }
 
 /// 定位 Flutter 包根目录（向上查找 pubspec.yaml），兼容在不同工作目录下执行测试。

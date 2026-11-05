@@ -3642,8 +3642,57 @@ class FloatingPetService : Service() {
     /**
      * 给猫加餐：写入饱食度 / 心情 / 亲密度，并同步到悬浮猫的表情与行为权重。
      * 通知栏投喂与拖拽投喂共用这一份结算逻辑。
+     *
+     * ⚠️ 写盘归属（原生让路）：
+     * Dart 侧与原生侧共用同一份存档 `flutter.poko_pet_data`，
+     * 两边都写就是「读-改-写」互相覆盖 —— 后写的赢，先写的那份改动直接丢，
+     * 表现为「App 里喂了，桌面上的猫却没吃到」。
+     * 所以：
+     *   · **Flutter 引擎活着 → 由 Dart 独占写盘**。原生只把「投喂」这个*动作*
+     *     转交给 Dart 去结算，自己绝不能再写一次盘（否则会把 Dart 刚写的值盖掉）。
+     *     Dart 写完盘后，SharedPreferences 监听会把新状态同步回桌面。
+     *   · **引擎不在（App 被杀、悬浮宠独自运行）→ 原生自己结算写盘**，兜底路径。
      */
     private fun applyFeeding(hungerDelta: Int) {
+        if (dispatchFeedingToDart(hungerDelta)) {
+            // Dart 接管了这次投喂：它自己结算、自己写盘，
+            // 写完由 petDataChangeListener → syncPetMood() 把桌面这边同步过去。
+            return
+        }
+        applyFeedingLocally(hungerDelta)
+        syncPetMood()
+    }
+
+    /**
+     * 把投喂动作转交给 Dart 侧结算。
+     *
+     * @return true  表示 Dart 接管了这次投喂（原生不要再写盘）
+     *         false 表示引擎不在 / 投递失败，原生需要自己兜底结算
+     */
+    private fun dispatchFeedingToDart(hungerDelta: Int): Boolean {
+        val channel = MainActivity.engineChannel ?: return false
+        return try {
+            channel.invokeMethod(
+                OverlayChannel.APPLY_FEEDING,
+                mapOf(OverlayChannel.ARG_HUNGER_DELTA to hungerDelta),
+            )
+            true
+        } catch (e: Exception) {
+            // 引擎可能刚好在这一刻被回收 —— 投喂不能凭空丢了，退回原生兜底
+            Log.w(TAG, "转交 Dart 结算投喂失败，改由原生兜底写盘: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * 原生侧自己结算投喂并写盘。
+     *
+     * 只在 Flutter 引擎不在（App 被杀、桌面悬浮宠独自运行）时走这条路。
+     *
+     * 结算规则必须与 Dart 侧 `PetModel.applyExternalFeeding` 保持一致，
+     * 否则「App 开着时喂」和「App 关着时喂」会算出不一样的状态。
+     */
+    private fun applyFeedingLocally(hungerDelta: Int) {
         try {
             val prefs = getSharedPreferences(PREFS_PET, Context.MODE_PRIVATE)
             val rawJson = prefs.getString(KEY_PET_DATA, null)
@@ -3671,8 +3720,6 @@ class FloatingPetService : Service() {
                 prefs.edit().putString(KEY_PET_DATA, json.toString()).apply()
             }
         } catch (_: Exception) {}
-
-        syncPetMood()
     }
 
     /**

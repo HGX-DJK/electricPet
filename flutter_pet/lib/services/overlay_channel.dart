@@ -56,6 +56,16 @@ class OverlayChannel {
   /// 打开系统的小组件选择界面 (用于添加「波可桌面萌宠」桌面小组件)
   static const String openWidgetPicker = 'openWidgetPicker';
 
+  /// 桌面悬浮宠请求 Dart 侧结算一次投喂 (原生 → Dart 方向)
+  ///
+  /// 背景：Dart 侧与原生侧共用同一份宠物存档（SharedPreferences 的
+  /// `flutter.poko_pet_data`）。两边同时写就是「读-改-写」互相覆盖 ——
+  /// 后写的赢，先写的那份改动直接丢，表现为「App 里喂了，桌面上的猫没吃到」。
+  ///
+  /// 所以约定：**Flutter 引擎活着时由 Dart 独占写盘**，原生只把「投喂」这个
+  /// *动作* 转交给 Dart 去结算；引擎不在（App 被杀）才由原生自己结算写盘。
+  static const String applyFeeding = 'applyFeeding';
+
   // ---------- 参数名 ----------
 
   /// 皮肤 / 品种 ID
@@ -79,6 +89,9 @@ class OverlayChannel {
 
   /// 设置项集合
   static const String argSettings = 'settings';
+
+  /// 投喂带来的饱食度增量 (原生 → Dart 的 applyFeeding 用)
+  static const String argHungerDelta = 'hungerDelta';
 
   // ---------- 设置项字段名 (与原生 OverlaySettings 字段一一对应) ----------
   static const String argSettingSizeDp = 'sizeDp';
@@ -106,6 +119,7 @@ class OverlayChannel {
     'GET_OVERLAY_SETTINGS': 'getOverlaySettings',
     'UPDATE_OVERLAY_SETTINGS': 'updateOverlaySettings',
     'OPEN_WIDGET_PICKER': 'openWidgetPicker',
+    'APPLY_FEEDING': 'applyFeeding',
   };
 
   /// 全部参数名 (常量名 -> 参数名)，必须与 Kotlin 侧 `OverlayChannel.ALL_ARGS` 逐项一致
@@ -116,6 +130,7 @@ class OverlayChannel {
     'ARG_DAY_START_MINUTE': 'dayStartMinute',
     'ARG_NIGHT_START_MINUTE': 'nightStartMinute',
     'ARG_SETTINGS': 'settings',
+    'ARG_HUNGER_DELTA': 'hungerDelta',
     'ARG_SETTING_SIZE_DP': 'sizeDp',
     'ARG_SETTING_OPACITY': 'opacity',
     'ARG_SETTING_PEEKING': 'peeking',

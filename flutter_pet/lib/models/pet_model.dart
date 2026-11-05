@@ -824,6 +824,33 @@ class PetModel extends ChangeNotifier {
     return true;
   }
 
+  /// 结算一次「来自桌面悬浮宠」的投喂。
+  ///
+  /// 桌面悬浮宠（原生侧）在 Flutter 引擎活着时**不会自己写盘** ——
+  /// 两边抢写同一份存档会互相覆盖（后写的赢，先写的那份改动直接丢），
+  /// 表现为「App 里喂了，桌面上的猫却没吃到」。
+  /// 所以原生只把「投喂」这个*动作*转交过来，结算与写盘全在 Dart 这边完成。
+  ///
+  /// 引擎不在时（App 被杀、悬浮宠独自运行）原生走自己的兜底写盘路径，
+  /// 不会调到这儿。
+  ///
+  /// ⚠️ 结算规则必须与原生侧的兜底路径
+  /// `FloatingPetService.applyFeedingLocally` **完全一致**，
+  /// 否则「App 开着时喂」和「App 关着时喂」会算出不一样的状态。
+  Future<void> applyExternalFeeding(int hungerDelta) async {
+    // 模型还没从磁盘加载完就先等一下 ——
+    // 否则会拿默认值去结算，把存档里真实的状态覆盖掉。
+    await isReady;
+    // 先把离线期间的衰减补上再结算投喂，
+    // 这样写回盘里的数值就是「此刻」的真实值，不会把 App 攒下的状态抹掉
+    applyOfflineDecay();
+    hunger = (hunger + hungerDelta).clamp(0.0, 100.0);
+    mood = (mood + 10.0).clamp(0.0, 100.0);
+    intimacy = (intimacy + 5).clamp(0, 100);
+    notifyListeners();
+    await saveToDisk();
+  }
+
   /// 抚摸头部
   void petHead() {
     mood = (mood + 4.5).clamp(0.0, 100.0);
