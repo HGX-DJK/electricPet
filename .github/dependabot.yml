@@ -1,0 +1,54 @@
+# Dependabot 负责把钉死在 workflow 里的 action SHA 往前推。
+#
+# ⚠️ 我们把 action 固定到 commit SHA（而不是会移动的 tag），
+#    换来的是供应链安全 —— 上游被入侵时最典型的手法就是推 tag，
+#    钉 SHA 后只有本文件能改 workflow，改动走 PR 评审。
+#    代价是没人再自动升级它们，这个文件就是那半边的补丁。
+#
+# 当前钉住的版本（改 workflow 时请同步更新这里的注释）：
+#   actions/checkout          v4  → 11d5960a326750d5838078e36cf38b85af677262
+#   actions/setup-java        v5  → b6effb05e454b25005698d916606bdc6ffcbf961
+#   actions/setup-python      v5  → a26af69be951a213d495a4c3e4e4022e16d87065
+#   actions/upload-artifact   v4  → ea165f8d65b6e75b540449e92b4886f43607fa02
+#   gradle/actions/setup-gradle v4 → ed408507eac070d1f99cc633dbcf757c94c7933a
+#   subosito/flutter-action   v2  → 1a449444c387b1966244ae4d4f8c696479add0b2
+#
+# ⚠️ Flutter 版本 3.47.2 不是随手挑的：它正是项目 android/ 脚手架的来源版本，
+#    该版本 Flutter 官方模板钉的 AGP(9.1.0) / Gradle(9.3.1) / Kotlin(2.4.0)
+#    与项目 settings.gradle.kts 完全一致。换 Flutter 版本必须同步核对这三项。
+
+version: 2
+
+updates:
+  # 1) GitHub Actions：把 workflow 里钉死的 SHA 往前推
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "ci"]
+
+  # 2) Flutter 侧依赖（flutter_pet 是子目录，有自己的 pubspec.yaml）
+  - package-ecosystem: "pub"
+    directory: "/flutter_pet"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+
+  # 3) Python 侧依赖（声明在 pyproject.toml）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
