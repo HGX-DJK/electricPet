@@ -4515,7 +4515,23 @@ class FloatingPetService : Service() {
                     startForeground(FOREGROUND_NOTIFICATION_ID, notification)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                // ⚠️ 这里**不能** stopSelf()。
+                //
+                // 前台通知起不来，只说明「通知这一环」失败了（比如某些定制系统不给
+                // 前台服务类型、或通知权限被拒），**桌面悬浮猫本身并不依赖通知** ——
+                // 它的窗口是 WindowManager 直接加的。只要不 stopSelf()，服务就还活着，
+                // 猫照样能站在桌面上。
+                //
+                // 反过来，一旦 stopSelf()，用户看到的就不是「没通知」，而是
+                // **「悬浮猫整个不见了」** —— 把一个降级问题变成了功能丢失。
+                //
+                // 所以正确做法是：记一条带 TAG 的日志（原来只有 printStackTrace，
+                // 在 logcat 里没有 TAG，根本筛不出来），然后继续跑。
+                Log.w(
+                    TAG,
+                    "startForeground 失败，降级为「无通知的常驻服务」" +
+                        "（悬浮猫窗口不依赖通知，仍会正常显示）：${e.javaClass.simpleName}: ${e.message}"
+                )
             }
         }
     }
@@ -4684,6 +4700,10 @@ class FloatingPetService : Service() {
         strollAnimator?.cancel()
         isStrolling = false
         edgeSnapAnimator?.cancel()
+        // 探头/溢出回收动画也得停：它每帧都在改 view.peekOffsetX，
+        // 服务都销毁了还留着动画，就是一个拿着已回收 View 的野指针。
+        peekOffsetAnimator?.cancel()
+        peekOffsetAnimator = null
         hideBubbleRunnable?.let { mainHandler.removeCallbacks(it) }
         hideActionMenuRunnable?.let { mainHandler.removeCallbacks(it) }
         try {
