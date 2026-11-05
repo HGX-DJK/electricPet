@@ -8,6 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.widget.RemoteViews
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 波可桌面小组件。
@@ -34,23 +36,57 @@ class PokoWidgetProvider : AppWidgetProvider() {
     companion object {
 
         /**
+         * 小组件刷新专用线程。
+         *
+         * ⚠️ 刷新必须在**主线程之外**做。
+         *
+         * refreshAll 是被悬浮宠的 syncPetMood() 调的，而 syncPetMood 又会在
+         * 「Dart 每次写盘」时被触发（原生侧注册了 SharedPreferences 变更监听）。
+         * 也就是说：**用户每摸一次猫，主线程就要做**——
+         *   1 次 SharedPreferences 读 + 1 次 JSON 解析（syncPetMood 自己那次）
+         *   + 1 次 SharedPreferences 读 + 1 次 JSON 解析（buildViews 里那次）
+         *   + N 次 updateAppWidget 的 binder 调用（每个约 1-3ms，且要过 system_server）
+         * 这些全在主线程上串行做，触摸反馈会被拖住。
+         */
+        private val refreshExecutor = Executors.newSingleThreadExecutor { r ->
+            Thread(r, "poko-widget-refresh").apply { isDaemon = true }
+        }
+
+        /**
+         * 刷新代次：只允许「最新一次」刷新真正落地。
+         *
+         * ⚠️ 刷新改成异步之后会冒出新的竞态：连续两次刷新可能乱序完成，
+         * 老快照后到，把新状态盖成旧状态 —— 小组件上会看到「状态往回退」。
+         * 用一个单调递增的代次号把过期的刷新挡掉。
+         */
+        private val refreshGeneration = AtomicInteger(0)
+
+        /**
          * 主动刷新桌面上的所有小组件。
          *
          * 悬浮宠服务在状态变化（App 写盘、投喂、离线衰减补算）后调用它，
          * 这样小组件不用等 30 分钟的系统周期就能显示最新状态。
          */
         fun refreshAll(context: Context) {
-            try {
-                val manager = AppWidgetManager.getInstance(context)
-                val component = ComponentName(context, PokoWidgetProvider::class.java)
-                val ids = manager.getAppWidgetIds(component)
-                if (ids.isEmpty()) return
-                val views = buildViews(context)
-                for (id in ids) {
-                    manager.updateAppWidget(id, views)
+            // ⚠️ 用 applicationContext：任务跑在后台线程上，会比调用方活得久，
+            //    拿着 Service 的 context 会把整个服务泄漏出去。
+            val appContext = context.applicationContext
+            val generation = refreshGeneration.incrementAndGet()
+            refreshExecutor.execute {
+                try {
+                    val manager = AppWidgetManager.getInstance(appContext)
+                    val component = ComponentName(appContext, PokoWidgetProvider::class.java)
+                    val ids = manager.getAppWidgetIds(component)
+                    if (ids.isEmpty()) return@execute
+                    val views = buildViews(appContext)
+                    // 组装视图的过程中可能又来了一次更新的刷新 —— 这次已经过期，作废
+                    if (refreshGeneration.get() != generation) return@execute
+                    for (id in ids) {
+                        manager.updateAppWidget(id, views)
+                    }
+                } catch (_: Exception) {
+                    // 小组件刷新失败不该影响悬浮宠本体
                 }
-            } catch (_: Exception) {
-                // 小组件刷新失败不该影响悬浮宠本体
             }
         }
 
