@@ -13,7 +13,10 @@ if REPO_ROOT not in sys.path:
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PyQt6.QtGui import QColor, QPen, QBrush, QFont, QLinearGradient, QRadialGradient  # noqa: E402
+from PyQt6.QtGui import (  # noqa: E402
+    QColor, QPen, QBrush, QFont, QLinearGradient, QRadialGradient,
+    QPainterPath, QPolygonF,
+)
 from PyQt6.QtCore import QPointF, QRectF  # noqa: E402
 
 COUNTERS = {}
@@ -27,6 +30,8 @@ _ORIGINALS = {
     "QRectF": QRectF,
     "QLinearGradient": QLinearGradient,
     "QRadialGradient": QRadialGradient,
+    "QPainterPath": QPainterPath,
+    "QPolygonF": QPolygonF,
 }
 _COUNTERED = {}
 
@@ -74,7 +79,7 @@ def print_breakdown(frames, title):
     for k in sorted(COUNTERS, key=lambda x: -COUNTERS[x]):
         print(f"    {k:18} {COUNTERS[k]/frames:8.1f} 个/帧")
     print("  分配热点（次/帧）:")
-    rows = sorted(SITES.items(), key=lambda kv: -kv[1])[:12]
+    rows = sorted(SITES.items(), key=lambda kv: -kv[1])[:25]
     for (name, fn, line), n in rows:
         print(f"    {fn}:{line:<6} {name:<18} {n/frames:7.1f}")
 
@@ -146,6 +151,42 @@ def measure_holo(seconds=1.0):
     print_breakdown(frames, "holo")
 
 
+def measure_microbench():
+    """微基准：单个 Qt 对象的构造成本。
+
+    有了这个数字才能判断「少分配 N 个对象/帧」到底值多少 CPU。
+    """
+    print("\n=== 单个 Qt 对象构造成本（微基准）===")
+
+    def bench(label, fn, n=30000):
+        for _ in range(2000):
+            fn()
+        t0 = time.perf_counter()
+        for _ in range(n):
+            fn()
+        dt = (time.perf_counter() - t0) / n * 1e6
+        print("  %-26s %7.3f us/ea" % (label, dt))
+        return dt
+
+    class Plain:
+        __slots__ = ("a", "b")
+
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+
+    bench("plain python object", lambda: Plain(1, 2))
+    bench("QColor(r,g,b,a)", lambda: QColor(200, 100, 50, 180))
+    bench("QColor(hex)", lambda: QColor("#FF8040"))
+    bench("QBrush(QColor)", lambda: QBrush(QColor(200, 100, 50, 180)))
+    bench("QPen(QColor,1.5)", lambda: QPen(QColor(1, 2, 3), 1.5))
+    bench("QRectF", lambda: QRectF(1.0, 2.0, 3.0, 4.0))
+    bench("QPointF", lambda: QPointF(1.0, 2.0))
+    bench("QRadialGradient", lambda: QRadialGradient(1.0, 2.0, 3.0))
+    bench("QPainterPath", lambda: QPainterPath())
+
+
 if __name__ == "__main__":
+    measure_microbench()
     measure_renderer()
     measure_holo()
