@@ -31,10 +31,57 @@ from pet.audio import sound_manager
 _BRUSH_CACHE = {}
 _COLOR_CACHE = {}
 _PEN_CACHE = {}
+_GRAD_BRUSH_CACHE = {}
 
 # 缓存上限：带变化 alpha 的颜色（如 255,255,255,<alpha>）最多会占 256 个键，
 # 全部颜色加起来理论上能有几千个。设个上限兜住内存，不让缓存无限涨。
 _CACHE_LIMIT = 4096
+
+
+def _key_part(value):
+    """把一个参数转成可哈希的键片段。
+
+    渐变的几何参数里可能出现 QPointF 这种**不可哈希**的对象
+    （例如 QRadialGradient(QPointF, radius)），
+    直接塞进 dict 的键会抛 TypeError，所以这里统一折算成坐标元组。
+    """
+    try:
+        hash(value)
+        return value
+    except TypeError:
+        if hasattr(value, "x") and hasattr(value, "y"):
+            return (type(value).__name__, value.x(), value.y())
+        return repr(value)
+
+
+def _grad_brush(grad_cls, geom, stops):
+    """取一支「渐变画刷」（带缓存）。
+
+    实测 QBrush(QGradient(...)) 是所有 Qt 对象里最贵的（连着渐变一起约 9~10µs），
+    而渐变的几何和色标在一帧里往往是常量 —— 缓存下来就只剩一次字典查找。
+
+    缓存键由**渐变几何**和**全部色标**自动推导：
+    键 = (渐变类型, 几何参数, ((位置, 颜色), ...))。
+    也就是说键里必然包含「画这支笔所需要的全部信息」，
+    不可能因为少写一项而取到一支画错的笔。
+
+    geom  : 传给 QLinearGradient / QRadialGradient 的构造参数
+    stops : [(位置, QColor), ...]，按位置升序
+    """
+    key = (
+        grad_cls.__name__,
+        tuple(_key_part(g) for g in geom),
+        tuple((pos, col.getRgb()) for pos, col in stops),
+    )
+    brush = _GRAD_BRUSH_CACHE.get(key)
+    if brush is None:
+        grad = grad_cls(*geom)
+        for pos, col in stops:
+            grad.setColorAt(pos, col)
+        brush = QBrush(grad)
+        if len(_GRAD_BRUSH_CACHE) < _CACHE_LIMIT:
+            _GRAD_BRUSH_CACHE[key] = brush
+    return brush
 
 
 def _color(*args):
@@ -720,11 +767,11 @@ class PetRenderer:
 
         # 漫反射羽化大阴影 (羽化环境落影)
         shadow_rect = QRectF(shadow_cx - shadow_w / 2.0, 44 - (0.0 if is_spin else breath_offset * 0.3), shadow_w, 20)
-        shadow_grad = QRadialGradient(shadow_rect.center(), shadow_w / 2.0)
-        shadow_grad.setColorAt(0.0, QColor(0, 0, 0, ambient_alpha))
-        shadow_grad.setColorAt(0.55, QColor(0, 0, 0, int(ambient_alpha * 0.42)))
-        shadow_grad.setColorAt(1.0, _color(0, 0, 0, 0))
-        painter.setBrush(QBrush(shadow_grad))
+        painter.setBrush(_grad_brush(QRadialGradient, (shadow_rect.center(), shadow_w / 2.0), [
+            (0.0, QColor(0, 0, 0, ambient_alpha)),
+            (0.55, QColor(0, 0, 0, int(ambient_alpha * 0.42))),
+            (1.0, _color(0, 0, 0, 0)),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(shadow_rect)
 
@@ -732,11 +779,11 @@ class PetRenderer:
         if contact_alpha > 0:
             contact_w = shadow_w * 0.72
             contact_rect = QRectF(shadow_cx - contact_w / 2.0, 47 - (0.0 if is_spin else breath_offset * 0.2), contact_w, 9)
-            contact_grad = QRadialGradient(contact_rect.center(), contact_w / 2.0)
-            contact_grad.setColorAt(0.0, QColor(0, 0, 0, contact_alpha))
-            contact_grad.setColorAt(0.65, QColor(0, 0, 0, int(contact_alpha * 0.3)))
-            contact_grad.setColorAt(1.0, _color(0, 0, 0, 0))
-            painter.setBrush(QBrush(contact_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (contact_rect.center(), contact_w / 2.0), [
+                (0.0, QColor(0, 0, 0, contact_alpha)),
+                (0.65, QColor(0, 0, 0, int(contact_alpha * 0.3))),
+                (1.0, _color(0, 0, 0, 0)),
+            ]))
             painter.drawEllipse(contact_rect)
 
         # 3.5 3D 星尘环绕粒子 (背景层，位于身体后方)
@@ -863,11 +910,11 @@ class PetRenderer:
 
         elif habitat == "summer_beach":
             # 夏日阳光海滩：温暖落日余晖斜光束 + 漂浮金光微尘
-            sun_grad = QRadialGradient(width * 0.82, height * 0.18, 90)
-            sun_grad.setColorAt(0.0, _color(253, 224, 71, 55))
-            sun_grad.setColorAt(0.6, _color(251, 146, 60, 25))
-            sun_grad.setColorAt(1.0, _color(251, 146, 60, 0))
-            painter.setBrush(QBrush(sun_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (width * 0.82, height * 0.18, 90), [
+                (0.0, _color(253, 224, 71, 55)),
+                (0.6, _color(251, 146, 60, 25)),
+                (1.0, _color(251, 146, 60, 0)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QRectF(width * 0.45, 0, width * 0.75, height * 0.6))
 
@@ -889,10 +936,10 @@ class PetRenderer:
 
         elif habitat == "zen_tatami":
             # 佛系禅意蒲团室：静谧抹茶清竹微光 + 优雅徐徐飘落的樱花花瓣
-            tatami_grad = QLinearGradient(0, height * 0.82, 0, height)
-            tatami_grad.setColorAt(0.0, _color(101, 163, 13, 0))
-            tatami_grad.setColorAt(1.0, _color(101, 163, 13, 26))
-            painter.setBrush(QBrush(tatami_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (0, height * 0.82, 0, height), [
+                (0.0, _color(101, 163, 13, 0)),
+                (1.0, _color(101, 163, 13, 26)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRect(QRectF(0, height * 0.82, width, height * 0.18))
 
@@ -966,11 +1013,11 @@ class PetRenderer:
     # ================= 究极体光环与背部装饰 =================
     def _draw_ultimate_aura(self, painter: QPainter):
         aura_rad = 75 + math.sin(self.anim_time * 3.0) * 8.0
-        aura_grad = QRadialGradient(0, 0, aura_rad)
-        aura_grad.setColorAt(0.0, _color(255, 235, 120, 110))
-        aura_grad.setColorAt(0.6, _color(255, 180, 50, 45))
-        aura_grad.setColorAt(1.0, _color(255, 150, 0, 0))
-        painter.setBrush(QBrush(aura_grad))
+        painter.setBrush(_grad_brush(QRadialGradient, (0, 0, aura_rad), [
+            (0.0, _color(255, 235, 120, 110)),
+            (0.6, _color(255, 180, 50, 45)),
+            (1.0, _color(255, 150, 0, 0)),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(-aura_rad, -aura_rad - 10, aura_rad * 2, aura_rad * 2))
 
@@ -1011,11 +1058,11 @@ class PetRenderer:
             star_path.cubicTo(-1.5, 2, -2, 1.5, -s, 0)
             star_path.cubicTo(-2, -1.5, -1.5, -2, 0, -s)
 
-            grad = QRadialGradient(0, 0, s)
-            grad.setColorAt(0.0, QColor(255, 255, 255, alpha))
-            grad.setColorAt(0.45, QColor(254, 240, 138, alpha))
-            grad.setColorAt(1.0, _color(245, 158, 11, 0))
-            painter.setBrush(QBrush(grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (0, 0, s), [
+                (0.0, QColor(255, 255, 255, alpha)),
+                (0.45, QColor(254, 240, 138, alpha)),
+                (1.0, _color(245, 158, 11, 0)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(star_path)
 
@@ -1084,11 +1131,11 @@ class PetRenderer:
             # 佛系大懒喵专属：禅意榻榻米软垫/蒲团 (置于身下地面)
             painter.save()
             cushion_rect = QRectF(-48, 36, 96, 26)
-            cushion_grad = QRadialGradient(0, 48, 48)
-            cushion_grad.setColorAt(0.0, _color("#FDE68A"))
-            cushion_grad.setColorAt(0.7, _color("#F59E0B"))
-            cushion_grad.setColorAt(1.0, _color("#B45309"))
-            painter.setBrush(QBrush(cushion_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (0, 48, 48), [
+                (0.0, _color("#FDE68A")),
+                (0.7, _color("#F59E0B")),
+                (1.0, _color("#B45309")),
+            ]))
             painter.setPen(_pen("#78350F", 2.2))
             painter.drawEllipse(cushion_rect)
 
@@ -1141,10 +1188,10 @@ class PetRenderer:
                 tail_path.cubicTo(26, -10, 28, -42, 6 + tail_wag * 0.4, -48)
                 tail_path.cubicTo(-4 + tail_wag * 0.4, -50, -8, -32, 0, -12)
                 tail_path.closeSubpath()
-                tail_grad = QLinearGradient(0, 0, 15, -45)
-                tail_grad.setColorAt(0.0, _color(palette["tail_l"]))
-                tail_grad.setColorAt(1.0, _color(palette["tail_d"]))
-                painter.setBrush(QBrush(tail_grad))
+                painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 15, -45), [
+                    (0.0, _color(palette["tail_l"])),
+                    (1.0, _color(palette["tail_d"])),
+                ]))
                 painter.setPen(_pen(palette["outline"], 3.2))
                 painter.drawPath(tail_path)
                 painter.restore()
@@ -1161,10 +1208,10 @@ class PetRenderer:
                 tail_path.moveTo(0, 0)
                 tail_path.cubicTo(24, 10, 32, -26, 20, -36)
                 tail_path.cubicTo(12, -40, 4, -20, 0, -10)
-                tail_grad = QLinearGradient(0, 0, 25, -30)
-                tail_grad.setColorAt(0.0, _color(palette["tail_l"]))
-                tail_grad.setColorAt(1.0, _color(palette["tail_d"]))
-                painter.setBrush(QBrush(tail_grad))
+                painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 25, -30), [
+                    (0.0, _color(palette["tail_l"])),
+                    (1.0, _color(palette["tail_d"])),
+                ]))
                 painter.setPen(_pen(palette["outline"], 3.2))
                 painter.drawPath(tail_path)
                 painter.restore()
@@ -1191,10 +1238,10 @@ class PetRenderer:
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        ear_grad_l = QLinearGradient(-46 + ear_shift, -63, -14 + ear_shift, -26)
-        ear_grad_l.setColorAt(0.0, _color(palette["ear_l_t"]))
-        ear_grad_l.setColorAt(1.0, _color(palette["ear_l_b"]))
-        painter.setBrush(QBrush(ear_grad_l))
+        painter.setBrush(_grad_brush(QLinearGradient, (-46 + ear_shift, -63, -14 + ear_shift, -26), [
+            (0.0, _color(palette["ear_l_t"])),
+            (1.0, _color(palette["ear_l_b"])),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.2))
         painter.drawPath(left_ear)
 
@@ -1230,10 +1277,10 @@ class PetRenderer:
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        ear_grad_r = QLinearGradient(46 + ear_shift, -63, 14 + ear_shift, -26)
-        ear_grad_r.setColorAt(0.0, _color(palette["ear_r_t"]))
-        ear_grad_r.setColorAt(1.0, _color(palette["ear_r_b"]))
-        painter.setBrush(QBrush(ear_grad_r))
+        painter.setBrush(_grad_brush(QLinearGradient, (46 + ear_shift, -63, 14 + ear_shift, -26), [
+            (0.0, _color(palette["ear_r_t"])),
+            (1.0, _color(palette["ear_r_b"])),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.2))
         painter.drawPath(right_ear)
 
@@ -1259,13 +1306,13 @@ class PetRenderer:
 
         # 3. 3D 球形漫反射身体 (Spherical Lighting Volume)
         body_rect = QRectF(-52, -48, 104, 100)
-        body_rad = QRadialGradient(-18, -20, 75, -18, -20)
-        body_rad.setColorAt(0.0, _color(palette["body_hl"]))
-        body_rad.setColorAt(0.35, _color(palette["body_light"]))
-        body_rad.setColorAt(0.72, _color(palette["body_mid"]))
-        body_rad.setColorAt(0.92, _color(palette["body_dark"]))
-        body_rad.setColorAt(1.0, _color(palette["body_shadow"]))
-        painter.setBrush(QBrush(body_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-18, -20, 75, -18, -20), [
+            (0.0, _color(palette["body_hl"])),
+            (0.35, _color(palette["body_light"])),
+            (0.72, _color(palette["body_mid"])),
+            (0.92, _color(palette["body_dark"])),
+            (1.0, _color(palette["body_shadow"])),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.5))
         painter.drawEllipse(body_rect)
 
@@ -1276,10 +1323,10 @@ class PetRenderer:
             spot_path.moveTo(15 + spot_shift, -45)
             spot_path.cubicTo(45 + spot_shift, -42, 52 + spot_shift, -15, 45 + spot_shift, 10)
             spot_path.cubicTo(32 + spot_shift, 0, 20 + spot_shift, -20, 15 + spot_shift, -45)
-            spot_grad = QLinearGradient(20 + spot_shift, -40, 48 + spot_shift, 5)
-            spot_grad.setColorAt(0.0, palette["spot_t"])
-            spot_grad.setColorAt(1.0, palette["spot_b"])
-            painter.setBrush(QBrush(spot_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (20 + spot_shift, -40, 48 + spot_shift, 5), [
+                (0.0, palette["spot_t"]),
+                (1.0, palette["spot_b"]),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(spot_path)
 
@@ -1289,11 +1336,11 @@ class PetRenderer:
             painter.translate(belly_offset_x, 0)
             painter.scale(cos_a, 1.0)
         belly_rect = QRectF(-30, 2, 60, 44)
-        belly_grad = QRadialGradient(0, 15, 32, 0, 8)
-        belly_grad.setColorAt(0.0, _color(255, 255, 255, 220))
-        belly_grad.setColorAt(0.7, _color(255, 250, 245, 170))
-        belly_grad.setColorAt(1.0, _color(255, 235, 220, 0))
-        painter.setBrush(QBrush(belly_grad))
+        painter.setBrush(_grad_brush(QRadialGradient, (0, 15, 32, 0, 8), [
+            (0.0, _color(255, 255, 255, 220)),
+            (0.7, _color(255, 250, 245, 170)),
+            (1.0, _color(255, 235, 220, 0)),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(belly_rect)
         painter.restore()
@@ -1302,11 +1349,11 @@ class PetRenderer:
         painter.save()
         painter.translate(-21, -30)
         painter.rotate(-22)
-        spec_grad = QLinearGradient(-15, -7, 15, 7)
-        spec_grad.setColorAt(0.0, _color(255, 255, 255, 140))
-        spec_grad.setColorAt(0.6, _color(255, 255, 255, 60))
-        spec_grad.setColorAt(1.0, _color(255, 255, 255, 0))
-        painter.setBrush(QBrush(spec_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (-15, -7, 15, 7), [
+            (0.0, _color(255, 255, 255, 140)),
+            (0.6, _color(255, 255, 255, 60)),
+            (1.0, _color(255, 255, 255, 0)),
+        ]))
         painter.drawEllipse(QRectF(-15, -7, 30, 14))
         painter.restore()
 
@@ -1319,11 +1366,11 @@ class PetRenderer:
         # 柔和羽化立体腮红 (带微光)
         blush_alpha = 190 if (self.petting_timer > 0 or self.model.stage == "BABY") else 125
         for bx, by in [(-33, 4), (33, 4)]:
-            b_grad = QRadialGradient(bx, by, 12)
-            b_grad.setColorAt(0.0, QColor(255, 110, 145, blush_alpha))
-            b_grad.setColorAt(0.55, QColor(255, 140, 170, int(blush_alpha * 0.6)))
-            b_grad.setColorAt(1.0, _color(255, 160, 180, 0))
-            painter.setBrush(QBrush(b_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (bx, by, 12), [
+                (0.0, QColor(255, 110, 145, blush_alpha)),
+                (0.55, QColor(255, 140, 170, int(blush_alpha * 0.6))),
+                (1.0, _color(255, 160, 180, 0)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QRectF(bx - 12, by - 8, 24, 16))
             painter.setBrush(_solid_brush(255, 255, 255, 210))
@@ -1399,10 +1446,10 @@ class PetRenderer:
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        ear_grad_l = QLinearGradient(-46 + ear_shift, -63, -14 + ear_shift, -26)
-        ear_grad_l.setColorAt(0.0, _color(palette["ear_l_t"]).darker(115))
-        ear_grad_l.setColorAt(1.0, _color(palette["ear_l_b"]).darker(120))
-        painter.setBrush(QBrush(ear_grad_l))
+        painter.setBrush(_grad_brush(QLinearGradient, (-46 + ear_shift, -63, -14 + ear_shift, -26), [
+            (0.0, _color(palette["ear_l_t"]).darker(115)),
+            (1.0, _color(palette["ear_l_b"]).darker(120)),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.2))
         painter.drawPath(left_ear)
 
@@ -1414,22 +1461,22 @@ class PetRenderer:
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        ear_grad_r = QLinearGradient(46 + ear_shift, -63, 14 + ear_shift, -26)
-        ear_grad_r.setColorAt(0.0, _color(palette["ear_r_t"]).darker(115))
-        ear_grad_r.setColorAt(1.0, _color(palette["ear_r_b"]).darker(120))
-        painter.setBrush(QBrush(ear_grad_r))
+        painter.setBrush(_grad_brush(QLinearGradient, (46 + ear_shift, -63, 14 + ear_shift, -26), [
+            (0.0, _color(palette["ear_r_t"]).darker(115)),
+            (1.0, _color(palette["ear_r_b"]).darker(120)),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.2))
         painter.drawPath(right_ear)
 
         # 2. 3D 球体后背与后脑勺 (Spherical Back Volume)
         body_rect = QRectF(-52, -48, 104, 100)
-        body_rad = QRadialGradient(-15, -20, 75, -15, -20)
-        body_rad.setColorAt(0.0, _color(palette["body_hl"]))
-        body_rad.setColorAt(0.35, _color(palette["body_light"]))
-        body_rad.setColorAt(0.72, _color(palette["body_mid"]))
-        body_rad.setColorAt(0.92, _color(palette["body_dark"]))
-        body_rad.setColorAt(1.0, _color(palette["body_shadow"]))
-        painter.setBrush(QBrush(body_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-15, -20, 75, -15, -20), [
+            (0.0, _color(palette["body_hl"])),
+            (0.35, _color(palette["body_light"])),
+            (0.72, _color(palette["body_mid"])),
+            (0.92, _color(palette["body_dark"])),
+            (1.0, _color(palette["body_shadow"])),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.5))
         painter.drawEllipse(body_rect)
 
@@ -1439,10 +1486,10 @@ class PetRenderer:
             spot_path.moveTo(-10 - ear_shift, -45)
             spot_path.cubicTo(15 - ear_shift, -40, 22 - ear_shift, -10, 15 - ear_shift, 20)
             spot_path.cubicTo(-2 - ear_shift, 15, -15 - ear_shift, -20, -10 - ear_shift, -45)
-            spot_grad = QLinearGradient(-10, -40, 20, 15)
-            spot_grad.setColorAt(0.0, palette["spot_t"])
-            spot_grad.setColorAt(1.0, palette["spot_b"])
-            painter.setBrush(QBrush(spot_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (-10, -40, 20, 15), [
+                (0.0, palette["spot_t"]),
+                (1.0, palette["spot_b"]),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(spot_path)
 
@@ -1450,11 +1497,11 @@ class PetRenderer:
         painter.save()
         painter.translate(-18, -32)
         painter.rotate(-18)
-        spec_grad = QLinearGradient(-15, -7, 15, 7)
-        spec_grad.setColorAt(0.0, _color(255, 255, 255, 120))
-        spec_grad.setColorAt(0.6, _color(255, 255, 255, 40))
-        spec_grad.setColorAt(1.0, _color(255, 255, 255, 0))
-        painter.setBrush(QBrush(spec_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (-15, -7, 15, 7), [
+            (0.0, _color(255, 255, 255, 120)),
+            (0.6, _color(255, 255, 255, 40)),
+            (1.0, _color(255, 255, 255, 0)),
+        ]))
         painter.drawEllipse(QRectF(-14, -6, 28, 12))
         painter.restore()
 
@@ -1468,10 +1515,10 @@ class PetRenderer:
         tail_path.moveTo(0, 0)
         tail_path.cubicTo(26, 8, 36, -26, 22, -38)
         tail_path.cubicTo(14, -42, 6, -22, 0, -10)
-        tail_grad = QLinearGradient(0, 0, 25, -30)
-        tail_grad.setColorAt(0.0, _color(palette["tail_l"]))
-        tail_grad.setColorAt(1.0, _color(palette["tail_d"]))
-        painter.setBrush(QBrush(tail_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 25, -30), [
+            (0.0, _color(palette["tail_l"])),
+            (1.0, _color(palette["tail_d"])),
+        ]))
         painter.setPen(_pen(palette["outline"], 3.2))
         painter.drawPath(tail_path)
         painter.restore()
@@ -1481,10 +1528,10 @@ class PetRenderer:
         paw_col = _color(palette.get("paw_b", "#F0DFD1"))
         for px in [-28, 12]:
             paw_rect = QRectF(px, 39, 20, 14)
-            paw_g = QRadialGradient(px + 10, 45, 15)
-            paw_g.setColorAt(0.0, _color(palette.get("paw_t", "#FFFFFF")))
-            paw_g.setColorAt(1.0, paw_col)
-            painter.setBrush(QBrush(paw_g))
+            painter.setBrush(_grad_brush(QRadialGradient, (px + 10, 45, 15), [
+                (0.0, _color(palette.get("paw_t", "#FFFFFF"))),
+                (1.0, paw_col),
+            ]))
             painter.setPen(QPen(outline_col, 2.6))
             painter.drawEllipse(paw_rect)
 
@@ -1495,21 +1542,21 @@ class PetRenderer:
 
         def draw_single_paw(x, y, w, h, pad_x, pad_y, pad_w, pad_h):
             paw_rect = QRectF(x, y, w, h)
-            paw_grad = QRadialGradient(x + w * 0.4, y + h * 0.35, max(w, h))
-            paw_grad.setColorAt(0.0, paw_col_t)
-            paw_grad.setColorAt(0.7, paw_col_b)
-            paw_grad.setColorAt(1.0, paw_col_b.darker(110))
-            painter.setBrush(QBrush(paw_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (x + w * 0.4, y + h * 0.35, max(w, h)), [
+                (0.0, paw_col_t),
+                (0.7, paw_col_b),
+                (1.0, paw_col_b.darker(110)),
+            ]))
             painter.setPen(QPen(outline_col, 2.8))
             painter.drawEllipse(paw_rect)
 
             # 3D 粉嫩果冻主掌心肉垫 (Palm Pad)
             pad_rect = QRectF(pad_x, pad_y, pad_w, pad_h)
-            pad_grad = QRadialGradient(pad_x + pad_w * 0.45, pad_y + pad_h * 0.35, max(pad_w, pad_h))
-            pad_grad.setColorAt(0.0, _color("#FFB2B2"))
-            pad_grad.setColorAt(0.75, _color("#FF768C"))
-            pad_grad.setColorAt(1.0, _color("#D94B62"))
-            painter.setBrush(QBrush(pad_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (pad_x + pad_w * 0.45, pad_y + pad_h * 0.35, max(pad_w, pad_h)), [
+                (0.0, _color("#FFB2B2")),
+                (0.75, _color("#FF768C")),
+                (1.0, _color("#D94B62")),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(pad_rect)
             # 主掌心高光
@@ -1527,11 +1574,15 @@ class PetRenderer:
                 tx = pad_x + pad_w * 0.5 + tox - toe_r * 0.5
                 ty = pad_y + pad_h * 0.5 + toy - toe_r * 0.5
                 t_rect = QRectF(tx, ty, toe_r, toe_r)
-                t_grad = QRadialGradient(tx + toe_r * 0.4, ty + toe_r * 0.35, toe_r)
-                t_grad.setColorAt(0.0, _color("#FFB8B8"))
-                t_grad.setColorAt(0.8, _color("#FF768C"))
-                t_grad.setColorAt(1.0, _color("#D94B62"))
-                painter.setBrush(QBrush(t_grad))
+                painter.setBrush(_grad_brush(
+                    QRadialGradient,
+                    (tx + toe_r * 0.4, ty + toe_r * 0.35, toe_r),
+                    [
+                        (0.0, _color("#FFB8B8")),
+                        (0.8, _color("#FF768C")),
+                        (1.0, _color("#D94B62")),
+                    ],
+                ))
                 painter.drawEllipse(t_rect)
                 painter.setBrush(_solid_brush(255, 255, 255, 225))
                 painter.drawEllipse(QRectF(tx + toe_r * 0.22, ty + toe_r * 0.2, toe_r * 0.36, toe_r * 0.36))
@@ -1648,10 +1699,10 @@ class PetRenderer:
                 tail_path.cubicTo(26, -8, 28, -38, 6 + tail_wag * 0.4, -42)
                 tail_path.cubicTo(-4 + tail_wag * 0.4, -44, -8, -28, 0, -10)
                 tail_path.closeSubpath()
-                tail_grad = QLinearGradient(0, 0, 15, -40)
-                tail_grad.setColorAt(0.0, _color(pal["tail_l"]))
-                tail_grad.setColorAt(1.0, _color(pal["tail_d"]))
-                painter.setBrush(QBrush(tail_grad))
+                painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 15, -40), [
+                    (0.0, _color(pal["tail_l"])),
+                    (1.0, _color(pal["tail_d"])),
+                ]))
                 painter.setPen(_pen(pal["outline"], 3))
                 painter.drawPath(tail_path)
                 painter.restore()
@@ -1665,10 +1716,10 @@ class PetRenderer:
                 tail_path.moveTo(0, 0)
                 tail_path.cubicTo(25, 5, 35, -20, 20, -30)
                 tail_path.cubicTo(10, -35, 5, -15, 0, -5)
-                tail_grad = QLinearGradient(0, 0, 25, -25)
-                tail_grad.setColorAt(0.0, _color(pal["tail_l"]))
-                tail_grad.setColorAt(1.0, _color(pal["tail_d"]))
-                painter.setBrush(QBrush(tail_grad))
+                painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 25, -25), [
+                    (0.0, _color(pal["tail_l"])),
+                    (1.0, _color(pal["tail_d"])),
+                ]))
                 painter.setPen(_pen(pal["outline"], 3))
                 painter.drawPath(tail_path)
                 painter.restore()
@@ -1680,10 +1731,10 @@ class PetRenderer:
         left_ear.lineTo(-50 + ear_shift, -78)
         left_ear.lineTo(-12 + ear_shift, -45)
         left_ear.closeSubpath()
-        ear_g_l = QLinearGradient(-50 + ear_shift, -78, -12 + ear_shift, -28)
-        ear_g_l.setColorAt(0.0, _color(pal["fur_hl"]))
-        ear_g_l.setColorAt(1.0, _color(pal["fur_mid"]))
-        painter.setBrush(QBrush(ear_g_l))
+        painter.setBrush(_grad_brush(QLinearGradient, (-50 + ear_shift, -78, -12 + ear_shift, -28), [
+            (0.0, _color(pal["fur_hl"])),
+            (1.0, _color(pal["fur_mid"])),
+        ]))
         painter.setPen(_pen(pal["outline"], 3.2))
         painter.drawPath(left_ear)
 
@@ -1692,21 +1743,21 @@ class PetRenderer:
         right_ear.lineTo(50 + ear_shift, -78)
         right_ear.lineTo(12 + ear_shift, -45)
         right_ear.closeSubpath()
-        ear_g_r = QLinearGradient(50 + ear_shift, -78, 12 + ear_shift, -28)
-        ear_g_r.setColorAt(0.0, _color(pal["fur_hl"]))
-        ear_g_r.setColorAt(1.0, _color(pal["fur_mid"]))
-        painter.setBrush(QBrush(ear_g_r))
+        painter.setBrush(_grad_brush(QLinearGradient, (50 + ear_shift, -78, 12 + ear_shift, -28), [
+            (0.0, _color(pal["fur_hl"])),
+            (1.0, _color(pal["fur_mid"])),
+        ]))
         painter.drawPath(right_ear)
 
         # 3. 头部身体 3D 球形漫反射光影 (Spherical Volume)
         body_rect = QRectF(-52, -48, 104, 100)
-        fur_rad = QRadialGradient(-18, -20, 75, -18, -20)
-        fur_rad.setColorAt(0.0, _color(pal["fur_hl"]))
-        fur_rad.setColorAt(0.35, _color(pal["fur_light"]))
-        fur_rad.setColorAt(0.72, _color(pal["fur_mid"]))
-        fur_rad.setColorAt(0.92, _color(pal["fur_dark"]))
-        fur_rad.setColorAt(1.0, _color(pal["fur_shadow"]))
-        painter.setBrush(QBrush(fur_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-18, -20, 75, -18, -20), [
+            (0.0, _color(pal["fur_hl"])),
+            (0.35, _color(pal["fur_light"])),
+            (0.72, _color(pal["fur_mid"])),
+            (0.92, _color(pal["fur_dark"])),
+            (1.0, _color(pal["fur_shadow"])),
+        ]))
         painter.setPen(_pen(pal["outline"], 3.5))
         painter.drawEllipse(body_rect)
 
@@ -1722,28 +1773,28 @@ class PetRenderer:
         mask.cubicTo(-46, 25, -20, 48, 0, 48)
         mask.cubicTo(20, 48, 46, 25, 36, -8)
         mask.cubicTo(20, 10, -20, 10, -36, -8)
-        mask_grad = QLinearGradient(0, -8, 0, 48)
-        mask_grad.setColorAt(0.0, _color(pal["muzzle_t"]))
-        mask_grad.setColorAt(1.0, _color(pal["muzzle_b"]))
-        painter.setBrush(QBrush(mask_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (0, -8, 0, 48), [
+            (0.0, _color(pal["muzzle_t"])),
+            (1.0, _color(pal["muzzle_b"])),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(mask)
 
         # 柴犬标志性白眉毛
         for bx in [-28, 16]:
-            brow_g = QRadialGradient(bx + 6, -28, 8)
-            brow_g.setColorAt(0.0, _color(pal["brow"]))
-            brow_g.setColorAt(1.0, _color(pal["muzzle_b"]))
-            painter.setBrush(QBrush(brow_g))
+            painter.setBrush(_grad_brush(QRadialGradient, (bx + 6, -28, 8), [
+                (0.0, _color(pal["brow"])),
+                (1.0, _color(pal["muzzle_b"])),
+            ]))
             painter.drawEllipse(QRectF(bx, -32, 12, 10))
 
         # 柔和羽化立体腮红
         for bx, by in [(-33, 6), (33, 6)]:
-            b_grad = QRadialGradient(bx, by, 12)
-            b_grad.setColorAt(0.0, _color(255, 120, 145, 140))
-            b_grad.setColorAt(0.6, _color(255, 145, 170, 70))
-            b_grad.setColorAt(1.0, _color(255, 160, 180, 0))
-            painter.setBrush(QBrush(b_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (bx, by, 12), [
+                (0.0, _color(255, 120, 145, 140)),
+                (0.6, _color(255, 145, 170, 70)),
+                (1.0, _color(255, 160, 180, 0)),
+            ]))
             painter.drawEllipse(QRectF(bx - 12, by - 8, 24, 16))
 
         # 面部表情
@@ -1754,11 +1805,11 @@ class PetRenderer:
         painter.save()
         painter.translate(-21, -30)
         painter.rotate(-22)
-        spec_grad = QLinearGradient(-15, -7, 15, 7)
-        spec_grad.setColorAt(0.0, _color(255, 255, 255, 130))
-        spec_grad.setColorAt(0.6, _color(255, 255, 255, 50))
-        spec_grad.setColorAt(1.0, _color(255, 255, 255, 0))
-        painter.setBrush(QBrush(spec_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (-15, -7, 15, 7), [
+            (0.0, _color(255, 255, 255, 130)),
+            (0.6, _color(255, 255, 255, 50)),
+            (1.0, _color(255, 255, 255, 0)),
+        ]))
         painter.drawEllipse(QRectF(-15, -7, 30, 14))
         painter.restore()
 
@@ -1781,10 +1832,10 @@ class PetRenderer:
         left_ear.lineTo(-50 + ear_shift, -78)
         left_ear.lineTo(-12 + ear_shift, -45)
         left_ear.closeSubpath()
-        ear_g_l = QLinearGradient(-50 + ear_shift, -78, -12 + ear_shift, -28)
-        ear_g_l.setColorAt(0.0, _color(pal["fur_hl"]).darker(115))
-        ear_g_l.setColorAt(1.0, _color(pal["fur_mid"]).darker(120))
-        painter.setBrush(QBrush(ear_g_l))
+        painter.setBrush(_grad_brush(QLinearGradient, (-50 + ear_shift, -78, -12 + ear_shift, -28), [
+            (0.0, _color(pal["fur_hl"]).darker(115)),
+            (1.0, _color(pal["fur_mid"]).darker(120)),
+        ]))
         painter.setPen(_pen(pal["outline"], 3.2))
         painter.drawPath(left_ear)
 
@@ -1793,21 +1844,21 @@ class PetRenderer:
         right_ear.lineTo(50 + ear_shift, -78)
         right_ear.lineTo(12 + ear_shift, -45)
         right_ear.closeSubpath()
-        ear_g_r = QLinearGradient(50 + ear_shift, -78, 12 + ear_shift, -28)
-        ear_g_r.setColorAt(0.0, _color(pal["fur_hl"]).darker(115))
-        ear_g_r.setColorAt(1.0, _color(pal["fur_mid"]).darker(120))
-        painter.setBrush(QBrush(ear_g_r))
+        painter.setBrush(_grad_brush(QLinearGradient, (50 + ear_shift, -78, 12 + ear_shift, -28), [
+            (0.0, _color(pal["fur_hl"]).darker(115)),
+            (1.0, _color(pal["fur_mid"]).darker(120)),
+        ]))
         painter.drawPath(right_ear)
 
         # 2. 身体背面 3D 球体
         body_rect = QRectF(-52, -48, 104, 100)
-        fur_rad = QRadialGradient(-18, -20, 75, -18, -20)
-        fur_rad.setColorAt(0.0, _color(pal["fur_hl"]))
-        fur_rad.setColorAt(0.35, _color(pal["fur_light"]))
-        fur_rad.setColorAt(0.72, _color(pal["fur_mid"]))
-        fur_rad.setColorAt(0.92, _color(pal["fur_dark"]))
-        fur_rad.setColorAt(1.0, _color(pal["fur_shadow"]))
-        painter.setBrush(QBrush(fur_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-18, -20, 75, -18, -20), [
+            (0.0, _color(pal["fur_hl"])),
+            (0.35, _color(pal["fur_light"])),
+            (0.72, _color(pal["fur_mid"])),
+            (0.92, _color(pal["fur_dark"])),
+            (1.0, _color(pal["fur_shadow"])),
+        ]))
         painter.setPen(_pen(pal["outline"], 3.5))
         painter.drawEllipse(body_rect)
 
@@ -1831,10 +1882,10 @@ class PetRenderer:
         tail_path.moveTo(0, 0)
         tail_path.cubicTo(25, 5, 35, -20, 20, -30)
         tail_path.cubicTo(10, -35, 5, -15, 0, -5)
-        tail_grad = QLinearGradient(0, 0, 25, -25)
-        tail_grad.setColorAt(0.0, _color(pal["tail_l"]))
-        tail_grad.setColorAt(1.0, _color(pal["tail_d"]))
-        painter.setBrush(QBrush(tail_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 25, -25), [
+            (0.0, _color(pal["tail_l"])),
+            (1.0, _color(pal["tail_d"])),
+        ]))
         painter.setPen(_pen(pal["outline"], 3))
         painter.drawPath(tail_path)
         painter.restore()
@@ -1843,10 +1894,10 @@ class PetRenderer:
         outline_col = _color(pal["outline"])
         for px in [-28, 12]:
             paw_rect = QRectF(px, 39, 20, 14)
-            paw_g = QRadialGradient(px + 10, 45, 15)
-            paw_g.setColorAt(0.0, _color(pal["paw_t"]))
-            paw_g.setColorAt(1.0, _color(pal["paw_b"]))
-            painter.setBrush(QBrush(paw_g))
+            painter.setBrush(_grad_brush(QRadialGradient, (px + 10, 45, 15), [
+                (0.0, _color(pal["paw_t"])),
+                (1.0, _color(pal["paw_b"])),
+            ]))
             painter.setPen(QPen(outline_col, 2.6))
             painter.drawEllipse(paw_rect)
 
@@ -1897,11 +1948,11 @@ class PetRenderer:
         star_x = math.sin(self.anim_time * 4.0) * 6.0
         painter.setPen(QPen(outline_col, 2.5))
         painter.drawLine(0, -60, int(star_x), -76)
-        star_g = QRadialGradient(star_x - 2, -85, 9)
-        star_g.setColorAt(0.0, _color(255, 255, 180))
-        star_g.setColorAt(0.7, _color(250, 204, 21))
-        star_g.setColorAt(1.0, _color(180, 120, 0))
-        painter.setBrush(QBrush(star_g))
+        painter.setBrush(_grad_brush(QRadialGradient, (star_x - 2, -85, 9), [
+            (0.0, _color(255, 255, 180)),
+            (0.7, _color(250, 204, 21)),
+            (1.0, _color(180, 120, 0)),
+        ]))
         painter.setPen(_pen((180, 120, 0), 1.5))
         painter.drawEllipse(QRectF(star_x - 7, -83, 14, 14))
 
@@ -1914,10 +1965,10 @@ class PetRenderer:
         # 内部下部焦散折射亮圈
         caustic = QPainterPath()
         caustic.addEllipse(QRectF(15, 12, 28, 16))
-        c_grad = QLinearGradient(15, 12, 38, 28)
-        c_grad.setColorAt(0.0, _color(255, 255, 255, 0))
-        c_grad.setColorAt(1.0, _color(255, 255, 255, 90))
-        painter.setBrush(QBrush(c_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (15, 12, 38, 28), [
+            (0.0, _color(255, 255, 255, 0)),
+            (1.0, _color(255, 255, 255, 90)),
+        ]))
         painter.drawPath(caustic)
 
         # 旋转时面部层透视投射
@@ -1928,10 +1979,10 @@ class PetRenderer:
 
         # 腮红
         for bx, by in [(-36, 10), (24, 10)]:
-            b_grad = QRadialGradient(bx, by, 10)
-            b_grad.setColorAt(0.0, _color(255, 100, 170, 160))
-            b_grad.setColorAt(1.0, _color(255, 100, 170, 0))
-            painter.setBrush(QBrush(b_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (bx, by, 10), [
+                (0.0, _color(255, 100, 170, 160)),
+                (1.0, _color(255, 100, 170, 0)),
+            ]))
             painter.drawEllipse(QRectF(bx - 9, by - 6, 18, 12))
 
         # 史莱姆动态面部表情
@@ -1973,10 +2024,10 @@ class PetRenderer:
         # 内部焦散折射光球 (内部纵深折射)
         caustic = QPainterPath()
         caustic.addEllipse(QRectF(-20 + sin_a * 8, 10, 32, 20))
-        c_grad = QRadialGradient(-10 + sin_a * 8, 18, 20)
-        c_grad.setColorAt(0.0, _color(255, 255, 255, 120))
-        c_grad.setColorAt(1.0, _color(255, 255, 255, 0))
-        painter.setBrush(QBrush(c_grad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-10 + sin_a * 8, 18, 20), [
+            (0.0, _color(255, 255, 255, 120)),
+            (1.0, _color(255, 255, 255, 0)),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(caustic)
 
@@ -1984,11 +2035,11 @@ class PetRenderer:
         star_x = math.sin(self.anim_time * 4.0) * 6.0
         painter.setPen(QPen(outline_col, 2.5))
         painter.drawLine(0, -60, int(star_x), -76)
-        star_g = QRadialGradient(star_x - 2, -85, 9)
-        star_g.setColorAt(0.0, _color(255, 255, 180))
-        star_g.setColorAt(0.7, _color(250, 204, 21))
-        star_g.setColorAt(1.0, _color(180, 120, 0))
-        painter.setBrush(QBrush(star_g))
+        painter.setBrush(_grad_brush(QRadialGradient, (star_x - 2, -85, 9), [
+            (0.0, _color(255, 255, 180)),
+            (0.7, _color(250, 204, 21)),
+            (1.0, _color(180, 120, 0)),
+        ]))
         painter.setPen(_pen((180, 120, 0), 1.5))
         painter.drawEllipse(QRectF(star_x - 7, -83, 14, 14))
 
@@ -2005,12 +2056,12 @@ class PetRenderer:
 
         # 黑色球体身体 (3D 天鹅绒深邃漫反射)
         body_rect = QRectF(-50, -48, 100, 98)
-        body_rad = QRadialGradient(-15, -18, 70, -15, -18)
-        body_rad.setColorAt(0.0, _color("#475569"))
-        body_rad.setColorAt(0.4, _color("#334155"))
-        body_rad.setColorAt(0.8, _color("#1E293B"))
-        body_rad.setColorAt(1.0, _color("#0F172A"))
-        painter.setBrush(QBrush(body_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-15, -18, 70, -15, -18), [
+            (0.0, _color("#475569")),
+            (0.4, _color("#334155")),
+            (0.8, _color("#1E293B")),
+            (1.0, _color("#0F172A")),
+        ]))
         painter.setPen(_pen("#080D1A", 3.2))
         painter.drawEllipse(body_rect)
 
@@ -2022,28 +2073,28 @@ class PetRenderer:
 
         # 企鹅 3D 饱满白肚皮 (向前隆起圆润光泽)
         belly = QRectF(-36, -24, 72, 68)
-        belly_rad = QRadialGradient(0, -6, 38, 0, -12)
-        belly_rad.setColorAt(0.0, _color("#FFFFFF"))
-        belly_rad.setColorAt(0.7, _color("#F1F5F9"))
-        belly_rad.setColorAt(1.0, _color("#CBD5E1"))
-        painter.setBrush(QBrush(belly_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (0, -6, 38, 0, -12), [
+            (0.0, _color("#FFFFFF")),
+            (0.7, _color("#F1F5F9")),
+            (1.0, _color("#CBD5E1")),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(belly)
 
         # 企鹅黄色侧颊纹 (立体渐变)
         for cx, r_scale in [(-37, 1), (37, -1)]:
-            cheek_g = QLinearGradient(cx, -32, cx + 10 * r_scale, -10)
-            cheek_g.setColorAt(0.0, _color("#FDE047"))
-            cheek_g.setColorAt(1.0, _color("#EAB308"))
-            painter.setBrush(QBrush(cheek_g))
+            painter.setBrush(_grad_brush(QLinearGradient, (cx, -32, cx + 10 * r_scale, -10), [
+                (0.0, _color("#FDE047")),
+                (1.0, _color("#EAB308")),
+            ]))
             painter.drawEllipse(QRectF(cx - 8, -32, 16, 22))
 
         # 腮红
         for bx, by in [(-25, 4), (25, 4)]:
-            b_grad = QRadialGradient(bx, by, 10)
-            b_grad.setColorAt(0.0, _color(255, 120, 140, 140))
-            b_grad.setColorAt(1.0, _color(255, 120, 140, 0))
-            painter.setBrush(QBrush(b_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (bx, by, 10), [
+                (0.0, _color(255, 120, 140, 140)),
+                (1.0, _color(255, 120, 140, 0)),
+            ]))
             painter.drawEllipse(QRectF(bx - 8, by - 5, 16, 10))
 
         # 企鹅面容表情
@@ -2075,10 +2126,10 @@ class PetRenderer:
             painter.save()
             painter.translate(fx, -5)
             painter.rotate(fa)
-            f_grad = QLinearGradient(-8, -5, 10, 33)
-            f_grad.setColorAt(0.0, _color("#334155"))
-            f_grad.setColorAt(1.0, _color("#0F172A"))
-            painter.setBrush(QBrush(f_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (-8, -5, 10, 33), [
+                (0.0, _color("#334155")),
+                (1.0, _color("#0F172A")),
+            ]))
             painter.setPen(_pen("#080D1A", 2.5))
             painter.drawEllipse(QRectF(-9, -5, 18, 38))
             painter.restore()
@@ -2086,11 +2137,11 @@ class PetRenderer:
         # 企鹅立体小脚丫
         leg_offset = math.sin(self.anim_time * 8.0) * 5.0 if state in ("WALK_LEFT", "WALK_RIGHT") else 0.0
         for fx, fo in [(-20 + wing_shift * 0.5, leg_offset), (20 + wing_shift * 0.5, -leg_offset)]:
-            foot_g = QRadialGradient(fx, 45 + fo, 14)
-            foot_g.setColorAt(0.0, _color("#FDBA74"))
-            foot_g.setColorAt(0.8, _color("#EA580C"))
-            foot_g.setColorAt(1.0, _color("#C2410C"))
-            painter.setBrush(QBrush(foot_g))
+            painter.setBrush(_grad_brush(QRadialGradient, (fx, 45 + fo, 14), [
+                (0.0, _color("#FDBA74")),
+                (0.8, _color("#EA580C")),
+                (1.0, _color("#C2410C")),
+            ]))
             painter.setPen(_pen("#9A3412", 1.8))
             painter.drawEllipse(QRectF(fx - 11, 41 + fo, 22, 13))
 
@@ -2100,12 +2151,12 @@ class PetRenderer:
 
         # 1. 企鹅燕尾服后背 (深邃天鹅绒黑立体球体)
         body_rect = QRectF(-50, -48, 100, 98)
-        body_rad = QRadialGradient(-15, -18, 70, -15, -18)
-        body_rad.setColorAt(0.0, _color("#475569"))
-        body_rad.setColorAt(0.4, _color("#334155"))
-        body_rad.setColorAt(0.8, _color("#1E293B"))
-        body_rad.setColorAt(1.0, _color("#0F172A"))
-        painter.setBrush(QBrush(body_rad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-15, -18, 70, -15, -18), [
+            (0.0, _color("#475569")),
+            (0.4, _color("#334155")),
+            (0.8, _color("#1E293B")),
+            (1.0, _color("#0F172A")),
+        ]))
         painter.setPen(_pen("#080D1A", 3.2))
         painter.drawEllipse(body_rect)
 
@@ -2113,10 +2164,10 @@ class PetRenderer:
         painter.save()
         painter.translate(-16, -30)
         painter.rotate(-18)
-        spec_grad = QLinearGradient(-15, -7, 15, 7)
-        spec_grad.setColorAt(0.0, _color(255, 255, 255, 90))
-        spec_grad.setColorAt(1.0, _color(255, 255, 255, 0))
-        painter.setBrush(QBrush(spec_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (-15, -7, 15, 7), [
+            (0.0, _color(255, 255, 255, 90)),
+            (1.0, _color(255, 255, 255, 0)),
+        ]))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QRectF(-14, -6, 28, 12))
         painter.restore()
@@ -2133,21 +2184,21 @@ class PetRenderer:
             painter.save()
             painter.translate(fx, -5)
             painter.rotate(fa)
-            f_grad = QLinearGradient(-8, -5, 10, 33)
-            f_grad.setColorAt(0.0, _color("#334155"))
-            f_grad.setColorAt(1.0, _color("#0F172A"))
-            painter.setBrush(QBrush(f_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (-8, -5, 10, 33), [
+                (0.0, _color("#334155")),
+                (1.0, _color("#0F172A")),
+            ]))
             painter.setPen(_pen("#080D1A", 2.5))
             painter.drawEllipse(QRectF(-9, -5, 18, 38))
             painter.restore()
 
         # 5. 企鹅立体橙脚蹼跟
         for fx in [-20, 20]:
-            foot_g = QRadialGradient(fx, 45, 14)
-            foot_g.setColorAt(0.0, _color("#FDBA74"))
-            foot_g.setColorAt(0.8, _color("#EA580C"))
-            foot_g.setColorAt(1.0, _color("#C2410C"))
-            painter.setBrush(QBrush(foot_g))
+            painter.setBrush(_grad_brush(QRadialGradient, (fx, 45, 14), [
+                (0.0, _color("#FDBA74")),
+                (0.8, _color("#EA580C")),
+                (1.0, _color("#C2410C")),
+            ]))
             painter.setPen(_pen("#9A3412", 2))
             painter.drawEllipse(QRectF(fx - 12, 42, 24, 12))
 
@@ -2397,11 +2448,11 @@ class PetRenderer:
         body.cubicTo(8, -9, -10, -11, -14, 0)
         body.cubicTo(-16, 8, -4, 11, 14, 2)
         body.closeSubpath()
-        m_grad = QLinearGradient(-14, -8, 12, 8)
-        m_grad.setColorAt(0.0, _color("#CBD5E1"))
-        m_grad.setColorAt(0.65, _color("#94A3B8"))
-        m_grad.setColorAt(1.0, _color("#64748B"))
-        painter.setBrush(QBrush(m_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (-14, -8, 12, 8), [
+            (0.0, _color("#CBD5E1")),
+            (0.65, _color("#94A3B8")),
+            (1.0, _color("#64748B")),
+        ]))
         painter.setPen(_pen("#475569", 1.6))
         painter.drawPath(body)
 
@@ -2470,12 +2521,12 @@ class PetRenderer:
         painter.translate(ball_x, ball_y)
         painter.rotate(ball_rot)
         ball_rad = 16.0
-        y_grad = QRadialGradient(-5, -5, ball_rad * 1.3)
-        y_grad.setColorAt(0.0, _color("#FDA4AF"))
-        y_grad.setColorAt(0.5, _color("#F43F5E"))
-        y_grad.setColorAt(0.85, _color("#E11D48"))
-        y_grad.setColorAt(1.0, _color("#9F1239"))
-        painter.setBrush(QBrush(y_grad))
+        painter.setBrush(_grad_brush(QRadialGradient, (-5, -5, ball_rad * 1.3), [
+            (0.0, _color("#FDA4AF")),
+            (0.5, _color("#F43F5E")),
+            (0.85, _color("#E11D48")),
+            (1.0, _color("#9F1239")),
+        ]))
         painter.setPen(_pen("#881337", 1.8))
         painter.drawEllipse(QRectF(-ball_rad, -ball_rad, ball_rad * 2, ball_rad * 2))
 
@@ -2509,11 +2560,11 @@ class PetRenderer:
 
         # 1. 纸箱正面外轮廓与牛皮纸质感双色渐变
         box_rect = QRectF(box_x, box_y, box_w, box_h)
-        box_grad = QLinearGradient(box_x, box_y, box_x + box_w, box_y + box_h)
-        box_grad.setColorAt(0.0, _color("#DDB892"))
-        box_grad.setColorAt(0.45, _color("#B08968"))
-        box_grad.setColorAt(1.0, _color("#7F5539"))
-        painter.setBrush(QBrush(box_grad))
+        painter.setBrush(_grad_brush(QLinearGradient, (box_x, box_y, box_x + box_w, box_y + box_h), [
+            (0.0, _color("#DDB892")),
+            (0.45, _color("#B08968")),
+            (1.0, _color("#7F5539")),
+        ]))
         painter.setPen(_pen("#543D37", 2.2))
         painter.drawRoundedRect(box_rect, 7, 7)
 
@@ -2752,11 +2803,11 @@ class PetRenderer:
             eye_rect = QRectF(ex - eye_w / 2.0, -15, eye_w, eye_h)
 
             # 3D 琉璃眼眶渐变 (外轮廓眼眶保持头部原生位置)
-            e_grad = QLinearGradient(ex, -15, ex, 6)
-            e_grad.setColorAt(0.0, _color("#1A0C08"))
-            e_grad.setColorAt(0.5, col.darker(115))
-            e_grad.setColorAt(1.0, col.lighter(135))
-            painter.setBrush(QBrush(e_grad))
+            painter.setBrush(_grad_brush(QLinearGradient, (ex, -15, ex, 6), [
+                (0.0, _color("#1A0C08")),
+                (0.5, col.darker(115)),
+                (1.0, col.lighter(135)),
+            ]))
             painter.setPen(_pen("#150A06", 1.2))
             painter.drawEllipse(eye_rect)
 
@@ -2770,10 +2821,10 @@ class PetRenderer:
             # 下眼眶琉璃月牙光泽 (Caustic Glow，随虹膜微偏)
             iris_glow = QPainterPath()
             iris_glow.addEllipse(QRectF(ex - eye_w / 2.0 + 2 + gaze_ox * 0.35, -5 + gaze_oy * 0.35, eye_w - 4, 9))
-            g_iris = QLinearGradient(ex, -5, ex, 5)
-            g_iris.setColorAt(0.0, _color(255, 255, 255, 0))
-            g_iris.setColorAt(1.0, QColor(col.red(), col.green(), col.blue(), 165))
-            painter.setBrush(QBrush(g_iris))
+            painter.setBrush(_grad_brush(QLinearGradient, (ex, -5, ex, 5), [
+                (0.0, _color(255, 255, 255, 0)),
+                (1.0, QColor(col.red(), col.green(), col.blue(), 165)),
+            ]))
             painter.drawPath(iris_glow)
 
             # 璀璨星芒高光 (主大高光随角膜光照微偏，次高光跟随瞳孔形成真实晶状体视差)
@@ -2802,10 +2853,10 @@ class PetRenderer:
                 painter.drawPath(star_path)
 
             # 上眼睑投射深邃环境阴影 (Upper Eyelid Ambient Occlusion Shadow)
-            lid_shadow = QLinearGradient(ex, -15, ex, -7)
-            lid_shadow.setColorAt(0.0, _color(0, 0, 0, 90))
-            lid_shadow.setColorAt(1.0, _color(0, 0, 0, 0))
-            painter.setBrush(QBrush(lid_shadow))
+            painter.setBrush(_grad_brush(QLinearGradient, (ex, -15, ex, -7), [
+                (0.0, _color(0, 0, 0, 90)),
+                (1.0, _color(0, 0, 0, 0)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawChord(QRectF(ex - eye_w / 2.0, -15, eye_w, eye_h * 0.48), 0, 180 * 16)
 

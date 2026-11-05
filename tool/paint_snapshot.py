@@ -64,6 +64,10 @@ def render_all():
             try:
                 r.render(p, SIZE, SIZE, state, False)
             except Exception as e:  # 某些状态在无头环境可能不支持
+                # 必须先把 painter 关掉再走 —— 否则 QImage 被回收时 painter 还在画，
+                # Qt 会直接 abort（"Cannot destroy paint device that is being painted"），
+                # 把一个本该被记成 "ERROR" 的软失败变成进程崩溃。
+                p.end()
                 out["%s/%s" % (skin, state)] = "ERROR:%s" % type(e).__name__
                 continue
             p.end()

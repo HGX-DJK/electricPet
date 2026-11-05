@@ -75,7 +75,8 @@ def reset():
 
 def print_breakdown(frames, title):
     total = sum(COUNTERS.values())
-    print(f"  单帧分配 {total} 个 -> 每秒 {total * frames / 1.0 * 30:.0f} 个(按 30FPS 折算)")
+    per_frame = total / float(frames)
+    print(f"  单帧分配 {per_frame:.1f} 个 -> 每秒 {per_frame * 30:.0f} 个(按 30FPS 折算)")
     for k in sorted(COUNTERS, key=lambda x: -COUNTERS[x]):
         print(f"    {k:18} {COUNTERS[k]/frames:8.1f} 个/帧")
     print("  分配热点（次/帧）:")
