@@ -414,41 +414,69 @@ class PetStickyNote(QWidget):
         else:
             self.show_memo()
 
-    def load_data(self):
-        """从本地磁盘读取便签内容与位置"""
+    @staticmethod
+    def _to_int(value, field=""):
+        """把存档里的数值字段安全地转成 int；非法值返回 None 并留日志。
+
+        ⚠️ 存档是磁盘上的外部数据，随时可能被改坏（手改 JSON、写入时被中断、
+        旧版本残留的格式……）。直接 int() 抛 ValueError 会把整个加载流程带崩。
+        """
+        if value is None:
+            return None
         try:
-            if os.path.exists(self.memo_file):
-                with open(self.memo_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self.text_edit.setPlainText(data.get("content", ""))
-                self.current_theme = data.get("theme", "yellow")
-                self.is_pinned = data.get("pinned", True)
-                self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.is_pinned)
-                self.btn_pin.setText("📌" if self.is_pinned else "📍")
+            return int(value)
+        except (TypeError, ValueError):
+            print(f"[Memo] 便签存档字段 {field!r} 不是合法数字，已忽略: {value!r}")
+            return None
 
-                saved_x = data.get("x")
-                saved_y = data.get("y")
-                if saved_x is not None and saved_y is not None:
-                    # 屏幕可见校验
-                    screen = QApplication.primaryScreen()
-                    avail = screen.availableGeometry() if screen else None
-                    if avail:
-                        clamped_x = max(avail.left(), min(int(saved_x), avail.right() - 200))
-                        clamped_y = max(avail.top(), min(int(saved_y), avail.bottom() - 150))
-                        self.move(int(clamped_x), int(clamped_y))
-                    else:
-                        self.move(int(saved_x), int(saved_y))
+    def load_data(self):
+        """从本地磁盘读取便签内容与位置
 
-                saved_w = data.get("width")
-                saved_h = data.get("height")
-                if saved_w and saved_h:
-                    self.resize(max(220, int(saved_w)), max(200, int(saved_h)))
+        ⚠️ 以前这里是「一个 int() 抛 ValueError → 整个 try 块中止 →
+        except Exception: pass 静默吞掉」。后果是：便签主题样式不生效、
+        字数显示 0、窗口位置尺寸不恢复，而且**连一行日志都没有**。
+        现在改成逐字段兜底：单个字段坏了只影响它自己，其余照常生效。
+        """
+        try:
+            if not os.path.exists(self.memo_file):
+                return
+            with open(self.memo_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            print(f"[Memo] 读取便签存档失败: {e}")
+            return
 
-                self.apply_theme_style()
-                count = len(self.text_edit.toPlainText())
-                self.char_lbl.setText(f"{count} 字")
-        except Exception:
-            pass
+        # ---------- 内容与状态：必须无条件生效 ----------
+        self.text_edit.setPlainText(data.get("content", ""))
+        self.current_theme = data.get("theme", "yellow")
+        self.is_pinned = data.get("pinned", True)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, self.is_pinned)
+        self.btn_pin.setText("📌" if self.is_pinned else "📍")
+
+        # ---------- 位置：单个字段非法就整块跳过，不影响其它 ----------
+        saved_x = self._to_int(data.get("x"), "x")
+        saved_y = self._to_int(data.get("y"), "y")
+        if saved_x is not None and saved_y is not None:
+            # 屏幕可见校验
+            screen = QApplication.primaryScreen()
+            avail = screen.availableGeometry() if screen else None
+            if avail:
+                clamped_x = max(avail.left(), min(saved_x, avail.right() - 200))
+                clamped_y = max(avail.top(), min(saved_y, avail.bottom() - 150))
+                self.move(clamped_x, clamped_y)
+            else:
+                self.move(saved_x, saved_y)
+
+        # ---------- 尺寸 ----------
+        saved_w = self._to_int(data.get("width"), "width")
+        saved_h = self._to_int(data.get("height"), "height")
+        if saved_w and saved_h:
+            self.resize(max(220, saved_w), max(200, saved_h))
+
+        # ---------- 主题样式与字数：永远要执行 ----------
+        self.apply_theme_style()
+        count = len(self.text_edit.toPlainText())
+        self.char_lbl.setText(f"{count} 字")
 
     def save_data(self):
         """持久化保存便签至本地磁盘"""
@@ -465,8 +493,10 @@ class PetStickyNote(QWidget):
             }
             with open(self.memo_file, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        except Exception as e:
+            # ⚠️ 以前这里是 except Exception: pass —— 写盘失败完全静默，
+            # 用户以为便签存上了，其实重启就没了。至少要留一行日志。
+            print(f"[Memo] 保存便签失败: {e}")
 
     def hideEvent(self, event):
         self.save_data()
