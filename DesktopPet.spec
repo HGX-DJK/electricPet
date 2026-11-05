@@ -5,8 +5,10 @@
 # 路径约定：一律使用 SPECPATH（PyInstaller 注入的本 spec 文件所在目录）拼绝对路径。
 # 不要写死任何机器绝对路径 —— 那会让构建只在某一台电脑上能跑通，换机 / 上 CI 必崩。
 #
-# 说明：仓库里的 build_exe.py 默认走命令行参数构建（不读本文件）；
-#       本 spec 保留下来是为了「手工一条命令复现出同样的产物」，并保证两套路径都机器无关。
+# 说明：本文件是打包配置的**唯一事实来源**。
+#       build_exe.py 直接调用本 spec（不再用命令行参数），因为命令行参数路径会让
+#       PyInstaller 生成同名 spec 并覆盖掉这份手写的，把 git 工作区弄脏。
+#       手工复现同样产物：python -m PyInstaller --noconfirm DesktopPet.spec
 
 import os
 
