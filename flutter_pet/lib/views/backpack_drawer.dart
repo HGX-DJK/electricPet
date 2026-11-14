@@ -265,18 +265,24 @@ class PokoBackpackDrawer extends StatelessWidget {
               childAspectRatio: 2.1,
               children: [
                 // 1. 美味投喂
-                _BackpackCard(
-                  icon: '🍱',
-                  title: '美味投喂',
-                  subtitle: '饱腹又涨好感',
-                  badgeText: '${model.hunger.toInt()}%',
-                  badgeColor: const Color(0xFFF59E0B),
-                  accentColor: const Color(0xFFF59E0B),
-                  isNight: isNight,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onFeedTap();
-                  },
+                // ⚠️ 饱腹度是**每秒都在变**的数值，而这个抽屉是在打开时
+                // 一次性构造好的（不会跟着主界面一起重建）——
+                // 所以这张卡片必须自己监听模型，否则读数会一直停在打开那一刻。
+                AnimatedBuilder(
+                  animation: model,
+                  builder: (context, _) => _BackpackCard(
+                    icon: '🍱',
+                    title: '美味投喂',
+                    subtitle: '饱腹又涨好感',
+                    badgeText: '${model.hunger.toInt()}%',
+                    badgeColor: const Color(0xFFF59E0B),
+                    accentColor: const Color(0xFFF59E0B),
+                    isNight: isNight,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onFeedTap();
+                    },
+                  ),
                 ),
                 // 2. 神奇激光笔逗猫 (全新超高趣味交互)
                 // 标题压在 4 字以内：卡片右半区还要给「新玩具」角标留位置，
@@ -307,18 +313,22 @@ class PokoBackpackDrawer extends StatelessWidget {
                   },
                 ),
                 // 4. 泡泡沐浴
-                _BackpackCard(
-                  icon: '🫧',
-                  title: '泡泡沐浴',
-                  subtitle: '香波洗香香',
-                  badgeText: '${model.energy.toInt()}%',
-                  badgeColor: const Color(0xFF10B981),
-                  accentColor: const Color(0xFF10B981),
-                  isNight: isNight,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    onBathTap();
-                  },
+                // 同上：精力值也是逐秒变化的实时读数
+                AnimatedBuilder(
+                  animation: model,
+                  builder: (context, _) => _BackpackCard(
+                    icon: '🫧',
+                    title: '泡泡沐浴',
+                    subtitle: '香波洗香香',
+                    badgeText: '${model.energy.toInt()}%',
+                    badgeColor: const Color(0xFF10B981),
+                    accentColor: const Color(0xFF10B981),
+                    isNight: isNight,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      onBathTap();
+                    },
+                  ),
                 ),
                 // 5. 伴眠哄睡 / 唤醒
                 _BackpackCard(

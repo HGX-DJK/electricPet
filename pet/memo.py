@@ -492,8 +492,27 @@ class PetStickyNote(QWidget):
                 "height": self.height(),
                 "updated_at": time.time()
             }
-            with open(self.memo_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            # 原子写：先写同目录的 .tmp，再 os.replace 覆盖正式存档。
+            #
+            # 为什么不直接覆盖写：便签是 500ms 防抖自动保存（打字时约 2 次/秒），
+            # 直接 open(...,"w") 会**先清空原文件**再写 —— 写到一半崩了/断电了，
+            # 便签就只剩半截 JSON，重启后内容全丢。pet/model.py 的存档
+            # 早就是用 .tmp + os.replace 写的，这里对齐同一套写法。
+            tmp_file = self.memo_file + ".tmp"
+            try:
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_file, self.memo_file)
+            except Exception:
+                # 清理半截临时文件，别把垃圾留在存档目录里
+                try:
+                    if os.path.exists(tmp_file):
+                        os.remove(tmp_file)
+                except Exception:
+                    pass
+                raise
         except Exception as e:
             # ⚠️ 以前这里是 except Exception: pass —— 写盘失败完全静默，
             # 用户以为便签存上了，其实重启就没了。至少要留一行日志。

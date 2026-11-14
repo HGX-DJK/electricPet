@@ -8,6 +8,8 @@ import ctypes
 import time
 from typing import Dict, Any, Tuple
 
+from pet.diagnostics import log_exception
+
 # Windows 内核结构体定义
 class _MEMORYSTATUSEX(ctypes.Structure):
     _fields_ = [
@@ -104,8 +106,10 @@ class SystemHardwareMonitor:
             if self._kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):
                 mem_load = int(mem.dwMemoryLoad)
                 total_gb = round(mem.ullTotalPhys / (1024 ** 3), 1)
-        except Exception:
-            pass
+        except Exception as e:
+            # 以前是完全静默的 pass —— 读不到内存时托盘会一直显示 0%/0m，
+            # 用户根本分不清是「真的没内存」还是「读取坏了」。记一笔。
+            log_exception("SystemMonitor.Memory", e, min_interval=60.0)
 
         # 2. 读取 CPU 占用率
         cpu_load = self._cached_cpu_percent
@@ -132,8 +136,8 @@ class SystemHardwareMonitor:
                 self._last_kernel_time = curr_kernel
                 self._last_user_time = curr_user
                 self._last_cpu_sample_time = now
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception("SystemMonitor.Cpu", e, min_interval=60.0)
 
         # 3. 读取系统已开机运行时长
         uptime_str = "0m"
@@ -147,8 +151,8 @@ class SystemHardwareMonitor:
                 uptime_str = f"{hours}h {mins}m"
             else:
                 uptime_str = f"{mins}m"
-        except Exception:
-            pass
+        except Exception as e:
+            log_exception("SystemMonitor.Uptime", e, min_interval=60.0)
 
         self._cached_stats = {
             "cpu": cpu_load,

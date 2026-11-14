@@ -954,7 +954,15 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           },
         );
       },
-    );
+    ).whenComplete(() {
+      // ⚠️ 这三个控制器是本方法里现造的，弹窗关掉之后没人管它们 ——
+      // 每开一次设置弹窗就漏三个 TextEditingController（连带它内部的
+      // EditableText / Selection / CompositionState）。
+      // 弹窗一关闭就立刻释放。
+      keyController.dispose();
+      customUrlController.dispose();
+      modelController.dispose();
+    });
   }
 
   /// 状态胶囊: 绿=就绪 / 橙=本地陪伴 / 红=云端异常, 点击可直接进入设置排查

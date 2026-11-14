@@ -12,6 +12,119 @@ from pet.dock import PetCompanionDock
 from pet.memo import PetStickyNote
 from pet.audio import sound_manager
 from pet.qt_safe import safe_slot
+from pet.diagnostics import log_exception
+
+# 动作注册表：每个动作的时长 / 音效 / 台词。
+#
+# ⚠️ 为什么放在模块级：以前这整张表是写在 play_action() 函数体里的，
+# 每次播放动作都要现建一个 13 项的 dict + 39 条中文字符串字面量。
+# 现在只建一次 —— 表是常量，play_action 只读不写。
+ACTION_CONFIG = {
+        "STRETCH_YAWN": {
+            "duration": 3.8, "sound": "yawn",
+            "lines": [
+                "呼啊~ 伸个大大的懒腰，浑身骨头都舒展开啦！(ฅ'ω'ฅ)",
+                "舒展四肢~ 伸懒腰是最舒服的事啦！🐾",
+                "喵呜~ 伸展一下，整个人都神清气爽！✨"
+            ]
+        },
+        "WASH_FACE": {
+            "duration": 4.2, "sound": "purr",
+            "lines": [
+                "洗洗脸蛋、擦擦小胡须，做一只讲卫生的精致小可爱！✨",
+                "举起小肉垫擦呀擦~ 呼噜呼噜~ (๑╹◡╹๑)",
+                "梳洗干净，才能保持最萌的颜值面对主人！🐱"
+            ]
+        },
+        "CHASE_BUTTERFLY": {
+            "duration": 5.0, "sound": "pop",
+            "lines": [
+                "哇！看这只扑闪扑闪的荧光彩蝶！看我无敌飞扑！🦋🐾",
+                "蝴蝶蝴蝶等等我~ 扑腾扑腾！抓到啦！(开心跳跃)",
+                "抓彩蝶大冒险启动！身法轻盈如燕~ 💨"
+            ]
+        },
+        "HEAD_BOB_MUSIC": {
+            "duration": 5.2, "sound": "dance",
+            "lines": [
+                "戴上潮酷耳机~ 跟随动感节拍一起晃动脑袋！🎶🎧",
+                "动次打次~ 音乐响起来，心情嗨起来！♪(･ω･)ﾉ",
+                "戴着耳机的波可最帅气啦！左摇摇，右晃晃~ 🎵"
+            ]
+        },
+        "TILT_HEAD": {
+            "duration": 3.5, "sound": "curious",
+            "lines": [
+                "歪头眨巴大眼睛：主人在写什么厉害的代码呀？波可也想康康！👀❓",
+                "好奇心爆棚~ 脑袋往右一歪，萌力瞬间翻倍！(✧ω✧)",
+                "这是在忙什么呢？歪歪头，认真凝望主人~ 🤔"
+            ]
+        },
+        "HAPPY_SPIN": {
+            "duration": 3.4, "sound": "sparkle",
+            "lines": [
+                "抓到了吗？抓到了吗！疯狂追自己的小尾巴转圈圈~ 💫(✧ω✧)🐾",
+                "看波可原地大漂移！小尾巴别跑，看爪！🌀🐾",
+                "原地超级大回旋！今天一定要咬到自己的毛茸茸尾巴尖！🎉(ฅ>ω<*ฅ)"
+            ]
+        },
+        "DOZE_OFF": {
+            "duration": 4.5, "sound": "snore",
+            "lines": [
+                "呼... 困意像小虫子爬上来了... 脑袋一点一点犯迷糊... 💤",
+                "站着站着眼皮就开始打架啦... 呼噜... 🥱",
+                "脑袋点呀点... 小憩一下下就好... 😴"
+            ]
+        },
+        "DIZZY": {
+            "duration": 3.6, "sound": "dizzy",
+            "lines": [
+                "晕乎乎~ 天上的小星星都在脑袋顶上转圈圈啦！⭐🌀",
+                "眼花缭乱~ 世界怎么开始倒过来了？(@ @)",
+                "脚步轻飘飘... 晕头转向晃悠悠~ 💫"
+            ]
+        },
+        "LOOK_AROUND": {
+            "duration": 3.6, "sound": "curious",
+            "lines": [
+                "东瞅瞅、西看看~ 发现主人正专注地敲代码呢！👀✨",
+                "脑袋转转，警惕巡视桌面~ 报告主人，一切安全！🐾",
+                "四处张望~ 看看有没有小鱼干掉落呢？(ฅ'ω'ฅ)"
+            ]
+        },
+        "SIT_WAG_TAIL": {
+            "duration": 3.8, "sound": "purr",
+            "lines": [
+                "乖乖坐下~ 小尾巴轻快摇晃，静静陪在主人身边！🐾💕",
+                "端坐卖萌中~ 蓬松尾巴晃呀晃，心情满分！✨",
+                "在主人脚边乖巧蹲坐~ 呼噜呼噜好安心~ (๑╹◡╹๑)"
+            ]
+        },
+        "CATCH_MOUSE": {
+            "duration": 4.5, "sound": "pop",
+            "lines": [
+                "看我的喵影神捕！敏捷一扑，抓到机械小老鼠啦！🐭🐾",
+                "小老鼠别跑~ 喵呜飞扑！稳稳按在爪下！✨(ฅ'ω'ฅ)",
+                "本喵是抓鼠小冠军！身手矫健敏捷度拉满~ 💨"
+            ]
+        },
+        "PLAY_YARN": {
+            "duration": 4.6, "sound": "sparkle",
+            "lines": [
+                "发现粉红毛线球！左爪拍拍，右爪拨拨~ 🧶🐾",
+                "毛线球滚呀滚~ 扑腾扑腾，好好玩呀！💕✨",
+                "抓线头大作战！滚来滚去，快乐无极限~ 🐱"
+            ]
+        },
+        "CARDBOARD_BOX": {
+            "duration": 6.5, "sound": "purr",
+            "lines": [
+                "发现一个刚拆开的快递纸箱！钻进去也太舒服太有安全感啦~ 📦🐾",
+                "只要有纸箱，波可就能把自己装进去！露出一双好奇大眼睛~ (✧ω✧)",
+                "纸箱是猫咪永远的快乐老家！探头偷看~ 谁都不许抢我的箱子！📦✨"
+            ]
+        }
+    }
 
 class GlobalBossKeyFilter(QAbstractNativeEventFilter):
     """Windows 原生全局消息过滤器 (安全响应 Alt+P 全局老板键)"""
@@ -37,6 +150,23 @@ class PetWindow(QWidget):
     实现物理重力、拖拽掉落回弹、屏幕边缘碰撞、自由漫步巡逻与交互触发
     """
     EDGE_PEEK_MARGIN = 38
+
+    # ================= 帧率自适应 =================
+    #
+    # 重绘是这只宠物最贵的一项开销（实测约 2.9ms/帧，见 tool/measure_paint_alloc.py），
+    # 而它一天里有绝大部分时间都待在「慢动作」状态：呼吸、摆尾、踱步、探头。
+    #
+    # 这些动作的节奏都很慢 —— 呼吸 3.2 rad/s、耳抖 6 rad/s、摆尾 8 rad/s ——
+    # 换算下来每个动作周期都有 20~30 帧，**降到 30 FPS 肉眼几乎看不出区别**，
+    # 但重绘成本直接减半。所以：慢动作 30 FPS，快动作（旋转/扑蝶/扑鼠/拖拽…）60 FPS。
+    #
+    # 休眠原本就已经是 30 FPS（沿用同一套逻辑）。
+    ACTIVE_FRAME_MS = 16     # 快动作：60 FPS
+    AMBIENT_FRAME_MS = 33    # 慢动作：30 FPS
+    AMBIENT_STATES = frozenset({
+        "IDLE", "WALK_LEFT", "WALK_RIGHT", "SIT_WAG_TAIL", "LOOK_AROUND",
+        "PEEK_LEFT", "PEEK_RIGHT", "DOZE_OFF", "CARDBOARD_BOX",
+    })
 
     def __init__(self, model):
         super().__init__()
@@ -92,7 +222,9 @@ class PetWindow(QWidget):
         # 60 FPS 物理与渲染动画定时器 (~16.6ms)
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self._on_animation_tick)
-        self.anim_timer.start(16)
+        # 起始就按当前状态选好帧率（慢动作 30 FPS / 快动作 60 FPS），别先跑一帧 60 FPS 再降下来
+        self._frame_ms = self._desired_frame_ms()
+        self.anim_timer.start(self._frame_ms)
         self.last_tick_time = time.time()
 
         # 1秒宠物属性状态流逝定时器
@@ -179,7 +311,8 @@ class PetWindow(QWidget):
             # 恢复现身：重启帧定时器
             if hasattr(self, "anim_timer") and not self.anim_timer.isActive():
                 self.last_tick_time = time.time()
-                self.anim_timer.start(33 if self.model.is_sleeping else 16)
+                self._frame_ms = self._desired_frame_ms()
+                self.anim_timer.start(self._frame_ms)
             sound_manager.muted = not getattr(self.model, "sound_enabled", True)
             self.show()
             self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
@@ -365,6 +498,25 @@ class PetWindow(QWidget):
         scale = self.width() / 220.0
         return int(avail.bottom() - 171.0 * scale)
 
+    def _desired_frame_ms(self) -> int:
+        """当前状态该用多少毫秒一帧（慢动作 30 FPS / 快动作 60 FPS）。"""
+        if self.model.is_sleeping or self.state in self.AMBIENT_STATES:
+            return self.AMBIENT_FRAME_MS
+        return self.ACTIVE_FRAME_MS
+
+    def _apply_frame_rate(self, force=False):
+        """把帧定时器切到当前状态该用的间隔。
+
+        ⚠️ 只在间隔**真的变了**时才动定时器 —— setInterval 会重置定时器，
+        每帧都调会把定时器反复重启，反而引入抖动。
+        """
+        target = self._desired_frame_ms()
+        if force or target != getattr(self, "_frame_ms", None):
+            self._frame_ms = target
+            timer = getattr(self, "anim_timer", None)
+            if timer is not None and timer.isActive():
+                timer.setInterval(target)
+
     # ================= 60 FPS 核心帧循环 =================
     def _on_animation_tick(self):
         try:
@@ -373,6 +525,9 @@ class PetWindow(QWidget):
             now = time.time()
             dt = min(0.05, now - self.last_tick_time)
             self.last_tick_time = now
+
+            # 状态可能刚变过（例如播了一个新动作），这里同步一次帧率
+            self._apply_frame_rate()
 
             # 计算鼠标光标相对宠物头部的空间方位，计算眼神注视跟踪与空间距离 (驱动动态瞳孔放大)
             cursor_pos = QCursor.pos()
@@ -404,10 +559,10 @@ class PetWindow(QWidget):
             # 触发重绘
             self.update()
         except Exception as e:
-            now = time.time()
-            if now - getattr(self, "_last_tick_err_time", 0.0) > 5.0:
-                self._last_tick_err_time = now
-                print(f"[PetWindow] Animation tick warning: {e}")
+            # 带**完整堆栈**记录（5 秒限流一次）。
+            # ⚠️ 以前这里只打一句 str(e)，而且限流之后连那句都没有 ——
+            # 真出问题时用户只看到「宠物不动了」，日志里一个线索都没有。
+            log_exception("PetWindow.AnimationTick", e)
 
     def play_action(self, action_name, custom_msg=None, duration=None, show_dialogue=True):
         """播放特定多样化动作动画与对应专属音效、台词气泡"""
@@ -417,113 +572,11 @@ class PetWindow(QWidget):
             self.model.stop_focus_timer()
 
         self.state = action_name
+        # 动作多为快节奏（旋转 / 扑蝶 / 扑鼠…），立刻切回 60 FPS，
+        # 不用等下一个 tick 才提频。
+        self._apply_frame_rate()
 
-        action_config = {
-            "STRETCH_YAWN": {
-                "duration": 3.8, "sound": "yawn",
-                "lines": [
-                    "呼啊~ 伸个大大的懒腰，浑身骨头都舒展开啦！(ฅ'ω'ฅ)",
-                    "舒展四肢~ 伸懒腰是最舒服的事啦！🐾",
-                    "喵呜~ 伸展一下，整个人都神清气爽！✨"
-                ]
-            },
-            "WASH_FACE": {
-                "duration": 4.2, "sound": "purr",
-                "lines": [
-                    "洗洗脸蛋、擦擦小胡须，做一只讲卫生的精致小可爱！✨",
-                    "举起小肉垫擦呀擦~ 呼噜呼噜~ (๑╹◡╹๑)",
-                    "梳洗干净，才能保持最萌的颜值面对主人！🐱"
-                ]
-            },
-            "CHASE_BUTTERFLY": {
-                "duration": 5.0, "sound": "pop",
-                "lines": [
-                    "哇！看这只扑闪扑闪的荧光彩蝶！看我无敌飞扑！🦋🐾",
-                    "蝴蝶蝴蝶等等我~ 扑腾扑腾！抓到啦！(开心跳跃)",
-                    "抓彩蝶大冒险启动！身法轻盈如燕~ 💨"
-                ]
-            },
-            "HEAD_BOB_MUSIC": {
-                "duration": 5.2, "sound": "dance",
-                "lines": [
-                    "戴上潮酷耳机~ 跟随动感节拍一起晃动脑袋！🎶🎧",
-                    "动次打次~ 音乐响起来，心情嗨起来！♪(･ω･)ﾉ",
-                    "戴着耳机的波可最帅气啦！左摇摇，右晃晃~ 🎵"
-                ]
-            },
-            "TILT_HEAD": {
-                "duration": 3.5, "sound": "curious",
-                "lines": [
-                    "歪头眨巴大眼睛：主人在写什么厉害的代码呀？波可也想康康！👀❓",
-                    "好奇心爆棚~ 脑袋往右一歪，萌力瞬间翻倍！(✧ω✧)",
-                    "这是在忙什么呢？歪歪头，认真凝望主人~ 🤔"
-                ]
-            },
-            "HAPPY_SPIN": {
-                "duration": 3.4, "sound": "sparkle",
-                "lines": [
-                    "抓到了吗？抓到了吗！疯狂追自己的小尾巴转圈圈~ 💫(✧ω✧)🐾",
-                    "看波可原地大漂移！小尾巴别跑，看爪！🌀🐾",
-                    "原地超级大回旋！今天一定要咬到自己的毛茸茸尾巴尖！🎉(ฅ>ω<*ฅ)"
-                ]
-            },
-            "DOZE_OFF": {
-                "duration": 4.5, "sound": "snore",
-                "lines": [
-                    "呼... 困意像小虫子爬上来了... 脑袋一点一点犯迷糊... 💤",
-                    "站着站着眼皮就开始打架啦... 呼噜... 🥱",
-                    "脑袋点呀点... 小憩一下下就好... 😴"
-                ]
-            },
-            "DIZZY": {
-                "duration": 3.6, "sound": "dizzy",
-                "lines": [
-                    "晕乎乎~ 天上的小星星都在脑袋顶上转圈圈啦！⭐🌀",
-                    "眼花缭乱~ 世界怎么开始倒过来了？(@ @)",
-                    "脚步轻飘飘... 晕头转向晃悠悠~ 💫"
-                ]
-            },
-            "LOOK_AROUND": {
-                "duration": 3.6, "sound": "curious",
-                "lines": [
-                    "东瞅瞅、西看看~ 发现主人正专注地敲代码呢！👀✨",
-                    "脑袋转转，警惕巡视桌面~ 报告主人，一切安全！🐾",
-                    "四处张望~ 看看有没有小鱼干掉落呢？(ฅ'ω'ฅ)"
-                ]
-            },
-            "SIT_WAG_TAIL": {
-                "duration": 3.8, "sound": "purr",
-                "lines": [
-                    "乖乖坐下~ 小尾巴轻快摇晃，静静陪在主人身边！🐾💕",
-                    "端坐卖萌中~ 蓬松尾巴晃呀晃，心情满分！✨",
-                    "在主人脚边乖巧蹲坐~ 呼噜呼噜好安心~ (๑╹◡╹๑)"
-                ]
-            },
-            "CATCH_MOUSE": {
-                "duration": 4.5, "sound": "pop",
-                "lines": [
-                    "看我的喵影神捕！敏捷一扑，抓到机械小老鼠啦！🐭🐾",
-                    "小老鼠别跑~ 喵呜飞扑！稳稳按在爪下！✨(ฅ'ω'ฅ)",
-                    "本喵是抓鼠小冠军！身手矫健敏捷度拉满~ 💨"
-                ]
-            },
-            "PLAY_YARN": {
-                "duration": 4.6, "sound": "sparkle",
-                "lines": [
-                    "发现粉红毛线球！左爪拍拍，右爪拨拨~ 🧶🐾",
-                    "毛线球滚呀滚~ 扑腾扑腾，好好玩呀！💕✨",
-                    "抓线头大作战！滚来滚去，快乐无极限~ 🐱"
-                ]
-            },
-            "CARDBOARD_BOX": {
-                "duration": 6.5, "sound": "purr",
-                "lines": [
-                    "发现一个刚拆开的快递纸箱！钻进去也太舒服太有安全感啦~ 📦🐾",
-                    "只要有纸箱，波可就能把自己装进去！露出一双好奇大眼睛~ (✧ω✧)",
-                    "纸箱是猫咪永远的快乐老家！探头偷看~ 谁都不许抢我的箱子！📦✨"
-                ]
-            }
-        }
+        action_config = ACTION_CONFIG
 
         cfg = action_config.get(action_name, {"duration": 3.0, "sound": "meow", "lines": ["波可展示了可爱绝活！✨"]})
         self.action_timer = duration if duration is not None else cfg["duration"]
@@ -719,13 +772,10 @@ class PetWindow(QWidget):
         """每秒更新一次宠物数值与自适应能耗调节，并进行硬件全息状态轮询"""
         try:
             self.model.tick(1.0)
-            # 自适应能耗调节：休眠中降低帧率至 30 FPS 节约系统开销，醒来恢复 60 FPS
-            if self.model.is_sleeping:
-                if self.anim_timer.interval() != 33:
-                    self.anim_timer.setInterval(33)
-            else:
-                if self.anim_timer.interval() != 16:
-                    self.anim_timer.setInterval(16)
+            # 自适应能耗调节：慢动作降帧到 30 FPS，快动作 / 醒来恢复 60 FPS。
+            # （实际的切换由 _on_animation_tick 里的 _apply_frame_rate 负责，
+            #   这里只是保证「休眠中」这个条件变化后立刻生效。）
+            self._apply_frame_rate()
 
             # 硬件性能感知与高负载流汗彩蛋 (每 15 秒轮询一次)
             now = time.time()
@@ -747,10 +797,8 @@ class PetWindow(QWidget):
                 except Exception:
                     pass
         except Exception as e:
-            now = time.time()
-            if now - getattr(self, "_last_status_err_time", 0.0) > 5.0:
-                self._last_status_err_time = now
-                print(f"[PetWindow] Status tick warning: {e}")
+            # 同上：带完整堆栈记录，别让状态循环里的故障悄无声息
+            log_exception("PetWindow.StatusTick", e)
 
     # ================= 鼠标与交互事件 =================
     def enterEvent(self, event):
@@ -785,6 +833,11 @@ class PetWindow(QWidget):
             self.dialogue.sync_position()
 
     def hideEvent(self, event):
+        # 窗口不可见时**彻底停掉帧定时器**。
+        # 否则定时器照样每 16~33ms 唤醒一次 GUI 线程，醒来第一件事就是 return ——
+        # 白白把 CPU 唤起来，却一帧都不画。
+        if hasattr(self, "anim_timer") and self.anim_timer.isActive():
+            self.anim_timer.stop()
         if hasattr(self, "dock"):
             self.dock.hide()
         if hasattr(self, "dialogue"):
@@ -796,6 +849,12 @@ class PetWindow(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
+        # 重新可见时把帧定时器拉回来（老板键隐身也会走这里）
+        if hasattr(self, "anim_timer") and not self.anim_timer.isActive():
+            if not getattr(self, "is_boss_hidden", False):
+                self.last_tick_time = time.time()
+                self._frame_ms = self._desired_frame_ms()
+                self.anim_timer.start(self._frame_ms)
         if getattr(self, "_memo_was_open", False) and hasattr(self, "memo"):
             self.memo.show()
             self._memo_was_open = False

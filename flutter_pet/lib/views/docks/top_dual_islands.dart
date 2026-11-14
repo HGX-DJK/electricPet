@@ -1,6 +1,7 @@
 import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import '../../models/pet_model.dart';
+import '../../services/solar_service.dart';
 import '../../services/sound_service.dart';
 import '../../theme/poko_theme.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
@@ -17,7 +18,7 @@ class TopDualIslands extends StatelessWidget {
   final PetModel petModel;
   final Size screenSize;
   final bool isNight;
-  final Map<String, dynamic> circadianTheme;
+  final SkyTheme circadianTheme;
   final bool isManualSky;
   final String ambientMode;
   final VoidCallback? onAmbientToggle;
@@ -333,13 +334,19 @@ class TopDualIslands extends StatelessWidget {
                   children: [
                     const Text('🍗', style: TextStyle(fontSize: 8.5)),
                     const SizedBox(width: 1.5),
-                    Text(
-                      '${petModel.hunger.toInt()}%',
-                      style: const TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        color: PokoPalette.amberDeep,
+                    // ⚠️ 饱腹/心情是**每秒都在变**的数值。
+                    // 主界面为了省性能已经不再因为数值衰减而整树重建，
+                    // 所以这两个读数必须自己监听模型 —— 否则会一直停在旧值上。
+                    AnimatedBuilder(
+                      animation: petModel,
+                      builder: (context, _) => Text(
+                        '${petModel.hunger.toInt()}%',
+                        style: const TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: PokoPalette.amberDeep,
+                        ),
                       ),
                     ),
                     Container(
@@ -350,15 +357,18 @@ class TopDualIslands extends StatelessWidget {
                     ),
                     const Text('💖', style: TextStyle(fontSize: 8.5)),
                     const SizedBox(width: 1.5),
-                    Text(
-                      '${petModel.mood.toInt()}%',
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        height: 1.1,
-                        color: isNight
-                            ? const Color(0xFF34D399)
-                            : PokoPalette.emeraldDeep,
+                    AnimatedBuilder(
+                      animation: petModel,
+                      builder: (context, _) => Text(
+                        '${petModel.mood.toInt()}%',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          height: 1.1,
+                          color: isNight
+                              ? const Color(0xFF34D399)
+                              : PokoPalette.emeraldDeep,
+                        ),
                       ),
                     ),
                   ],
@@ -390,13 +400,13 @@ class TopDualIslands extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          circadianTheme['icon'] as String,
+                          circadianTheme.icon,
                           style: const TextStyle(fontSize: 8.5),
                         ),
                         const SizedBox(width: 2),
                         Flexible(
                           child: Text(
-                            circadianTheme['name'] as String,
+                            circadianTheme.name,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -491,7 +501,7 @@ class TopDualIslands extends StatelessWidget {
                 tooltip: '流转天象',
                 onTap: onSkyRhythmToggle,
                 child: Text(
-                  circadianTheme['icon'] as String,
+                  circadianTheme.icon,
                   style: const TextStyle(fontSize: 12.0),
                 ),
               ),

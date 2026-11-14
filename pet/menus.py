@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen, QLinearGradient, QRadialGradient
 from pet.audio import sound_manager
 from pet.renderer import PetRenderer
+from pet.renderer import _color, _pen, _solid_brush, _grad_brush
 from pet.qt_safe import safe_slot
 
 # 赛博高科技全息毛玻璃与霓虹全局 QSS
@@ -760,6 +761,14 @@ class CyberHoloChamberWidget(QWidget):
         self.speech_text = "✨ 试衣舱全息链路已就绪！"
         self.speech_timer = 3.0
 
+        # 「每帧都一样」的画笔与字体：提前建好复用，别在 paintEvent 里反复构造。
+        # _ring_pen 是本控件**独占**的一支（虚线偏移每帧在转），
+        # 所以它绝不能来自 pet/renderer.py 的共享缓存 —— 改了会污染缓存里的同款笔。
+        self._ring_pen = QPen(QColor(56, 189, 248, 160), 1.5, Qt.PenStyle.DashLine)
+        self._ring_pen.setDashPattern([6, 6])
+        self._font_hud = QFont("Consolas", 8, QFont.Weight.Bold)
+        self._font_bubble = QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold)
+
         # 30 FPS 刷新
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._on_tick)
@@ -833,12 +842,16 @@ class CyberHoloChamberWidget(QWidget):
             h = self.height()
 
             # 1. 舱体深邃科技渐变背景
-            bg_grad = QLinearGradient(0, 0, 0, h)
-            bg_grad.setColorAt(0.0, QColor("#090D16"))
-            bg_grad.setColorAt(0.7, QColor("#0F172A"))
-            bg_grad.setColorAt(1.0, QColor("#0B132B"))
-            painter.setBrush(QBrush(bg_grad))
-            painter.setPen(QPen(QColor("#1E293B"), 1.5))
+            # ⚠️ 这里的画刷/画笔/字体都是**每帧都一样**的常量，
+            # 以前每帧都要现造一遍（实测这个弹窗单帧要新建 27 个 QColor、
+            # 13 个 QPen、7 个 QBrush、2 个 QFont），白白烧掉一个核的近两成。
+            # 现在统一走 pet/renderer.py 里现成的缓存助手，建一次一直复用。
+            painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 0, h), [
+                (0.0, _color("#090D16")),
+                (0.7, _color("#0F172A")),
+                (1.0, _color("#0B132B")),
+            ]))
+            painter.setPen(_pen("#1E293B", 1.5))
             painter.drawRoundedRect(QRectF(3, 3, w - 6, h - 6), 18, 18)
 
             # 2. 绘制全息透视网格地台 (Perspective Hologram Floor)
@@ -847,37 +860,35 @@ class CyberHoloChamberWidget(QWidget):
             pedestal_h = 52.0
 
             # 地台网格发射线
-            grid_pen = QPen(QColor(14, 165, 233, 40), 1)
-            painter.setPen(grid_pen)
+            painter.setPen(_pen((14, 165, 233, 40), 1))
             for i in range(-4, 5):
                 fx = w / 2.0 + i * 22
                 painter.drawLine(int(w / 2.0 + i * 10), int(pedestal_y - 12), int(fx), int(pedestal_y + 28))
 
             # 3. 动态旋转全息投影环 (Holographic Emitter Rings)
-            glow_grad = QRadialGradient(w / 2.0, pedestal_y + 4, pedestal_w / 2.0)
-            glow_grad.setColorAt(0.0, QColor(6, 182, 212, 70))
-            glow_grad.setColorAt(0.6, QColor(14, 165, 233, 25))
-            glow_grad.setColorAt(1.0, QColor(14, 165, 233, 0))
-            painter.setBrush(QBrush(glow_grad))
+            painter.setBrush(_grad_brush(QRadialGradient, (w / 2.0, pedestal_y + 4, pedestal_w / 2.0), [
+                (0.0, _color(6, 182, 212, 70)),
+                (0.6, _color(14, 165, 233, 25)),
+                (1.0, _color(14, 165, 233, 0)),
+            ]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 2.0, pedestal_h / 2.0)
 
             # 外圈全息刻度光环
-            ring_pen = QPen(QColor(56, 189, 248, 160), 1.5, Qt.PenStyle.DashLine)
-            ring_pen.setDashPattern([6, 6])
-            ring_pen.setDashOffset(self.ring_angle / 10.0)
-            painter.setPen(ring_pen)
+            # ⚠️ 这支笔的虚线偏移每帧都在转 —— 所以不能进共享缓存
+            # （改了会污染缓存里的同款笔）。改成**本控件独占一支**，
+            # 每帧只改 dashOffset，不重新构造 QPen/QColor。
+            self._ring_pen.setDashOffset(self.ring_angle / 10.0)
+            painter.setPen(self._ring_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 2.0 - 4, pedestal_h / 2.0 - 2)
 
             # 内圈能量核心环
-            inner_pen = QPen(QColor(168, 85, 247, 180), 1.2)
-            painter.setPen(inner_pen)
+            painter.setPen(_pen((168, 85, 247, 180), 1.2))
             painter.drawEllipse(QPointF(w / 2.0, pedestal_y + 4), pedestal_w / 3.0, pedestal_h / 3.0)
 
             # 4. 绘制 HUD 高科技角标
-            hud_pen = QPen(QColor(56, 189, 248, 160), 1.5)
-            painter.setPen(hud_pen)
+            painter.setPen(_pen((56, 189, 248, 160), 1.5))
             # 左上
             painter.drawLine(12, 18, 12, 12)
             painter.drawLine(12, 12, 18, 12)
@@ -892,10 +903,10 @@ class CyberHoloChamberWidget(QWidget):
             painter.drawLine(w - 12, h - 12, w - 12, h - 18)
 
             # 5. 顶部高科技读数
-            painter.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-            painter.setPen(QColor("#06B6D4"))
+            painter.setFont(self._font_hud)
+            painter.setPen(_color("#06B6D4"))
             painter.drawText(QRectF(16, 10, 110, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "● HOLO-POD v3.2")
-            painter.setPen(QColor("#94A3B8"))
+            painter.setPen(_color("#94A3B8"))
             painter.drawText(QRectF(w - 95, 10, 80, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "SYNC 99.8%")
 
             # 6. 绘制高精度萌宠本体
@@ -908,14 +919,14 @@ class CyberHoloChamberWidget(QWidget):
 
             # 7. 语音气泡/互动反馈胶囊
             if self.speech_timer > 0 and self.speech_text:
-                painter.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
+                painter.setFont(self._font_bubble)
                 fm = painter.fontMetrics()
                 text_w = fm.horizontalAdvance(self.speech_text) + 20
                 bubble_rect = QRectF((w - text_w) / 2.0, 32, text_w, 24)
-                painter.setBrush(QBrush(QColor(15, 23, 42, 220)))
-                painter.setPen(QPen(QColor("#38BDF8"), 1))
+                painter.setBrush(_solid_brush(15, 23, 42, 220))
+                painter.setPen(_pen("#38BDF8", 1))
                 painter.drawRoundedRect(bubble_rect, 12, 12)
-                painter.setPen(QColor("#E0F2FE"))
+                painter.setPen(_color("#E0F2FE"))
                 painter.drawText(bubble_rect, Qt.AlignmentFlag.AlignCenter, self.speech_text)
         finally:
             painter.end()

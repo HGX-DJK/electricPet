@@ -84,6 +84,52 @@ def _grad_brush(grad_cls, geom, stops):
     return brush
 
 
+def _grad_brush_dynamic(grad_cls, geom, stops):
+    """取一支**不进缓存**的渐变画刷 —— 专供「几何逐帧都在变」的场合。
+
+    ⚠️ 为什么要另开一个函数（别直接用 _grad_brush）：
+
+    _grad_brush 的缓存键里带着**全部几何参数**。而阴影的渐变半径
+    (shadow_w / 2) 跟着 squash_x 走、究极光环的半径跟着 sin(anim_time) 走
+    —— 这些量每帧都在变，键永远对不上，于是：
+
+      1) 每帧 100% 未命中，白白重建一支 QRadialGradient + QBrush；
+      2) 更糟的是**每次未命中都会往 _GRAD_BRUSH_CACHE 里塞一条永不命中的
+         死条目**。实测几秒就能把 _CACHE_LIMIT(4096) 塞满，之后连真正该
+         缓存的渐变（比如玩家换了新皮肤 / 新头饰）都再也存不进去了。
+
+    所以「几何会动」的渐变一律走这里：现造现用、不进缓存、也不污染缓存。
+
+    geom / stops 的含义与 _grad_brush 完全一致。
+    """
+    grad = grad_cls(*geom)
+    for pos, col in stops:
+        grad.setColorAt(pos, col)
+    return QBrush(grad)
+
+
+def _grad_brush_xshift(grad_cls, geom, shift, stops):
+    """取一支「横向位移渐变」画刷 —— 耳廓渐变专用。
+
+    耳朵会跟着 3D 旋转做轨道视差位移 (ear_shift = sin_a * 14)，
+    位移量直接写进渐变几何的话，键就每帧都在变（旋转期间 sin_a 连续变化），
+    于是每帧未命中 + 往缓存里塞死条目。
+
+    所以：
+      · shift == 0（没有在旋转）→ 几何恒定，走正常缓存；
+      · shift != 0（正在旋转）  → 走「不缓存」通道，现造现用。
+
+    geom 的第 0、2 个分量会加上 shift（耳廓渐变一律是这个形状）。
+    """
+    if shift:
+        return _grad_brush_dynamic(
+            grad_cls,
+            (geom[0] + shift, geom[1], geom[2] + shift, geom[3]),
+            stops,
+        )
+    return _grad_brush(grad_cls, geom, stops)
+
+
 def _color(*args):
     """取一个 QColor（带缓存）。参数与 QColor(...) 完全一致。
 
@@ -765,26 +811,47 @@ class PetRenderer:
 
         shadow_cx = spin_orbit_x if is_spin else 0.0
 
+        # ── 地面阴影：统一用「局部坐标 + painter 变换」绘制 ──
+        #
+        # 阴影宽度 shadow_w 跟着 squash_x 变、渐变半径又跟着宽度变，
+        # 如果把这些绝对数值写进渐变的缓存键，键就**每帧都在变**：
+        #   · 每帧必然未命中 → 白白重建一支 QRadialGradient + QBrush；
+        #   · 每次未命中还会往 _GRAD_BRUSH_CACHE 里塞一条永不命中的死条目，
+        #     几秒就把 _CACHE_LIMIT 塞满，之后换个皮肤/头饰都再也缓存不上。
+        #
+        # 改成「先平移到椭圆中心 → 再做一次**均匀缩放**」之后，
+        # 渐变几何恒定成 (0, 0, 基半径)，可以建一次一直复用，每帧零分配。
+        # 画面零差异：均匀缩放下圆仍然是圆，设备坐标逐点等价。
+        #
         # 漫反射羽化大阴影 (羽化环境落影)
-        shadow_rect = QRectF(shadow_cx - shadow_w / 2.0, 44 - (0.0 if is_spin else breath_offset * 0.3), shadow_w, 20)
-        painter.setBrush(_grad_brush(QRadialGradient, (shadow_rect.center(), shadow_w / 2.0), [
+        shadow_s = shadow_w / 96.0
+        painter.save()
+        painter.translate(shadow_cx, 44 - (0.0 if is_spin else breath_offset * 0.3) + 10.0)
+        painter.scale(shadow_s, shadow_s)
+        painter.setBrush(_grad_brush(QRadialGradient, (0, 0, 48), [
             (0.0, QColor(0, 0, 0, ambient_alpha)),
             (0.55, QColor(0, 0, 0, int(ambient_alpha * 0.42))),
             (1.0, _color(0, 0, 0, 0)),
         ]))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(shadow_rect)
+        painter.drawEllipse(QRectF(-48, -10.0 / shadow_s, 96, 20.0 / shadow_s))
+        painter.restore()
 
         # 紧贴足底重力接触阴影 (Contact Shadow, 仅在触地时生效)
         if contact_alpha > 0:
             contact_w = shadow_w * 0.72
-            contact_rect = QRectF(shadow_cx - contact_w / 2.0, 47 - (0.0 if is_spin else breath_offset * 0.2), contact_w, 9)
-            painter.setBrush(_grad_brush(QRadialGradient, (contact_rect.center(), contact_w / 2.0), [
+            contact_s = contact_w / 72.0
+            painter.save()
+            painter.translate(shadow_cx, 47 - (0.0 if is_spin else breath_offset * 0.2) + 4.5)
+            painter.scale(contact_s, contact_s)
+            painter.setBrush(_grad_brush(QRadialGradient, (0, 0, 36), [
                 (0.0, QColor(0, 0, 0, contact_alpha)),
                 (0.65, QColor(0, 0, 0, int(contact_alpha * 0.3))),
                 (1.0, _color(0, 0, 0, 0)),
             ]))
-            painter.drawEllipse(contact_rect)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(-36, -4.5 / contact_s, 72, 9 / contact_s))
+            painter.restore()
 
         # 3.5 3D 星尘环绕粒子 (背景层，位于身体后方)
         if is_spin:
@@ -1012,14 +1079,21 @@ class PetRenderer:
 
     # ================= 究极体光环与背部装饰 =================
     def _draw_ultimate_aura(self, painter: QPainter):
+        # 光环半径随时间脉动 —— 同样用「局部坐标 + 均匀缩放」把渐变几何
+        # 固定成 (0, 0, 75)，这样它就能进缓存一直复用，而不是每帧重建。
+        # 画面零差异：均匀缩放下圆仍是圆，设备坐标逐点等价。
         aura_rad = 75 + math.sin(self.anim_time * 3.0) * 8.0
-        painter.setBrush(_grad_brush(QRadialGradient, (0, 0, aura_rad), [
+        aura_s = aura_rad / 75.0
+        painter.save()
+        painter.scale(aura_s, aura_s)
+        painter.setBrush(_grad_brush(QRadialGradient, (0, 0, 75), [
             (0.0, _color(255, 235, 120, 110)),
             (0.6, _color(255, 180, 50, 45)),
             (1.0, _color(255, 150, 0, 0)),
         ]))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QRectF(-aura_rad, -aura_rad - 10, aura_rad * 2, aura_rad * 2))
+        painter.drawEllipse(QRectF(-75, -10.0 / aura_s - 75, 150, 150))
+        painter.restore()
 
     def _draw_spin_stardust_ring(self, painter: QPainter, spin_angle, in_front: bool, center_x: float = 0.0):
         """3D 环绕星尘粒子系统：正面穿插角色前方，背面穿插角色后方，提供真实立体景深"""
@@ -1238,7 +1312,7 @@ class PetRenderer:
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (-46 + ear_shift, -63, -14 + ear_shift, -26), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (-46, -63, -14, -26), ear_shift, [
             (0.0, _color(palette["ear_l_t"])),
             (1.0, _color(palette["ear_l_b"])),
         ]))
@@ -1253,10 +1327,11 @@ class PetRenderer:
         left_inner.cubicTo(-25 + ear_shift, -46, -20 + ear_shift, -40, -17 + ear_shift, -37)
         left_inner.cubicTo(-22 + ear_shift, -32, -30 + ear_shift, -30, -39 + ear_shift, -30)
         left_inner.closeSubpath()
-        inner_grad_l = QLinearGradient(-41 + ear_shift, -58, -20 + ear_shift, -30)
-        inner_grad_l.setColorAt(0.0, _color(palette["inner_ear_t"]))
-        inner_grad_l.setColorAt(1.0, _color(palette["inner_ear_b"]))
-        painter.setBrush(QBrush(inner_grad_l))
+        inner_grad_l = _grad_brush_xshift(QLinearGradient, (-41, -58, -20, -30), ear_shift, [
+            (0.0, _color(palette["inner_ear_t"])),
+            (1.0, _color(palette["inner_ear_b"])),
+        ])
+        painter.setBrush(inner_grad_l)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawPath(left_inner)
 
@@ -1277,7 +1352,7 @@ class PetRenderer:
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (46 + ear_shift, -63, 14 + ear_shift, -26), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (46, -63, 14, -26), ear_shift, [
             (0.0, _color(palette["ear_r_t"])),
             (1.0, _color(palette["ear_r_b"])),
         ]))
@@ -1292,7 +1367,7 @@ class PetRenderer:
         right_inner.cubicTo(25 + ear_shift, -46, 20 + ear_shift, -40, 17 + ear_shift, -37)
         right_inner.cubicTo(22 + ear_shift, -32, 30 + ear_shift, -30, 39 + ear_shift, -30)
         right_inner.closeSubpath()
-        painter.setBrush(QBrush(inner_grad_l))
+        painter.setBrush(inner_grad_l)
         painter.drawPath(right_inner)
 
         # 右耳内软绒毛
@@ -1446,7 +1521,7 @@ class PetRenderer:
         left_ear.cubicTo(-26 + ear_shift, -49, -20 + ear_shift, -42, -14 + ear_shift, -38)
         left_ear.cubicTo(-22 + ear_shift, -32, -32 + ear_shift, -28, -43 + ear_shift, -26)
         left_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (-46 + ear_shift, -63, -14 + ear_shift, -26), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (-46, -63, -14, -26), ear_shift, [
             (0.0, _color(palette["ear_l_t"]).darker(115)),
             (1.0, _color(palette["ear_l_b"]).darker(120)),
         ]))
@@ -1461,7 +1536,7 @@ class PetRenderer:
         right_ear.cubicTo(26 + ear_shift, -49, 20 + ear_shift, -42, 14 + ear_shift, -38)
         right_ear.cubicTo(22 + ear_shift, -32, 32 + ear_shift, -28, 43 + ear_shift, -26)
         right_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (46 + ear_shift, -63, 14 + ear_shift, -26), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (46, -63, 14, -26), ear_shift, [
             (0.0, _color(palette["ear_r_t"]).darker(115)),
             (1.0, _color(palette["ear_r_b"]).darker(120)),
         ]))
@@ -1541,8 +1616,25 @@ class PetRenderer:
         outline_col = _color(palette["outline"])
 
         def draw_single_paw(x, y, w, h, pad_x, pad_y, pad_w, pad_h):
-            paw_rect = QRectF(x, y, w, h)
-            painter.setBrush(_grad_brush(QRadialGradient, (x + w * 0.4, y + h * 0.35, max(w, h)), [
+            # ⚠️ 以「爪子自身」为局部原点作画：位移交给 painter 变换去承担，
+            # 形状与渐变几何一律用相对坐标表达。
+            #
+            # 为什么这么做（画面零差异，只是让缓存能命中）：
+            #   爪子会跟着动画满屏乱动（揉脸 / 扑蝶 / 扑鼠 / 拍毛线 / 乱蹬…），
+            #   如果把**绝对坐标**写进渐变的缓存键，那支渐变的键每帧都在变：
+            #     · 每帧必然未命中 → 白白重建一支 QRadialGradient + QBrush；
+            #     · 每次未命中还往缓存里塞一条永不命中的死条目，几秒就把
+            #       _CACHE_LIMIT 塞满，之后换个皮肤 / 头饰都再也缓存不上了。
+            #   改成局部坐标后，渐变几何只跟爪子**形状**有关（w/h/pad 偏移），
+            #   同一个调用点的形状是常量 → 键稳定 → 建一次一直复用，每帧零分配。
+            #
+            #   画面为什么一模一样：这里只加了一层**纯平移**，
+            #   设备坐标逐点等价，渐变中心/半径也完全一致。
+            lx, ly = pad_x - x, pad_y - y  # 掌心肉垫相对爪子原点的偏移（恒定）
+            painter.translate(x, y)
+
+            paw_rect = QRectF(0.0, 0.0, w, h)
+            painter.setBrush(_grad_brush(QRadialGradient, (w * 0.4, h * 0.35, max(w, h)), [
                 (0.0, paw_col_t),
                 (0.7, paw_col_b),
                 (1.0, paw_col_b.darker(110)),
@@ -1551,8 +1643,8 @@ class PetRenderer:
             painter.drawEllipse(paw_rect)
 
             # 3D 粉嫩果冻主掌心肉垫 (Palm Pad)
-            pad_rect = QRectF(pad_x, pad_y, pad_w, pad_h)
-            painter.setBrush(_grad_brush(QRadialGradient, (pad_x + pad_w * 0.45, pad_y + pad_h * 0.35, max(pad_w, pad_h)), [
+            pad_rect = QRectF(lx, ly, pad_w, pad_h)
+            painter.setBrush(_grad_brush(QRadialGradient, (lx + pad_w * 0.45, ly + pad_h * 0.35, max(pad_w, pad_h)), [
                 (0.0, _color("#FFB2B2")),
                 (0.75, _color("#FF768C")),
                 (1.0, _color("#D94B62")),
@@ -1561,7 +1653,7 @@ class PetRenderer:
             painter.drawEllipse(pad_rect)
             # 主掌心高光
             painter.setBrush(_solid_brush(255, 255, 255, 210))
-            painter.drawEllipse(QRectF(pad_x + pad_w * 0.22, pad_y + pad_h * 0.16, pad_w * 0.34, pad_h * 0.28))
+            painter.drawEllipse(QRectF(lx + pad_w * 0.22, ly + pad_h * 0.16, pad_w * 0.34, pad_h * 0.28))
 
             # 3 颗萌萌趾尖肉垫 (3 Cute Toe Beans)
             toe_r = min(pad_w, pad_h) * 0.44
@@ -1571,8 +1663,8 @@ class PetRenderer:
                 (pad_w * 0.36, -pad_h * 0.36)
             ]
             for tox, toy in toe_offsets:
-                tx = pad_x + pad_w * 0.5 + tox - toe_r * 0.5
-                ty = pad_y + pad_h * 0.5 + toy - toe_r * 0.5
+                tx = lx + pad_w * 0.5 + tox - toe_r * 0.5
+                ty = ly + pad_h * 0.5 + toy - toe_r * 0.5
                 t_rect = QRectF(tx, ty, toe_r, toe_r)
                 painter.setBrush(_grad_brush(
                     QRadialGradient,
@@ -1586,6 +1678,8 @@ class PetRenderer:
                 painter.drawEllipse(t_rect)
                 painter.setBrush(_solid_brush(255, 255, 255, 225))
                 painter.drawEllipse(QRectF(tx + toe_r * 0.22, ty + toe_r * 0.2, toe_r * 0.36, toe_r * 0.36))
+
+            painter.translate(-x, -y)  # 还原平移（不用 save/restore：保持画笔状态与原实现完全一致）
 
         if state == "WASH_FACE":
             draw_single_paw(-35, 40, 22, 14, -28, 45, 8, 6)
@@ -1731,7 +1825,7 @@ class PetRenderer:
         left_ear.lineTo(-50 + ear_shift, -78)
         left_ear.lineTo(-12 + ear_shift, -45)
         left_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (-50 + ear_shift, -78, -12 + ear_shift, -28), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (-50, -78, -12, -28), ear_shift, [
             (0.0, _color(pal["fur_hl"])),
             (1.0, _color(pal["fur_mid"])),
         ]))
@@ -1743,7 +1837,7 @@ class PetRenderer:
         right_ear.lineTo(50 + ear_shift, -78)
         right_ear.lineTo(12 + ear_shift, -45)
         right_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (50 + ear_shift, -78, 12 + ear_shift, -28), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (50, -78, 12, -28), ear_shift, [
             (0.0, _color(pal["fur_hl"])),
             (1.0, _color(pal["fur_mid"])),
         ]))
@@ -1832,7 +1926,7 @@ class PetRenderer:
         left_ear.lineTo(-50 + ear_shift, -78)
         left_ear.lineTo(-12 + ear_shift, -45)
         left_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (-50 + ear_shift, -78, -12 + ear_shift, -28), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (-50, -78, -12, -28), ear_shift, [
             (0.0, _color(pal["fur_hl"]).darker(115)),
             (1.0, _color(pal["fur_mid"]).darker(120)),
         ]))
@@ -1844,7 +1938,7 @@ class PetRenderer:
         right_ear.lineTo(50 + ear_shift, -78)
         right_ear.lineTo(12 + ear_shift, -45)
         right_ear.closeSubpath()
-        painter.setBrush(_grad_brush(QLinearGradient, (50 + ear_shift, -78, 12 + ear_shift, -28), [
+        painter.setBrush(_grad_brush_xshift(QLinearGradient, (50, -78, 12, -28), ear_shift, [
             (0.0, _color(pal["fur_hl"]).darker(115)),
             (1.0, _color(pal["fur_mid"]).darker(120)),
         ]))

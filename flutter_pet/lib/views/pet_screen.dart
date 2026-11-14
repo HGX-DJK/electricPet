@@ -114,6 +114,34 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 通过 AnimatedBuilder 单独驱动，所以这里不会影响它的刷新率。
   final ValueNotifier<int> _motionTick = ValueNotifier<int>(0);
 
+  /// 上一次「影响画面的模型字段」快照。
+  ///
+  /// 用来判断「这次模型通知到底要不要重建整棵树」——
+  /// 单纯的数值衰减（每秒一次）不重建，省掉 25ms 的整树重建。
+  /// 详见 [_modelTreeSignature]。
+  late String _lastModelTreeSignature;
+
+  /// **单调递增**的动画时钟（秒）。
+  ///
+  /// ⚠️ 为什么不直接用 `_idleAnimController.value * 10`：
+  /// 呼吸控制器每 10 秒回到 0，而画笔里有一百多项正弦都由 animTime 驱动，
+  /// 其中 `canvas.rotate(animTime * 10.0)` 在回绕瞬间会从 100 弧度跳回 0 ——
+  /// 换算过来差不多是 330° 的突兀猛转，肉眼能看见「每 10 秒抽一下」。
+  ///
+  /// 这里把控制器每次回绕补回来，得到一条永不回绕的时间轴。
+  double _animTime = 0.0;
+  double _lastIdleAnimValue = 0.0;
+
+  /// 呼吸控制器已经走过的整轮数（用来把回绕补成单调时间轴）
+  int _animIterations = 0;
+
+  /// 三个动画控制器的合并监听器。
+  ///
+  /// ⚠️ 必须在 initState 里建一次并复用：
+  /// 以前它写在 build() 里，每次重建都会 new 一个新的合并监听器，
+  /// AnimatedBuilder 的 didUpdateWidget 随之退订 + 重新订阅三个控制器。
+  late final Listenable _petAnimations;
+
   // 萌宠坐标 (默认在屏幕居中偏上舒适视线区域)
   double _petX = 200.0;
   double _petY = 320.0;
@@ -320,6 +348,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       duration: const Duration(seconds: 10),
     )..repeat();
 
+    // 单调动画时钟：控制器每 10 秒回绕一次，这里把回绕补回来，
+    // 让画笔拿到的时间轴永远递增（详见 _animTime 的注释）。
+    _idleAnimController.addListener(_accumulateAnimTime);
+
     // 触碰 Q 弹形变动画
     _squishController = AnimationController(
       vsync: this,
@@ -343,12 +375,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       duration: const Duration(milliseconds: 420),
     );
 
+    // 三个动画控制器的合并监听器 —— 建一次就够，别在 build() 里反复 new。
+    // 以前它写在 build() 里，每次重建都会 new 一个新的合并监听器，
+    // AnimatedBuilder 的 didUpdateWidget 随之退订 + 重新订阅三个控制器。
+    _petAnimations = Listenable.merge(
+      <Listenable>[_idleAnimController, _squishController, _focusController],
+    );
+
     // 监听 PetModel 属性变更
+    // ⚠️ 先把基线快照记下来，再挂监听 —— 否则第一次通知会误判成「什么都没变」。
+    _lastModelTreeSignature = _modelTreeSignature();
     widget.petModel.addListener(_onModelUpdated);
 
     // 启动初始对话 (根据当前真实时段问候)
     final circadian = _getCircadianTheme();
-    _showDialogueBubble(circadian['greeting'] as String, speak: true);
+    _showDialogueBubble(circadian.greeting, speak: true);
 
     // 方案 B：首启/重装后历史档案自动感知与一键继承探测，并预热高频小奶音
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -677,9 +718,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 桌面上和 App 里的昼夜就永远一致。
   void _syncNightModeToOverlay() {
     final theme = _getCircadianTheme();
-    final isNight = theme['isNight'] as bool;
-    final dayStart = theme['dayStartMinute'] as int;
-    final nightStart = theme['nightStartMinute'] as int;
+    final isNight = theme.isNight;
+    final dayStart = theme.dayStartMinute;
+    final nightStart = theme.nightStartMinute;
 
     // 边界每天都在挪，漂超过 2 分钟就重新推一次
     final boundaryDrifted =
@@ -976,11 +1017,76 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble('💾 已将当前波可状态 (Lv.${widget.petModel.level}) 完整备份至手机公共存储！', duration: const Duration(seconds: 4));
   }
 
+  /// 「会影响这棵组件树」的模型字段快照。
+  ///
+  /// ⚠️ 为什么需要它：
+  /// 模型的数值衰减（饥饿 / 心情 / 精力 / 清洁）**每秒**都会 notifyListeners()，
+  /// 而以前 _onModelUpdated 一律 `setState(() {})` —— 等于**每秒把整棵组件树
+  /// 重建一遍**（build() 有 1270 行）。
+  /// 实测一次整树重建要 **25.4ms**：60Hz 屏上就是每秒掉一帧，
+  /// 在中端安卓机上更是一次肉眼可见的卡顿。而这些数值变化，
+  /// 画面上根本看不出来。
+  ///
+  /// 现在只有「真的会改变画面」的那几项变了才重建。
+  ///
+  /// 关于饥饿值：它在树上只以**阈值**形式出现（饿不饿 <50、<35、>=90、
+  /// 吃饱 >=100），精确数值只有喂食托盘打开时才会显示 —— 而托盘是个
+  /// 独立小部件，它自己监听模型即可，不必拖着整棵树一起重建。
+  String _modelTreeSignature() {
+    final m = widget.petModel;
+    final d = m.decorations;
+    return [
+      m.skinId,
+      m.level,
+      m.totalDays,
+      m.intimacy,
+      m.isSleeping,
+      m.isFull,
+      m.hunger < 50, // 饿不饿（isHunting / isHungry）
+      m.hunger < 35, // 自发需求提醒阈值
+      m.hunger >= 90, // 吃饱了的小表情
+      m.energy < 25, // 疲惫提醒阈值
+      m.enableFootprints,
+      m.enableHaptics,
+      m.userScale,
+      m.habitat,
+      d['head'],
+      d['face'],
+      d['neck'],
+      d['back'],
+      d['hand'],
+      m.unlockedItems.length,
+    ].join('|');
+  }
+
+  /// 把呼吸控制器的回绕补成一条**单调递增**的时间轴。
+  ///
+  /// 控制器每 10 秒从 1 回到 0。直接拿 `value * 10` 当 animTime 的话，
+  /// 时间轴会每 10 秒回跳一次 —— 画笔里 `canvas.rotate(animTime * 10.0)`
+  /// 在那一帧会从 100 弧度跳回 0（≈330°），肉眼能看见「每 10 秒抽一下」。
+  ///
+  /// 这里按「轮次 + 本轮进度」算出真实经过的时间，得到永不回绕的时间轴。
+  void _accumulateAnimTime() {
+    final v = _idleAnimController.value;
+    if (v < _lastIdleAnimValue) {
+      _animIterations++; // 控制器回绕了 —— 进入下一轮
+    }
+    _lastIdleAnimValue = v;
+    final durationSeconds =
+        (_idleAnimController.duration?.inMilliseconds ?? 0) / 1000.0;
+    _animTime = _animIterations * durationSeconds + v * durationSeconds;
+  }
+
   void _onModelUpdated() {
     HapticService.enabled = widget.petModel.enableHaptics;
-    if (mounted) {
-      setState(() {});
-    }
+    if (!mounted) return;
+
+    // 只有「真的会改变画面」的部分变了才重建整棵树。
+    // 单纯的数值衰减（每秒一次）不再触发 25ms 的整树重建。
+    final signature = _modelTreeSignature();
+    if (signature == _lastModelTreeSignature) return;
+    _lastModelTreeSignature = signature;
+    setState(() {});
   }
 
   DateTime? _lastPausedTime;
@@ -988,6 +1094,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   /// 移动端节能模式：应用退到后台时深度暂停高频计时器与动效，降低 CPU/GPU 占用与电量消耗
   void _pauseBackgroundProcessing() {
     _idleAnimController.stop();
+    // 退到后台时把「本轮进度」归零 —— 否则回来时控制器从 0 重启，
+    // 会被误判成一次「回绕」，动画时间轴凭空往前跳一大截。
+    _lastIdleAnimValue = 0.0;
     _particleTimer?.cancel();
     _particleTimer = null;
     _decayTimer?.cancel();
@@ -2907,23 +3016,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   }
 
   /// 当前昼夜状态 (与主界面昼夜节律一致, 供各类弹层统一取用)
-  bool get _isNightMode => _getCircadianTheme()['isNight'] as bool;
+  bool get _isNightMode => _getCircadianTheme().isNight;
 
   /// 真实太阳天文算法与四季时角光影主题 (基于分钟进度 Color.lerp 平滑流光)
-  Map<String, dynamic> _getCircadianTheme() {
-    final theme = SolarService.getSkyTheme(manualMode: _skyManualMode);
-    return {
-      'name': theme.name,
-      'icon': theme.icon,
-      'colors': theme.colors,
-      'isNight': theme.isNight,
-      'greeting': theme.greeting,
-      'phaseName': theme.phaseName,
-      'solarTimes': theme.solarTimes,
-      'isManual': theme.isManual,
-      'dayStartMinute': theme.dayStartMinute,
-      'nightStartMinute': theme.nightStartMinute,
-    };
+  ///
+  /// ⚠️ 直接返回 [SolarService.getSkyTheme] 的结果（它自己已经按「日 / 分钟」
+  /// 两级缓存好了），**不要**再包一层 Map：
+  /// 以前每次调用都要新建一个 10 项的 Map，而它被 build()、
+  /// `_isNightMode` getter、昼夜同步等十来处反复调用 —— 纯垃圾。
+  SkyTheme _getCircadianTheme() {
+    return SolarService.getSkyTheme(manualMode: _skyManualMode);
   }
 
   /// 踩出地板温润小猫肉垫爪印
@@ -3380,9 +3482,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 维度四：昼夜光影与氛围主题
     final circadian = _getCircadianTheme();
-    final isNight = circadian['isNight'] as bool;
+    final isNight = circadian.isNight;
     final habitat = widget.petModel.habitat;
-    List<Color> gradientColors = (circadian['colors'] as List<Color>?) ?? const [Color(0xFF140F2D), Color(0xFF1D1742)];
+    List<Color> gradientColors = circadian.colors;
     if (gradientColors.isEmpty) {
       gradientColors = const [Color(0xFF140F2D), Color(0xFF1D1742)];
     }
@@ -3912,7 +4014,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       });
                     },
                     child: AnimatedBuilder(
-                      animation: Listenable.merge([_idleAnimController, _squishController, _focusController]),
+                      animation: _petAnimations,
                       builder: (context, child) {
                         return Transform.rotate(
                           angle: _bodyTiltAngle,
@@ -3924,7 +4026,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                 size: const Size(200, 200),
                                 painter: PetPainter(
                                   model: widget.petModel,
-                                  animTime: _idleAnimController.value * 10,
+                                  animTime: _animTime,
                                   state: _state,
                                   touchPos: (_isYarnFlying || _isYarnDragging)
                                       ? Offset(_yarnX - _petX, _yarnY - _petY)
@@ -4523,35 +4625,40 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   },
                 )
               else if (_showFoodTray)
-                LiveFeedingDock(
-                  isNight: isNight,
-                  currentHunger: widget.petModel.hunger,
-                  isFull: widget.petModel.isFull,
-                  foodMenu: PetModel.foodMenu,
-                  onFoodTap: (id, name, icon, hunger, intimacyGain) {
-                    _draggingFoodId = id;
-                    _draggingFoodName = name;
-                    _draggingFoodIcon = icon;
-                    _draggingFoodPos = Offset(_petX, _petY - 20);
-                    _finishDragToFeed(hunger, intimacyGain);
-                    _spawnParticles(Offset(_petX, _petY - 20), emoji: icon, count: 4);
-                  },
-                  onFoodPanStart: (id, name, icon, details) {
-                    setState(() {
+                // ⚠️ 喂食托盘是唯一会显示**饥饿精确数值**的地方。
+                // 用 ListenableBuilder 让它自己监听模型 —— 这样数值每秒变化时
+                // 只重建这一个小部件，而不是拖着上面 1270 行的整棵树一起重建。
+                ListenableBuilder(
+                  listenable: widget.petModel,
+                  builder: (context, _) => LiveFeedingDock(
+                    isNight: isNight,
+                    currentHunger: widget.petModel.hunger,
+                    isFull: widget.petModel.isFull,
+                    foodMenu: PetModel.foodMenu,
+                    onFoodTap: (id, name, icon, hunger, intimacyGain) {
                       _draggingFoodId = id;
                       _draggingFoodName = name;
                       _draggingFoodIcon = icon;
-                      _draggingFoodPos = details.globalPosition;
-                      _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
-                    });
-                    _vibrate('selection');
-                  },
-                  onFoodPanUpdate: (details) {
-                    setState(() {
-                      _draggingFoodPos = details.globalPosition;
-                      _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
-                    });
-                  },
+                      _draggingFoodPos = Offset(_petX, _petY - 20);
+                      _finishDragToFeed(hunger, intimacyGain);
+                      _spawnParticles(_draggingFoodPos!, emoji: icon, count: 4);
+                    },
+                    onFoodPanStart: (id, name, icon, details) {
+                      setState(() {
+                        _draggingFoodId = id;
+                        _draggingFoodName = name;
+                        _draggingFoodIcon = icon;
+                        _draggingFoodPos = details.globalPosition;
+                        _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
+                      });
+                      _vibrate('selection');
+                    },
+                    onFoodPanUpdate: (details) {
+                      setState(() {
+                        _draggingFoodPos = details.globalPosition;
+                        _lookTargetPos = _draggingFoodPos! - Offset(_petX, _petY);
+                      });
+                    },
                   onFoodPanEnd: (hunger, intimacyGain) {
                     _finishDragToFeed(hunger, intimacyGain);
                   },
@@ -4559,6 +4666,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _vibrate('light');
                     setState(() => _showFoodTray = false);
                   },
+                  ),
                 )
               else
                 BottomFloatingBar(
@@ -4767,10 +4875,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         skinId: widget.petModel.skinId,
                         petName: widget.petModel.name,
                         nightMode: _isNightMode,
-                        dayStartMinute:
-                            _getCircadianTheme()['dayStartMinute'] as int,
-                        nightStartMinute:
-                            _getCircadianTheme()['nightStartMinute'] as int,
+                        dayStartMinute: _getCircadianTheme().dayStartMinute,
+                        nightStartMinute: _getCircadianTheme().nightStartMinute,
                       );
                       if (ok) {
                         _showDialogueBubble(
