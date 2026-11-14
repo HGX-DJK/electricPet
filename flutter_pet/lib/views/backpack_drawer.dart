@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
+import '../widgets/poko_tap_target.dart';
 
 /// 波可的奇妙背包 (优雅上拉抽屉 / 萌宠日常照料与生活工具箱)
 /// 专注于日常护理、逗猫玩具与实用工具，不与外层换装/绝活重复
@@ -158,7 +159,12 @@ class PokoBackpackDrawer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                GestureDetector(
+                PokoTapTarget(
+                  semanticLabel: '关闭背包',
+                  // ⚠️ 不扩展命中区：抽屉标题栏在 320dp 窄屏上本就很挤，
+                  // 关闭键占宽一点就会把「日常照料与逗猫玩具」挤成省略号。
+                  // 它在右上角角落，本来就很好点 —— 留个读屏名字就够了。
+                  expandHitArea: false,
                   onTap: () => Navigator.of(context).pop(),
                   child: Container(
                     padding: const EdgeInsets.all(6),

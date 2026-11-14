@@ -3,6 +3,8 @@ import json
 import time
 import random
 from pet.audio import sound_manager
+from pet.console_safe import safe_print
+from pet.diagnostics import log_exception
 
 class PetModel:
     """
@@ -52,6 +54,9 @@ class PetModel:
 
         # 赛博扭蛋与物品图鉴
         self.coins = 150
+        # 上一次抽取实际抵扣的经验值 / 付不起时的原因（UI 用来给用户一个明确交代）
+        self.last_draw_exp_cost = 0.0
+        self.last_draw_error = ""
         self.unlocked_items = [
             "cat_calico", "crown", "glasses", "bow", "wings", "keyboard", "neon_matrix"
         ]
@@ -234,7 +239,19 @@ class PetModel:
         """
         赛博盲盒扭蛋抽奖
         单抽消耗 30 金币，十连抽消耗 270 金币
-        返回: list of won items dict
+        返回: list of won items dict（余额不足时返回空列表）
+
+        ⚠️ 支付规则（以前这里是两个实打实的坑）：
+
+        1. **静默扣经验**：金币不够时以前直接 ``exp = max(0, exp - cost*2)``，
+           不告诉用户任何事 —— 金币纹丝不动、经验却凭空少一大截，
+           用户只知道自己「莫名其妙亏了」。
+        2. **白嫖漏洞**：因为扣经验后不校验是否付得起，
+           0 金币 + 30 EXP 就能抽走一整发十连（十连本该扣 540 EXP）。
+           也就是说「付费不足也能拿到满额奖品」。
+
+        现在：金币优先付，不足部分按 1 金币 = 2 EXP 用经验补齐；
+        **全额付不起就不抽**（返回空列表），UI 会明确告诉他差多少。
         """
         pool = [
             # 稀有度, 插槽类型, 物品代号, 物品名称, 图标, 权重
@@ -260,12 +277,29 @@ class PetModel:
         ]
 
         cost = 30 if count == 1 else 270
+        # 本次抽取实际抵扣的经验值（0 = 全额用金币支付）。
+        # UI 靠它把「你被扣了多少 EXP」摆到明面上。
+        self.last_draw_exp_cost = 0.0
+        # 付不起时的原因（给 UI 提示用）
+        self.last_draw_error = ""
+
         if self.coins >= cost:
             self.coins -= cost
         else:
-            # 金币不足时可用经验值抵扣
-            exp_cost = cost * 2
-            self.exp = max(0.0, self.exp - exp_cost)
+            # 金币不足 → 经验值兜底（1 金币 = 2 EXP）
+            exp_needed = (cost - self.coins) * 2
+            if self.exp < exp_needed:
+                # ⚠️ 以前这里是「exp 扣到 0 就算数，照样抽满 count 次」——
+                # 0 金币 + 30 EXP 能白嫖一整发十连。现在付不起就不抽。
+                self.last_draw_error = (
+                    "金币不足：本次需要 %d 金币，你只有 %d 枚，"
+                    "还差 %d 枚（或 %d EXP）"
+                    % (cost, self.coins, cost - self.coins, exp_needed)
+                )
+                return []
+            self.last_draw_exp_cost = exp_needed
+            self.coins = 0
+            self.exp = max(0.0, self.exp - exp_needed)
 
         results = []
         total_weight = sum(item[5] for item in pool)
@@ -590,12 +624,46 @@ class PetModel:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             os.replace(tmp_file, self.save_file)
         except Exception as e:
-            print(f"[PetModel] Save error: {e}")
+            # ⚠️ 打包版是 console=False，print 根本不输出 ——
+            # 写盘失败对用户来说就是「改了没保存」，却没有任何提示。
+            log_exception("PetModel.save_to_disk", e)
             if os.path.exists(tmp_file):
                 try:
                     os.remove(tmp_file)
                 except Exception:
                     pass
+
+    @staticmethod
+    def _to_num(value, default, lo=None, hi=None, field=""):
+        """把存档字段安全地转成数字；**单个字段坏掉只影响它自己**。
+
+        ⚠️ 为什么必须逐字段兜底：
+        以前整个 load_from_disk 是一块 try，任何一个字段被写成 "85%" 这类脏值，
+        float() 抛 ValueError → 整块中止 → except 里只 print 一句。
+        结果是**整份存档被丢弃**、模型退回默认值；
+        而打包版 DesktopPet.spec 是 console=False，这句 print 根本不输出 ——
+        用户零感知地丢掉等级 / 金币 / 衣柜，
+        随后任意一次 save_to_disk() 再用默认值把原文件盖掉，原始数据不可恢复。
+
+        现在：坏字段单独跳过并留日志，其余字段照常生效。
+        """
+        try:
+            num = float(value)
+        except (TypeError, ValueError):
+            safe_print(f"[PetModel] 存档字段 {field!r} 不是合法数字，已忽略: {value!r}")
+            return default
+        if lo is not None:
+            num = max(lo, num)
+        if hi is not None:
+            num = min(hi, num)
+        return num
+
+    @classmethod
+    def _to_int(cls, value, default, lo=None, hi=None, field=""):
+        """整数字段的安全兜底（走 _to_num，"12.5" 这类也能吃下）。"""
+        if value is None:
+            return default
+        return int(cls._to_num(value, default, lo=lo, hi=hi, field=field))
 
     def load_from_disk(self):
         if not os.path.exists(self.save_file):
@@ -603,58 +671,87 @@ class PetModel:
         try:
             with open(self.save_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            self.name = data.get("name", self.name)
-            self.skin_id = data.get("skin_id", data.get("pet_type", "cat_calico"))
-            self.set_skin(self.skin_id)
-            self.hunger = max(0.0, min(100.0, float(data.get("hunger", self.hunger))))
-            self.mood = max(0.0, min(100.0, float(data.get("mood", self.mood))))
-            self.energy = max(0.0, min(100.0, float(data.get("energy", self.energy))))
-            self.cleanliness = max(0.0, min(100.0, float(data.get("cleanliness", self.cleanliness))))
-            self.level = max(1, min(99, int(data.get("level", self.level))))
-            self.exp = max(0.0, float(data.get("exp", self.exp)))
-            if self.level >= 99:
-                self.exp = min(self.exp, self.max_exp)
-            self.intimacy = int(data.get("intimacy", self.intimacy))
-            self.total_days = int(data.get("total_days", self.total_days))
-            self.birth_time = float(data.get("birth_time", self.birth_time))
-            self.growth = float(data.get("growth", 0.0))
-            self.weight = float(data.get("weight", 1.20))
-            self.total_fed_count = int(data.get("total_fed_count", 0))
+        except Exception as e:
+            # JSON 本身都解不开 = 存档彻底损坏。
+            # 这时绝不能「静默退回默认值」—— 退回默认值后随便一次保存
+            # 就会把用户原本的存档盖掉。先把坏档备份成 .bak，再让用户知道。
+            safe_print(f"[PetModel] 读取存档失败: {e}")
+            self._backup_corrupted_save()
+            return
 
-            loaded_decs = data.get("decorations", {})
+        if not isinstance(data, dict):
+            safe_print("[PetModel] 存档格式非法（顶层不是对象），已忽略")
+            self._backup_corrupted_save()
+            return
+
+        # ---------- 以下全部逐字段兜底：坏字段只丢自己 ----------
+        self.name = data.get("name", self.name)
+        self.skin_id = data.get("skin_id", data.get("pet_type", "cat_calico"))
+        self.set_skin(self.skin_id)
+        self.hunger = self._to_num(data.get("hunger"), self.hunger, 0.0, 100.0, "hunger")
+        self.mood = self._to_num(data.get("mood"), self.mood, 0.0, 100.0, "mood")
+        self.energy = self._to_num(data.get("energy"), self.energy, 0.0, 100.0, "energy")
+        self.cleanliness = self._to_num(data.get("cleanliness"), self.cleanliness, 0.0, 100.0, "cleanliness")
+        self.level = self._to_int(data.get("level"), self.level, 1, 99, "level")
+        self.exp = self._to_num(data.get("exp"), self.exp, 0.0, None, "exp")
+        if self.level >= 99:
+            self.exp = min(self.exp, self.max_exp)
+        self.intimacy = self._to_int(data.get("intimacy"), self.intimacy, None, None, "intimacy")
+        self.total_days = self._to_int(data.get("total_days"), self.total_days, 1, None, "total_days")
+        self.birth_time = self._to_num(data.get("birth_time"), self.birth_time, 0.0, None, "birth_time")
+        self.growth = self._to_num(data.get("growth"), 0.0, 0.0, None, "growth")
+        self.weight = self._to_num(data.get("weight"), 1.20, 0.1, None, "weight")
+        self.total_fed_count = self._to_int(data.get("total_fed_count"), 0, 0, None, "total_fed_count")
+
+        loaded_decs = data.get("decorations", {})
+        if isinstance(loaded_decs, dict):
             for k in self.decorations:
                 if k in loaded_decs:
                     self.decorations[k] = loaded_decs[k]
-            # 兼容旧版本单饰品
-            old_acc = data.get("current_accessory", "none")
-            if old_acc != "none" and self.decorations["head"] == "none":
-                if old_acc in ("glasses",):
-                    self.decorations["face"] = old_acc
-                elif old_acc in ("bow", "scarf"):
-                    self.decorations["neck"] = old_acc
-                else:
-                    self.decorations["head"] = old_acc
+        # 兼容旧版本单饰品
+        old_acc = data.get("current_accessory", "none")
+        if old_acc != "none" and self.decorations["head"] == "none":
+            if old_acc in ("glasses",):
+                self.decorations["face"] = old_acc
+            elif old_acc in ("bow", "scarf"):
+                self.decorations["neck"] = old_acc
+            else:
+                self.decorations["head"] = old_acc
 
-            self.habitat = data.get("habitat", "none")
-            self.personality_stats = data.get("personality_stats", {"tech": 0, "sport": 0, "lazy": 0})
-            self.coins = int(data.get("coins", 150))
-            loaded_unlocked = data.get("unlocked_items", None)
-            if loaded_unlocked and isinstance(loaded_unlocked, list):
-                self.unlocked_items = loaded_unlocked
+        self.habitat = data.get("habitat", "none")
+        loaded_personality = data.get("personality_stats", None)
+        if isinstance(loaded_personality, dict):
+            self.personality_stats = loaded_personality
+        self.coins = self._to_int(data.get("coins"), 150, 0, None, "coins")
+        loaded_unlocked = data.get("unlocked_items", None)
+        if loaded_unlocked and isinstance(loaded_unlocked, list):
+            self.unlocked_items = loaded_unlocked
 
-            self.user_scale_offset = float(data.get("user_scale_offset", data.get("scale", 1.0)))
-            self.user_scale_offset = max(0.75, min(1.35, self.user_scale_offset))
-            self.always_on_top = bool(data.get("always_on_top", self.always_on_top))
-            self.sound_enabled = bool(data.get("sound_enabled", self.sound_enabled))
-            sound_manager.muted = not self.sound_enabled
-            self.auto_roam = bool(data.get("auto_roam", self.auto_roam))
-            self.health_reminders = bool(data.get("health_reminders", self.health_reminders))
-            self.auto_start = self.check_system_autostart()
-            self.enable_gravity = bool(data.get("enable_gravity", False))
-            self.last_pos_x = data.get("last_pos_x", None)
-            self.last_pos_y = data.get("last_pos_y", None)
+        self.user_scale_offset = self._to_num(
+            data.get("user_scale_offset", data.get("scale", 1.0)), 1.0, 0.75, 1.35, "user_scale_offset"
+        )
+        self.always_on_top = bool(data.get("always_on_top", self.always_on_top))
+        self.sound_enabled = bool(data.get("sound_enabled", self.sound_enabled))
+        sound_manager.muted = not self.sound_enabled
+        self.auto_roam = bool(data.get("auto_roam", self.auto_roam))
+        self.health_reminders = bool(data.get("health_reminders", self.health_reminders))
+        self.auto_start = self.check_system_autostart()
+        self.enable_gravity = bool(data.get("enable_gravity", False))
+        self.last_pos_x = data.get("last_pos_x", None)
+        self.last_pos_y = data.get("last_pos_y", None)
 
-            days_passed = max(1, int((time.time() - self.birth_time) / 86400) + 1)
-            self.total_days = days_passed
+        days_passed = max(1, int((time.time() - self.birth_time) / 86400) + 1)
+        self.total_days = days_passed
+
+    def _backup_corrupted_save(self):
+        """存档彻底损坏时留一份 .bak，别让默认值把原始数据盖掉。
+
+        用户至少还能手动把 .bak 改回 save_data.json 找回大部分养成数据。
+        """
+        try:
+            import shutil
+            bak = self.save_file + ".bak"
+            shutil.copy2(self.save_file, bak)
+            safe_print(f"[PetModel] 存档已损坏，已备份到 {bak}")
         except Exception as e:
-            print(f"[PetModel] Load error: {e}")
+            safe_print(f"[PetModel] 存档备份失败: {e}")

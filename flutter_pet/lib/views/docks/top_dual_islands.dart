@@ -612,10 +612,17 @@ class TopDualIslands extends StatelessWidget {
     );
 
     if (tooltip != null) {
-      content = Tooltip(
-        message: tooltip,
-        waitDuration: const Duration(milliseconds: 600),
-        child: content,
+      // ⚠️ 无障碍：这些是纯图标按钮（🔊 / 💧 / 📈…），不包一层 Semantics 的话，
+      // 读屏用户只会听到一串没有名字的符号。现在把 tooltip 复用成读屏名字。
+      content = Semantics(
+        button: true,
+        label: tooltip,
+        excludeSemantics: true,
+        child: Tooltip(
+          message: tooltip,
+          waitDuration: const Duration(milliseconds: 600),
+          child: content,
+        ),
       );
     }
 

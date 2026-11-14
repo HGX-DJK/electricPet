@@ -48,9 +48,24 @@ class _FloatingPetSettingsSheetState extends State<FloatingPetSettingsSheet> {
   }
 
   /// 立即下发：桌面上的悬浮宠实时生效
+  ///
+  /// ⚠️ 下发失败必须把界面**回滚**回去：面板顶部写着「改动即时生效」，
+  /// 如果实际没生效却把新值留在界面上，用户会一直以为已经改好了，
+  /// 直到在桌面上看到老样子才发现。
   Future<void> _apply(OverlaySettings next) async {
+    final previous = _settings;
     setState(() => _settings = next);
-    await OverlayService.updateSettings(next);
+    final ok = await OverlayService.updateSettings(next);
+    if (ok || !mounted) return;
+    setState(() => _settings = previous);
+    final reason = OverlayService.lastError ?? '未知原因';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('设置没能同步到桌面悬浮宠（$reason）'),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
   }
 
   @override

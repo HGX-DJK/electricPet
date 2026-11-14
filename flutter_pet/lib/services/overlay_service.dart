@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/overlay_settings.dart';
 import '../models/pet_model.dart';
@@ -7,6 +8,20 @@ import 'overlay_channel.dart';
 /// Android 原生悬浮窗与系统交互通道服务
 class OverlayService {
   static const MethodChannel _channel = MethodChannel(OverlayChannel.name);
+
+  /// 最近一次通道调用的失败原因（供 UI 透出给用户）。
+  ///
+  /// 以前这里统一是 `catch (_) { return false; }` —— 失败原因被整个吞掉：
+  /// 用户点了「立即启动桌面悬浮」，什么都没发生、也拿不到任何提示，
+  /// 只能怀疑是 App 坏了。把原因留下来，UI 才能给出可行动的建议
+  /// （比如「需要在系统设置里开启悬浮窗权限」）。
+  static String? lastError;
+
+  /// 记录一次失败原因（同时打到 logcat，方便真机排查）。
+  static void _recordError(String op, Object e) {
+    lastError = '$op失败：$e';
+    debugPrint('[OverlayService] $lastError');
+  }
 
   /// 检查是否拥有悬浮窗权限 (SYSTEM_ALERT_WINDOW)
   static Future<bool> checkPermission() async {
@@ -61,7 +76,8 @@ class OverlayService {
         OverlayChannel.argNightStartMinute: nightStartMinute,
       });
       return res;
-    } catch (_) {
+    } catch (e) {
+      _recordError('启动悬浮宠', e);
       return false;
     }
   }
@@ -137,7 +153,8 @@ class OverlayService {
         {OverlayChannel.argSettings: settings.toMap()},
       );
       return res ?? false;
-    } catch (_) {
+    } catch (e) {
+      _recordError('更新悬浮宠设置', e);
       return false;
     }
   }

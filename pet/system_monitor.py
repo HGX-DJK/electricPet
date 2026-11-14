@@ -85,11 +85,18 @@ class SystemHardwareMonitor:
             "cpu": int (0~100),
             "memory": int (0~100),
             "mem_total_gb": float,
-            "uptime": str (例如 "2h 45m")
+            "uptime": str (例如 "2h 45m"),
+            "cpu_ok": bool,      # False = 读数失败，不是「真的 0%」
+            "memory_ok": bool,
+            "uptime_ok": bool,
         }
+
+        ⚠️ 为什么要带 ok 标记：
+        以前读失败时值就停在 0，托盘 tooltip 直接显示「CPU 0% / 内存 0%」——
+        用户分不清是「真的空闲」还是「读取坏了」，两种情况天差地别。
         """
         now = time.time()
-        if now - self._last_sample_tick < 0.8 and self._cached_stats["memory"] > 0:
+        if now - self._last_sample_tick < 0.8 and self._cached_stats.get("_sampled", False):
             return self._cached_stats
 
         self._last_sample_tick = now
@@ -99,6 +106,7 @@ class SystemHardwareMonitor:
 
         # 1. 读取物理内存
         mem_load = 0
+        mem_ok = False
         total_gb = 16.0
         try:
             mem = _MEMORYSTATUSEX()
@@ -106,6 +114,7 @@ class SystemHardwareMonitor:
             if self._kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):
                 mem_load = int(mem.dwMemoryLoad)
                 total_gb = round(mem.ullTotalPhys / (1024 ** 3), 1)
+                mem_ok = True
         except Exception as e:
             # 以前是完全静默的 pass —— 读不到内存时托盘会一直显示 0%/0m，
             # 用户根本分不清是「真的没内存」还是「读取坏了」。记一笔。
@@ -113,6 +122,7 @@ class SystemHardwareMonitor:
 
         # 2. 读取 CPU 占用率
         cpu_load = self._cached_cpu_percent
+        cpu_ok = False
         try:
             curr_idle, curr_kernel, curr_user = self._sample_cpu_times()
             if self._last_cpu_sample_time > 0 and curr_kernel > 0:
@@ -127,6 +137,7 @@ class SystemHardwareMonitor:
                         calc_cpu = int(max(0.0, min(100.0, (busy / total_sys) * 100.0)))
                         cpu_load = calc_cpu
                         self._cached_cpu_percent = cpu_load
+                        cpu_ok = True
                     self._last_idle_time = curr_idle
                     self._last_kernel_time = curr_kernel
                     self._last_user_time = curr_user
@@ -141,6 +152,7 @@ class SystemHardwareMonitor:
 
         # 3. 读取系统已开机运行时长
         uptime_str = "0m"
+        uptime_ok = False
         try:
             # GetTickCount64 返回自开机以来的毫秒数
             ms = self._kernel32.GetTickCount64()
@@ -151,6 +163,7 @@ class SystemHardwareMonitor:
                 uptime_str = f"{hours}h {mins}m"
             else:
                 uptime_str = f"{mins}m"
+            uptime_ok = True
         except Exception as e:
             log_exception("SystemMonitor.Uptime", e, min_interval=60.0)
 
@@ -159,6 +172,10 @@ class SystemHardwareMonitor:
             "memory": mem_load,
             "mem_total_gb": total_gb,
             "uptime": uptime_str,
+            "cpu_ok": cpu_ok,
+            "memory_ok": mem_ok,
+            "uptime_ok": uptime_ok,
+            "_sampled": True,
         }
         return self._cached_stats
 

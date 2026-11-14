@@ -21,6 +21,7 @@ import '../services/sensor_service.dart';
 import '../services/haptic_service.dart';
 import 'dialogs/gacha_dialog.dart';
 import '../widgets/smart_dialogue_bubble.dart';
+import '../widgets/poko_tap_target.dart';
 import 'physics/floor_footprints.dart';
 import 'physics/yarn_ball_widget.dart';
 import 'habitat/habitat_scene.dart';
@@ -791,17 +792,38 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       builder: (ctx) => HeritageBackupDialog(
         backupData: backup,
         isNight: _isNightMode,
+        // 把「当前档会被顶掉」这件事摆到用户眼前，继承是整体替换操作
+        currentLevel: widget.petModel.level,
+        currentCoins: widget.petModel.coins,
+        currentItemCount: widget.petModel.unlockedItems.length,
         onInherit: () async {
+          // ⚠️ 覆盖前先给**当前**存档另存一份安全备份。
+          // 继承是整体替换（等级 / 金币 / 装扮 / 回忆相册全被顶掉），
+          // 以前没有任何回退手段 —— 继承完才发现不对，原档已经找不回来了。
+          await BackupService.writeSafetyBackup(
+            widget.petModel.toDataMap(),
+            memoData: widget.memoModel.toDataMap(),
+          );
+
           final ok = await BackupService.restoreFromHistoricalBackup(
             backup,
             widget.petModel,
             memo: widget.memoModel,
           );
-          if (ok && mounted) {
+          if (!mounted) return;
+          if (ok) {
             setState(() {});
             _playAction('HAPPY_SPIN');
             _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 6);
             _showDialogueBubble('🎉 哇！成功找回了波可的全部记忆与装扮，欢迎回家主人~ ✨', duration: const Duration(seconds: 5));
+          } else {
+            // ⚠️ 以前失败分支是空的：弹窗关了、什么都没变、用户也分不清
+            // 「成功中」还是「失败了」。现在明确告诉他当前档案**没有**被动过。
+            _showDialogueBubble(
+              '😿 继承历史档案失败了，当前档案保持原样没有变化。'
+              '可以稍后再试一次，或者用备份口令手动找回~ 🐾',
+              duration: const Duration(seconds: 6),
+            );
           }
         },
         onDecline: () async {
@@ -1079,6 +1101,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
   void _onModelUpdated() {
     HapticService.enabled = widget.petModel.enableHaptics;
+    // 音效开关同样要跟着存档走：模型载入完成后把存档里的值同步过来，
+    // 否则静态开关会停在默认的「开」—— 用户明明关了声音，重开又听见喵叫，
+    // 只会以为这个开关失灵了。
+    if (SoundService.soundEnabled != widget.petModel.enableSound) {
+      SoundService.soundEnabled = widget.petModel.enableSound;
+    }
     if (!mounted) return;
 
     // 只有「真的会改变画面」的部分变了才重建整棵树。
@@ -1247,10 +1275,23 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       }
 
       // 投喂成功！嗷呜飞扑吞食
+      // ⚠️ 先问 feed() 要结果，再决定要不要放庆祝动画：
+      // 睡着的波可 feed() 会返回 false，此时若照旧播「吃掉了」+ 飘饱腹字，
+      // 用户会看到它狼吞虎咽、经验也涨了，实际数值一点没动 —— 假反馈。
+      final fed = widget.petModel.feed(_draggingFoodId ?? 'dried_fish', allowWhenFull: false);
+      if (!fed) {
+        _vibrate('light');
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', const Color(0xFF94A3B8));
+        _showDialogueBubble('呼噜噜... 波可睡得正香呢，等它醒来再喂好不好~ 💤', duration: const Duration(seconds: 4));
+        setState(() {
+          _draggingFoodPos = null;
+          _lookTargetPos = null;
+        });
+        return;
+      }
       SoundService.playPop();
       _vibrate('heavy');
       _squishController.forward(from: 0.0);
-      widget.petModel.feed(_draggingFoodId ?? 'dried_fish', allowWhenFull: false);
       widget.petModel.addIntimacy(intimacyGain);
       _spawnParticles(petHeadPos, emoji: foodIcon, count: 5);
       _spawnParticles(petHeadPos, emoji: '💖', count: 3);
@@ -1405,7 +1446,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ],
                   ),
-                  GestureDetector(
+                  PokoTapTarget(
+                    semanticLabel: '关闭亲密羁绊面板',
                     onTap: () => Navigator.pop(ctx),
                     child: Container(
                       padding: const EdgeInsets.all(6),
@@ -2082,9 +2124,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _showDialogueBubble(dialogue, duration: const Duration(seconds: 5));
     switch (action.toUpperCase()) {
       case 'FEED':
-        _playAction('EAT_FISH');
-        widget.petModel.feed('dried_fish');
-        _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 5);
+        // 同理：喂不进去就别演「吃掉了」（睡觉 / 吃饱时 feed() 返回 false）
+        if (widget.petModel.feed('dried_fish')) {
+          _playAction('EAT_FISH');
+          _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 5);
+        } else {
+          _spawnTextParticle(Offset(_petX - 35, _petY - 55), '吃不下啦 🐾', const Color(0xFF94A3B8));
+        }
         break;
       case 'SLEEP':
         if (!widget.petModel.isSleeping) {
@@ -2143,6 +2189,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 final hungerGain = (food['hunger'] as double).toInt();
                 final expGain = (food['exp'] as double).toInt();
 
+                if (widget.petModel.isSleeping) {
+                  // 睡着的波可吃不下。
+                  // ⚠️ 这里必须单独拦一道：feed() 在睡眠时是「返回 false 但什么都不做」的，
+                  // 而下面那段会无条件播进食动画、飘「+饱腹/+经验」字 —— 数值纹丝不动，
+                  // 用户却看着它吃得香喷喷，属于最伤信任感的假反馈。
+                  _vibrate('light');
+                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', const Color(0xFF94A3B8));
+                  _showDialogueBubble('呼噜噜... 波可睡得正香呢，等它醒来再喂好不好~ 💤', duration: const Duration(seconds: 4));
+                  return;
+                }
+
                 if (widget.petModel.isFull) {
                   _vibrate('light');
                   _squishController.forward(from: 0.0);
@@ -2157,7 +2214,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   return;
                 }
 
-                widget.petModel.feed(foodId, allowWhenFull: false);
+                // feed() 会返回 false（睡着 / 拒食），只有真的吃下去了才播「吃掉了」的反馈
+                final fed = widget.petModel.feed(foodId, allowWhenFull: false);
+                if (!fed) {
+                  _showDialogueBubble('咦... 波可好像没吃下呢，再试一次好不好~ 🐾', duration: const Duration(seconds: 3));
+                  return;
+                }
                 _vibrate('medium');
 
                 // 触发进食咀嚼动画
@@ -3822,8 +3884,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       setState(() {
                         SoundService.soundEnabled = !SoundService.soundEnabled;
                       });
+                      // 同时写回模型落盘 —— 否则重启 App 后音效会自动恢复成「开」，
+                      // 用户会以为这个开关失灵了。
+                      widget.petModel.setSoundEnabled(SoundService.soundEnabled);
                       if (SoundService.soundEnabled) {
                         _showDialogueBubble('波可的声音已开启啦！🐾', speak: true);
+                      } else {
+                        _showDialogueBubble('波可静音啦，安静地陪着你~ 🤫', speak: false);
                       }
                     },
                     onFootprintsToggle: () {
@@ -4532,7 +4599,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   left: 20,
                   right: 20,
                   child: Center(
-                    child: GestureDetector(
+                    child: PokoTapTarget(
+                      semanticLabel: '停止激光笔逗猫',
                       onTap: _stopLaserChase,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -4883,6 +4951,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           notified
                               ? '桌面悬浮宠启动成功！切回手机桌面就能看到波可啦~ ✨'
                               : '桌面悬浮宠启动成功！未授予通知权限，常驻提示可能不显示哦~',
+                        );
+                      } else {
+                        // ⚠️ 以前这个分支是空的 —— 启动失败时界面毫无反应，
+                        // 用户点了按钮什么都没发生，只能怀疑 App 坏了。
+                        // 现在把真正的原因透出来（OverlayService.lastError）。
+                        // 注意：原生侧在「没给悬浮窗权限」时会正常返回 false
+                        // （并把用户带到系统设置页），那种情况没有异常信息，
+                        // 要单独给一句「去授权」的引导，而不是「未知原因」。
+                        final reason = OverlayService.lastError;
+                        _showDialogueBubble(
+                          reason == null
+                              ? '😿 桌面悬浮宠没能启动。请确认已授予悬浮窗权限'
+                                  '（系统会跳到设置页，授权后再点一次就好啦）~'
+                              : '😿 桌面悬浮宠启动失败（$reason）。'
+                                  '请确认已授予悬浮窗权限~',
+                          duration: const Duration(seconds: 6),
                         );
                       }
                     }

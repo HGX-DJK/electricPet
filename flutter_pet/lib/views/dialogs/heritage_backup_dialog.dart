@@ -12,12 +12,24 @@ class HeritageBackupDialog extends StatelessWidget {
   final VoidCallback? onDecline;
   final bool isNight;
 
+  /// 当前存档的概览（等级 / 金币 / 装扮数）。
+  ///
+  /// ⚠️ 继承历史档案是**整体替换**当前存档 —— 等级、金币、装扮、回忆相册全都会被顶掉。
+  /// 这个参数存在的意义就是让用户在做决定**之前**看得见自己会失去什么：
+  /// 没有它的话，「一键继承」就是个没有任何代价提示的按钮。
+  final int currentLevel;
+  final int currentCoins;
+  final int currentItemCount;
+
   const HeritageBackupDialog({
     super.key,
     required this.backupData,
     required this.onInherit,
     this.onDecline,
     this.isNight = false,
+    this.currentLevel = 1,
+    this.currentCoins = 200,
+    this.currentItemCount = 0,
   });
 
   @override
@@ -62,9 +74,12 @@ class HeritageBackupDialog extends StatelessWidget {
           horizontal: PokoSpacing.xl,
           vertical: PokoSpacing.xxl,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        // 用滚动容器包一层：小窗 / 横屏 / 大字号下这串内容（徽章 + 标题 + 两行说明
+        // + 预览卡 + 覆盖提示 + 两个按钮）会超出可视区，把标题和按钮顶出屏幕。
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
             // 顶层暖金发光徽章与大标题
             Container(
               padding: const EdgeInsets.all(PokoSpacing.md),
@@ -223,6 +238,58 @@ class HeritageBackupDialog extends StatelessWidget {
             ),
             const SizedBox(height: PokoSpacing.xl),
 
+            // ⚠️ 覆盖代价提示：继承是**整体替换**，当前档会被顶掉。
+            // 以前这里什么都没有，用户是在「不知道会失去什么」的状态下点的确认。
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: PokoSpacing.md,
+                vertical: PokoSpacing.sm,
+              ),
+              decoration: BoxDecoration(
+                color: PokoPalette.rose.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(PokoRadius.md),
+                border: Border.all(
+                  color: PokoPalette.rose.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 14,
+                        color: PokoPalette.rose,
+                      ),
+                      SizedBox(width: PokoSpacing.xs),
+                      Text(
+                        '继承会整体替换当前档案',
+                        style: TextStyle(
+                          fontSize: PokoFont.caption,
+                          fontWeight: FontWeight.bold,
+                          color: PokoPalette.rose,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '当前 Lv.$currentLevel · $currentCoins 币 · $currentItemCount 件装扮'
+                    '将被历史档案顶替。\n'
+                    '放心：覆盖前会自动把当前档案另存一份安全备份，出问题还能找回来。',
+                    style: TextStyle(
+                      fontSize: PokoFont.tiny,
+                      height: 1.4,
+                      color: t.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: PokoSpacing.xl),
+
             // 操作按钮
             // 1. 主按钮：一键继承档案
             SizedBox(
@@ -307,7 +374,8 @@ class HeritageBackupDialog extends StatelessWidget {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

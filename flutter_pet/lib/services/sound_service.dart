@@ -165,9 +165,11 @@ class SoundService {
 
   /// 家具开关清脆“啪嗒”声 (Lamp Click)
   static Future<void> playClick() async {
+    // ⚠️ 必须先判开关：以前系统物理声是在判开关**之前**播的，
+    // 于是用户关了音效照样听见「哒哒」的点击声 —— 典型的「关了又响」。
+    if (!soundEnabled) return;
     // 系统物理清脆声优先提供原生级低延迟
     SystemSound.play(SystemSoundType.click);
-    if (!soundEnabled) return;
     try {
       await sfxPlayer.stop();
       await sfxPlayer.play(AssetSource('audio/click.wav'), volume: 0.95);

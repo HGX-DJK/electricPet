@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
 import '../../theme/poko_theme.dart';
 import 'gacha_dialog.dart';
+import '../../widgets/poko_tap_target.dart';
 
 /// 萌宠魔法衣橱换装面板 (支持 8 大纯种猫咪品种切换、头部、面部、颈部、背部、手持、小窝 7 Tab 架构)
 class WardrobeDialog extends StatefulWidget {
@@ -239,7 +240,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ),
 
                     // 关闭按钮
-                    GestureDetector(
+                    PokoTapTarget(
+                      semanticLabel: '关闭衣橱',
                       onTap: () => Navigator.pop(context),
                       child: Container(
                         padding: const EdgeInsets.all(PokoSpacing.xs),

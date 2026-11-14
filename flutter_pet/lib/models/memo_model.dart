@@ -107,15 +107,23 @@ class MemoModel extends ChangeNotifier {
     saveToDisk();
   }
 
+  /// 当前便签数据的快照（与 [saveToDisk] 落盘的内容保持一致）。
+  ///
+  /// 供「覆盖前安全备份」使用 —— 继承历史档案会整体替换便签内容，
+  /// 替换前得先把现有一份另存出来。
+  Map<String, dynamic> toDataMap() {
+    return {
+      'content': content,
+      'currentThemeKey': currentThemeKey,
+      'isPinned': isPinned,
+      'updatedAt': updatedAt,
+    };
+  }
+
   Future<void> saveToDisk() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final data = {
-        'content': content,
-        'currentThemeKey': currentThemeKey,
-        'isPinned': isPinned,
-        'updatedAt': updatedAt,
-      };
+      final data = toDataMap();
       await prefs.setString('poko_memo_data', jsonEncode(data));
     } catch (_) {}
   }

@@ -3,6 +3,7 @@ import '../../models/pet_model.dart';
 import '../../services/haptic_service.dart';
 import '../../services/sound_service.dart';
 import '../../theme/poko_theme.dart';
+import '../../widgets/poko_tap_target.dart';
 
 /// 扭蛋机专属「落日珊瑚」品牌色。
 /// 设计令牌 (PokoPalette) 暂未收录该色相, 故在此集中定义一处, 便于后续并入令牌体系。
@@ -96,6 +97,11 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
   }
 
   void _handleDraw(int count) {
+    // 重入守卫：按钮虽然会在 _isPulling 期间置灰，但 setState -> 重建之间
+    // 仍有一个帧的窗口期，快速连点可能连发两次抽取。
+    // 这里在函数入口再挡一次，保证一次抽取只对应一次扣币。
+    if (_isPulling) return;
+
     final cost = count == 1 ? 30 : 270;
     if (widget.model.coins < cost) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +128,18 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
     _animCtrl.forward(from: 0.0);
 
     Future.delayed(const Duration(milliseconds: 450), () {
+      // ⚠️ 必须先判「面板还在不在」，再抽卡：
+      // 抽卡动画期间（这 450ms）用户可以点右上角 ✕ 或遮罩把面板关掉。
+      // 以前这里是无条件抽取的 —— 面板没了、结果卡没了，**币却扣了**，
+      // 用户只能事后去衣橱里看到新装扮，完全不知道发生了什么。
+      // 现在面板已经关闭就整笔放弃：不扣币、不产出，权当没点过。
+      //
+      // ⚠️ 光看 mounted 不够：关闭动画播完之前 State 仍然是 mounted 的，
+      // 但用户已经明确关掉了面板。所以还要看路由是不是还是当前路由。
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route != null && !route.isCurrent) return;
+
       final rawResults = widget.model.drawGacha(count);
       final results = rawResults.map((m) => GachaItem.fromMap(m)).toList();
       final hasHighRarity = results.any((item) => item.rarity == 'UR' || item.rarity == 'SSR');
@@ -291,7 +309,8 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                       ),
                     ),
                     const SizedBox(width: PokoSpacing.xs),
-                    GestureDetector(
+                    PokoTapTarget(
+                      semanticLabel: '关闭扭蛋机',
                       onTap: () {
                         SoundService.playClick();
                         Navigator.of(context).pop();

@@ -980,7 +980,19 @@ class PetModel extends ChangeNotifier {
     _syncBondMilestone();
   }
 
-  /// 时间流逝状态扣减 (每秒调用)
+  /// 设置音效开关并落盘。
+  ///
+  /// 以前音效开关只改了 [SoundService] 的静态变量，**没有任何持久化**：
+  /// 重启 App 就自动恢复成「开」，用户明明关了声音、重开又听见喵叫，
+  /// 只会以为这个开关坏了。这里把开关写回存档并落盘，重启后保持不变。
+  void setSoundEnabled(bool value) {
+    if (enableSound == value) return;
+    enableSound = value;
+    notifyListeners();
+    saveToDisk();
+  }
+
+  /// 按时间流逝状态扣减 (每秒调用)
   void tickDecay(double dt) {
     if (isSleeping) {
       energy = (energy + dt * 1.5).clamp(0.0, 100.0);

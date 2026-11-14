@@ -413,6 +413,16 @@ class DialogueManager:
 
     def say(self, text, duration=5.0, badge="🐾 波可"):
         """显示气泡对话，并自动与宠物对齐坐标"""
+        # ⚠️ 宠物不在屏幕上时**不要**弹气泡。
+        # 气泡是独立的置顶 Tool 窗，宠物隐藏后它照样会浮在桌面空白处 ——
+        # 用户明明把萌宠藏了（老板键 / 托盘隐藏），却凭空冒出一句没人说的话。
+        if self.pet_window is not None:
+            try:
+                if not self.pet_window.isVisible():
+                    return
+            except Exception:
+                pass
+
         # 判断类型选择标签
         if "💧" in text or "👀" in text or "🧘" in text:
             badge = "💧 健康关怀"

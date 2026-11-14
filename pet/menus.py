@@ -16,6 +16,7 @@ from pet.audio import sound_manager
 from pet.renderer import PetRenderer
 from pet.renderer import _color, _pen, _solid_brush, _grad_brush
 from pet.qt_safe import safe_slot
+from pet.diagnostics import log_exception
 
 # 赛博高科技全息毛玻璃与霓虹全局 QSS
 MODERN_STYLE = """
@@ -421,7 +422,11 @@ class QuickActionMenu(QWidget):
         try:
             from pet.system_monitor import get_system_stats
             hw_stats = get_system_stats()
-            hw_pill = QLabel(f"💻 {hw_stats['cpu']}% | 🧠 {hw_stats['memory']}%")
+            # 读数失败时显示「不可用」而不是 0% ——
+            # 「CPU 0%」和「读不到 CPU」在用户眼里是两回事。
+            cpu_txt = f"{hw_stats['cpu']}%" if hw_stats.get("cpu_ok") else "不可用"
+            mem_txt = f"{hw_stats['memory']}%" if hw_stats.get("memory_ok") else "不可用"
+            hw_pill = QLabel(f"💻 {cpu_txt} | 🧠 {mem_txt}")
             hw_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
             hw_pill.setStyleSheet("""
                 background: rgba(15, 23, 42, 0.8);
@@ -430,10 +435,23 @@ class QuickActionMenu(QWidget):
                 border-radius: 6px;
                 border: 1px solid rgba(52, 211, 153, 0.35);
             """)
-            hw_pill.setToolTip(f"开机运行: {hw_stats['uptime']} · 物理内存: {hw_stats['mem_total_gb']}GB")
+            uptime_txt = hw_stats.get("uptime", "0m") if hw_stats.get("uptime_ok") else "不可用"
+            hw_pill.setToolTip(f"开机运行: {uptime_txt} · 物理内存: {hw_stats['mem_total_gb']}GB")
             sub_row.addWidget(hw_pill)
-        except Exception:
-            pass
+        except Exception as e:
+            # ⚠️ 以前整颗药丸直接消失 —— 用户不知道是「读不到」还是「没有这功能」。
+            # 失败时也要留一个「不可用」的占位。
+            log_exception("Menus.StatusDialog.HardwarePill", e)
+            hw_pill = QLabel("💻 硬件读数不可用")
+            hw_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            hw_pill.setStyleSheet("""
+                background: rgba(15, 23, 42, 0.8);
+                color: #94A3B8;
+                padding: 1px 6px;
+                border-radius: 6px;
+                border: 1px solid rgba(148, 163, 184, 0.35);
+            """)
+            sub_row.addWidget(hw_pill)
 
         sub_row.addStretch()
         name_box.addLayout(sub_row)
@@ -1568,11 +1586,33 @@ class CyberGachaDialog(ModernBaseDialog):
 
     def _do_draw(self, count):
         results = self.model.draw_gacha(count)
+        if not results:
+            # 余额不足：以前这里会抽出一堆卡、同时静默扣掉经验，
+            # 用户完全不知道发生了什么。现在明确告诉他差多少。
+            self._show_draw_error()
+            return
         self._show_results(results)
+
+    def _show_draw_error(self):
+        reason = getattr(self.model, "last_draw_error", "") or "余额不足"
+        self.res_title.setText("😿 这次没能扭到呢...")
+        self.res_coins_info.setText(reason)
+        while self.res_cards_layout.count():
+            item = self.res_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self.stack.setCurrentWidget(self.page_results)
 
     def _show_results(self, results):
         self.res_title.setText(f"🎉 成功解构 {len(results)} 件赛博奖励！")
-        self.res_coins_info.setText(f"剩余金币: {self.model.coins} 🪙")
+        # 金币不够时用经验值补齐了 —— 必须写出来，不能让资产无声流失
+        exp_cost = getattr(self.model, "last_draw_exp_cost", 0.0)
+        if exp_cost > 0:
+            self.res_coins_info.setText(
+                f"剩余金币: {self.model.coins} 🪙　|　金币不足，本次抵扣 {int(exp_cost)} EXP ✨"
+            )
+        else:
+            self.res_coins_info.setText(f"剩余金币: {self.model.coins} 🪙")
 
         # 清空旧卡片
         while self.res_cards_layout.count():
@@ -3051,7 +3091,7 @@ class SettingsDialog(ModernBaseDialog):
         self.model.health_reminders = self.cb_health.isChecked()
         
         auto_start = self.cb_autostart.isChecked()
-        self._set_windows_autostart(auto_start)
+        auto_ok = self._set_windows_autostart(auto_start)
         self.model.auto_start = auto_start
 
         new_ct = self.cb_click_through.isChecked()
@@ -3060,6 +3100,17 @@ class SettingsDialog(ModernBaseDialog):
 
         self.model.save_to_disk()
         self.accept()
+        # 开机自启没写成功要明确告诉用户 —— 否则勾选框一打勾，
+        # 用户就以为「开机自启已开启」，其实注册表里什么都没有。
+        if not auto_ok and self.pet_window is not None:
+            try:
+                self.pet_window.dialogue.say(
+                    "😿 开机自启没能设置成功（可能被系统权限拦住了），"
+                    "可以稍后再试一次，或者手动把快捷方式放进启动文件夹~",
+                    duration=5.0,
+                )
+            except Exception:
+                pass
         # 弹窗完全关闭后异步应用设置，彻底避免 Windows 句柄重建冲突与卡死
         QTimer.singleShot(40, safe_slot(self._apply_settings_after_close))
 
@@ -3075,6 +3126,11 @@ class SettingsDialog(ModernBaseDialog):
         self.pet_window.apply_model_settings()
 
     def _set_windows_autostart(self, enable):
+        """写入 / 删除开机自启注册表项。**返回是否成功**。
+
+        ⚠️ 以前失败只 print 一句 —— 打包版 console=False 根本没有控制台，
+        用户勾了「开机自启」却压根没生效，还以为自己设置成功了。
+        """
         try:
             key = winreg.OpenKey(
                 winreg.HKEY_CURRENT_USER,
@@ -3094,5 +3150,7 @@ class SettingsDialog(ModernBaseDialog):
                 except FileNotFoundError:
                     pass
             winreg.CloseKey(key)
+            return True
         except Exception as e:
-            print(f"[Settings] Windows autostart reg error: {e}")
+            log_exception("SettingsDialog._set_windows_autostart", e)
+            return False

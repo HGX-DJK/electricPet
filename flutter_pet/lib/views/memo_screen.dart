@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/memo_model.dart';
+import '../widgets/poko_tap_target.dart';
 
 /// 桌面便签 (马卡龙四色主题便签半屏面板)
 class MemoScreen extends StatefulWidget {
@@ -45,9 +46,17 @@ class _MemoScreenState extends State<MemoScreen> {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+        // 滚动容器 + 高度上限：
+        // 键盘弹起时会叠加 viewInsets.bottom，原来这个固定 Column
+        // 在小窗口 / 横屏下会把底部调色盘顶出可视区，够不着。
+        child: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
             // 便签顶部把手
             const SizedBox(height: 12),
             Center(
@@ -79,7 +88,8 @@ class _MemoScreenState extends State<MemoScreen> {
                   ),
                   const Spacer(),
                   // 插入时间戳按钮
-                  GestureDetector(
+                  PokoTapTarget(
+                    semanticLabel: '插入当前时间戳',
                     onTap: () {
                       widget.memoModel.insertTimestamp();
                       _controller.text = widget.memoModel.content;
@@ -104,7 +114,8 @@ class _MemoScreenState extends State<MemoScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  GestureDetector(
+                  PokoTapTarget(
+                    semanticLabel: '关闭便签',
                     onTap: () => Navigator.pop(context),
                     child: Container(
                       padding: const EdgeInsets.all(6),
@@ -155,7 +166,11 @@ class _MemoScreenState extends State<MemoScreen> {
                   ...MemoModel.themes.entries.map((entry) {
                     final t = entry.value;
                     final isSelected = (widget.memoModel.currentThemeKey == entry.key);
-                    return GestureDetector(
+                    // 26dp 的色卡在手机上很难点准 ——
+                    // 命中区扩到 40dp，视觉尺寸保持 26dp 不变。
+                    return PokoTapTarget(
+                      semanticLabel: '切换便签配色：${entry.value.name}',
+                      minTapTarget: 40,
                       onTap: () {
                         widget.memoModel.setTheme(entry.key);
                         setState(() {});
@@ -192,7 +207,9 @@ class _MemoScreenState extends State<MemoScreen> {
                 ],
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
     );

@@ -121,6 +121,56 @@ class BackupService {
     }
   }
 
+  /// 覆盖前安全备份：把**当前**存档另存一份（不动历史档本身）。
+  ///
+  /// ⚠️ 为什么不能直接复用 [writeSilentBackup]：
+  /// 静默备份写的是 `poko_backup.json`，而「历史波可档案」恰恰就是从那个文件读出来的。
+  /// 拿它当安全备份 = 把正要继承的那份历史档原地覆盖掉 ——
+  /// 一旦继承出问题就再也没有回头路。这里另起文件名，两份互不干扰。
+  ///
+  /// 返回是否写成功。写失败**不阻断**主流程（继承本身才是用户要的），
+  /// 但会留一条日志，避免「以为有备份、其实没有」。
+  static Future<bool> writeSafetyBackup(
+    Map<String, dynamic> petData, {
+    Map<String, dynamic>? memoData,
+  }) async {
+    try {
+      final payload = {
+        'version': 2,
+        'format': 'POKO_SAFETY_BACKUP',
+        'savedAt': DateTime.now().toIso8601String(),
+        'pet': petData,
+        if (memoData != null) 'memo': memoData,
+      };
+      final jsonContent = const JsonEncoder.withIndent('  ').convert(payload);
+      final stamp = DateTime.now()
+          .toIso8601String()
+          .replaceAll(':', '-')
+          .replaceAll('.', '-');
+      final fileName = 'poko_safety_backup_$stamp.json';
+
+      for (final dirPath in candidateBackupDirs) {
+        try {
+          final dir = Directory(dirPath);
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          final file = File('${dir.path}/$fileName');
+          await file.writeAsString(jsonContent, flush: true);
+          debugPrint('[BackupService] 覆盖前安全备份已写入: ${file.path}');
+          return true;
+        } catch (_) {
+          // 继续尝试备用候选目录
+        }
+      }
+      debugPrint('[BackupService] 覆盖前安全备份写入失败（不阻断继承流程）');
+      return false;
+    } catch (e) {
+      debugPrint('安全备份写入异常: $e');
+      return false;
+    }
+  }
+
   /// 判定备份档案是否具备继承价值 (已升级、抽过盲盒、喂食过、换过皮肤等)
   static bool isBackupValuable(Map<String, dynamic> data) {
     try {

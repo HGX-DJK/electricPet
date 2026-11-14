@@ -8,6 +8,7 @@ import '../../services/haptic_service.dart';
 import '../../services/minimax_service.dart';
 import '../../services/sound_service.dart';
 import '../../theme/poko_theme.dart';
+import '../../widgets/poko_tap_target.dart';
 
 /// 波可与主人的 MiniMax AI 语音伴侣交互界面
 class AiVoiceChatDialog extends StatefulWidget {
@@ -52,6 +53,12 @@ class AiVoiceChatDialog extends StatefulWidget {
 class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+
+  /// 打字输入框的焦点句柄。
+  ///
+  /// 切到「打字输入」时必须主动把焦点抢过来 —— 否则键盘不弹，
+  /// 用户看到的是「点了打字按钮，却什么反应都没有」。
+  final FocusNode _textFocusNode = FocusNode();
   final AudioRecorder _audioRecorder = AudioRecorder();
   late final MinimaxService _ai;
 
@@ -73,8 +80,14 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   bool _micHeldLongEnough = false;
   /// 按住时长判定计时器
   Timer? _micHoldTimer;
-  /// 小奶音合成失败只提示一次, 避免每条消息都弹 Toast 刷屏
-  bool _ttsErrorNotified = false;
+  /// 小奶音合成失败提示的节流窗口（秒）。
+  ///
+  /// ⚠️ 以前是一个「一辈子只提示一次」的布尔开关：
+  /// 第一次合成失败之后，后续**所有**失败都静默降级成喵叫，用户再也
+  /// 不知道小奶音为什么不出声了。改成**时间窗节流**：短时间内不刷屏，
+  /// 但过一会儿再失败仍然会如实告知。
+  static const int _ttsErrorToastCooldownSec = 30;
+  DateTime? _lastTtsErrorToastAt;
 
   /// 是否处于"等待回复"的忙碌态 (UI 指示条)
   bool get _isBusy => _isSending || _isTranscribing;
@@ -119,6 +132,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       _audioRecorder.dispose();
     } catch (_) {}
     _textController.dispose();
+    _textFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -146,6 +160,22 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     );
   }
 
+  /// 小奶音合成失败时的提示（按时间窗节流，避免每条消息都弹 Toast 刷屏）。
+  ///
+  /// 失败是**降级**（改用本地喵叫），不是崩溃，但用户必须有知情权 ——
+  /// 否则他只会觉得「小奶音怎么不说话了」。
+  void _notifyTtsError(String? reason) {
+    if (reason == null || reason.isEmpty) return;
+    final now = DateTime.now();
+    final last = _lastTtsErrorToastAt;
+    if (last != null &&
+        now.difference(last).inSeconds < _ttsErrorToastCooldownSec) {
+      return;
+    }
+    _lastTtsErrorToastAt = now;
+    _showToast('小奶音合成失败：$reason');
+  }
+
   /// 统一的发送入口。守卫只看 [_isSending] —— 语音识别阶段 ([_isTranscribing]) 不拦截,
   /// 否则"录音 → 识别 → 发送"链路会因为识别中已置 busy 而被静默丢弃。
   Future<void> _sendMessage(String text) async {
@@ -169,12 +199,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           if (!mounted) return;
           _ai.playVoiceResponse(audio);
           // 合成失败会静默降级为本地喵叫, 这里把真实原因告诉用户, 避免"没声音"无迹可寻
-          if (audio == null && !_ttsErrorNotified) {
-            final reason = _ai.lastTtsError;
-            if (reason != null && reason.isNotEmpty) {
-              _ttsErrorNotified = true;
-              _showToast('小奶音合成失败：$reason');
-            }
+          if (audio == null) {
+            _notifyTtsError(_ai.lastTtsError);
           }
         },
       );
@@ -1019,25 +1045,32 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     required VoidCallback onTap,
   }) {
     final t = context.poko(isNight);
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: () {
-          HapticService.light();
-          onTap();
-        },
-        child: Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: t.surfaceAlt,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: 18,
-            color: t.textSecondary,
+    // ⚠️ 无障碍：纯图标按钮不给读屏一个名字的话，
+    // 用户只会听到「按钮、按钮、按钮」。复用 tooltip 当读屏名。
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: () {
+            HapticService.light();
+            onTap();
+          },
+          child: Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: t.surfaceAlt,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              icon,
+              size: 18,
+              color: t.textSecondary,
+            ),
           ),
         ),
       ),
@@ -1106,7 +1139,13 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           icon: Icons.keyboard_alt_outlined,
           tooltip: '打字输入',
           isNight: isNight,
-          onTap: () => setState(() => _showKeyboardInput = true),
+          onTap: () {
+            setState(() => _showKeyboardInput = true);
+            // 等这一帧把输入框建出来，再把焦点抢过去 —— 键盘才会弹起来。
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _textFocusNode.requestFocus();
+            });
+          },
         ),
       ],
     );
@@ -1150,6 +1189,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                 Expanded(
                   child: TextField(
                     controller: _textController,
+                    focusNode: _textFocusNode,
+                    autofocus: true,
                     textInputAction: TextInputAction.send,
                     onSubmitted: _sendMessage,
                     style: TextStyle(
@@ -1170,17 +1211,48 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                 ),
                 const SizedBox(width: PokoSpacing.xs),
                 // 发送
-                GestureDetector(
-                  onTap: () => _sendMessage(_textController.text),
+                // ⚠️ 忙碌时以前只是「点了没反应」—— _sendMessage 里的
+                // `if (query.isEmpty || _isSending) return;` 直接把这次点击吞掉了，
+                // 用户以为按钮坏了。现在给明确反馈，并把按钮画成「忙碌中」的样子。
+                //
+                // 顺手做两件事（都不影响视觉）：
+                //  * Semantics：给读屏一个名字「发送消息」；
+                //  * 命中区从 30×30 扩到 46×46 —— 手机上这个键是最常点的，
+                //    30dp 真的太小，容易按空。
+                PokoTapTarget(
+                  semanticLabel: '发送消息',
+                  onTap: () {
+                    if (_isBusy) {
+                      _showToast('🐱 波可正在想呢，稍等一下下~');
+                      return;
+                    }
+                    final text = _textController.text.trim();
+                    if (text.isEmpty) {
+                      _showToast('🐾 先对波可说点什么吧~');
+                      return;
+                    }
+                    _sendMessage(text);
+                  },
                   child: Container(
                     width: 30,
                     height: 30,
-                    decoration: const BoxDecoration(
-                      color: PokoPalette.indigo,
+                    decoration: BoxDecoration(
+                      color: _isBusy
+                          ? PokoPalette.indigo.withValues(alpha: 0.45)
+                          : PokoPalette.indigo,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(Icons.send_rounded, size: 15, color: Colors.white),
+                    child: _isBusy
+                        ? const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded, size: 15, color: Colors.white),
                   ),
                 ),
               ],
@@ -1199,25 +1271,32 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
     required VoidCallback onTap,
   }) {
     final t = context.poko(isNight);
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: () {
-          HapticService.light();
-          onTap();
-        },
-        child: Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: t.surfaceAlt,
-            shape: BoxShape.circle,
-          ),
-          alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: 20,
-            color: t.accent,
+    // ⚠️ 无障碍：纯图标按钮不给读屏一个名字的话，
+    // 用户只会听到「按钮、按钮、按钮」。复用 tooltip 当读屏名。
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: tooltip,
+        child: GestureDetector(
+          onTap: () {
+            HapticService.light();
+            onTap();
+          },
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: t.surfaceAlt,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              icon,
+              size: 20,
+              color: t.accent,
+            ),
           ),
         ),
       ),
@@ -1405,13 +1484,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                                   await _ai.playVoiceResponse(audio);
                                                 } else {
                                                   SoundService.playMeow(tone: MeowTone.sweet);
-                                                  final reason = _ai.lastTtsError;
-                                                  if (reason != null &&
-                                                      reason.isNotEmpty &&
-                                                      !_ttsErrorNotified) {
-                                                    _ttsErrorNotified = true;
-                                                    _showToast('小奶音合成失败：$reason');
-                                                  }
+                                                  _notifyTtsError(_ai.lastTtsError);
                                                 }
                                               }
                                               if (mounted) setState(() {});

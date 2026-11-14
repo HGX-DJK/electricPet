@@ -6,6 +6,8 @@ import threading
 import queue
 import time
 
+from pet.diagnostics import log_exception
+
 try:
     import winsound
 except ImportError:
@@ -309,8 +311,12 @@ class SoundManager:
                 if winsound is not None and not self.muted:
                     winsound.PlaySound(data, winsound.SND_MEMORY)
                 self._audio_queue.task_done()
-            except Exception:
-                pass
+            except Exception as e:
+                # ⚠️ 以前是完全静默的 pass：
+                # 没有音频设备 / 设备被占用时，winsound 会抛错，
+                # 结果就是「音效死活不响」却一个字都不留，用户完全无从排查。
+                # log_exception 自带 5 秒限流，不会刷屏也不会拖慢音频线程。
+                log_exception("Audio.WorkerLoop", e, min_interval=5.0)
 
     def play(self, sound_name):
         """异步播放指定音效 (含150ms同一音效防爆音冷却、单工作线程与安全队列，彻底避免线程泄漏)"""

@@ -271,14 +271,20 @@ class PetWindow(QWidget):
             res = ctypes.windll.user32.RegisterHotKey(hwnd, self.HOTKEY_BOSS_ID, 0x0001 | 0x4000, 0x50)
             self.hotkey_registered = (res != 0)
             if not self.hotkey_registered:
-                print("[PetWindow] Alt+P hotkey conflict with another application. Boss mode can still be toggled via tray icon.")
+                # ⚠️ 打包版 console=False，print 不输出 ——
+                # 热键被占用时用户只会发现「Alt+P 没反应」，像坏了。
+                # 记一笔（有堆栈、可查），托盘菜单仍可手动切换老板键。
+                log_exception(
+                    "PetWindow.RegisterHotKeyConflict",
+                    RuntimeError("Alt+P 已被其它程序占用"),
+                )
             app = QApplication.instance()
             if app and not getattr(self, "_boss_filter_installed", False):
                 self._boss_filter = GlobalBossKeyFilter(self)
                 app.installNativeEventFilter(self._boss_filter)
                 self._boss_filter_installed = True
         except Exception as e:
-            print("RegisterHotKey error:", e)
+            log_exception("PetWindow.RegisterHotKey", e)
 
     def unregister_boss_hotkey(self):
         """注销全局热键"""
@@ -345,22 +351,44 @@ class PetWindow(QWidget):
             if hasattr(self, "dialogue"):
                 self.dialogue.say("检测到屏幕环境变动，波可跳回眼前咯~ 🐾", duration=3.5)
 
-    def _init_initial_position(self):
-        screen = QApplication.primaryScreen()
+    def _init_initial_position(self, force: bool = False):
+        """把萌宠摆到初始位置。
+
+        :param force: True = **强制回到右下角默认位**，忽略存档里的上次坐标。
+            托盘菜单的「重置萌宠屏幕位置」必须传 True ——
+            以前它走的是「恢复上次拖拽位置」，结果宠物几乎没动，
+            气泡却宣称「回到默认位置啦」，反馈文案在撒谎。
+        """
+        last_x = self.model.last_pos_x
+        last_y = self.model.last_pos_y
+
+        # 先按存档坐标找到「它当时所在的那块屏幕」——
+        # 以前一律用 primaryScreen()，于是放在副屏的宠物每次重启
+        # 都会被强行拉回主屏（副屏坐标被主屏的边界夹住）。
+        screen = None
+        if not force and last_x is not None and last_y is not None:
+            try:
+                screen = QApplication.screenAt(QPoint(int(last_x), int(last_y)))
+            except Exception:
+                screen = None
+        if screen is None:
+            screen = QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen else None
+
         if not avail:
             init_x, init_y = 100, 100
         else:
             default_x = avail.right() - self.width() - 80
             default_y = avail.bottom() - self.height() - 15
-            if (self.model.last_pos_x is not None and self.model.last_pos_y is not None and
-                    not (self.model.last_pos_x == 0 and self.model.last_pos_y == 0)):
+            if (not force
+                    and last_x is not None and last_y is not None and
+                    not (last_x == 0 and last_y == 0)):
                 # 如果历史记录的坐标贴顶 (<=15px) 或超出屏幕工作区，重置为右下角默认位置
-                if self.model.last_pos_y <= 15 or self.model.last_pos_y > avail.bottom() - self.height() - 10:
+                if last_y <= 15 or last_y > avail.bottom() - self.height() - 10:
                     init_x, init_y = default_x, default_y
                 else:
-                    init_x = max(avail.left() + 10, min(int(self.model.last_pos_x), avail.right() - self.width() - 10))
-                    init_y = max(avail.top() + 10, min(int(self.model.last_pos_y), avail.bottom() - self.height() - 10))
+                    init_x = max(avail.left() + 10, min(int(last_x), avail.right() - self.width() - 10))
+                    init_y = max(avail.top() + 10, min(int(last_y), avail.bottom() - self.height() - 10))
             else:
                 init_x, init_y = default_x, default_y
 
@@ -564,12 +592,26 @@ class PetWindow(QWidget):
             # 真出问题时用户只看到「宠物不动了」，日志里一个线索都没有。
             log_exception("PetWindow.AnimationTick", e)
 
-    def play_action(self, action_name, custom_msg=None, duration=None, show_dialogue=True):
-        """播放特定多样化动作动画与对应专属音效、台词气泡"""
+    def play_action(self, action_name, custom_msg=None, duration=None, show_dialogue=True,
+                    allow_interrupt_focus=True):
+        """播放特定多样化动作动画与对应专属音效、台词气泡
+
+        :param allow_interrupt_focus: 允许打断正在进行的专注番茄钟吗？
+            True（默认，用户主动点播才艺 / 双击宠物）→ 打断，但**必须告知用户**：
+            以前是静默清零，25 分钟专注被一键取消，既没奖励也没提示。
+            False（自主行为：空闲时自己演节目）→ 专注期间**不打扰**，
+            番茄钟继续走 —— 专注模式的意义就是「别来烦我」。
+        """
         if self.model.is_sleeping:
             self.model.wake_up()
         if self.model.is_studying:
-            self.model.stop_focus_timer()
+            if allow_interrupt_focus:
+                self.model.stop_focus_timer()
+                if show_dialogue:
+                    self.dialogue.say(
+                        "哇... 波可去表演节目啦，专注计时先暂停一下下哦~ ⏸️",
+                        duration=3.5,
+                    )
 
         self.state = action_name
         # 动作多为快节奏（旋转 / 扑蝶 / 扑鼠…），立刻切回 60 FPS，
@@ -727,7 +769,9 @@ class PetWindow(QWidget):
                         selected = random.choices(act_choices, weights=weights)[0]
                         # 20% 概率轻声冒出台词气泡，避免频繁打扰工作
                         say_line = (random.random() < 0.20)
-                        self.play_action(selected, show_dialogue=say_line)
+                        # 专注模式下不打断番茄钟 —— 自主行为不该劫持用户的专注时段
+                        self.play_action(selected, show_dialogue=say_line,
+                                         allow_interrupt_focus=False)
                         self.next_action_time = now + self.action_timer + random.uniform(2.5, 5.5)
 
             elif self.state in ("WALK_LEFT", "WALK_RIGHT"):
