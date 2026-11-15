@@ -1,3 +1,4 @@
+from pet.theme import Palette, qss
 import os
 import sys
 from PyQt6.QtWidgets import QSystemTrayIcon, QMenu
@@ -31,18 +32,18 @@ def create_app_icon():
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
     # 萌萌橙色圆形背景
-    painter.setBrush(QBrush(QColor("#FFAA66")))
-    painter.setPen(QPen(QColor("#E07A30"), 2))
+    painter.setBrush(QBrush(QColor(Palette.orange_warm)))
+    painter.setPen(QPen(QColor(Palette.orange_600), 2))
     painter.drawEllipse(QRectF(4, 4, 56, 56))
 
     # 白色小猫脸/柴犬脸轮廓
-    painter.setBrush(QBrush(QColor("#FFF9F2")))
+    painter.setBrush(QBrush(QColor(Palette.glow_cream)))
     painter.setPen(Qt.PenStyle.NoPen)
     painter.drawEllipse(QRectF(12, 16, 40, 38))
 
     # 两个小耳朵
-    painter.setBrush(QBrush(QColor("#FFAA66")))
-    painter.setPen(QPen(QColor("#E07A30"), 1.5))
+    painter.setBrush(QBrush(QColor(Palette.orange_warm)))
+    painter.setPen(QPen(QColor(Palette.orange_600), 1.5))
     painter.drawPolygon([QPointF(16, 22), QPointF(24, 10), QPointF(30, 22)])
     painter.drawPolygon([QPointF(48, 22), QPointF(40, 10), QPointF(34, 22)])
 
@@ -90,32 +91,32 @@ class PetTrayIcon(QSystemTrayIcon):
 
     def _init_menu(self):
         menu = QMenu()
-        menu.setStyleSheet("""
+        menu.setStyleSheet(qss("""
             QMenu {
-                background-color: #0B0F19;
-                border: 1.5px solid #0EA5E9;
+                background-color: @ink@;
+                border: 1.5px solid @sky_500@;
                 border-radius: 10px;
                 padding: 6px;
                 font-family: "Microsoft YaHei UI";
                 font-size: 13px;
-                color: #F1F5F9;
+                color: @slate_100@;
             }
             QMenu::item {
                 padding: 7px 26px 7px 22px;
                 border-radius: 6px;
                 background-color: transparent;
-                color: #F1F5F9;
+                color: @slate_100@;
             }
             QMenu::item:selected {
-                background: rgba(14, 165, 233, 0.25);
-                color: #38BDF8;
-                border: 1px solid rgba(56, 189, 248, 0.4);
+                background: @sky_500_25@;
+                color: @sky_400@;
+                border: 1px solid @sky_400_40@;
             }
             QMenu::item:disabled {
-                color: #38BDF8;
+                color: @sky_400@;
                 font-weight: bold;
-                background: rgba(15, 23, 42, 0.85);
-                border: 1px solid rgba(14, 165, 233, 0.4);
+                background: @slate_900_85@;
+                border: 1px solid @sky_500_40@;
                 border-radius: 6px;
                 padding: 7px 22px;
                 margin-bottom: 2px;
@@ -126,21 +127,21 @@ class PetTrayIcon(QSystemTrayIcon):
                 margin-left: 6px;
             }
             QMenu::indicator:checked {
-                background-color: #0EA5E9;
-                border: 2px solid #38BDF8;
+                background-color: @sky_500@;
+                border: 2px solid @sky_400@;
                 border-radius: 3px;
             }
             QMenu::indicator:unchecked {
-                background-color: #1E293B;
-                border: 1.5px solid #475569;
+                background-color: @slate_800@;
+                border: 1.5px solid @slate_600@;
                 border-radius: 3px;
             }
             QMenu::separator {
                 height: 1px;
-                background: #1E293B;
+                background: @slate_800@;
                 margin: 5px 8px;
             }
-        """)
+        """))
 
         # 状态概览标题
         self.status_action = menu.addAction(f"🐾 {self.model.name} (Lv.{self.model.level})")

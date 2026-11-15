@@ -1,3 +1,4 @@
+from pet.theme import Alpha, Palette
 import os
 import json
 import time
@@ -15,51 +16,51 @@ from pet.console_safe import safe_print
 MEMO_THEMES = {
     "yellow": {
         "name": "奶杏黄",
-        "bg": "#FEFCE8",
-        "border": "#FDE047",
-        "header": "#FEF08A",
-        "text": "#1E293B",
-        "sub": "#854D0E"
+        "bg": Palette.glow_warm,
+        "border": Palette.yellow_300,
+        "header": Palette.yellow_200,
+        "text": Palette.slate_800,
+        "sub": Palette.amber_800
     },
     "peach": {
         "name": "暖蜜桃",
-        "bg": "#FFF7ED",
-        "border": "#FDBA74",
-        "header": "#FFEDD5",
-        "text": "#1E293B",
-        "sub": "#C2410C"
+        "bg": Palette.glow_soft,
+        "border": Palette.orange_300,
+        "header": Palette.orange_100,
+        "text": Palette.slate_800,
+        "sub": Palette.orange_700
     },
     "pink": {
         "name": "落樱粉",
-        "bg": "#FFF1F2",
-        "border": "#FECDD3",
-        "header": "#FFE4E6",
-        "text": "#1E293B",
-        "sub": "#9F1239"
+        "bg": Palette.rose_50,
+        "border": Palette.rose_200,
+        "header": Palette.rose_100,
+        "text": Palette.slate_800,
+        "sub": Palette.rose_900
     },
     "green": {
         "name": "薄荷绿",
-        "bg": "#F0FDF4",
-        "border": "#BBF7D0",
-        "header": "#DCFCE7",
-        "text": "#1E293B",
-        "sub": "#166534"
+        "bg": Palette.emerald_50,
+        "border": Palette.mint_200,
+        "header": Palette.mint_100,
+        "text": Palette.slate_800,
+        "sub": Palette.mint_800
     },
     "blue": {
         "name": "晴空蓝",
-        "bg": "#EFF6FF",
-        "border": "#BFDBFE",
-        "header": "#DBEAFE",
-        "text": "#1E293B",
-        "sub": "#1E40AF"
+        "bg": Palette.blue_50,
+        "border": Palette.blue_200,
+        "header": Palette.blue_100,
+        "text": Palette.slate_800,
+        "sub": Palette.blue_800
     },
     "cyber": {
         "name": "赛博暗夜",
-        "bg": "#0B0F19",
-        "border": "#0EA5E9",
-        "header": "#1E293B",
-        "text": "#F8FAFC",
-        "sub": "#38BDF8"
+        "bg": Palette.ink,
+        "border": Palette.sky_500,
+        "header": Palette.slate_800,
+        "text": Palette.slate_50,
+        "sub": Palette.sky_400
     }
 }
 
@@ -217,9 +218,9 @@ class PetStickyNote(QWidget):
         self.title_lbl.setStyleSheet(f"color: {sub_col}; background: transparent; border: none;")
         self.char_lbl.setStyleSheet(f"color: {sub_col}; background: transparent; border: none; font-size: 10px;")
 
-        btn_bg = "rgba(30, 41, 59, 0.85)" if is_dark else "rgba(255, 255, 255, 0.7)"
-        btn_hover = "rgba(14, 165, 233, 0.25)" if is_dark else "#FFFFFF"
-        btn_pressed = "rgba(15, 23, 42, 0.95)" if is_dark else "rgba(0, 0, 0, 0.08)"
+        btn_bg = Alpha.slate_800_85 if is_dark else Alpha.white_70
+        btn_hover = Alpha.sky_500_25 if is_dark else Palette.white
+        btn_pressed = Alpha.slate_900_95 if is_dark else Alpha.black_8
 
         btn_css = f"""
             QPushButton {{
@@ -244,8 +245,8 @@ class PetStickyNote(QWidget):
         self.btn_pin.setStyleSheet(btn_css)
         self.btn_close.setStyleSheet(btn_css)
 
-        sb_handle = "#0EA5E9" if is_dark else "rgba(0, 0, 0, 0.15)"
-        sb_hover = "#38BDF8" if is_dark else "rgba(0, 0, 0, 0.25)"
+        sb_handle = Palette.sky_500 if is_dark else Alpha.black_15
+        sb_hover = Palette.sky_400 if is_dark else Alpha.black_25
 
         self.text_edit.setStyleSheet(f"""
             QTextEdit {{
@@ -282,7 +283,7 @@ class PetStickyNote(QWidget):
             for t_key, dot_btn in self.theme_dots.items():
                 dot_color = MEMO_THEMES[t_key]["header"]
                 dot_border = MEMO_THEMES[t_key]["border"]
-                border_str = "2px solid #334155" if t_key == self.current_theme else f"2px solid {dot_border}"
+                border_str = f"2px solid {Palette.slate_700}" if t_key == self.current_theme else f"2px solid {dot_border}"
                 dot_btn.setStyleSheet(f"""
                     QPushButton {{
                         background-color: {dot_color};
@@ -290,7 +291,7 @@ class PetStickyNote(QWidget):
                         border-radius: 7px;
                     }}
                     QPushButton:hover {{
-                        border: 2px solid #334155;
+                        border: 2px solid {Palette.slate_700};
                     }}
                 """)
 

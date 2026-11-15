@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../widgets/bouncy_touch_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
@@ -122,7 +123,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               children: [
                 Row(
                   children: [
-                    const Text('👗', style: TextStyle(fontSize: 22)),
+                    const Text('👗', style: TextStyle(fontSize: PokoFont.displayMd)),
                     const SizedBox(width: PokoSpacing.sm),
                     Text(
                       '波可的魔法衣橱',
@@ -137,8 +138,9 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 Row(
                   children: [
                     // 🎲 随机混搭穿戴
-                    GestureDetector(
-                      onTap: () {
+                    BouncyTouchFeedback(
+                      scaleDown: 0.95,
+        onTap: () {
                         HapticFeedback.mediumImpact();
                         final rand = math.Random();
                         setState(() {
@@ -176,7 +178,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('🎲', style: TextStyle(fontSize: 12)),
+                            const Text('🎲', style: TextStyle(fontSize: PokoFont.small)),
                             const SizedBox(width: PokoSpacing.xxs),
                             Text(
                               '混搭',
@@ -192,8 +194,9 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                     ),
 
                     // 🔮 赛博能量盲盒入口
-                    GestureDetector(
-                      onTap: () {
+                    BouncyTouchFeedback(
+                      scaleDown: 0.95,
+        onTap: () {
                         HapticFeedback.lightImpact();
                         showModalBottomSheet(
                           context: context,
@@ -216,15 +219,15 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         ),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [PokoPalette.sky, PokoPalette.violet],
+                            colors: [PokoPalette.sky_400, PokoPalette.violet_500],
                           ),
                           borderRadius: BorderRadius.circular(PokoRadius.sm),
-                          boxShadow: PokoShadow.soft(PokoPalette.sky),
+                          boxShadow: PokoShadow.soft(PokoPalette.sky_400),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('🔮', style: TextStyle(fontSize: 12)),
+                            Text('🔮', style: TextStyle(fontSize: PokoFont.small)),
                             SizedBox(width: PokoSpacing.xxs),
                             Text(
                               '盲盒',
@@ -280,9 +283,9 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 indicatorSize: TabBarIndicatorSize.tab,
                 dividerColor: Colors.transparent,
                 indicator: BoxDecoration(
-                  color: PokoPalette.violet,
+                  color: PokoPalette.violet_500,
                   borderRadius: BorderRadius.circular(PokoRadius.pill),
-                  boxShadow: PokoShadow.soft(PokoPalette.violet),
+                  boxShadow: PokoShadow.soft(PokoPalette.violet_500),
                 ),
                 labelColor: Colors.white,
                 unselectedLabelColor: subColor,
@@ -358,15 +361,16 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
               final skin = skins[index];
               final isSelected = (model.skinId == skin.id);
 
-              return GestureDetector(
-                onTap: () {
+              return BouncyTouchFeedback(
+                scaleDown: 0.95,
+        onTap: () {
                   HapticFeedback.mediumImpact();
                   setState(() {
                     model.setSkin(skin.id);
                   });
                 },
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
+                  duration: PokoDuration.normal,
                   width: 96,
                   margin: const EdgeInsets.only(
                     right: PokoSpacing.sm,
@@ -380,16 +384,16 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   decoration: BoxDecoration(
                     color: isSelected
                         ? (isNight
-                            ? PokoPalette.violetDeep
-                            : PokoPalette.violetSoft)
+                            ? PokoPalette.violet_800
+                            : PokoPalette.violet_50)
                         : cardBg,
                     borderRadius: BorderRadius.circular(PokoRadius.lg),
                     border: Border.all(
-                      color: isSelected ? PokoPalette.violet : borderColor,
+                      color: isSelected ? PokoPalette.violet_500 : borderColor,
                       width: isSelected ? 1.5 : 1.0,
                     ),
                     boxShadow: isSelected
-                        ? PokoShadow.soft(PokoPalette.violet)
+                        ? PokoShadow.soft(PokoPalette.violet_500)
                         : null,
                   ),
                   child: Column(
@@ -412,7 +416,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               boxShadow: PokoShadow.soft(Colors.black),
                             ),
                             child: Center(
-                              child: Text(skin.icon, style: const TextStyle(fontSize: 16)),
+                              child: Text(skin.icon, style: const TextStyle(fontSize: PokoFont.titleSm)),
                             ),
                           ),
                           if (isSelected)
@@ -443,8 +447,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               : FontWeight.w500,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violetDeep)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_800)
                               : titleColor,
                         ),
                       ),
@@ -457,8 +461,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                           fontSize: PokoFont.tiny,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violet)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_500)
                               : subColor,
                         ),
                       ),
@@ -477,12 +481,12 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             width: double.infinity,
             padding: const EdgeInsets.all(PokoSpacing.md),
             decoration: BoxDecoration(
-              color: isNight ? t.surfaceAlt : PokoPalette.violetSoft,
+              color: isNight ? t.surfaceAlt : PokoPalette.violet_50,
               borderRadius: BorderRadius.circular(PokoRadius.lg),
               border: Border.all(
                 color: isNight
-                    ? PokoPalette.violetDeep
-                    : PokoPalette.violetSoft,
+                    ? PokoPalette.violet_800
+                    : PokoPalette.violet_50,
                 width: 1.5,
               ),
             ),
@@ -493,7 +497,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 children: [
                   Row(
                     children: [
-                      Text(currentSkin.icon, style: const TextStyle(fontSize: 24)),
+                      Text(currentSkin.icon, style: const TextStyle(fontSize: PokoFont.display)),
                       const SizedBox(width: PokoSpacing.sm),
                       Expanded(
                         child: Column(
@@ -514,7 +518,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: PokoPalette.violet.withValues(alpha: 0.18),
+                                color: PokoPalette.violet_500.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(PokoRadius.xs),
                               ),
                               child: Text(
@@ -522,7 +526,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                                 style: const TextStyle(
                                   fontSize: PokoFont.caption,
                                   fontWeight: FontWeight.bold,
-                                  color: PokoPalette.violet,
+                                  color: PokoPalette.violet_500,
                                 ),
                               ),
                             ),
@@ -597,7 +601,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         const Icon(
                           Icons.auto_awesome,
                           size: 14,
-                          color: PokoPalette.violet,
+                          color: PokoPalette.violet_500,
                         ),
                         const SizedBox(width: PokoSpacing.xs),
                         Expanded(
@@ -607,8 +611,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               fontSize: PokoFont.caption,
                               fontWeight: FontWeight.w500,
                               color: isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violetDeep,
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_800,
                             ),
                           ),
                         ),
@@ -649,8 +653,9 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
         final isLocked = minStage > currentStage;
 
-        return GestureDetector(
-          onTap: () {
+        return BouncyTouchFeedback(
+          scaleDown: 0.97,
+        onTap: () {
             if (isLocked) {
               HapticFeedback.heavyImpact();
               ScaffoldMessenger.of(context).showSnackBar(
@@ -658,7 +663,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                   content: Text('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖'),
                   duration: const Duration(seconds: 2),
                   behavior: SnackBarBehavior.floating,
-                  backgroundColor: PokoPalette.violet,
+                  backgroundColor: PokoPalette.violet_500,
                 ),
               );
               return;
@@ -669,7 +674,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             });
           },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: PokoDuration.base,
             margin: const EdgeInsets.only(bottom: PokoSpacing.sm),
             padding: const EdgeInsets.symmetric(
               horizontal: PokoSpacing.md,
@@ -677,20 +682,20 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             ),
             decoration: BoxDecoration(
               color: isSelected
-                  ? (isNight ? PokoPalette.violetDeep : PokoPalette.violetSoft)
+                  ? (isNight ? PokoPalette.violet_800 : PokoPalette.violet_50)
                   : cardBg,
               borderRadius: BorderRadius.circular(PokoRadius.md),
               border: Border.all(
-                color: isSelected ? PokoPalette.violet : borderColor,
+                color: isSelected ? PokoPalette.violet_500 : borderColor,
                 width: isSelected ? 1.5 : 1.0,
               ),
               boxShadow: isSelected
-                  ? PokoShadow.soft(PokoPalette.violet)
+                  ? PokoShadow.soft(PokoPalette.violet_500)
                   : null,
             ),
             child: Row(
               children: [
-                Text(item['icon']!, style: const TextStyle(fontSize: 26)),
+                Text(item['icon']!, style: const TextStyle(fontSize: PokoFont.displayLg)),
                 const SizedBox(width: PokoSpacing.md),
                 Expanded(
                   child: Column(
@@ -705,8 +710,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               : FontWeight.w600,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violetDeep)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_800)
                               : titleColor,
                         ),
                       ),
@@ -717,8 +722,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                           fontSize: PokoFont.caption,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violet)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_500)
                               : subColor,
                         ),
                       ),
@@ -732,7 +737,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: PokoPalette.amber.withValues(alpha: 0.18),
+                      color: PokoPalette.amber_500.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(PokoRadius.xs),
                     ),
                     child: Row(
@@ -741,7 +746,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                         const Icon(
                           Icons.lock_rounded,
                           size: 12,
-                          color: PokoPalette.amber,
+                          color: PokoPalette.amber_500,
                         ),
                         const SizedBox(width: PokoSpacing.xxs),
                         Text(
@@ -749,7 +754,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                           style: const TextStyle(
                             fontSize: PokoFont.tiny,
                             fontWeight: FontWeight.bold,
-                            color: PokoPalette.amber,
+                            color: PokoPalette.amber_500,
                           ),
                         ),
                       ],
@@ -758,7 +763,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 else if (isSelected)
                   const Icon(
                     Icons.check_circle_rounded,
-                    color: PokoPalette.violet,
+                    color: PokoPalette.violet_500,
                     size: 20,
                   )
                 else
@@ -794,15 +799,16 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         final id = item['id']!;
         final isSelected = (currentHabitat == id);
 
-        return GestureDetector(
-          onTap: () {
+        return BouncyTouchFeedback(
+          scaleDown: 0.97,
+        onTap: () {
             HapticFeedback.lightImpact();
             setState(() {
               model.setHabitat(id);
             });
           },
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: PokoDuration.base,
             margin: const EdgeInsets.only(bottom: PokoSpacing.sm),
             padding: const EdgeInsets.symmetric(
               horizontal: PokoSpacing.md,
@@ -810,20 +816,20 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
             ),
             decoration: BoxDecoration(
               color: isSelected
-                  ? (isNight ? PokoPalette.violetDeep : PokoPalette.violetSoft)
+                  ? (isNight ? PokoPalette.violet_800 : PokoPalette.violet_50)
                   : cardBg,
               borderRadius: BorderRadius.circular(PokoRadius.md),
               border: Border.all(
-                color: isSelected ? PokoPalette.violet : borderColor,
+                color: isSelected ? PokoPalette.violet_500 : borderColor,
                 width: isSelected ? 1.5 : 1.0,
               ),
               boxShadow: isSelected
-                  ? PokoShadow.soft(PokoPalette.violet)
+                  ? PokoShadow.soft(PokoPalette.violet_500)
                   : null,
             ),
             child: Row(
               children: [
-                Text(item['icon']!, style: const TextStyle(fontSize: 26)),
+                Text(item['icon']!, style: const TextStyle(fontSize: PokoFont.displayLg)),
                 const SizedBox(width: PokoSpacing.md),
                 Expanded(
                   child: Column(
@@ -838,8 +844,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                               : FontWeight.w600,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violetDeep)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_800)
                               : titleColor,
                         ),
                       ),
@@ -850,8 +856,8 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                           fontSize: PokoFont.caption,
                           color: isSelected
                               ? (isNight
-                                  ? PokoPalette.violetSoft
-                                  : PokoPalette.violet)
+                                  ? PokoPalette.violet_50
+                                  : PokoPalette.violet_500)
                               : subColor,
                         ),
                       ),
@@ -861,7 +867,7 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
                 if (isSelected)
                   const Icon(
                     Icons.check_circle_rounded,
-                    color: PokoPalette.violet,
+                    color: PokoPalette.violet_500,
                     size: 20,
                   )
                 else

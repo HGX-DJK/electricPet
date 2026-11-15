@@ -114,10 +114,10 @@ class _DockButtonState extends State<_DockButton> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.90 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
+        duration: PokoDuration.quick,
+        curve: PokoCurves.standard,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 140),
+          duration: PokoDuration.brisk,
           width: 44,
           height: 52,
           decoration: BoxDecoration(
@@ -132,7 +132,7 @@ class _DockButtonState extends State<_DockButton> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(widget.icon, style: const TextStyle(fontSize: 18)),
+              Text(widget.icon, style: const TextStyle(fontSize: PokoFont.subtitle)),
               const SizedBox(height: 2),
               Text(
                 widget.label,

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../theme/poko_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,38 +28,38 @@ class MemoModel extends ChangeNotifier {
     'yellow': MemoTheme(
       id: 'yellow',
       name: '奶杏黄',
-      bg: Color(0xFFFEFCE8),
-      border: Color(0xFFFDE047),
-      header: Color(0xFFFEF08A),
-      text: Color(0xFF1E293B),
-      sub: Color(0xFF854D0E),
+      bg: PokoPalette.glow_warm,
+      border: PokoPalette.yellow_300,
+      header: PokoPalette.yellow_200,
+      text: PokoPalette.slate_800,
+      sub: PokoPalette.amber_800,
     ),
     'pink': MemoTheme(
       id: 'pink',
       name: '落樱粉',
-      bg: Color(0xFFFFF1F2),
-      border: Color(0xFFFECDD3),
-      header: Color(0xFFFFE4E6),
-      text: Color(0xFF1E293B),
-      sub: Color(0xFF9F1239),
+      bg: PokoPalette.rose_50,
+      border: PokoPalette.rose_200,
+      header: PokoPalette.rose_100,
+      text: PokoPalette.slate_800,
+      sub: PokoPalette.rose_900,
     ),
     'green': MemoTheme(
       id: 'green',
       name: '薄荷绿',
-      bg: Color(0xFFF0FDF4),
-      border: Color(0xFFBBF7D0),
-      header: Color(0xFFDCFCE7),
-      text: Color(0xFF1E293B),
-      sub: Color(0xFF166534),
+      bg: PokoPalette.emerald_50,
+      border: PokoPalette.mint_200,
+      header: PokoPalette.mint_100,
+      text: PokoPalette.slate_800,
+      sub: PokoPalette.mint_800,
     ),
     'blue': MemoTheme(
       id: 'blue',
       name: '晴空蓝',
-      bg: Color(0xFFEFF6FF),
-      border: Color(0xFFBFDBFE),
-      header: Color(0xFFDBEAFE),
-      text: Color(0xFF1E293B),
-      sub: Color(0xFF1E40AF),
+      bg: PokoPalette.blue_50,
+      border: PokoPalette.blue_200,
+      header: PokoPalette.blue_100,
+      text: PokoPalette.slate_800,
+      sub: PokoPalette.blue_800,
     ),
   };
 

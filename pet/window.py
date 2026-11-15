@@ -909,6 +909,10 @@ class PetWindow(QWidget):
             return
 
         if event.button() == Qt.MouseButton.LeftButton:
+            # 气泡永久鼠标穿透（见 pet/dialogue.py），所以「戳一下让波可闭嘴」
+            # 这个动作改由宠物本体承接 —— 顺手摸一下，话题就翻篇。
+            if hasattr(self, "dialogue") and self.dialogue.is_visible:
+                self.dialogue.dismiss()
             self.is_dragging = False
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             self.mouse_press_pos = event.globalPosition().toPoint()

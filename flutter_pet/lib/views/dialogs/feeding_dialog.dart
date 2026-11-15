@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/bouncy_touch_feedback.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
 import '../../theme/poko_theme.dart';
@@ -38,7 +39,7 @@ class FeedingDialog extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Text('🍱', style: TextStyle(fontSize: 22)),
+                    const Text('🍱', style: TextStyle(fontSize: PokoFont.displayMd)),
                     const SizedBox(width: PokoSpacing.sm),
                     Text(
                       '波可的美食小厨房',
@@ -50,8 +51,9 @@ class FeedingDialog extends StatelessWidget {
                     ),
                   ],
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                BouncyTouchFeedback(
+                  scaleDown: 0.9,
+        onTap: () => Navigator.pop(context),
                   child: Container(
                     padding: const EdgeInsets.all(PokoSpacing.xs),
                     decoration: BoxDecoration(
@@ -78,10 +80,10 @@ class FeedingDialog extends StatelessWidget {
                     vertical: PokoSpacing.sm,
                   ),
                   decoration: BoxDecoration(
-                    color: PokoPalette.amberSoft,
+                    color: PokoPalette.amber_50,
                     borderRadius: BorderRadius.circular(PokoRadius.md),
                     border: Border.all(
-                      color: PokoPalette.amber.withValues(alpha: 0.45),
+                      color: PokoPalette.amber_500.withValues(alpha: 0.45),
                     ),
                   ),
                   child: Column(
@@ -96,7 +98,7 @@ class FeedingDialog extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: PokoFont.small,
                                   fontWeight: FontWeight.bold,
-                                  color: PokoPalette.amberDeep,
+                                  color: PokoPalette.amber_700,
                                 ),
                               ),
                               const SizedBox(width: PokoSpacing.xs),
@@ -106,8 +108,8 @@ class FeedingDialog extends StatelessWidget {
                                   fontSize: PokoFont.body,
                                   fontWeight: FontWeight.bold,
                                   color: isFull
-                                      ? PokoPalette.emerald
-                                      : PokoPalette.amber,
+                                      ? PokoPalette.emerald_500
+                                      : PokoPalette.amber_500,
                                 ),
                               ),
                             ],
@@ -116,7 +118,7 @@ class FeedingDialog extends StatelessWidget {
                             '体重: ${model.weight.toStringAsFixed(2)} kg  ${isFull ? "🌟 肚子饱饱" : "😋 嗷嗷待哺"}',
                             style: const TextStyle(
                               fontSize: PokoFont.caption,
-                              color: PokoPalette.amberDeep,
+                              color: PokoPalette.amber_700,
                             ),
                           ),
                         ],
@@ -126,7 +128,7 @@ class FeedingDialog extends StatelessWidget {
                         borderRadius: BorderRadius.circular(PokoRadius.xs),
                         child: Container(
                           height: 8,
-                          color: PokoPalette.amber.withValues(alpha: 0.18),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.18),
                           child: FractionallySizedBox(
                             alignment: Alignment.centerLeft,
                             widthFactor: hungerPct,
@@ -135,12 +137,12 @@ class FeedingDialog extends StatelessWidget {
                                 gradient: LinearGradient(
                                   colors: isFull
                                       ? [
-                                          PokoPalette.emerald,
-                                          PokoPalette.emeraldDeep,
+                                          PokoPalette.emerald_500,
+                                          PokoPalette.emerald_700,
                                         ]
                                       : [
-                                          PokoPalette.amber,
-                                          PokoPalette.amberDeep,
+                                          PokoPalette.amber_500,
+                                          PokoPalette.amber_700,
                                         ],
                                 ),
                               ),
@@ -184,23 +186,24 @@ class FeedingDialog extends StatelessWidget {
                     }
                   }
                   String pBadge = '';
-                  Color pColor = PokoPalette.amber;
+                  Color pColor = PokoPalette.amber_500;
                   if (pType == 'tech') {
                     pBadge = ' · 极客+$pVal';
-                    pColor = PokoPalette.sky;
+                    pColor = PokoPalette.sky_400;
                   } else if (pType == 'sport') {
                     pBadge = ' · 运动+$pVal';
-                    pColor = PokoPalette.rose;
+                    pColor = PokoPalette.rose_500;
                   } else if (pType == 'lazy') {
                     pBadge = ' · 佛系+$pVal';
-                    pColor = PokoPalette.emerald;
+                    pColor = PokoPalette.emerald_500;
                   }
 
                   return AnimatedOpacity(
-                    duration: const Duration(milliseconds: 200),
+                    duration: PokoDuration.normal,
                     opacity: isFull ? 0.65 : 1.0,
-                    child: GestureDetector(
-                      onTap: () {
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.96,
+        onTap: () {
                         HapticFeedback.lightImpact();
                         onFeedSelected(food['id'] as String);
                       },
@@ -221,7 +224,7 @@ class FeedingDialog extends StatelessWidget {
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                              color: PokoPalette.amberSoft,
+                              color: PokoPalette.amber_50,
                               borderRadius: BorderRadius.circular(
                                 PokoRadius.sm,
                               ),
@@ -229,7 +232,7 @@ class FeedingDialog extends StatelessWidget {
                             alignment: Alignment.center,
                             child: Text(
                               food['icon'] as String,
-                              style: const TextStyle(fontSize: 22),
+                              style: const TextStyle(fontSize: PokoFont.displayMd),
                             ),
                           ),
                           const SizedBox(width: PokoSpacing.sm),
@@ -285,7 +288,7 @@ class FeedingDialog extends StatelessWidget {
               style: TextStyle(
                 fontSize: PokoFont.caption,
                 fontWeight: isFull ? FontWeight.bold : FontWeight.normal,
-                color: isFull ? PokoPalette.emerald : t.textMuted,
+                color: isFull ? PokoPalette.emerald_500 : t.textMuted,
               ),
             ),
           );

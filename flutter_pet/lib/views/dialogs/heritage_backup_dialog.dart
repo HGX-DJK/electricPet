@@ -65,7 +65,7 @@ class HeritageBackupDialog extends StatelessWidget {
           color: t.surface,
           borderRadius: BorderRadius.circular(PokoRadius.xl),
           border: Border.all(
-            color: PokoPalette.amber.withValues(alpha: 0.45),
+            color: PokoPalette.amber_500.withValues(alpha: 0.45),
             width: 1.5,
           ),
           boxShadow: PokoShadow.card(t.shadow),
@@ -87,11 +87,11 @@ class HeritageBackupDialog extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    PokoPalette.amberSoft,
-                    PokoPalette.amber.withValues(alpha: 0.35),
+                    PokoPalette.amber_50,
+                    PokoPalette.amber_500.withValues(alpha: 0.35),
                   ],
                 ),
-                boxShadow: PokoShadow.card(PokoPalette.amber),
+                boxShadow: PokoShadow.card(PokoPalette.amber_500),
               ),
               child: const Text('👑', style: TextStyle(fontSize: 34)),
             ),
@@ -101,7 +101,7 @@ class HeritageBackupDialog extends StatelessWidget {
               style: TextStyle(
                 fontSize: PokoFont.headline,
                 fontWeight: FontWeight.bold,
-                color: PokoPalette.amberDeep,
+                color: PokoPalette.amber_700,
                 letterSpacing: -0.3,
               ),
             ),
@@ -112,7 +112,7 @@ class HeritageBackupDialog extends StatelessWidget {
               style: TextStyle(
                 fontSize: PokoFont.small,
                 height: 1.45,
-                color: PokoPalette.amberDeep.withValues(alpha: 0.85),
+                color: PokoPalette.amber_700.withValues(alpha: 0.85),
               ),
             ),
             const SizedBox(height: PokoSpacing.lg),
@@ -125,10 +125,10 @@ class HeritageBackupDialog extends StatelessWidget {
                 vertical: PokoSpacing.md,
               ),
               decoration: BoxDecoration(
-                color: PokoPalette.amberSoft,
+                color: PokoPalette.amber_50,
                 borderRadius: BorderRadius.circular(PokoRadius.lg),
                 border: Border.all(
-                  color: PokoPalette.amber.withValues(alpha: 0.45),
+                  color: PokoPalette.amber_500.withValues(alpha: 0.45),
                   width: 1,
                 ),
               ),
@@ -140,7 +140,7 @@ class HeritageBackupDialog extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Text('🐱 ', style: TextStyle(fontSize: 18)),
+                          const Text('🐱 ', style: TextStyle(fontSize: PokoFont.subtitle)),
                           Text(
                             name,
                             style: TextStyle(
@@ -156,7 +156,7 @@ class HeritageBackupDialog extends StatelessWidget {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: PokoPalette.amber.withValues(alpha: 0.35),
+                              color: PokoPalette.amber_500.withValues(alpha: 0.35),
                               borderRadius: BorderRadius.circular(
                                 PokoRadius.xs,
                               ),
@@ -165,7 +165,7 @@ class HeritageBackupDialog extends StatelessWidget {
                               skinName,
                               style: const TextStyle(
                                 fontSize: PokoFont.caption,
-                                color: PokoPalette.amberDeep,
+                                color: PokoPalette.amber_700,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -179,7 +179,7 @@ class HeritageBackupDialog extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [PokoPalette.amber, PokoPalette.amberDeep],
+                            colors: [PokoPalette.amber_500, PokoPalette.amber_700],
                           ),
                           borderRadius: BorderRadius.circular(PokoRadius.sm),
                         ),
@@ -200,7 +200,7 @@ class HeritageBackupDialog extends StatelessWidget {
                     ),
                     child: Divider(
                       height: 1,
-                      color: PokoPalette.amber.withValues(alpha: 0.45),
+                      color: PokoPalette.amber_500.withValues(alpha: 0.45),
                     ),
                   ),
                   // 三维数据矩阵
@@ -220,7 +220,7 @@ class HeritageBackupDialog extends StatelessWidget {
                         const Icon(
                           Icons.history_rounded,
                           size: 12,
-                          color: PokoPalette.sky,
+                          color: PokoPalette.sky_400,
                         ),
                         const SizedBox(width: PokoSpacing.xs),
                         Text(
@@ -247,10 +247,10 @@ class HeritageBackupDialog extends StatelessWidget {
                 vertical: PokoSpacing.sm,
               ),
               decoration: BoxDecoration(
-                color: PokoPalette.rose.withValues(alpha: 0.10),
+                color: PokoPalette.rose_500.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(PokoRadius.md),
                 border: Border.all(
-                  color: PokoPalette.rose.withValues(alpha: 0.45),
+                  color: PokoPalette.rose_500.withValues(alpha: 0.45),
                 ),
               ),
               child: Column(
@@ -261,7 +261,7 @@ class HeritageBackupDialog extends StatelessWidget {
                       Icon(
                         Icons.warning_amber_rounded,
                         size: 14,
-                        color: PokoPalette.rose,
+                        color: PokoPalette.rose_500,
                       ),
                       SizedBox(width: PokoSpacing.xs),
                       Text(
@@ -269,7 +269,7 @@ class HeritageBackupDialog extends StatelessWidget {
                         style: TextStyle(
                           fontSize: PokoFont.caption,
                           fontWeight: FontWeight.bold,
-                          color: PokoPalette.rose,
+                          color: PokoPalette.rose_500,
                         ),
                       ),
                     ],
@@ -315,10 +315,10 @@ class HeritageBackupDialog extends StatelessWidget {
                 child: Ink(
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [PokoPalette.amber, PokoPalette.amberDeep],
+                      colors: [PokoPalette.amber_500, PokoPalette.amber_700],
                     ),
                     borderRadius: BorderRadius.circular(PokoRadius.md),
-                    boxShadow: PokoShadow.card(PokoPalette.amber),
+                    boxShadow: PokoShadow.card(PokoPalette.amber_500),
                   ),
                   child: Container(
                     alignment: Alignment.center,
@@ -389,7 +389,7 @@ class HeritageBackupDialog extends StatelessWidget {
           style: const TextStyle(
             fontSize: PokoFont.bodyLg,
             fontWeight: FontWeight.bold,
-            color: PokoPalette.amberDeep,
+            color: PokoPalette.amber_700,
           ),
         ),
         const SizedBox(height: PokoSpacing.xxs),
@@ -397,7 +397,7 @@ class HeritageBackupDialog extends StatelessWidget {
           label,
           style: const TextStyle(
             fontSize: PokoFont.tiny,
-            color: PokoPalette.amberDeep,
+            color: PokoPalette.amber_700,
           ),
         ),
       ],

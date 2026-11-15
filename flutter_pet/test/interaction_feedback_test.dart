@@ -157,7 +157,14 @@ void main() {
       await tester.tap(find.text('🌟 开启心愿'));
       await tester.pump(const Duration(milliseconds: 600));
 
-      expect(model.coins, 270, reason: '正常抽一次应扣 30 币');
+      // ⚠️ 净扣币**不能**写死 270：抽到**已解锁**的装扮会退 15 币
+      // （pet_model.dart 的 refundCoins = isNew ? 0 : 15，退款由抽卡面板结算）。
+      // 'ribbon' / 'bell' 默认就在 unlockedItems 里，合计权重 50/266 ≈ 19% ——
+      // 写死 270 就有约五分之一的概率随机失败。这里按「扣 30 − 可能退款」断言：
+      // 抽到新装扮净扣 30，抽到重复装扮退 15、净扣 15。
+      final spent = 300 - model.coins;
+      expect(spent, anyOf(30, 15),
+          reason: '正常抽一次应扣 30 币（抽到重复装扮退 15，净扣 15）');
       expect(find.textContaining('愿望启封达成'), findsOneWidget,
           reason: '抽完应当出结果卡');
     });

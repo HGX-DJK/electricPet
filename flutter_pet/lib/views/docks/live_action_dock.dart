@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/poko_theme.dart';
 import '../../services/haptic_service.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
@@ -25,9 +26,9 @@ class LiveActionDock extends StatelessWidget {
         ? const Color(0xFF14122C).withValues(alpha: 0.96)
         : Colors.white.withValues(alpha: 0.98);
     final borderColor = isNight
-        ? const Color(0xFFF59E0B).withValues(alpha: 0.55)
-        : const Color(0xFFFDE68A);
-    final cardBg = isNight ? const Color(0xFF231B45) : const Color(0xFFFFFBEB);
+        ? PokoPalette.amber_500.withValues(alpha: 0.55)
+        : PokoPalette.amber_200;
+    final cardBg = isNight ? const Color(0xFF231B45) : PokoPalette.amber_50;
 
     final isActing = actions.any((act) => act['id'] == currentState);
     final currentAct = isActing
@@ -44,8 +45,8 @@ class LiveActionDock extends StatelessWidget {
       left: 12,
       right: 12,
       child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: PokoDuration.settle,
+        curve: PokoCurves.standard,
         tween: Tween<double>(begin: 0.0, end: 1.0),
         builder: (context, animVal, child) {
           return Transform.translate(
@@ -60,13 +61,13 @@ class LiveActionDock extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(PokoRadius.xl),
           border: Border.all(color: borderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: isNight
                   ? const Color(0xFF0F0C24).withValues(alpha: 0.65)
-                  : const Color(0xFFF59E0B).withValues(alpha: 0.14),
+                  : PokoPalette.amber_500.withValues(alpha: 0.14),
               blurRadius: 20,
               offset: const Offset(0, 6),
             ),
@@ -86,23 +87,23 @@ class LiveActionDock extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                         decoration: BoxDecoration(
                           color: isActing
-                              ? const Color(0xFFEF4444).withValues(alpha: isNight ? 0.3 : 0.12)
-                              : const Color(0xFFF59E0B).withValues(alpha: isNight ? 0.25 : 0.12),
-                          borderRadius: BorderRadius.circular(10),
+                              ? PokoPalette.red_500.withValues(alpha: isNight ? 0.3 : 0.12)
+                              : PokoPalette.amber_500.withValues(alpha: isNight ? 0.25 : 0.12),
+                          borderRadius: BorderRadius.circular(PokoRadius.sm),
                           border: Border.all(
                             color: isActing
-                                ? const Color(0xFFEF4444).withValues(alpha: 0.5)
-                                : const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                                ? PokoPalette.red_500.withValues(alpha: 0.5)
+                                : PokoPalette.amber_500.withValues(alpha: 0.4),
                           ),
                         ),
                         child: Text(
                           isActing ? '🔴 LIVE' : '✨ 才艺',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: PokoFont.tiny,
                             fontWeight: FontWeight.bold,
                             color: isActing
-                                ? (isNight ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626))
-                                : (isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309)),
+                                ? (isNight ? PokoPalette.red_300 : PokoPalette.red_600)
+                                : (isNight ? PokoPalette.amber_200 : PokoPalette.amber_700),
                           ),
                         ),
                       ),
@@ -113,11 +114,11 @@ class LiveActionDock extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: PokoFont.caption,
                             fontWeight: FontWeight.w600,
                             color: isActing
-                                ? (isNight ? Colors.white : const Color(0xFF0F172A))
-                                : (isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569)),
+                                ? (isNight ? Colors.white : PokoPalette.slate_900)
+                                : (isNight ? PokoPalette.slate_300 : PokoPalette.slate_600),
                           ),
                         ),
                       ),
@@ -127,18 +128,19 @@ class LiveActionDock extends StatelessWidget {
                 const SizedBox(width: 8),
 
                 // 完成退出点播按钮
-                GestureDetector(
-                  onTap: onClose,
+                BouncyTouchFeedback(
+                  scaleDown: 0.96,
+        onTap: onClose,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                        colors: [PokoPalette.amber_500, PokoPalette.amber_600],
                       ),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(PokoRadius.md),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.35),
                           blurRadius: 6,
                           offset: const Offset(0, 2),
                         ),
@@ -152,7 +154,7 @@ class LiveActionDock extends StatelessWidget {
                         Text(
                           '完成',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: PokoFont.small,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
@@ -183,25 +185,25 @@ class LiveActionDock extends StatelessWidget {
                       onActionSelected(act['id']!);
                     },
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
+                      duration: PokoDuration.base,
                       width: 78,
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                       decoration: BoxDecoration(
                         color: isCurrent
-                            ? (isNight ? const Color(0xFF581C87) : const Color(0xFFFEF3C7))
+                            ? (isNight ? const Color(0xFF581C87) : PokoPalette.amber_100)
                             : cardBg,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(PokoRadius.md),
                         border: Border.all(
                           color: isCurrent
-                              ? const Color(0xFFF59E0B)
-                              : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.35) : const Color(0xFFFDE68A).withValues(alpha: 0.7)),
+                              ? PokoPalette.amber_500
+                              : (isNight ? PokoPalette.indigo_700.withValues(alpha: 0.35) : PokoPalette.amber_200.withValues(alpha: 0.7)),
                           width: isCurrent ? 2.2 : 1.0,
                         ),
                         boxShadow: isCurrent
                             ? [
                                 BoxShadow(
-                                  color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                                  color: PokoPalette.amber_500.withValues(alpha: 0.35),
                                   blurRadius: 8,
                                   offset: const Offset(0, 2),
                                 ),
@@ -214,13 +216,13 @@ class LiveActionDock extends StatelessWidget {
                           Stack(
                             alignment: Alignment.topRight,
                             children: [
-                              Text(act['icon']!, style: const TextStyle(fontSize: 22)),
+                              Text(act['icon']!, style: const TextStyle(fontSize: PokoFont.displayMd)),
                               if (isCurrent)
                                 Container(
                                   width: 7,
                                   height: 7,
                                   decoration: const BoxDecoration(
-                                    color: Color(0xFFEF4444),
+                                    color: PokoPalette.red_500,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -232,11 +234,11 @@ class LiveActionDock extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: PokoFont.tiny,
                               fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
                               color: isCurrent
-                                  ? (isNight ? const Color(0xFFFDE68A) : const Color(0xFF92400E))
-                                  : (isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155)),
+                                  ? (isNight ? PokoPalette.amber_200 : PokoPalette.orange_800)
+                                  : (isNight ? PokoPalette.slate_200 : PokoPalette.slate_700),
                             ),
                           ),
                         ],

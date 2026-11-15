@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/poko_theme.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
 import '../../services/haptic_service.dart';
@@ -120,10 +121,10 @@ class LiveWardrobeDock extends StatelessWidget {
         ? const Color(0xFF14122C).withValues(alpha: 0.96)
         : Colors.white.withValues(alpha: 0.98);
     final borderColor = isNight
-        ? const Color(0xFF8B5CF6).withValues(alpha: 0.5)
-        : const Color(0xFFE9D5FF);
-    final cardBg = isNight ? const Color(0xFF231B45) : const Color(0xFFF8FAFC);
-    final titleColor = isNight ? Colors.white : const Color(0xFF1E293B);
+        ? PokoPalette.violet_600.withValues(alpha: 0.5)
+        : PokoPalette.violet_200;
+    final cardBg = isNight ? const Color(0xFF231B45) : PokoPalette.slate_50;
+    final titleColor = isNight ? Colors.white : PokoPalette.slate_800;
 
     final skins = PetModel.availableSkins.values
         .where((s) => s.id != 'cat_white')
@@ -136,8 +137,8 @@ class LiveWardrobeDock extends StatelessWidget {
       left: 12,
       right: 12,
       child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: PokoDuration.settle,
+        curve: PokoCurves.standard,
         tween: Tween<double>(begin: 0.0, end: 1.0),
         builder: (context, animVal, child) {
           return Transform.translate(
@@ -152,13 +153,13 @@ class LiveWardrobeDock extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(PokoRadius.xl),
           border: Border.all(color: borderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: isNight
                   ? const Color(0xFF0F0C24).withValues(alpha: 0.65)
-                  : const Color(0xFF6366F1).withValues(alpha: 0.14),
+                  : PokoPalette.indigo_500.withValues(alpha: 0.14),
               blurRadius: 20,
               offset: const Offset(0, 6),
             ),
@@ -175,37 +176,38 @@ class LiveWardrobeDock extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(2.5),
                   decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF1E1A40) : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(16),
+                    color: isNight ? const Color(0xFF1E1A40) : PokoPalette.slate_100,
+                    borderRadius: BorderRadius.circular(PokoRadius.md),
                     border: Border.all(
-                      color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
+                      color: isNight ? PokoPalette.indigo_700.withValues(alpha: 0.3) : PokoPalette.slate_200,
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // 👗 猫咪装扮模式
-                      GestureDetector(
-                        onTap: () {
+                      BouncyTouchFeedback(
+                        scaleDown: 0.96,
+        onTap: () {
                           if (wardrobeTab == 6) {
                             if (petModel.enableHaptics) HapticFeedback.selectionClick();
                             onTabChanged(0);
                           }
                         },
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: PokoDuration.base,
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
                             gradient: wardrobeTab != 6
                                 ? const LinearGradient(
-                                    colors: [Color(0xFFA855F7), Color(0xFF7C3AED)],
+                                    colors: [PokoPalette.violet_500, PokoPalette.violet_700],
                                   )
                                 : null,
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: BorderRadius.circular(PokoRadius.sm),
                             boxShadow: wardrobeTab != 6
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFFA855F7).withValues(alpha: 0.28),
+                                      color: PokoPalette.violet_500.withValues(alpha: 0.28),
                                       blurRadius: 5,
                                       offset: const Offset(0, 1.5),
                                     ),
@@ -215,16 +217,16 @@ class LiveWardrobeDock extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('👗', style: TextStyle(fontSize: 11.5)),
+                              const Text('👗', style: TextStyle(fontSize: PokoFont.caption)),
                               const SizedBox(width: 3.5),
                               Text(
                                 '猫咪装扮',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: PokoFont.caption,
                                   fontWeight: wardrobeTab != 6 ? FontWeight.bold : FontWeight.w500,
                                   color: wardrobeTab != 6
                                       ? Colors.white
-                                      : (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                                      : (isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
                                 ),
                               ),
                             ],
@@ -234,27 +236,28 @@ class LiveWardrobeDock extends StatelessWidget {
                       const SizedBox(width: 2),
 
                       // 🏠 小窝场景模式
-                      GestureDetector(
-                        onTap: () {
+                      BouncyTouchFeedback(
+                        scaleDown: 0.96,
+        onTap: () {
                           if (wardrobeTab != 6) {
                             if (petModel.enableHaptics) HapticFeedback.selectionClick();
                             onTabChanged(6);
                           }
                         },
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: PokoDuration.base,
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
                           decoration: BoxDecoration(
                             gradient: wardrobeTab == 6
                                 ? const LinearGradient(
-                                    colors: [Color(0xFF10B981), Color(0xFF059669)],
+                                    colors: [PokoPalette.emerald_500, PokoPalette.emerald_600],
                                   )
                                 : null,
-                            borderRadius: BorderRadius.circular(13),
+                            borderRadius: BorderRadius.circular(PokoRadius.sm),
                             boxShadow: wardrobeTab == 6
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.28),
+                                      color: PokoPalette.emerald_500.withValues(alpha: 0.28),
                                       blurRadius: 5,
                                       offset: const Offset(0, 1.5),
                                     ),
@@ -264,16 +267,16 @@ class LiveWardrobeDock extends StatelessWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('🏠', style: TextStyle(fontSize: 11.5)),
+                              const Text('🏠', style: TextStyle(fontSize: PokoFont.caption)),
                               const SizedBox(width: 3.5),
                               Text(
                                 '小窝全景',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: PokoFont.caption,
                                   fontWeight: wardrobeTab == 6 ? FontWeight.bold : FontWeight.w500,
                                   color: wardrobeTab == 6
                                       ? Colors.white
-                                      : (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                                      : (isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
                                 ),
                               ),
                             ],
@@ -293,24 +296,24 @@ class LiveWardrobeDock extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
                       decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF262054) : const Color(0xFFF3E8FF),
-                        borderRadius: BorderRadius.circular(12),
+                        color: isNight ? const Color(0xFF262054) : PokoPalette.violet_100,
+                        borderRadius: BorderRadius.circular(PokoRadius.sm),
                         border: Border.all(
-                          color: isNight ? const Color(0xFF8B5CF6).withValues(alpha: 0.4) : const Color(0xFFD8B4FE),
+                          color: isNight ? PokoPalette.violet_600.withValues(alpha: 0.4) : PokoPalette.violet_300,
                           width: 1.0,
                         ),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('🔮', style: TextStyle(fontSize: 11.5)),
+                          Text('🔮', style: TextStyle(fontSize: PokoFont.caption)),
                           SizedBox(width: 3),
                           Text(
                             '盲盒',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: PokoFont.caption,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF7C3AED),
+                              color: PokoPalette.violet_700,
                             ),
                           ),
                         ],
@@ -327,24 +330,24 @@ class LiveWardrobeDock extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8.5, vertical: 4.5),
                     decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF241F48) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
+                      color: isNight ? const Color(0xFF241F48) : PokoPalette.slate_100,
+                      borderRadius: BorderRadius.circular(PokoRadius.sm),
                       border: Border.all(
-                        color: isNight ? const Color(0xFF3B336A) : const Color(0xFFCBD5E1),
+                        color: isNight ? const Color(0xFF3B336A) : PokoPalette.slate_300,
                         width: 1.0,
                       ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_rounded, color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B), size: 13),
+                        Icon(Icons.check_rounded, color: isNight ? PokoPalette.slate_300 : PokoPalette.slate_500, size: 13),
                         const SizedBox(width: 2),
                         Text(
                           '完成',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: PokoFont.caption,
                             fontWeight: FontWeight.w600,
-                            color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                            color: isNight ? PokoPalette.slate_300 : PokoPalette.slate_500,
                           ),
                         ),
                       ],
@@ -377,23 +380,23 @@ class LiveWardrobeDock extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF1E1A40) : const Color(0xFFF0FDF4),
-                  borderRadius: BorderRadius.circular(10),
+                  color: isNight ? const Color(0xFF1E1A40) : PokoPalette.emerald_50,
+                  borderRadius: BorderRadius.circular(PokoRadius.sm),
                   border: Border.all(
-                    color: isNight ? const Color(0xFF10B981).withValues(alpha: 0.3) : const Color(0xFFBBF7D0),
+                    color: isNight ? PokoPalette.emerald_500.withValues(alpha: 0.3) : PokoPalette.mint_200,
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Text('🏡', style: TextStyle(fontSize: 12)),
+                    const Text('🏡', style: TextStyle(fontSize: PokoFont.small)),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         '4大家园主题 DIY · 实时变换全屏房间与环境光影',
                         style: TextStyle(
-                          fontSize: 10.5,
+                          fontSize: PokoFont.tiny,
                           fontWeight: FontWeight.w600,
-                          color: isNight ? const Color(0xFFA7F3D0) : const Color(0xFF15803D),
+                          color: isNight ? PokoPalette.emerald_200 : const Color(0xFF15803D),
                         ),
                       ),
                     ),
@@ -415,31 +418,32 @@ class LiveWardrobeDock extends StatelessWidget {
                         final skin = skins[index];
                         final isSelected = (petModel.skinId == skin.id);
 
-                        return GestureDetector(
-                          onTap: () {
+                        return BouncyTouchFeedback(
+                          scaleDown: 0.95,
+        onTap: () {
                             if (petModel.enableHaptics) HapticFeedback.mediumImpact();
                             onSkinSelected(skin.id);
                           },
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
+                            duration: PokoDuration.base,
                             width: 72,
                             margin: const EdgeInsets.only(right: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                  ? (isNight ? PokoPalette.indigo_shadow : PokoPalette.violet_100)
                                   : cardBg,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(PokoRadius.md),
                               border: Border.all(
                                 color: isSelected
-                                    ? const Color(0xFFA855F7)
-                                    : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
+                                    ? PokoPalette.violet_500
+                                    : (isNight ? PokoPalette.indigo_700.withValues(alpha: 0.4) : PokoPalette.slate_200),
                                 width: isSelected ? 2.2 : 1.0,
                               ),
                               boxShadow: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFFA855F7).withValues(alpha: 0.35),
+                                        color: PokoPalette.violet_500.withValues(alpha: 0.35),
                                         blurRadius: 6,
                                         offset: const Offset(0, 2),
                                       ),
@@ -461,7 +465,7 @@ class LiveWardrobeDock extends StatelessWidget {
                                         border: Border.all(color: Color(skin.secondaryColor), width: 2.5),
                                       ),
                                       child: Center(
-                                        child: Text(skin.icon, style: const TextStyle(fontSize: 14)),
+                                        child: Text(skin.icon, style: const TextStyle(fontSize: PokoFont.bodyMd)),
                                       ),
                                     ),
                                     if (isSelected)
@@ -482,10 +486,10 @@ class LiveWardrobeDock extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: PokoFont.tiny,
                                     fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                     color: isSelected
-                                        ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                        ? (isNight ? PokoPalette.violet_200 : PokoPalette.violet_800)
                                         : titleColor,
                                   ),
                                 ),
@@ -505,42 +509,43 @@ class LiveWardrobeDock extends StatelessWidget {
                             final id = item['id']!;
                             final isSelected = (petModel.habitat == id);
 
-                            return GestureDetector(
-                              onTap: () {
+                            return BouncyTouchFeedback(
+                              scaleDown: 0.95,
+        onTap: () {
                                 if (petModel.enableHaptics) HapticService.light();
                                 onHabitatSelected(id, item['icon']!);
                               },
                               child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
+                                duration: PokoDuration.base,
                                 width: 72,
                                 margin: const EdgeInsets.only(right: 8),
                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: isSelected
-                                      ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                      ? (isNight ? PokoPalette.indigo_shadow : PokoPalette.violet_100)
                                       : cardBg,
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(PokoRadius.md),
                                   border: Border.all(
                                     color: isSelected
-                                        ? const Color(0xFFA855F7)
-                                        : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
+                                        ? PokoPalette.violet_500
+                                        : (isNight ? PokoPalette.indigo_700.withValues(alpha: 0.4) : PokoPalette.slate_200),
                                     width: isSelected ? 2.2 : 1.0,
                                   ),
                                 ),
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(item['icon']!, style: const TextStyle(fontSize: 20)),
+                                    Text(item['icon']!, style: const TextStyle(fontSize: PokoFont.headline)),
                                     const SizedBox(height: 2),
                                     Text(
                                       item['name']!,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontSize: 9.5,
+                                        fontSize: PokoFont.microSm,
                                         fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                         color: isSelected
-                                            ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                            ? (isNight ? PokoPalette.violet_200 : PokoPalette.violet_800)
                                             : titleColor,
                                       ),
                                     ),
@@ -577,8 +582,9 @@ class LiveWardrobeDock extends StatelessWidget {
                                 final currentStage = (petModel.intimacyBondInfo['stage'] as int?) ?? 1;
                                 final isLocked = minStage > currentStage;
 
-                                return GestureDetector(
-                                  onTap: () {
+                                return BouncyTouchFeedback(
+                                  scaleDown: 0.95,
+        onTap: () {
                                     if (isLocked) {
                                       if (petModel.enableHaptics) HapticService.heavy();
                                       onShowDialogue?.call('🔒 专属装扮：亲密度羁绊需达到第 $minStage 阶解锁！多与波可互动吧~ 💖');
@@ -588,19 +594,19 @@ class LiveWardrobeDock extends StatelessWidget {
                                     onDecorationSelected(slot, id);
                                   },
                                   child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
+                                    duration: PokoDuration.base,
                                     width: 72,
                                     margin: const EdgeInsets.only(right: 8),
                                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: isSelected
-                                          ? (isNight ? const Color(0xFF4C1D95) : const Color(0xFFF3E8FF))
+                                          ? (isNight ? PokoPalette.indigo_shadow : PokoPalette.violet_100)
                                           : cardBg,
-                                      borderRadius: BorderRadius.circular(16),
+                                      borderRadius: BorderRadius.circular(PokoRadius.md),
                                       border: Border.all(
                                         color: isSelected
-                                            ? const Color(0xFFA855F7)
-                                            : (isNight ? const Color(0xFF4338CA).withValues(alpha: 0.4) : const Color(0xFFE2E8F0)),
+                                            ? PokoPalette.violet_500
+                                            : (isNight ? PokoPalette.indigo_700.withValues(alpha: 0.4) : PokoPalette.slate_200),
                                         width: isSelected ? 2.2 : 1.0,
                                       ),
                                     ),
@@ -613,25 +619,25 @@ class LiveWardrobeDock extends StatelessWidget {
                                             children: [
                                               Opacity(
                                                 opacity: 0.35,
-                                                child: Text(item['icon']!, style: const TextStyle(fontSize: 18)),
+                                                child: Text(item['icon']!, style: const TextStyle(fontSize: PokoFont.subtitle)),
                                               ),
-                                              const Icon(Icons.lock_rounded, size: 14, color: Color(0xFFF59E0B)),
+                                              const Icon(Icons.lock_rounded, size: 14, color: PokoPalette.amber_500),
                                             ],
                                           )
                                         else
-                                          Text(item['icon']!, style: const TextStyle(fontSize: 20)),
+                                          Text(item['icon']!, style: const TextStyle(fontSize: PokoFont.headline)),
                                         const SizedBox(height: 2),
                                         Text(
                                           item['name']!,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontSize: 9.5,
+                                            fontSize: PokoFont.microSm,
                                             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                             color: isLocked
-                                                ? const Color(0xFF94A3B8)
+                                                ? PokoPalette.slate_400
                                                 : (isSelected
-                                                    ? (isNight ? const Color(0xFFE9D5FF) : const Color(0xFF7E22CE))
+                                                    ? (isNight ? PokoPalette.violet_200 : PokoPalette.violet_800)
                                                     : titleColor),
                                           ),
                                         ),
@@ -654,7 +660,8 @@ class LiveWardrobeDock extends StatelessWidget {
   Widget _buildZeroScrollTabPill(int index, String label, bool isNight) {
     final isSelected = (wardrobeTab == index);
     return Expanded(
-      child: GestureDetector(
+      child: BouncyTouchFeedback(
+        scaleDown: 0.94,
         onTap: () {
           if (petModel.enableHaptics) {
             HapticFeedback.selectionClick();
@@ -662,26 +669,26 @@ class LiveWardrobeDock extends StatelessWidget {
           onTabChanged(index);
         },
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: PokoDuration.fast,
           padding: const EdgeInsets.symmetric(vertical: 5.5, horizontal: 1),
           decoration: BoxDecoration(
             gradient: isSelected
                 ? const LinearGradient(
-                    colors: [Color(0xFFA855F7), Color(0xFF7C3AED)],
+                    colors: [PokoPalette.violet_500, PokoPalette.violet_700],
                   )
                 : null,
             color: isSelected ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
             border: Border.all(
               color: isSelected
-                  ? const Color(0xFFA855F7)
+                  ? PokoPalette.violet_500
                   : Colors.transparent,
               width: 1.0,
             ),
             boxShadow: isSelected
                 ? [
                     BoxShadow(
-                      color: const Color(0xFFA855F7).withValues(alpha: 0.3),
+                      color: PokoPalette.violet_500.withValues(alpha: 0.3),
                       blurRadius: 4,
                       offset: const Offset(0, 1.5),
                     ),
@@ -694,11 +701,11 @@ class LiveWardrobeDock extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: PokoFont.tiny,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
                     ? Colors.white
-                    : (isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                    : (isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
               ),
             ),
           ),

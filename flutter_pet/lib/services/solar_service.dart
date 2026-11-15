@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../theme/poko_theme.dart';
 import 'package:flutter/material.dart';
 
 /// 真实太阳天文算法与四季时角计算服务 (NOAA Solar Astronomical Engine)
@@ -137,7 +138,7 @@ class SolarService {
       return SkyTheme(
         name: '破晓晨曦',
         icon: '🌅',
-        colors: const [Color(0xFFFDE8E8), Color(0xFFFEF3C7), Color(0xFFF0FDF4)],
+        colors: const [Color(0xFFFDE8E8), PokoPalette.amber_100, PokoPalette.emerald_50],
         isNight: false,
         greeting: '破晓微光初现，万物初醒，波可伸个大懒腰陪你迎接第一缕晨曦！🌅✨',
         phaseName: '破晓晨曦',
@@ -148,7 +149,7 @@ class SolarService {
       return SkyTheme(
         name: '澄澈晴空',
         icon: '☀️',
-        colors: const [Color(0xFFE0F2FE), Color(0xFFF0FDF4), Color(0xFFF8FAFC)],
+        colors: const [PokoPalette.sky_100, PokoPalette.emerald_50, PokoPalette.slate_50],
         isNight: false,
         greeting: '阳光洒满木地板，微风轻拂，最适合和小猫在地垫上打滚晒太阳啦~ ☀️🍃',
         phaseName: '澄澈晴空',
@@ -159,7 +160,7 @@ class SolarService {
       return SkyTheme(
         name: '落日晚霞',
         icon: '🌇',
-        colors: const [Color(0xFFFFF1F2), Color(0xFFFEF3C7), Color(0xFFF3E8FF)],
+        colors: const [PokoPalette.rose_50, PokoPalette.amber_100, PokoPalette.violet_100],
         isNight: false,
         greeting: '落日熔金，晚霞漫天，主人今天辛苦啦，波可等你回家好久啦！🌇💕',
         phaseName: '落日晚霞',
@@ -197,12 +198,12 @@ class SolarService {
     // 精选天文级连续渐变色标
     const cDeepNight = [Color(0xFF141133), Color(0xFF1C1844), Color(0xFF271F52)];
     const cDawn = [Color(0xFF241C48), Color(0xFF5B3C68), Color(0xFFC48B9F)];
-    const cSunrise = [Color(0xFFFFEDD5), Color(0xFFFEF3C7), Color(0xFFE0F2FE)];
-    const cMorning = [Color(0xFFFFFBEB), Color(0xFFF0FDF4), Color(0xFFF8FAFC)];
-    const cNoon = [Color(0xFFE0F2FE), Color(0xFFF0FDF4), Color(0xFFF8FAFC)];
-    const cAfternoon = [Color(0xFFEFF6FF), Color(0xFFFEF3C7), Color(0xFFFDF2F8)];
-    const cGoldenHour = [Color(0xFFFFF1F2), Color(0xFFFED7AA), Color(0xFFFEF08A)];
-    const cSunset = [Color(0xFFFCE7F3), Color(0xFFF472B6), Color(0xFF818CF8)];
+    const cSunrise = [PokoPalette.orange_100, PokoPalette.amber_100, PokoPalette.sky_100];
+    const cMorning = [PokoPalette.amber_50, PokoPalette.emerald_50, PokoPalette.slate_50];
+    const cNoon = [PokoPalette.sky_100, PokoPalette.emerald_50, PokoPalette.slate_50];
+    const cAfternoon = [PokoPalette.blue_50, PokoPalette.amber_100, Color(0xFFFDF2F8)];
+    const cGoldenHour = [PokoPalette.rose_50, PokoPalette.orange_200, PokoPalette.yellow_200];
+    const cSunset = [PokoPalette.pink_100, PokoPalette.pink_400, PokoPalette.indigo_400];
     const cDusk = [Color(0xFF24153B), Color(0xFF372054), Color(0xFF1E1742)];
     const cNight = [Color(0xFF0F0E26), Color(0xFF18153E), Color(0xFF221A48)];
 

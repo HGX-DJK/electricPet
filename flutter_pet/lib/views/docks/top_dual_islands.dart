@@ -107,7 +107,7 @@ class TopDualIslands extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
+                          fontSize: PokoFont.caption,
                           fontWeight: FontWeight.w800,
                           height: 1.2,
                           letterSpacing: 0.2,
@@ -121,26 +121,26 @@ class TopDualIslands extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                       decoration: BoxDecoration(
                         color: isNight
-                            ? PokoPalette.rose.withValues(alpha: 0.2)
-                            : const Color(0xFFFFF1F2),
+                            ? PokoPalette.rose_500.withValues(alpha: 0.2)
+                            : PokoPalette.rose_50,
                         borderRadius: BorderRadius.circular(PokoRadius.pill),
                         border: Border.all(
-                          color: PokoPalette.rose.withValues(alpha: isNight ? 0.45 : 0.3),
+                          color: PokoPalette.rose_500.withValues(alpha: isNight ? 0.45 : 0.3),
                           width: 0.8,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('❤️', style: TextStyle(fontSize: 8)),
+                          const Text('❤️', style: TextStyle(fontSize: PokoFont.micro)),
                           const SizedBox(width: 2),
                           Text(
                             '${petModel.intimacy}',
                             style: TextStyle(
-                              fontSize: 8.5,
+                              fontSize: PokoFont.micro,
                               fontWeight: FontWeight.w800,
                               height: 1.1,
-                              color: isNight ? PokoPalette.rose : PokoPalette.roseDeep,
+                              color: isNight ? PokoPalette.rose_500 : PokoPalette.rose_600,
                             ),
                           ),
                         ],
@@ -183,7 +183,7 @@ class TopDualIslands extends StatelessWidget {
                             children: [
                               Text(
                                 bondInfo['icon'] as String,
-                                style: const TextStyle(fontSize: 8.5),
+                                style: const TextStyle(fontSize: PokoFont.micro),
                               ),
                               if (showTitle) ...[
                                 const SizedBox(width: 2.5),
@@ -193,7 +193,7 @@ class TopDualIslands extends StatelessWidget {
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      fontSize: 8.5,
+                                      fontSize: PokoFont.micro,
                                       fontWeight: FontWeight.bold,
                                       height: 1.15,
                                       color: bondColor,
@@ -243,24 +243,24 @@ class TopDualIslands extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: isNight
                     ? const [Color(0xFF3730A3), Color(0xFF581C87)]
-                    : const [Color(0xFFFFF7ED), Color(0xFFFEE2E2), Color(0xFFF3E8FF)],
+                    : const [PokoPalette.glow_soft, PokoPalette.red_100, PokoPalette.violet_100],
               ),
               border: Border.all(
                 color: isNight
-                    ? const Color(0xFF6366F1).withValues(alpha: 0.6)
+                    ? PokoPalette.indigo_500.withValues(alpha: 0.6)
                     : Colors.white,
                 width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: (isNight ? const Color(0xFF0F0B2E) : const Color(0xFF7C3AED))
+                  color: (isNight ? const Color(0xFF0F0B2E) : PokoPalette.violet_700)
                       .withValues(alpha: isNight ? 0.35 : 0.12),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: const Text('🐱', style: TextStyle(fontSize: 17)),
+            child: const Text('🐱', style: TextStyle(fontSize: PokoFont.title)),
           ),
           // 悬浮右下角等级微标
           Positioned(
@@ -289,7 +289,7 @@ class TopDualIslands extends StatelessWidget {
                 'Lv.${petModel.level}',
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 7.5,
+                  fontSize: PokoFont.nano,
                   fontWeight: FontWeight.w900,
                   height: 1.1,
                 ),
@@ -332,7 +332,7 @@ class TopDualIslands extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('🍗', style: TextStyle(fontSize: 8.5)),
+                    const Text('🍗', style: TextStyle(fontSize: PokoFont.micro)),
                     const SizedBox(width: 1.5),
                     // ⚠️ 饱腹/心情是**每秒都在变**的数值。
                     // 主界面为了省性能已经不再因为数值衰减而整树重建，
@@ -342,10 +342,10 @@ class TopDualIslands extends StatelessWidget {
                       builder: (context, _) => Text(
                         '${petModel.hunger.toInt()}%',
                         style: const TextStyle(
-                          fontSize: 8.5,
+                          fontSize: PokoFont.micro,
                           fontWeight: FontWeight.w800,
                           height: 1.1,
-                          color: PokoPalette.amberDeep,
+                          color: PokoPalette.amber_700,
                         ),
                       ),
                     ),
@@ -355,19 +355,19 @@ class TopDualIslands extends StatelessWidget {
                       margin: const EdgeInsets.symmetric(horizontal: 2.5),
                       color: t.border.withValues(alpha: 0.8),
                     ),
-                    const Text('💖', style: TextStyle(fontSize: 8.5)),
+                    const Text('💖', style: TextStyle(fontSize: PokoFont.micro)),
                     const SizedBox(width: 1.5),
                     AnimatedBuilder(
                       animation: petModel,
                       builder: (context, _) => Text(
                         '${petModel.mood.toInt()}%',
                         style: TextStyle(
-                          fontSize: 8.5,
+                          fontSize: PokoFont.micro,
                           fontWeight: FontWeight.w800,
                           height: 1.1,
                           color: isNight
-                              ? const Color(0xFF34D399)
-                              : PokoPalette.emeraldDeep,
+                              ? PokoPalette.emerald_400
+                              : PokoPalette.emerald_700,
                         ),
                       ),
                     ),
@@ -384,14 +384,14 @@ class TopDualIslands extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
                     decoration: BoxDecoration(
                       color: (!isManualSky
-                              ? (isNight ? PokoPalette.indigoDeep : PokoPalette.mintSoft)
-                              : (isNight ? PokoPalette.violetDeep : PokoPalette.amberSoft))
+                              ? (isNight ? PokoPalette.indigo_600 : PokoPalette.mint_100)
+                              : (isNight ? PokoPalette.violet_800 : PokoPalette.amber_50))
                           .withValues(alpha: isNight ? 0.35 : 0.85),
                       borderRadius: BorderRadius.circular(PokoRadius.pill),
                       border: Border.all(
                         color: (!isManualSky
-                                ? (isNight ? PokoPalette.indigo : PokoPalette.mintDeep)
-                                : (isNight ? PokoPalette.violet : PokoPalette.amberDeep))
+                                ? (isNight ? PokoPalette.indigo_500 : PokoPalette.mint_800)
+                                : (isNight ? PokoPalette.violet_500 : PokoPalette.amber_700))
                             .withValues(alpha: 0.3),
                         width: 0.8,
                       ),
@@ -401,7 +401,7 @@ class TopDualIslands extends StatelessWidget {
                       children: [
                         Text(
                           circadianTheme.icon,
-                          style: const TextStyle(fontSize: 8.5),
+                          style: const TextStyle(fontSize: PokoFont.micro),
                         ),
                         const SizedBox(width: 2),
                         Flexible(
@@ -410,7 +410,7 @@ class TopDualIslands extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 8.5,
+                              fontSize: PokoFont.micro,
                               fontWeight: FontWeight.w800,
                               height: 1.1,
                               color: t.textSecondary,
@@ -422,14 +422,14 @@ class TopDualIslands extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 0.6),
                           decoration: BoxDecoration(
                             color: !isManualSky
-                                ? (isNight ? PokoPalette.indigo : PokoPalette.mintDeep)
-                                : (isNight ? PokoPalette.violet : PokoPalette.amberDeep),
+                                ? (isNight ? PokoPalette.indigo_500 : PokoPalette.mint_800)
+                                : (isNight ? PokoPalette.violet_500 : PokoPalette.amber_700),
                             borderRadius: BorderRadius.circular(PokoRadius.xs),
                           ),
                           child: Text(
                             !isManualSky ? '自然' : '模式',
                             style: const TextStyle(
-                              fontSize: 7.0,
+                              fontSize: PokoFont.nano,
                               fontWeight: FontWeight.w900,
                               height: 1.1,
                               color: Colors.white,
@@ -453,12 +453,12 @@ class TopDualIslands extends StatelessWidget {
                 t,
                 key: const ValueKey('sound_toggle_button'),
                 active: SoundService.soundEnabled,
-                activeAccent: PokoPalette.indigo,
+                activeAccent: PokoPalette.indigo_500,
                 tooltip: '音效开关',
                 onTap: onSoundToggle,
                 child: Text(
                   SoundService.soundEnabled ? '🔊' : '🔇',
-                  style: const TextStyle(fontSize: 12.0),
+                  style: const TextStyle(fontSize: PokoFont.small),
                 ),
               ),
               if (onAmbientToggle != null)
@@ -468,7 +468,7 @@ class TopDualIslands extends StatelessWidget {
                   key: const ValueKey('ambient_asmr_toggle_button'),
                   active: ambientMode != 'none',
                   activeAccent: ambientMode == 'rain'
-                      ? const Color(0xFF0284C7)
+                      ? PokoPalette.sky_600
                       : const Color(0xFF9333EA),
                   tooltip: '助眠音效',
                   onTap: onAmbientToggle!,
@@ -476,7 +476,7 @@ class TopDualIslands extends StatelessWidget {
                     ambientMode == 'rain'
                         ? '🌧️'
                         : (ambientMode == 'purr' ? '🐱' : '🎵'),
-                    style: const TextStyle(fontSize: 11.5),
+                    style: const TextStyle(fontSize: PokoFont.caption),
                   ),
                 ),
               _actionPearlButton(
@@ -484,12 +484,12 @@ class TopDualIslands extends StatelessWidget {
                 t,
                 key: const ValueKey('footprint_toggle_button'),
                 active: petModel.enableFootprints,
-                activeAccent: PokoPalette.rose,
+                activeAccent: PokoPalette.rose_500,
                 tooltip: '肉垫爪印',
                 onTap: onFootprintsToggle,
                 child: Text(
                   petModel.enableFootprints ? '🐾' : '🧹',
-                  style: const TextStyle(fontSize: 12.0),
+                  style: const TextStyle(fontSize: PokoFont.small),
                 ),
               ),
               _actionPearlButton(
@@ -497,12 +497,12 @@ class TopDualIslands extends StatelessWidget {
                 t,
                 key: const ValueKey('sky_rhythm_toggle_button'),
                 active: isManualSky,
-                activeAccent: PokoPalette.amber,
+                activeAccent: PokoPalette.amber_500,
                 tooltip: '流转天象',
                 onTap: onSkyRhythmToggle,
                 child: Text(
                   circadianTheme.icon,
-                  style: const TextStyle(fontSize: 12.0),
+                  style: const TextStyle(fontSize: PokoFont.small),
                 ),
               ),
             ],
@@ -522,7 +522,7 @@ class TopDualIslands extends StatelessWidget {
   }) {
     final t = context.poko(isNight);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(PokoRadius.lg),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
@@ -532,7 +532,7 @@ class TopDualIslands extends StatelessWidget {
           padding: padding,
           decoration: BoxDecoration(
             color: t.surface.withValues(alpha: isNight ? 0.85 : 0.90),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(PokoRadius.lg),
             border: Border.all(
               color: isNight
                   ? const Color(0xFF4C4282).withValues(alpha: 0.55)
@@ -582,15 +582,15 @@ class TopDualIslands extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
           color: active
-              ? (activeAccent ?? PokoPalette.indigo)
+              ? (activeAccent ?? PokoPalette.indigo_500)
                   .withValues(alpha: isNight ? 0.30 : 0.14)
               : (isNight
                   ? Colors.white.withValues(alpha: 0.06)
                   : Colors.black.withValues(alpha: 0.035)),
-          borderRadius: BorderRadius.circular(8.5),
+          borderRadius: BorderRadius.circular(PokoRadius.xs),
           border: Border.all(
             color: active
-                ? (activeAccent ?? PokoPalette.indigo)
+                ? (activeAccent ?? PokoPalette.indigo_500)
                     .withValues(alpha: isNight ? 0.65 : 0.40)
                 : t.border.withValues(alpha: isNight ? 0.25 : 0.45),
             width: 0.9,
@@ -598,7 +598,7 @@ class TopDualIslands extends StatelessWidget {
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: (activeAccent ?? PokoPalette.indigo)
+                    color: (activeAccent ?? PokoPalette.indigo_500)
                         .withValues(alpha: isNight ? 0.25 : 0.12),
                     blurRadius: 5,
                     offset: const Offset(0, 1),
@@ -620,7 +620,7 @@ class TopDualIslands extends StatelessWidget {
         excludeSemantics: true,
         child: Tooltip(
           message: tooltip,
-          waitDuration: const Duration(milliseconds: 600),
+          waitDuration: PokoDuration.steady,
           child: content,
         ),
       );

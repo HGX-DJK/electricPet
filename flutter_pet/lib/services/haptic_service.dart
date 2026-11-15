@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../theme/poko_theme.dart';
 /// 移动端线性马达与多阶沉浸触觉反馈服务
 class HapticService {
   static bool enabled = true;
@@ -49,9 +50,9 @@ class HapticService {
     if (!enabled) return;
     try {
       await HapticFeedback.mediumImpact();
-      await Future.delayed(const Duration(milliseconds: 120));
+      await Future.delayed(PokoDuration.quick);
       await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 140));
+      await Future.delayed(PokoDuration.brisk);
       await HapticFeedback.heavyImpact();
     } catch (_) {}
   }

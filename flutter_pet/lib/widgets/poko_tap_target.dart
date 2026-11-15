@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'bouncy_touch_feedback.dart';
+
 /// 图标按钮的**无障碍 + 触控友好**包装。
 ///
 /// 为什么需要它：
@@ -71,10 +73,12 @@ class PokoTapTarget extends StatelessWidget {
     }
 
     if (onTap != null || onLongPress != null) {
-      inner = GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      // 统一走 BouncyTouchFeedback：按下有即时缩放反馈，
+      // 全 App 的图标按钮手感因此一致（原先这些键按下是"完全没反应"）。
+      inner = BouncyTouchFeedback(
         onTap: onTap,
         onLongPress: onLongPress,
+        scaleDown: 0.90,
         child: inner,
       );
     }

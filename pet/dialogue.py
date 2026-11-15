@@ -1,3 +1,4 @@
+from pet.theme import qss
 import time
 import random
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF, QPointF
@@ -6,7 +7,6 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QApplication
 )
 from PyQt6.QtGui import QFont, QColor, QPainter, QPainterPath, QBrush, QPen
-from pet.audio import sound_manager
 
 class SpeechBalloonCard(QFrame):
     """
@@ -116,6 +116,14 @@ class SpeechBubbleWidget(QWidget):
         self.setMinimumWidth(160)
         self.setMaximumWidth(280)
 
+        # ⚠️ 气泡**永久鼠标穿透**。
+        # 气泡是独立的置顶 Tool 窗，只要它接收鼠标事件，就会在自己那 160~280px
+        # 的矩形范围里把下层窗口的点击全部吃掉 —— 最典型的就是：波可正在跟你说话，
+        # 你伸手去摸它，点到的却是空气，气泡底下那一块桌面/快捷岛全点不动。
+        # 现在气泡只负责"说话"，点击一律穿透到下面的窗口。
+        # 关闭气泡的能力没有丢：改由「戳宠物本体」触发（见 pet/window.py 的 mousePressEvent）。
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
         self._current_anim = None
         self.hide_timer = QTimer(self)
         self.hide_timer.setSingleShot(True)
@@ -149,13 +157,13 @@ class SpeechBubbleWidget(QWidget):
 
         self.badge_lbl = QLabel("")
         self.badge_lbl.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
-        self.badge_lbl.setStyleSheet("""
-            background-color: rgba(14, 165, 233, 0.2);
-            color: #38BDF8;
+        self.badge_lbl.setStyleSheet(qss("""
+            background-color: @sky_500_20@;
+            color: @sky_400@;
             padding: 2px 7px;
             border-radius: 6px;
-            border: 1px solid #0EA5E9;
-        """)
+            border: 1px solid @sky_500@;
+        """))
         top_bar.addWidget(self.badge_lbl)
         top_bar.addStretch()
 
@@ -166,7 +174,7 @@ class SpeechBubbleWidget(QWidget):
         self.text_lbl = QLabel("")
         self.text_lbl.setFont(QFont("Microsoft YaHei UI", 10))
         self.text_lbl.setWordWrap(True)
-        self.text_lbl.setStyleSheet("color: #F8FAFC; background: transparent;")
+        self.text_lbl.setStyleSheet(qss("color: @slate_50@; background: transparent;"))
         self.card_layout.addWidget(self.text_lbl)
 
         main_layout.addWidget(self.card)
@@ -176,18 +184,19 @@ class SpeechBubbleWidget(QWidget):
         if self._current_anim and self._current_anim.state() == QPropertyAnimation.State.Running:
             self._current_anim.stop()
             self._current_anim = None
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+        # 保持穿透：即使中途被别的代码改回可点击，这里也会再压回去一次。
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.text_lbl.setText(text)
 
         # 仅针对特殊系统提示显示小标签，普通闲聊或默认波可标签保持极简气泡外观
         if badge and badge not in ("🐾 波可", ""):
             self.badge_lbl.setText(badge)
             if "健康" in badge:
-                self.badge_lbl.setStyleSheet("background-color: rgba(16, 185, 129, 0.2); color: #34D399; border: 1px solid #10B981; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet(qss("background-color: @emerald_500_20@; color: @emerald_400@; border: 1px solid @emerald_500@; padding: 2px 7px; border-radius: 6px;"))
             elif "喜讯" in badge or "成长" in badge:
-                self.badge_lbl.setStyleSheet("background-color: rgba(245, 158, 11, 0.2); color: #FBBF24; border: 1px solid #F59E0B; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet(qss("background-color: @amber_500_20@; color: @amber_400@; border: 1px solid @amber_500@; padding: 2px 7px; border-radius: 6px;"))
             else:
-                self.badge_lbl.setStyleSheet("background-color: rgba(14, 165, 233, 0.2); color: #38BDF8; border: 1px solid #0EA5E9; padding: 2px 7px; border-radius: 6px;")
+                self.badge_lbl.setStyleSheet(qss("background-color: @sky_500_20@; color: @sky_400@; border: 1px solid @sky_500@; padding: 2px 7px; border-radius: 6px;"))
             self.top_bar_widget.show()
         else:
             self.top_bar_widget.hide()
@@ -237,12 +246,9 @@ class SpeechBubbleWidget(QWidget):
         super().hideEvent(event)
 
     def mousePressEvent(self, event):
-        if self.windowOpacity() < 0.2:
-            event.ignore()
-            return
-        # 点击气泡任意位置快速关闭并伴随清脆音效
-        sound_manager.play("pop")
-        self.dismiss()
+        # 气泡已永久鼠标穿透，正常情况下根本收不到鼠标事件。
+        # 这里保留兜底：万一被外部代码改回可点击，至少别把事件吞掉。
+        event.ignore()
         super().mousePressEvent(event)
 
     def sync_position(self, pet_window, dock_widget=None):

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/poko_theme.dart';
 import '../models/memo_model.dart';
 import '../widgets/poko_tap_target.dart';
 
@@ -37,7 +38,7 @@ class _MemoScreenState extends State<MemoScreen> {
       child: Container(
         decoration: BoxDecoration(
           color: theme.bg,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(PokoRadius.xl)),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.12),
@@ -76,12 +77,12 @@ class _MemoScreenState extends State<MemoScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: Row(
                 children: [
-                  const Text('📝', style: TextStyle(fontSize: 20)),
+                  const Text('📝', style: TextStyle(fontSize: PokoFont.headline)),
                   const SizedBox(width: 8),
                   Text(
                     '随手灵感便签',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: PokoFont.titleSm,
                       fontWeight: FontWeight.bold,
                       color: theme.text,
                     ),
@@ -98,7 +99,7 @@ class _MemoScreenState extends State<MemoScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.85),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(PokoRadius.sm),
                         border: Border.all(color: theme.border.withValues(alpha: 0.6)),
                       ),
                       child: Row(
@@ -107,7 +108,7 @@ class _MemoScreenState extends State<MemoScreen> {
                           const SizedBox(width: 4),
                           Text(
                             '时间戳',
-                            style: TextStyle(fontSize: 11, color: theme.sub, fontWeight: FontWeight.bold),
+                            style: TextStyle(fontSize: PokoFont.caption, color: theme.sub, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -137,16 +138,16 @@ class _MemoScreenState extends State<MemoScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(PokoRadius.lg),
                   border: Border.all(color: theme.border.withValues(alpha: 0.8)),
                 ),
                 child: TextField(
                   controller: _controller,
                   maxLines: 6,
-                  style: TextStyle(fontSize: 14, color: theme.text, height: 1.5),
+                  style: TextStyle(fontSize: PokoFont.bodyMd, color: theme.text, height: 1.5),
                   decoration: const InputDecoration(
                     hintText: '写下当下的心事、待办灵感或想对波可说的话...',
-                    hintStyle: TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                    hintStyle: TextStyle(color: PokoPalette.slate_400, fontSize: PokoFont.body),
                     border: InputBorder.none,
                   ),
                   onChanged: (text) {
@@ -183,7 +184,7 @@ class _MemoScreenState extends State<MemoScreen> {
                           color: t.header,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isSelected ? const Color(0xFF1E293B) : t.border,
+                            color: isSelected ? PokoPalette.slate_800 : t.border,
                             width: isSelected ? 2.5 : 1.5,
                           ),
                           boxShadow: isSelected
@@ -202,7 +203,7 @@ class _MemoScreenState extends State<MemoScreen> {
                   const Spacer(),
                   Text(
                     '字数: ${_controller.text.length}',
-                    style: TextStyle(fontSize: 11, color: theme.sub.withValues(alpha: 0.85), fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: PokoFont.caption, color: theme.sub.withValues(alpha: 0.85), fontWeight: FontWeight.w600),
                   ),
                 ],
               ),

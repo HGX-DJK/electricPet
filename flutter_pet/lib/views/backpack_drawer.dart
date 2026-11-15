@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/poko_theme.dart';
+import '../widgets/bouncy_touch_feedback.dart';
 import 'package:flutter/services.dart';
 import '../models/pet_model.dart';
 import '../widgets/poko_tap_target.dart';
@@ -46,18 +48,18 @@ class PokoBackpackDrawer extends StatelessWidget {
         color: isNight
             ? const Color(0xFF161334).withValues(alpha: 0.96)
             : Colors.white.withValues(alpha: 0.98),
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(PokoRadius.xl)),
         border: Border.all(
           color: isNight
-              ? const Color(0xFF4338CA).withValues(alpha: 0.5)
-              : const Color(0xFFE2E8F0),
+              ? PokoPalette.indigo_700.withValues(alpha: 0.5)
+              : PokoPalette.slate_200,
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: isNight
                 ? const Color(0xFF09071A).withValues(alpha: 0.7)
-                : const Color(0xFF6366F1).withValues(alpha: 0.12),
+                : PokoPalette.indigo_500.withValues(alpha: 0.12),
             blurRadius: 28,
             offset: const Offset(0, -6),
           ),
@@ -79,8 +81,8 @@ class PokoBackpackDrawer extends StatelessWidget {
                 height: 4.5,
                 decoration: BoxDecoration(
                   color: isNight
-                      ? const Color(0xFF475569).withValues(alpha: 0.8)
-                      : const Color(0xFFCBD5E1),
+                      ? PokoPalette.slate_600.withValues(alpha: 0.8)
+                      : PokoPalette.slate_300,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -102,10 +104,10 @@ class PokoBackpackDrawer extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: isNight
                         ? const Color(0xFF262054)
-                        : const Color(0xFFFEF3C7),
+                        : PokoPalette.amber_100,
                     shape: BoxShape.circle,
                   ),
-                  child: const Text('🎒', style: TextStyle(fontSize: 18)),
+                  child: const Text('🎒', style: TextStyle(fontSize: PokoFont.subtitle)),
                 ),
                 const SizedBox(width: 9),
                 Expanded(
@@ -115,9 +117,9 @@ class PokoBackpackDrawer extends StatelessWidget {
                       Text(
                         '波可的奇妙背包',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: PokoFont.titleSm,
                           fontWeight: FontWeight.bold,
-                          color: isNight ? Colors.white : const Color(0xFF1E293B),
+                          color: isNight ? Colors.white : PokoPalette.slate_800,
                           letterSpacing: 0.3,
                         ),
                         maxLines: 1,
@@ -127,10 +129,10 @@ class PokoBackpackDrawer extends StatelessWidget {
                       Text(
                         '日常照料与逗猫玩具',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: PokoFont.caption,
                           color: isNight
-                              ? const Color(0xFF94A3B8)
-                              : const Color(0xFF64748B),
+                              ? PokoPalette.slate_400
+                              : PokoPalette.slate_500,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -143,18 +145,18 @@ class PokoBackpackDrawer extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.25 : 0.12),
-                    borderRadius: BorderRadius.circular(10),
+                    color: PokoPalette.emerald_500.withValues(alpha: isNight ? 0.25 : 0.12),
+                    borderRadius: BorderRadius.circular(PokoRadius.sm),
                     border: Border.all(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                      color: PokoPalette.emerald_500.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Text(
                     model.isSleeping ? '💤 伴眠中' : '✨ 元气满满',
                     style: TextStyle(
-                      fontSize: 10,
+                      fontSize: PokoFont.tiny,
                       fontWeight: FontWeight.bold,
-                      color: isNight ? const Color(0xFF6EE7B7) : const Color(0xFF059669),
+                      color: isNight ? PokoPalette.emerald_300 : PokoPalette.emerald_600,
                     ),
                   ),
                 ),
@@ -171,20 +173,20 @@ class PokoBackpackDrawer extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isNight
                           ? const Color(0xFF241F48)
-                          : const Color(0xFFF1F5F9),
+                          : PokoPalette.slate_100,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: isNight
                             ? const Color(0xFF3B336A)
-                            : const Color(0xFFE2E8F0),
+                            : PokoPalette.slate_200,
                       ),
                     ),
                     child: Icon(
                       Icons.close_rounded,
                       size: 16,
                       color: isNight
-                          ? const Color(0xFFCBD5E1)
-                          : const Color(0xFF64748B),
+                          ? PokoPalette.slate_300
+                          : PokoPalette.slate_500,
                     ),
                   ),
                 ),
@@ -200,24 +202,24 @@ class PokoBackpackDrawer extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                   decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF2E2452) : const Color(0xFFFFFBEB),
-                    borderRadius: BorderRadius.circular(12),
+                    color: isNight ? const Color(0xFF2E2452) : PokoPalette.amber_50,
+                    borderRadius: BorderRadius.circular(PokoRadius.sm),
                     border: Border.all(
-                      color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                      color: PokoPalette.amber_500.withValues(alpha: 0.5),
                       width: 1.0,
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('🪙', style: TextStyle(fontSize: 12)),
+                      const Text('🪙', style: TextStyle(fontSize: PokoFont.small)),
                       const SizedBox(width: 3.5),
                       Text(
                         '${model.coins}',
                         style: TextStyle(
-                          fontSize: 11.5,
+                          fontSize: PokoFont.caption,
                           fontWeight: FontWeight.bold,
-                          color: isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309),
+                          color: isNight ? PokoPalette.amber_200 : PokoPalette.amber_700,
                         ),
                       ),
                     ],
@@ -225,32 +227,33 @@ class PokoBackpackDrawer extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 // 4. 全局桌面悬浮宠快捷开关
-                GestureDetector(
-                  onTap: () {
+                BouncyTouchFeedback(
+                  scaleDown: 0.94,
+        onTap: () {
                     Navigator.of(context).pop();
                     onToggleFloating();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                     decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(12),
+                      color: isNight ? PokoPalette.night_canvas : PokoPalette.indigo_50,
+                      borderRadius: BorderRadius.circular(PokoRadius.sm),
                       border: Border.all(
-                        color: const Color(0xFF6366F1).withValues(alpha: 0.6),
+                        color: PokoPalette.indigo_500.withValues(alpha: 0.6),
                         width: 1.0,
                       ),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('📱', style: TextStyle(fontSize: 12)),
+                        Text('📱', style: TextStyle(fontSize: PokoFont.small)),
                         SizedBox(width: 3.5),
                         Text(
                           '桌面悬浮',
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: PokoFont.caption,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF6366F1),
+                            color: PokoPalette.indigo_500,
                           ),
                         ),
                       ],
@@ -281,8 +284,8 @@ class PokoBackpackDrawer extends StatelessWidget {
                     title: '美味投喂',
                     subtitle: '饱腹又涨好感',
                     badgeText: '${model.hunger.toInt()}%',
-                    badgeColor: const Color(0xFFF59E0B),
-                    accentColor: const Color(0xFFF59E0B),
+                    badgeColor: PokoPalette.amber_500,
+                    accentColor: PokoPalette.amber_500,
                     isNight: isNight,
                     onTap: () {
                       Navigator.of(context).pop();
@@ -298,8 +301,8 @@ class PokoBackpackDrawer extends StatelessWidget {
                   title: '激光笔',
                   subtitle: '红点逗猫飞扑',
                   badgeText: '新玩具',
-                  badgeColor: const Color(0xFFEF4444),
-                  accentColor: const Color(0xFFEF4444),
+                  badgeColor: PokoPalette.red_500,
+                  accentColor: PokoPalette.red_500,
                   isNight: isNight,
                   onTap: () {
                     Navigator.of(context).pop();
@@ -311,7 +314,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                   icon: '🧶',
                   title: '抛毛线球',
                   subtitle: '抛球满地打滚',
-                  accentColor: const Color(0xFFEC4899),
+                  accentColor: PokoPalette.pink_500,
                   isNight: isNight,
                   onTap: () {
                     Navigator.of(context).pop();
@@ -327,8 +330,8 @@ class PokoBackpackDrawer extends StatelessWidget {
                     title: '泡泡沐浴',
                     subtitle: '香波洗香香',
                     badgeText: '${model.energy.toInt()}%',
-                    badgeColor: const Color(0xFF10B981),
-                    accentColor: const Color(0xFF10B981),
+                    badgeColor: PokoPalette.emerald_500,
+                    accentColor: PokoPalette.emerald_500,
                     isNight: isNight,
                     onTap: () {
                       Navigator.of(context).pop();
@@ -341,7 +344,7 @@ class PokoBackpackDrawer extends StatelessWidget {
                   icon: model.isSleeping ? '☀️' : '🌙',
                   title: model.isSleeping ? '唤醒波可' : '伴眠哄睡',
                   subtitle: model.isSleeping ? '元气满满起床' : '呼噜甜甜梦乡',
-                  accentColor: const Color(0xFF6366F1),
+                  accentColor: PokoPalette.indigo_500,
                   isNight: isNight,
                   onTap: () {
                     Navigator.of(context).pop();
@@ -371,13 +374,13 @@ class PokoBackpackDrawer extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isNight
-                    ? const Color(0xFF1E1B4B).withValues(alpha: 0.8)
-                    : const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(16),
+                    ? PokoPalette.night_canvas.withValues(alpha: 0.8)
+                    : PokoPalette.slate_50,
+                borderRadius: BorderRadius.circular(PokoRadius.md),
                 border: Border.all(
                   color: isNight
-                      ? const Color(0xFF4338CA).withValues(alpha: 0.4)
-                      : const Color(0xFFE2E8F0),
+                      ? PokoPalette.indigo_700.withValues(alpha: 0.4)
+                      : PokoPalette.slate_200,
                   width: 1.2,
                 ),
               ),
@@ -389,13 +392,13 @@ class PokoBackpackDrawer extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          const Text('🛡️ ', style: TextStyle(fontSize: 13)),
+                          const Text('🛡️ ', style: TextStyle(fontSize: PokoFont.body)),
                           Text(
                             '档案守护与防丢继承',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: PokoFont.small,
                               fontWeight: FontWeight.bold,
-                              color: isNight ? const Color(0xFFE2E8F0) : const Color(0xFF334155),
+                              color: isNight ? PokoPalette.slate_200 : PokoPalette.slate_700,
                             ),
                           ),
                         ],
@@ -403,8 +406,8 @@ class PokoBackpackDrawer extends StatelessWidget {
                       Text(
                         '防卸载 · 免登录',
                         style: TextStyle(
-                          fontSize: 10,
-                          color: isNight ? const Color(0xFF818CF8) : const Color(0xFF6366F1),
+                          fontSize: PokoFont.tiny,
+                          color: isNight ? PokoPalette.indigo_400 : PokoPalette.indigo_500,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -487,14 +490,14 @@ class _BackupActionChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(PokoRadius.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
         decoration: BoxDecoration(
           color: isNight ? const Color(0xFF2E2A66) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(PokoRadius.sm),
           border: Border.all(
-            color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.5) : const Color(0xFFCBD5E1),
+            color: isNight ? PokoPalette.indigo_700.withValues(alpha: 0.5) : PokoPalette.slate_300,
             width: 1.0,
           ),
           boxShadow: [
@@ -508,14 +511,14 @@ class _BackupActionChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(icon, style: const TextStyle(fontSize: 14)),
+            Text(icon, style: const TextStyle(fontSize: PokoFont.bodyMd)),
             const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: PokoFont.tiny,
                 fontWeight: FontWeight.w600,
-                color: isNight ? Colors.white : const Color(0xFF334155),
+                color: isNight ? Colors.white : PokoPalette.slate_700,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -553,33 +556,27 @@ class _BackpackCard extends StatefulWidget {
 }
 
 class _BackpackCardState extends State<_BackpackCard> {
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
+    // 缩放手感统一交给 BouncyTouchFeedback ——
+    // 原先这里自己维护 _pressed + AnimatedScale，和全 App 的按压反馈是两套实现。
+    return BouncyTouchFeedback(
+      scaleDown: 0.94,
+      onTap: () {
         HapticFeedback.lightImpact();
         widget.onTap();
       },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.94 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        child: Container(
+      child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: widget.isNight
                 ? const Color(0xFF221D46)
-                : const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(16),
+                : PokoPalette.slate_50,
+            borderRadius: BorderRadius.circular(PokoRadius.md),
             border: Border.all(
               color: widget.isNight
                   ? widget.accentColor.withValues(alpha: 0.35)
-                  : const Color(0xFFE2E8F0),
+                  : PokoPalette.slate_200,
               width: 1.2,
             ),
             boxShadow: [
@@ -599,10 +596,10 @@ class _BackpackCardState extends State<_BackpackCard> {
                 height: 38,
                 decoration: BoxDecoration(
                   color: widget.accentColor.withValues(alpha: widget.isNight ? 0.22 : 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(PokoRadius.sm),
                 ),
                 alignment: Alignment.center,
-                child: Text(widget.icon, style: const TextStyle(fontSize: 20)),
+                child: Text(widget.icon, style: const TextStyle(fontSize: PokoFont.headline)),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -616,11 +613,11 @@ class _BackpackCardState extends State<_BackpackCard> {
                           child: Text(
                             widget.title,
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: PokoFont.small,
                               fontWeight: FontWeight.bold,
                               color: widget.isNight
                                   ? Colors.white
-                                  : const Color(0xFF1E293B),
+                                  : PokoPalette.slate_800,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -632,12 +629,12 @@ class _BackpackCardState extends State<_BackpackCard> {
                             padding: const EdgeInsets.symmetric(horizontal: 4.5, vertical: 1.5),
                             decoration: BoxDecoration(
                               color: (widget.badgeColor ?? widget.accentColor).withValues(alpha: widget.isNight ? 0.25 : 0.12),
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(PokoRadius.xs),
                             ),
                             child: Text(
                               widget.badgeText!,
                               style: TextStyle(
-                                fontSize: 8.5,
+                                fontSize: PokoFont.micro,
                                 fontWeight: FontWeight.bold,
                                 color: widget.badgeColor ?? widget.accentColor,
                               ),
@@ -654,10 +651,10 @@ class _BackpackCardState extends State<_BackpackCard> {
                     Text(
                       widget.subtitle,
                       style: TextStyle(
-                        fontSize: 9.5,
+                        fontSize: PokoFont.microSm,
                         color: widget.isNight
-                            ? const Color(0xFF94A3B8)
-                            : const Color(0xFF64748B),
+                            ? PokoPalette.slate_400
+                            : PokoPalette.slate_500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -668,7 +665,6 @@ class _BackpackCardState extends State<_BackpackCard> {
             ],
           ),
         ),
-      ),
     );
   }
 }

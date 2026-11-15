@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../theme/poko_theme.dart';
 import 'package:flutter/material.dart';
 import 'habitat_painters.dart';
 
@@ -42,7 +43,7 @@ class HabitatFlooring extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: [
             Color(0xFF020617),
-            Color(0xFF0B132B),
+            PokoPalette.glow_deep,
             Color(0xFF031E2E),
           ],
         ),
@@ -56,10 +57,10 @@ class HabitatFlooring extends StatelessWidget {
             height: 2.5,
             child: Container(
               decoration: const BoxDecoration(
-                color: Color(0xFF00F0FF),
+                color: PokoPalette.neon_cyan,
                 boxShadow: [
                   BoxShadow(
-                    color: Color(0xFF00F0FF),
+                    color: PokoPalette.neon_cyan,
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -70,8 +71,8 @@ class HabitatFlooring extends StatelessWidget {
           Positioned.fill(
             child: CustomPaint(
               painter: CyberPerspectiveGridPainter(
-                gridColor: const Color(0xFF00F0FF),
-                accentColor: const Color(0xFF10B981),
+                gridColor: PokoPalette.neon_cyan,
+                accentColor: PokoPalette.emerald_500,
               ),
             ),
           ),
@@ -103,10 +104,10 @@ class HabitatFlooring extends StatelessWidget {
             height: 2.5,
             child: Container(
               decoration: const BoxDecoration(
-                color: Color(0xFFEC4899),
+                color: PokoPalette.pink_500,
                 boxShadow: [
                   BoxShadow(
-                    color: Color(0xFFEC4899),
+                    color: PokoPalette.pink_500,
                     blurRadius: 10,
                     spreadRadius: 2,
                   ),
@@ -118,7 +119,7 @@ class HabitatFlooring extends StatelessWidget {
             child: CustomPaint(
               painter: CyberPerspectiveGridPainter(
                 gridColor: const Color(0xFFD946EF),
-                accentColor: const Color(0xFFF59E0B),
+                accentColor: PokoPalette.amber_500,
               ),
             ),
           ),
@@ -135,8 +136,8 @@ class HabitatFlooring extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: isNight
-              ? const [Color(0xFF1E293B), Color(0xFF334155), Color(0xFF475569)]
-              : const [Color(0xFFFED7AA), Color(0xFFFDE68A), Color(0xFFFBBF24)],
+              ? const [PokoPalette.slate_800, PokoPalette.slate_700, PokoPalette.slate_600]
+              : const [PokoPalette.orange_200, PokoPalette.amber_200, PokoPalette.amber_400],
         ),
       ),
       child: Stack(
@@ -157,7 +158,7 @@ class HabitatFlooring extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        const Color(0xFF06B6D4).withValues(alpha: 0.55),
+                        PokoPalette.cyan_500.withValues(alpha: 0.55),
                         const Color(0xFF67E8F9).withValues(alpha: 0.35),
                         Colors.white.withValues(alpha: 0.85),
                       ],
@@ -171,17 +172,17 @@ class HabitatFlooring extends StatelessWidget {
           const Positioned(
             top: 36,
             left: 30,
-            child: Text('🐚', style: TextStyle(fontSize: 14)),
+            child: Text('🐚', style: TextStyle(fontSize: PokoFont.bodyMd)),
           ),
           const Positioned(
             top: 75,
             right: 45,
-            child: Text('⭐', style: TextStyle(fontSize: 12, color: Color(0xFFF59E0B))),
+            child: Text('⭐', style: TextStyle(fontSize: PokoFont.small, color: PokoPalette.amber_500)),
           ),
           const Positioned(
             top: 130,
             left: 70,
-            child: Text('🐚', style: TextStyle(fontSize: 11)),
+            child: Text('🐚', style: TextStyle(fontSize: PokoFont.caption)),
           ),
         ],
       ),
@@ -193,7 +194,7 @@ class HabitatFlooring extends StatelessWidget {
     final tatamiBg = isNight
         ? const [Color(0xFF23201D), Color(0xFF1C1917)]
         : const [Color(0xFFEBE3D3), Color(0xFFDFD6C1)];
-    final borderTape = isNight ? const Color(0xFF0F172A) : const Color(0xFF1E2D24);
+    final borderTape = isNight ? PokoPalette.slate_900 : const Color(0xFF1E2D24);
 
     return Container(
       decoration: BoxDecoration(
@@ -211,7 +212,7 @@ class HabitatFlooring extends StatelessWidget {
             right: 0,
             height: 8,
             child: Container(
-              color: isNight ? const Color(0xFF110E0C) : const Color(0xFF78350F),
+              color: isNight ? const Color(0xFF110E0C) : PokoPalette.amber_900,
             ),
           ),
           Positioned(
@@ -223,7 +224,7 @@ class HabitatFlooring extends StatelessWidget {
               color: borderTape,
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                color: PokoPalette.amber_600.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -236,7 +237,7 @@ class HabitatFlooring extends StatelessWidget {
               color: borderTape,
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 2),
-                color: const Color(0xFFD97706).withValues(alpha: 0.3),
+                color: PokoPalette.amber_600.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -247,7 +248,7 @@ class HabitatFlooring extends StatelessWidget {
               right: 0,
               height: 1.0,
               child: Container(
-                color: (isNight ? Colors.white : const Color(0xFF854D0E)).withValues(alpha: 0.06),
+                color: (isNight ? Colors.white : PokoPalette.amber_800).withValues(alpha: 0.06),
               ),
             ),
         ],
@@ -376,10 +377,10 @@ class HabitatBackdropBuilder {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('λ', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.bold)),
-                Text('0', style: TextStyle(fontSize: 10, color: const Color(0xFF00F0FF).withValues(alpha: 0.7))),
-                Text('1', style: TextStyle(fontSize: 10, color: const Color(0xFF10B981).withValues(alpha: 0.6))),
-                Text('{', style: TextStyle(fontSize: 9, color: const Color(0xFF10B981).withValues(alpha: 0.35))),
+                Text('λ', style: TextStyle(fontSize: PokoFont.caption, color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.bold)),
+                Text('0', style: TextStyle(fontSize: PokoFont.tiny, color: PokoPalette.neon_cyan.withValues(alpha: 0.7))),
+                Text('1', style: TextStyle(fontSize: PokoFont.tiny, color: PokoPalette.emerald_500.withValues(alpha: 0.6))),
+                Text('{', style: TextStyle(fontSize: PokoFont.microSm, color: PokoPalette.emerald_500.withValues(alpha: 0.35))),
               ],
             ),
           ),
@@ -393,11 +394,11 @@ class HabitatBackdropBuilder {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: const Color(0xFF030712).withValues(alpha: 0.85),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.7), width: 1.2),
+            borderRadius: BorderRadius.circular(PokoRadius.md),
+            border: Border.all(color: PokoPalette.neon_cyan.withValues(alpha: 0.7), width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                color: PokoPalette.neon_cyan.withValues(alpha: 0.2),
                 blurRadius: 14,
                 spreadRadius: 1,
               ),
@@ -409,24 +410,24 @@ class HabitatBackdropBuilder {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('⚡', style: TextStyle(fontSize: 12)),
+                  const Text('⚡', style: TextStyle(fontSize: PokoFont.small)),
                   const SizedBox(width: 4),
                   const Text(
                     'POKO MATRIX LAB',
-                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF00F0FF), letterSpacing: 1.2),
+                    style: TextStyle(fontSize: PokoFont.caption, fontWeight: FontWeight.bold, color: PokoPalette.neon_cyan, letterSpacing: 1.2),
                   ),
                   const SizedBox(width: 4),
                   Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF10B981)),
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: PokoPalette.emerald_500),
                   ),
                 ],
               ),
               const SizedBox(height: 3),
               Text(
                 '全息算力过载 +20% · 专注无 BUG',
-                style: TextStyle(fontSize: 9.5, color: const Color(0xFF67E8F9).withValues(alpha: 0.85)),
+                style: TextStyle(fontSize: PokoFont.microSm, color: const Color(0xFF67E8F9).withValues(alpha: 0.85)),
               ),
             ],
           ),
@@ -439,15 +440,15 @@ class HabitatBackdropBuilder {
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: const Color(0xFF0A192F).withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.4)),
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
+            border: Border.all(color: PokoPalette.neon_cyan.withValues(alpha: 0.4)),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('💾', style: TextStyle(fontSize: 18)),
+              Text('💾', style: TextStyle(fontSize: PokoFont.subtitle)),
               SizedBox(width: 4),
-              Text('SERVER', style: TextStyle(fontSize: 8, color: Color(0xFF00F0FF), fontWeight: FontWeight.bold)),
+              Text('SERVER', style: TextStyle(fontSize: PokoFont.micro, color: PokoPalette.neon_cyan, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -459,15 +460,15 @@ class HabitatBackdropBuilder {
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: const Color(0xFF0A192F).withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
+            border: Border.all(color: PokoPalette.emerald_500.withValues(alpha: 0.4)),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('📡', style: TextStyle(fontSize: 18)),
+              Text('📡', style: TextStyle(fontSize: PokoFont.subtitle)),
               SizedBox(width: 4),
-              Text('RADAR', style: TextStyle(fontSize: 8, color: Color(0xFF10B981), fontWeight: FontWeight.bold)),
+              Text('RADAR', style: TextStyle(fontSize: PokoFont.micro, color: PokoPalette.emerald_500, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -490,11 +491,11 @@ class HabitatBackdropBuilder {
             gradient: const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFFFBBF24), Color(0xFFF43F5E), Color(0xFF9333EA)],
+              colors: [PokoPalette.amber_400, PokoPalette.rose_500, Color(0xFF9333EA)],
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFF43F5E).withValues(alpha: 0.5),
+                color: PokoPalette.rose_500.withValues(alpha: 0.5),
                 blurRadius: 24,
                 spreadRadius: 3,
               ),
@@ -508,14 +509,14 @@ class HabitatBackdropBuilder {
                 Container(
                   height: 3.5,
                   margin: EdgeInsets.symmetric(horizontal: 10.0 + i * 5),
-                  color: const Color(0xFF1E1035),
+                  color: PokoPalette.night_deep,
                 ),
             ],
           ),
         ),
       ),
-      const Positioned(top: 80, left: 35, child: Text('👾', style: TextStyle(fontSize: 20))),
-      const Positioned(top: 110, right: 40, child: Text('✨', style: TextStyle(fontSize: 18))),
+      const Positioned(top: 80, left: 35, child: Text('👾', style: TextStyle(fontSize: PokoFont.headline))),
+      const Positioned(top: 110, right: 40, child: Text('✨', style: TextStyle(fontSize: PokoFont.subtitle))),
       Positioned(
         right: 18,
         top: floorTop - 38,
@@ -524,13 +525,13 @@ class HabitatBackdropBuilder {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF3B0764), Color(0xFF1E1035)],
+              colors: [Color(0xFF3B0764), PokoPalette.night_deep],
             ),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFEC4899), width: 1.2),
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
+            border: Border.all(color: PokoPalette.pink_500, width: 1.2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFEC4899).withValues(alpha: 0.3),
+                color: PokoPalette.pink_500.withValues(alpha: 0.3),
                 blurRadius: 10,
               ),
             ],
@@ -538,11 +539,11 @@ class HabitatBackdropBuilder {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('🕹️', style: TextStyle(fontSize: 20)),
+              Text('🕹️', style: TextStyle(fontSize: PokoFont.headline)),
               SizedBox(width: 4),
               Text(
                 'POKO 1984',
-                style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFFFDE047)),
+                style: TextStyle(fontSize: PokoFont.microSm, fontWeight: FontWeight.bold, color: PokoPalette.yellow_300),
               ),
             ],
           ),
@@ -555,15 +556,15 @@ class HabitatBackdropBuilder {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: const Color(0xFF2E1065).withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(PokoRadius.sm),
             border: Border.all(color: const Color(0xFFD946EF).withValues(alpha: 0.5)),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('📼', style: TextStyle(fontSize: 18)),
+              Text('📼', style: TextStyle(fontSize: PokoFont.subtitle)),
               SizedBox(width: 4),
-              Text('8-BIT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFFF472B6))),
+              Text('8-BIT', style: TextStyle(fontSize: PokoFont.microSm, fontWeight: FontWeight.bold, color: PokoPalette.pink_400)),
             ],
           ),
         ),
@@ -580,21 +581,21 @@ class HabitatBackdropBuilder {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(isNight ? '🌙' : '☀️', style: const TextStyle(fontSize: 28)),
+            Text(isNight ? '🌙' : '☀️', style: const TextStyle(fontSize: PokoFont.huge)),
             const SizedBox(width: 10),
-            const Text('🕊️', style: TextStyle(fontSize: 16)),
+            const Text('🕊️', style: TextStyle(fontSize: PokoFont.titleSm)),
           ],
         ),
       ),
       Positioned(
         top: 110,
         left: 50,
-        child: Text(isNight ? '✨' : '☁️', style: TextStyle(fontSize: 22, color: Colors.white.withValues(alpha: 0.7))),
+        child: Text(isNight ? '✨' : '☁️', style: TextStyle(fontSize: PokoFont.displayMd, color: Colors.white.withValues(alpha: 0.7))),
       ),
       const Positioned(
         top: 125,
         right: 55,
-        child: Text('⛵', style: TextStyle(fontSize: 20)),
+        child: Text('⛵', style: TextStyle(fontSize: PokoFont.headline)),
       ),
       Positioned(
         key: const ValueKey('beach_palm'),
@@ -605,7 +606,7 @@ class HabitatBackdropBuilder {
           children: [
             Text('🌴', style: TextStyle(fontSize: 48)),
             SizedBox(height: 2),
-            Text('🥥', style: TextStyle(fontSize: 14)),
+            Text('🥥', style: TextStyle(fontSize: PokoFont.bodyMd)),
           ],
         ),
       ),
@@ -618,7 +619,7 @@ class HabitatBackdropBuilder {
           children: [
             Text('⛱️', style: TextStyle(fontSize: 40)),
             SizedBox(height: 2),
-            Text('🏐', style: TextStyle(fontSize: 18)),
+            Text('🏐', style: TextStyle(fontSize: PokoFont.subtitle)),
           ],
         ),
       ),
@@ -640,16 +641,16 @@ class HabitatBackdropBuilder {
         height: floorTop - 65,
         child: Container(
           decoration: BoxDecoration(
-            color: (isNight ? const Color(0xFF292524) : const Color(0xFFFFFDF9)).withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(16),
+            color: (isNight ? const Color(0xFF292524) : PokoPalette.cream).withValues(alpha: 0.75),
+            borderRadius: BorderRadius.circular(PokoRadius.md),
             border: Border.all(
-              color: isNight ? const Color(0xFF44403C) : const Color(0xFF78350F),
+              color: isNight ? const Color(0xFF44403C) : PokoPalette.amber_900,
               width: 2.0,
             ),
           ),
           child: CustomPaint(
             painter: ShojiLatticePainter(
-              frameColor: isNight ? const Color(0xFF44403C) : const Color(0xFFB45309),
+              frameColor: isNight ? const Color(0xFF44403C) : PokoPalette.amber_700,
             ),
           ),
         ),
@@ -662,9 +663,9 @@ class HabitatBackdropBuilder {
         height: 94,
         child: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFFEF3C7),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF78350F), width: 1.5),
+            color: PokoPalette.amber_100,
+            borderRadius: BorderRadius.circular(PokoRadius.xs),
+            border: Border.all(color: PokoPalette.amber_900, width: 1.5),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.12),
@@ -676,9 +677,9 @@ class HabitatBackdropBuilder {
           child: const Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text('静', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF451A03), fontFamily: 'serif')),
+              Text('静', style: TextStyle(fontSize: PokoFont.display, fontWeight: FontWeight.bold, color: Color(0xFF451A03), fontFamily: 'serif')),
               SizedBox(height: 2),
-              Text('🐾', style: TextStyle(fontSize: 12)),
+              Text('🐾', style: TextStyle(fontSize: PokoFont.small)),
             ],
           ),
         ),
@@ -686,7 +687,7 @@ class HabitatBackdropBuilder {
       Positioned(
         left: 24,
         top: floorTop - 25,
-        child: const Text('🪴', style: TextStyle(fontSize: 26)),
+        child: const Text('🪴', style: TextStyle(fontSize: PokoFont.displayLg)),
       ),
       Positioned(
         right: 24,
@@ -694,9 +695,9 @@ class HabitatBackdropBuilder {
         child: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('🍵', style: TextStyle(fontSize: 22)),
+            Text('🍵', style: TextStyle(fontSize: PokoFont.displayMd)),
             SizedBox(width: 2),
-            Text('🫖', style: TextStyle(fontSize: 18)),
+            Text('🫖', style: TextStyle(fontSize: PokoFont.subtitle)),
           ],
         ),
       ),
@@ -707,7 +708,7 @@ class HabitatBackdropBuilder {
           child: IgnorePointer(
             child: Transform.rotate(
               angle: i * 0.7 + idleAnimation.value * 3.14,
-              child: const Text('🌸', style: TextStyle(fontSize: 14)),
+              child: const Text('🌸', style: TextStyle(fontSize: PokoFont.bodyMd)),
             ),
           ),
         ),

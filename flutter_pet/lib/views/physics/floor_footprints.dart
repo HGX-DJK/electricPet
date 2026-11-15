@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/poko_theme.dart';
 /// 地板治愈微光小猫爪印数据模型 (漫步巡视与追球冲刺时自然交替踩出)
 class Footprint {
   final Offset position;
@@ -37,33 +38,33 @@ class FootprintPainter extends CustomPainter {
 
       switch (habitat) {
         case 'neon_matrix':
-          indentColor = const Color(0xFF0284C7);
-          glowColor = const Color(0xFF00F0FF);
+          indentColor = PokoPalette.sky_600;
+          glowColor = PokoPalette.neon_cyan;
           indentAlphaMult = 0.35;
           glowAlphaMult = 0.45;
           break;
         case 'retro_arcade':
-          indentColor = const Color(0xFF7E22CE);
-          glowColor = const Color(0xFFEC4899);
+          indentColor = PokoPalette.violet_800;
+          glowColor = PokoPalette.pink_500;
           indentAlphaMult = 0.35;
           glowAlphaMult = 0.40;
           break;
         case 'summer_beach':
-          indentColor = const Color(0xFFB45309);
-          glowColor = const Color(0xFF38BDF8);
+          indentColor = PokoPalette.amber_700;
+          glowColor = PokoPalette.sky_400;
           indentAlphaMult = 0.30;
           glowAlphaMult = 0.30;
           break;
         case 'zen_tatami':
           indentColor = const Color(0xFF065F46);
-          glowColor = const Color(0xFF34D399);
+          glowColor = PokoPalette.emerald_400;
           indentAlphaMult = 0.28;
           glowAlphaMult = 0.22;
           break;
         case 'default':
         default:
-          indentColor = const Color(0xFF78350F);
-          glowColor = const Color(0xFFF472B6);
+          indentColor = PokoPalette.amber_900;
+          glowColor = PokoPalette.pink_400;
           indentAlphaMult = 0.26;
           glowAlphaMult = 0.20;
           break;

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../widgets/bouncy_touch_feedback.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../models/pet_model.dart';
@@ -40,57 +41,57 @@ _CardStyle _styleOf(MemoryEntry entry) {
   final id = entry.id;
   if (entry.isSnapshot) {
     return _CardStyle(
-      PokoPalette.rose.withValues(alpha: 0.16),
-      PokoPalette.roseDeep,
-      PokoPalette.rose.withValues(alpha: 0.14),
+      PokoPalette.rose_500.withValues(alpha: 0.16),
+      PokoPalette.rose_600,
+      PokoPalette.rose_500.withValues(alpha: 0.14),
     );
   }
   if (id == 'meet') {
     return const _CardStyle(
-      PokoPalette.skySoft,
-      PokoPalette.skyDeep,
+      PokoPalette.blue_50,
+      PokoPalette.blue_600,
       Color(0x220E7490),
     );
   }
   if (id == 'first_feed') {
     return const _CardStyle(
-      PokoPalette.amberSoft,
-      PokoPalette.amberDeep,
+      PokoPalette.amber_50,
+      PokoPalette.amber_700,
       Color(0x22F59E0B),
     );
   }
   if (id == 'first_wash') {
     return const _CardStyle(
-      PokoPalette.violetSoft,
-      PokoPalette.violetDeep,
+      PokoPalette.violet_50,
+      PokoPalette.violet_800,
       Color(0x228B5CF6),
     );
   }
   if (id.startsWith('level_')) {
     return const _CardStyle(
-      PokoPalette.amberSoft,
-      PokoPalette.amber,
+      PokoPalette.amber_50,
+      PokoPalette.amber_500,
       Color(0x22FBBF24),
     );
   }
   if (id.startsWith('bond_')) {
     return const _CardStyle(
-      PokoPalette.roseSoft,
-      PokoPalette.roseDeep,
+      PokoPalette.rose_50,
+      PokoPalette.rose_600,
       Color(0x22F43F5E),
     );
   }
   if (id.startsWith('skin_')) {
     return const _CardStyle(
-      PokoPalette.skySoft,
-      PokoPalette.skyDeep,
+      PokoPalette.blue_50,
+      PokoPalette.blue_600,
       Color(0x220EA5E9),
     );
   }
   // 陪伴里程碑
   return const _CardStyle(
-    PokoPalette.violetSoft,
-    PokoPalette.violetDeep,
+    PokoPalette.violet_50,
+    PokoPalette.violet_800,
     Color(0x22A78BFA),
   );
 }
@@ -126,7 +127,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
           '咔嚓！已把这一刻的波可收入纪念相册（${entry.dateText}）~ 📸💕';
     });
 
-    Timer(const Duration(milliseconds: 220), () {
+    Timer(PokoDuration.settle, () {
       if (mounted) {
         setState(() => _isFlashing = false);
       }
@@ -173,12 +174,12 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                             Container(
                               padding: const EdgeInsets.all(PokoSpacing.sm),
                               decoration: BoxDecoration(
-                                color: PokoPalette.rose.withValues(alpha: 0.12),
+                                color: PokoPalette.rose_500.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(PokoRadius.sm),
                               ),
                               child: const Text(
                                 '📸',
-                                style: TextStyle(fontSize: 20),
+                                style: TextStyle(fontSize: PokoFont.headline),
                               ),
                             ),
                             const SizedBox(width: PokoSpacing.sm),
@@ -213,8 +214,9 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                           ],
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
+                      BouncyTouchFeedback(
+                        scaleDown: 0.9,
+        onTap: () => Navigator.pop(context),
                         child: Container(
                           padding: const EdgeInsets.all(PokoSpacing.xs),
                           decoration: BoxDecoration(
@@ -237,13 +239,13 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          PokoPalette.amberSoft,
-                          PokoPalette.amber.withValues(alpha: 0.22),
+                          PokoPalette.amber_50,
+                          PokoPalette.amber_500.withValues(alpha: 0.22),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(PokoRadius.md),
                       border: Border.all(
-                        color: PokoPalette.amber.withValues(alpha: 0.45),
+                        color: PokoPalette.amber_500.withValues(alpha: 0.45),
                       ),
                     ),
                     child: Row(
@@ -254,14 +256,14 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                         Container(
                           width: 1,
                           height: 24,
-                          color: PokoPalette.amber.withValues(alpha: 0.55),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.55),
                         ),
                         _buildStatItem(
                             '当前品种', widget.model.currentSkin.name, '🐾'),
                         Container(
                           width: 1,
                           height: 24,
-                          color: PokoPalette.amber.withValues(alpha: 0.55),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.55),
                         ),
                         _buildStatItem(
                           '亲密羁绊',
@@ -323,8 +325,9 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                         itemBuilder: (context, index) {
                           final card = memories[index];
                           final isSelected = safeIndex == index;
-                          return GestureDetector(
-                            onTap: () {
+                          return BouncyTouchFeedback(
+                            scaleDown: 0.96,
+        onTap: () {
                               HapticFeedback.selectionClick();
                               SoundService.playMeow(tone: MeowTone.short);
                               setState(() => _selectedCardIndex = index);
@@ -352,7 +355,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('📝', style: TextStyle(fontSize: 16)),
+                          const Text('📝', style: TextStyle(fontSize: PokoFont.titleSm)),
                           const SizedBox(width: PokoSpacing.sm),
                           Expanded(
                             child: Column(
@@ -387,7 +390,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                       _lastSnapMessage!,
                       style: const TextStyle(
                         fontSize: PokoFont.caption,
-                        color: PokoPalette.rose,
+                        color: PokoPalette.rose_500,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -399,7 +402,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       onPressed: _takeSnapshot,
-                      icon: const Text('📷', style: TextStyle(fontSize: 18)),
+                      icon: const Text('📷', style: TextStyle(fontSize: PokoFont.subtitle)),
                       label: const Text(
                         '咔嚓！拍下一张今日纪念照',
                         style: TextStyle(
@@ -433,7 +436,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
   Widget _buildStatItem(String label, String val, String icon) {
     return Row(
       children: [
-        Text(icon, style: const TextStyle(fontSize: 14)),
+        Text(icon, style: const TextStyle(fontSize: PokoFont.bodyMd)),
         const SizedBox(width: PokoSpacing.xs),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -442,7 +445,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
               label,
               style: const TextStyle(
                 fontSize: PokoFont.tiny,
-                color: PokoPalette.amberDeep,
+                color: PokoPalette.amber_700,
               ),
             ),
             Text(
@@ -450,7 +453,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
               style: const TextStyle(
                 fontSize: PokoFont.caption,
                 fontWeight: FontWeight.bold,
-                color: PokoPalette.amberDeep,
+                color: PokoPalette.amber_700,
               ),
             ),
           ],
@@ -464,7 +467,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
     final t = context.poko(widget.isNight);
     final style = _styleOf(card);
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+      duration: PokoDuration.normal,
       width: 154,
       padding: const EdgeInsets.fromLTRB(
         PokoSpacing.sm,

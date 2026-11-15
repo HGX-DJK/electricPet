@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../widgets/bouncy_touch_feedback.dart';
 import '../../models/overlay_settings.dart';
 import '../../services/overlay_service.dart';
 import '../../theme/poko_theme.dart';
@@ -86,12 +87,12 @@ class _FloatingPetSettingsSheetState extends State<FloatingPetSettingsSheet> {
                 children: [
                   Row(
                     children: [
-                      const Text('⚙️', style: TextStyle(fontSize: 22)),
+                      const Text('⚙️', style: TextStyle(fontSize: PokoFont.displayMd)),
                       const SizedBox(width: 8),
                       Text(
                         '悬浮宠设置',
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: PokoFont.title,
                           fontWeight: FontWeight.bold,
                           color: t.textPrimary,
                         ),
@@ -99,7 +100,7 @@ class _FloatingPetSettingsSheetState extends State<FloatingPetSettingsSheet> {
                       const Spacer(),
                       Text(
                         '改动即时生效',
-                        style: TextStyle(fontSize: 11, color: t.textSecondary),
+                        style: TextStyle(fontSize: PokoFont.caption, color: t.textSecondary),
                       ),
                     ],
                   ),
@@ -132,7 +133,7 @@ class _FloatingPetSettingsSheetState extends State<FloatingPetSettingsSheet> {
                   const SizedBox(height: 6),
                   Text(
                     '也可以直接在桌面用两指捏合波可来缩放',
-                    style: TextStyle(fontSize: 11, color: t.textSecondary),
+                    style: TextStyle(fontSize: PokoFont.caption, color: t.textSecondary),
                   ),
                   const SizedBox(height: 18),
 
@@ -207,10 +208,10 @@ class _PreviewCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
       decoration: BoxDecoration(
-        color: t.isNight ? const Color(0xFF2A2560) : const Color(0xFFFFF7ED),
-        borderRadius: BorderRadius.circular(18),
+        color: t.isNight ? PokoPalette.night_surface_alt : PokoPalette.glow_soft,
+        borderRadius: BorderRadius.circular(PokoRadius.lg),
         border: Border.all(
-          color: t.isNight ? const Color(0xFF3B356D) : const Color(0xFFFED7AA),
+          color: t.isNight ? PokoPalette.night_border : PokoPalette.orange_200,
         ),
       ),
       child: Column(
@@ -225,7 +226,7 @@ class _PreviewCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             '桌面上的波可就是这个样子',
-            style: TextStyle(fontSize: 12, color: t.textSecondary),
+            style: TextStyle(fontSize: PokoFont.small, color: t.textSecondary),
           ),
         ],
       ),
@@ -245,7 +246,7 @@ class _SectionTitle extends StatelessWidget {
     return Text(
       text,
       style: TextStyle(
-        fontSize: 13,
+        fontSize: PokoFont.body,
         fontWeight: FontWeight.bold,
         color: t.textPrimary,
       ),
@@ -269,19 +270,20 @@ class _ChoiceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.poko(isNight);
-    return GestureDetector(
-      onTap: onTap,
+    return BouncyTouchFeedback(
+      scaleDown: 0.96,
+        onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? (t.isNight ? const Color(0xFF3B356D) : const Color(0xFFFFEDD5))
-              : (t.isNight ? const Color(0xFF2A2560) : Colors.white),
-          borderRadius: BorderRadius.circular(14),
+              ? (t.isNight ? PokoPalette.night_border : PokoPalette.orange_100)
+              : (t.isNight ? PokoPalette.night_surface_alt : Colors.white),
+          borderRadius: BorderRadius.circular(PokoRadius.md),
           border: Border.all(
             color: selected
-                ? (t.isNight ? const Color(0xFF6366F1) : const Color(0xFFFB923C))
-                : (t.isNight ? const Color(0xFF3B356D) : const Color(0xFFE2E8F0)),
+                ? (t.isNight ? PokoPalette.indigo_500 : PokoPalette.orange_400)
+                : (t.isNight ? PokoPalette.night_border : PokoPalette.slate_200),
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -289,7 +291,7 @@ class _ChoiceChip extends StatelessWidget {
           label,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: PokoFont.small,
             height: 1.4,
             fontWeight: selected ? FontWeight.bold : FontWeight.normal,
             color: selected ? t.accentDeep : t.textSecondary,
@@ -324,7 +326,7 @@ class _SwitchRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Text(icon, style: const TextStyle(fontSize: 17)),
+          Text(icon, style: const TextStyle(fontSize: PokoFont.title)),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -333,14 +335,14 @@ class _SwitchRow extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: PokoFont.body,
                     fontWeight: FontWeight.w600,
                     color: t.textPrimary,
                   ),
                 ),
                 Text(
                   subtitle,
-                  style: TextStyle(fontSize: 11, color: t.textSecondary),
+                  style: TextStyle(fontSize: PokoFont.caption, color: t.textSecondary),
                 ),
               ],
             ),
@@ -369,10 +371,10 @@ class _TipsCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: t.isNight ? const Color(0xFF2A2560) : const Color(0xFFF0FDF4),
-        borderRadius: BorderRadius.circular(16),
+        color: t.isNight ? PokoPalette.night_surface_alt : PokoPalette.emerald_50,
+        borderRadius: BorderRadius.circular(PokoRadius.md),
         border: Border.all(
-          color: t.isNight ? const Color(0xFF3B356D) : const Color(0xFFBBF7D0),
+          color: t.isNight ? PokoPalette.night_border : PokoPalette.mint_200,
         ),
       ),
       child: Column(
@@ -381,7 +383,7 @@ class _TipsCard extends StatelessWidget {
           Text(
             '🐾 桌面上的新玩法',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: PokoFont.body,
               fontWeight: FontWeight.bold,
               color: t.textPrimary,
             ),
@@ -394,7 +396,7 @@ class _TipsCard extends StatelessWidget {
             '· 双击波可它会原地转圈，回小窝请点菜单里的 🏠\n'
             '· 气泡也能点，点一下就回小窝',
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: PokoFont.caption,
               height: 1.6,
               color: t.textSecondary,
             ),

@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import '../../theme/poko_theme.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
@@ -38,8 +39,9 @@ class FairyLightsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return BouncyTouchFeedback(
+      scaleDown: 0.95,
+        onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         child: Row(
@@ -63,20 +65,20 @@ class FairyLightsRow extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: isNight
-            ? const Color(0xFFFEF08A).withValues(alpha: 0.18)
-            : const Color(0xFFFEF3C7).withValues(alpha: 0.6),
+            ? PokoPalette.yellow_200.withValues(alpha: 0.18)
+            : PokoPalette.amber_100.withValues(alpha: 0.6),
         shape: BoxShape.circle,
         boxShadow: isNight
             ? [
                 BoxShadow(
-                  color: const Color(0xFFFDE047).withValues(alpha: 0.35),
+                  color: PokoPalette.yellow_300.withValues(alpha: 0.35),
                   blurRadius: 10,
                   spreadRadius: 1,
                 ),
               ]
             : null,
       ),
-      child: Text(icon, style: const TextStyle(fontSize: 14)),
+      child: Text(icon, style: const TextStyle(fontSize: PokoFont.bodyMd)),
     );
   }
 
@@ -87,8 +89,8 @@ class FairyLightsRow extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
           color: isNight
-              ? const Color(0xFF94A3B8).withValues(alpha: 0.3)
-              : const Color(0xFFCBD5E1),
+              ? PokoPalette.slate_400.withValues(alpha: 0.3)
+              : PokoPalette.slate_300,
           borderRadius: BorderRadius.circular(1),
         ),
       ),
@@ -116,15 +118,15 @@ class PolaroidFrame extends StatelessWidget {
       onTap: onTap,
       child: AnimatedRotation(
         turns: photoAngle / (2 * math.pi),
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeOutBack,
+        duration: PokoDuration.lazy,
+        curve: PokoCurves.playful,
         child: Container(
           padding: const EdgeInsets.fromLTRB(5, 5, 5, 6),
           decoration: BoxDecoration(
             color: isNight ? const Color(0xFF241D49) : Colors.white,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(PokoRadius.xs),
             border: Border.all(
-              color: isNight ? const Color(0xFF6366F1).withValues(alpha: 0.3) : const Color(0xFFE2E8F0),
+              color: isNight ? PokoPalette.indigo_500.withValues(alpha: 0.3) : PokoPalette.slate_200,
               width: 1,
             ),
             boxShadow: [
@@ -143,7 +145,7 @@ class PolaroidFrame extends StatelessWidget {
                 width: 20,
                 height: 4.5,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF472B6).withValues(alpha: 0.85),
+                  color: PokoPalette.pink_400.withValues(alpha: 0.85),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -153,20 +155,20 @@ class PolaroidFrame extends StatelessWidget {
                 width: 44,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF161131) : const Color(0xFFEFF6FF),
+                  color: isNight ? const Color(0xFF161131) : PokoPalette.blue_50,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Center(
-                  child: Text('🐾❤️', style: TextStyle(fontSize: 13)),
+                  child: Text('🐾❤️', style: TextStyle(fontSize: PokoFont.body)),
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 'Day 1 · 相遇',
                 style: TextStyle(
-                  fontSize: 7.5,
+                  fontSize: PokoFont.nano,
                   fontWeight: FontWeight.w600,
-                  color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF64748B),
+                  color: isNight ? PokoPalette.slate_300 : PokoPalette.slate_500,
                 ),
               ),
             ],
@@ -201,15 +203,15 @@ class CatGrassPlanter extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
           decoration: BoxDecoration(
-            color: isNight ? const Color(0xFF1E1838) : Colors.white.withValues(alpha: 0.96),
-            borderRadius: BorderRadius.circular(18),
+            color: isNight ? PokoPalette.night_surface : Colors.white.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(PokoRadius.lg),
             border: Border.all(
-              color: isNight ? const Color(0xFF10B981).withValues(alpha: 0.6) : const Color(0xFFA7F3D0),
+              color: isNight ? PokoPalette.emerald_500.withValues(alpha: 0.6) : PokoPalette.emerald_200,
               width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF10B981).withValues(alpha: isNight ? 0.22 : 0.16),
+                color: PokoPalette.emerald_500.withValues(alpha: isNight ? 0.22 : 0.16),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
               ),
@@ -234,17 +236,17 @@ class CatGrassPlanter extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: isNight
-                              ? [const Color(0xFF334155), const Color(0xFF1E293B)]
-                              : [const Color(0xFFFEF3C7), const Color(0xFFFDE68A)],
+                              ? [PokoPalette.slate_700, PokoPalette.slate_800]
+                              : [PokoPalette.amber_100, PokoPalette.amber_200],
                         ),
                         borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(8),
-                          bottomRight: Radius.circular(8),
+                          bottomLeft: Radius.circular(PokoRadius.xs),
+                          bottomRight: Radius.circular(PokoRadius.xs),
                           topLeft: Radius.circular(3),
                           topRight: Radius.circular(3),
                         ),
                         border: Border.all(
-                          color: isNight ? const Color(0xFF475569) : const Color(0xFFF59E0B),
+                          color: isNight ? PokoPalette.slate_600 : PokoPalette.amber_500,
                           width: 1.0,
                         ),
                       ),
@@ -270,17 +272,17 @@ class CatGrassPlanter extends StatelessWidget {
                         children: [
                           Transform.rotate(
                             angle: -0.15,
-                            child: const Text('🌱', style: TextStyle(fontSize: 16)),
+                            child: const Text('🌱', style: TextStyle(fontSize: PokoFont.titleSm)),
                           ),
                           const SizedBox(width: 1),
                           Transform.translate(
                             offset: const Offset(0, -3),
-                            child: const Text('🌿', style: TextStyle(fontSize: 18)),
+                            child: const Text('🌿', style: TextStyle(fontSize: PokoFont.subtitle)),
                           ),
                           const SizedBox(width: 1),
                           Transform.rotate(
                             angle: 0.15,
-                            child: const Text('🌱', style: TextStyle(fontSize: 15)),
+                            child: const Text('🌱', style: TextStyle(fontSize: PokoFont.bodyLg)),
                           ),
                         ],
                       ),
@@ -292,15 +294,15 @@ class CatGrassPlanter extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                 decoration: BoxDecoration(
-                  color: isNight ? const Color(0xFF065F46) : const Color(0xFFD1FAE5),
-                  borderRadius: BorderRadius.circular(8),
+                  color: isNight ? const Color(0xFF065F46) : PokoPalette.emerald_100,
+                  borderRadius: BorderRadius.circular(PokoRadius.xs),
                 ),
                 child: Text(
                   '猫草',
                   style: TextStyle(
-                    fontSize: 8.5,
+                    fontSize: PokoFont.micro,
                     fontWeight: FontWeight.bold,
-                    color: isNight ? const Color(0xFFA7F3D0) : const Color(0xFF047857),
+                    color: isNight ? PokoPalette.emerald_200 : PokoPalette.emerald_700,
                   ),
                 ),
               ),
@@ -328,8 +330,9 @@ class CatScratchingPost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isScratching = postWiggle.abs() > 0.1;
-    return GestureDetector(
-      onTap: onTap,
+    return BouncyTouchFeedback(
+      scaleDown: 0.95,
+        onTap: onTap,
       child: Transform.translate(
         offset: Offset(postWiggle, 0),
         child: Transform.scale(
@@ -339,18 +342,18 @@ class CatScratchingPost extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: isNight
-                  ? (isScratching ? const Color(0xFF2C2250) : const Color(0xFF1E1838))
-                  : (isScratching ? const Color(0xFFFEF9C3) : Colors.white.withValues(alpha: 0.96)),
-              borderRadius: BorderRadius.circular(18),
+                  ? (isScratching ? const Color(0xFF2C2250) : PokoPalette.night_surface)
+                  : (isScratching ? PokoPalette.yellow_100 : Colors.white.withValues(alpha: 0.96)),
+              borderRadius: BorderRadius.circular(PokoRadius.lg),
               border: Border.all(
                 color: isScratching
-                    ? const Color(0xFFF59E0B)
-                    : (isNight ? const Color(0xFFF59E0B).withValues(alpha: 0.6) : const Color(0xFFFDE68A)),
+                    ? PokoPalette.amber_500
+                    : (isNight ? PokoPalette.amber_500.withValues(alpha: 0.6) : PokoPalette.amber_200),
                 width: isScratching ? 2.0 : 1.5,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFF59E0B).withValues(alpha: isScratching ? 0.38 : (isNight ? 0.22 : 0.14)),
+                  color: PokoPalette.amber_500.withValues(alpha: isScratching ? 0.38 : (isNight ? 0.22 : 0.14)),
                   blurRadius: isScratching ? 14 : 10,
                   offset: const Offset(0, 3),
                 ),
@@ -359,24 +362,24 @@ class CatScratchingPost extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(isScratching ? '🐾' : '🪵', style: const TextStyle(fontSize: 24)),
+                Text(isScratching ? '🐾' : '🪵', style: const TextStyle(fontSize: PokoFont.display)),
                 const SizedBox(height: 2),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
                     color: isScratching
-                        ? const Color(0xFFF59E0B)
-                        : (isNight ? const Color(0xFF78350F) : const Color(0xFFFEF3C7)),
-                    borderRadius: BorderRadius.circular(8),
+                        ? PokoPalette.amber_500
+                        : (isNight ? PokoPalette.amber_900 : PokoPalette.amber_100),
+                    borderRadius: BorderRadius.circular(PokoRadius.xs),
                   ),
                   child: Text(
                     isScratching ? '解压中' : '磨爪',
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: PokoFont.microSm,
                       fontWeight: FontWeight.bold,
                       color: isScratching
                           ? Colors.white
-                          : (isNight ? const Color(0xFFFDE68A) : const Color(0xFFB45309)),
+                          : (isNight ? PokoPalette.amber_200 : PokoPalette.amber_700),
                     ),
                   ),
                 ),
@@ -411,41 +414,42 @@ class FrenchArchWindow extends StatelessWidget {
       const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFF38BDF8), Color(0xFFBAE6FD)],
+        colors: [PokoPalette.sky_400, PokoPalette.sky_200],
       ),
       const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFF475569), Color(0xFF94A3B8)],
+        colors: [PokoPalette.slate_600, PokoPalette.slate_400],
       ),
       const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFFF472B6), Color(0xFFFCE7F3)],
+        colors: [PokoPalette.pink_400, PokoPalette.pink_100],
       ),
       const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFF0F172A), Color(0xFF312E81)],
+        colors: [PokoPalette.slate_900, Color(0xFF312E81)],
       ),
     ];
 
     final weatherTags = ['☀️ 晴空', '🌧️ 细雨', '🌸 落樱', '🌙 星夜'];
 
-    return GestureDetector(
-      key: const ValueKey('french_arch_window'),
+    return BouncyTouchFeedback(
+      scaleDown: 0.96,
+        key: const ValueKey('french_arch_window'),
       onTap: onTap,
       child: AnimatedScale(
         scale: windowScale,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOutBack,
+        duration: PokoDuration.base,
+        curve: PokoCurves.playful,
         child: Container(
           width: 86,
           height: 112,
           decoration: BoxDecoration(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(43), bottom: Radius.circular(6)),
             border: Border.all(
-              color: isNight ? const Color(0xFF4338CA).withValues(alpha: 0.8) : const Color(0xFFE2E8F0),
+              color: isNight ? PokoPalette.indigo_700.withValues(alpha: 0.8) : PokoPalette.slate_200,
               width: 3.5,
             ),
             boxShadow: [
@@ -462,14 +466,14 @@ class FrenchArchWindow extends StatelessWidget {
               children: [
                 Container(decoration: BoxDecoration(gradient: gradients[windowWeather])),
                 if (windowWeather == 0) ...[
-                  const Positioned(top: 10, right: 10, child: Text('☀️', style: TextStyle(fontSize: 16))),
-                  const Positioned(bottom: 22, left: 10, child: Text('☁️', style: TextStyle(fontSize: 14))),
+                  const Positioned(top: 10, right: 10, child: Text('☀️', style: TextStyle(fontSize: PokoFont.titleSm))),
+                  const Positioned(bottom: 22, left: 10, child: Text('☁️', style: TextStyle(fontSize: PokoFont.bodyMd))),
                 ] else if (windowWeather == 1) ...[
-                  const Positioned(top: 8, left: 12, child: Text('🌧️', style: TextStyle(fontSize: 16))),
+                  const Positioned(top: 8, left: 12, child: Text('🌧️', style: TextStyle(fontSize: PokoFont.titleSm))),
                   Positioned(
                     bottom: 20,
                     right: 14,
-                    child: Text('💧', style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: 0.8))),
+                    child: Text('💧', style: TextStyle(fontSize: PokoFont.tiny, color: Colors.white.withValues(alpha: 0.8))),
                   ),
                   Positioned(
                     top: 36,
@@ -496,11 +500,11 @@ class FrenchArchWindow extends StatelessWidget {
                     ),
                   ),
                 ] else if (windowWeather == 2) ...[
-                  const Positioned(top: 12, left: 10, child: Text('🌸', style: TextStyle(fontSize: 14))),
-                  const Positioned(bottom: 22, right: 10, child: Text('🌸', style: TextStyle(fontSize: 11))),
+                  const Positioned(top: 12, left: 10, child: Text('🌸', style: TextStyle(fontSize: PokoFont.bodyMd))),
+                  const Positioned(bottom: 22, right: 10, child: Text('🌸', style: TextStyle(fontSize: PokoFont.caption))),
                 ] else ...[
-                  const Positioned(top: 8, right: 10, child: Text('🌙', style: TextStyle(fontSize: 14))),
-                  const Positioned(bottom: 22, left: 12, child: Text('✨', style: TextStyle(fontSize: 11))),
+                  const Positioned(top: 8, right: 10, child: Text('🌙', style: TextStyle(fontSize: PokoFont.bodyMd))),
+                  const Positioned(bottom: 22, left: 12, child: Text('✨', style: TextStyle(fontSize: PokoFont.caption))),
                 ],
                 Center(
                   child: Container(
@@ -526,12 +530,12 @@ class FrenchArchWindow extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 1.5),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.32),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(PokoRadius.xs),
                     ),
                     child: Center(
                       child: Text(
                         weatherTags[windowWeather],
-                        style: const TextStyle(fontSize: 8.5, color: Colors.white, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: PokoFont.micro, color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -577,8 +581,8 @@ class SunbeamPatch extends StatelessWidget {
                   borderRadius: const BorderRadius.all(Radius.elliptical(60, 31)),
                   gradient: RadialGradient(
                     colors: [
-                      const Color(0xFFFEF08A).withValues(alpha: 0.36),
-                      const Color(0xFFFDE047).withValues(alpha: 0.14),
+                      PokoPalette.yellow_200.withValues(alpha: 0.36),
+                      PokoPalette.yellow_300.withValues(alpha: 0.14),
                       Colors.transparent,
                     ],
                   ),
@@ -588,7 +592,7 @@ class SunbeamPatch extends StatelessWidget {
                   children: [
                     const Opacity(
                       opacity: 0.28,
-                      child: Text('☀️', style: TextStyle(fontSize: 18, color: Color(0xFFF59E0B))),
+                      child: Text('☀️', style: TextStyle(fontSize: PokoFont.subtitle, color: PokoPalette.amber_500)),
                     ),
                     // 丁达尔金光微尘 (Dust Motes ✨ ⭐)
                     Positioned(
@@ -596,7 +600,7 @@ class SunbeamPatch extends StatelessWidget {
                       left: 28 + math.cos(animVal) * 4,
                       child: Opacity(
                         opacity: (0.45 + math.sin(animVal).abs() * 0.35).clamp(0.0, 1.0),
-                        child: const Text('✨', style: TextStyle(fontSize: 10)),
+                        child: const Text('✨', style: TextStyle(fontSize: PokoFont.tiny)),
                       ),
                     ),
                     Positioned(
@@ -604,7 +608,7 @@ class SunbeamPatch extends StatelessWidget {
                       right: 24 - math.cos(animVal) * 4,
                       child: Opacity(
                         opacity: (0.35 + math.cos(animVal).abs() * 0.35).clamp(0.0, 1.0),
-                        child: const Text('⭐', style: TextStyle(fontSize: 9)),
+                        child: const Text('⭐', style: TextStyle(fontSize: PokoFont.microSm)),
                       ),
                     ),
                   ],
@@ -644,9 +648,9 @@ class CatRugBed extends StatelessWidget {
       width: rugWidth,
       height: rugHeight,
       child: RepaintBoundary(
-        child: GestureDetector(
+        child: BouncyTouchFeedback(
+        scaleDown: 0.96,
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
         child: Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
@@ -678,12 +682,12 @@ class CatRugBed extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: isNight
                       ? [const Color(0xFF2B2252).withValues(alpha: 0.55), const Color(0xFF1D1739).withValues(alpha: 0.60)]
-                      : [const Color(0xFFFFFDF5).withValues(alpha: 0.68), const Color(0xFFFEF3C7).withValues(alpha: 0.45)],
+                      : [const Color(0xFFFFFDF5).withValues(alpha: 0.68), PokoPalette.amber_100.withValues(alpha: 0.45)],
                 ),
                 border: Border.all(
                   color: isNight
-                      ? const Color(0xFF6366F1).withValues(alpha: 0.28)
-                      : const Color(0xFFFDE68A).withValues(alpha: 0.60),
+                      ? PokoPalette.indigo_500.withValues(alpha: 0.28)
+                      : PokoPalette.amber_200.withValues(alpha: 0.60),
                   width: 1.2,
                 ),
               ),
@@ -693,8 +697,8 @@ class CatRugBed extends StatelessWidget {
                   child: Text(
                     '🐾',
                     style: TextStyle(
-                      fontSize: 16,
-                      color: isNight ? const Color(0xFFC7D2FE) : const Color(0xFFD97706),
+                      fontSize: PokoFont.titleSm,
+                      color: isNight ? const Color(0xFFC7D2FE) : PokoPalette.amber_600,
                     ),
                   ),
                 ),
@@ -731,6 +735,8 @@ class CozyCatRug extends StatelessWidget {
       top: nestY + 65.0,
       width: 170.0,
       height: 28.0,
+      // 这是一块**不可见热区**（毯子本体由别的组件绘制），没有可缩放的视觉，
+      // 所以保持裸 GestureDetector —— 加按压反馈在这里没有意义。
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -799,7 +805,7 @@ class CoveredBlanket extends StatelessWidget {
         top: nestY + 30,
         child: AnimatedOpacity(
           opacity: isWardrobeMode ? 0.0 : 1.0,
-          duration: const Duration(milliseconds: 200),
+          duration: PokoDuration.normal,
           child: IgnorePointer(
             ignoring: isWardrobeMode,
             child: BouncyTouchFeedback(
@@ -808,11 +814,11 @@ class CoveredBlanket extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFFFB7185), Color(0xFFF43F5E)]),
-                  borderRadius: BorderRadius.circular(10),
+                  gradient: const LinearGradient(colors: [PokoPalette.rose_400, PokoPalette.rose_500]),
+                  borderRadius: BorderRadius.circular(PokoRadius.sm),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
+                      color: PokoPalette.rose_500.withValues(alpha: 0.35),
                       blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
@@ -821,9 +827,9 @@ class CoveredBlanket extends StatelessWidget {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('🛏️', style: TextStyle(fontSize: 10)),
+                    Text('🛏️', style: TextStyle(fontSize: PokoFont.tiny)),
                     SizedBox(width: 2.5),
-                    Text('盖被被', style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                    Text('盖被被', style: TextStyle(color: Colors.white, fontSize: PokoFont.microSm, fontWeight: FontWeight.bold)),
                   ],
                 ),
               ),
@@ -841,7 +847,7 @@ class CoveredBlanket extends StatelessWidget {
       top: petY + 18 + breathOffset,
       child: AnimatedOpacity(
         opacity: isWardrobeMode ? 0.0 : 1.0,
-        duration: const Duration(milliseconds: 200),
+        duration: PokoDuration.normal,
         child: IgnorePointer(
           ignoring: isWardrobeMode,
           child: BouncyTouchFeedback(
@@ -858,17 +864,17 @@ class CoveredBlanket extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: isNight
-                      ? const [Color(0xFF4C1D95), Color(0xFF312E81)]
-                      : const [Color(0xFFFECDD3), Color(0xFFFDA4AF)],
+                      ? const [PokoPalette.indigo_shadow, Color(0xFF312E81)]
+                      : const [PokoPalette.rose_200, PokoPalette.rose_300],
                 ),
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(22),
-                  topRight: Radius.circular(22),
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
+                  topLeft: Radius.circular(PokoRadius.lg),
+                  topRight: Radius.circular(PokoRadius.lg),
+                  bottomLeft: Radius.circular(PokoRadius.md),
+                  bottomRight: Radius.circular(PokoRadius.md),
                 ),
                 border: Border.all(
-                  color: isNight ? const Color(0xFF8B5CF6) : const Color(0xFFF43F5E),
+                  color: isNight ? PokoPalette.violet_600 : PokoPalette.rose_500,
                   width: 1.6,
                 ),
                 boxShadow: [
@@ -884,10 +890,10 @@ class CoveredBlanket extends StatelessWidget {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(22),
-                        topRight: Radius.circular(22),
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
+                        topLeft: Radius.circular(PokoRadius.lg),
+                        topRight: Radius.circular(PokoRadius.lg),
+                        bottomLeft: Radius.circular(PokoRadius.md),
+                        bottomRight: Radius.circular(PokoRadius.md),
                       ),
                       child: CustomPaint(
                         painter: BlanketQuiltPainter(isNight: isNight),
@@ -902,10 +908,10 @@ class CoveredBlanket extends StatelessWidget {
                       height: 12,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.92),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(PokoRadius.lg)),
                         border: Border(
                           bottom: BorderSide(
-                            color: (isNight ? const Color(0xFF8B5CF6) : const Color(0xFFF43F5E)).withValues(alpha: 0.4),
+                            color: (isNight ? PokoPalette.violet_600 : PokoPalette.rose_500).withValues(alpha: 0.4),
                             width: 1,
                           ),
                         ),
@@ -933,12 +939,12 @@ class CoveredBlanket extends StatelessWidget {
                   const Positioned(
                     top: 22,
                     left: 18,
-                    child: Text('🐾', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                    child: Text('🐾', style: TextStyle(fontSize: PokoFont.tiny, color: Colors.white70)),
                   ),
                   const Positioned(
                     top: 32,
                     right: 22,
-                    child: Text('⭐', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                    child: Text('⭐', style: TextStyle(fontSize: PokoFont.tiny, color: Colors.white70)),
                   ),
                 ],
               ),
@@ -953,13 +959,13 @@ class CoveredBlanket extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFFF43F5E), width: 1),
+                    borderRadius: BorderRadius.circular(PokoRadius.xs),
+                    border: Border.all(color: PokoPalette.rose_500, width: 1),
                     boxShadow: [
                       BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 4),
                     ],
                   ),
-                  child: const Text('掀被 ☀️', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Color(0xFFE11D48))),
+                  child: const Text('掀被 ☀️', style: TextStyle(fontSize: PokoFont.micro, fontWeight: FontWeight.bold, color: PokoPalette.rose_600)),
                 ),
               ),
             ),
@@ -1013,30 +1019,30 @@ class KittenNightLamp extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: isNightLampOn
                       ? [
-                          const Color(0xFFFEF3C7),
-                          const Color(0xFFFDE68A),
-                          const Color(0xFFF59E0B),
+                          PokoPalette.amber_100,
+                          PokoPalette.amber_200,
+                          PokoPalette.amber_500,
                         ]
                       : (isNight
-                          ? [const Color(0xFF334155), const Color(0xFF1E293B)]
-                          : [const Color(0xFFF1F5F9), const Color(0xFFE2E8F0)]),
+                          ? [PokoPalette.slate_700, PokoPalette.slate_800]
+                          : [PokoPalette.slate_100, PokoPalette.slate_200]),
                 ),
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(10),
-                  topRight: Radius.circular(10),
+                  topLeft: Radius.circular(PokoRadius.sm),
+                  topRight: Radius.circular(PokoRadius.sm),
                   bottomLeft: Radius.circular(5),
                   bottomRight: Radius.circular(5),
                 ),
                 border: Border.all(
                   color: isNightLampOn
-                      ? const Color(0xFFF59E0B)
-                      : (isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                      ? PokoPalette.amber_500
+                      : (isNight ? PokoPalette.slate_600 : PokoPalette.slate_300),
                   width: 1.2,
                 ),
                 boxShadow: isNightLampOn
                     ? [
                         BoxShadow(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.5),
                           blurRadius: 14,
                           spreadRadius: 2,
                           offset: const Offset(0, 2),
@@ -1054,9 +1060,9 @@ class KittenNightLamp extends StatelessWidget {
                 child: Text(
                   isNightLampOn ? '🐾' : '💡',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: PokoFont.small,
                     color: isNightLampOn
-                        ? const Color(0xFFB45309).withValues(alpha: 0.8)
+                        ? PokoPalette.amber_700.withValues(alpha: 0.8)
                         : (isNight ? Colors.white38 : Colors.black26),
                   ),
                 ),
@@ -1075,7 +1081,7 @@ class KittenNightLamp extends StatelessWidget {
                     width: 3,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8),
+                      color: isNight ? PokoPalette.slate_500 : PokoPalette.slate_400,
                       borderRadius: BorderRadius.circular(1.5),
                     ),
                   ),
@@ -1091,7 +1097,7 @@ class KittenNightLamp extends StatelessWidget {
                           Container(
                             width: 1.2,
                             height: 6,
-                            color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                            color: isNight ? PokoPalette.slate_400 : PokoPalette.slate_500,
                           ),
                           Container(
                             width: 4.5,
@@ -1099,12 +1105,12 @@ class KittenNightLamp extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isNightLampOn
-                                  ? const Color(0xFFF59E0B)
-                                  : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                                  ? PokoPalette.amber_500
+                                  : (isNight ? PokoPalette.slate_500 : PokoPalette.slate_400),
                               boxShadow: isNightLampOn
                                   ? [
                                       BoxShadow(
-                                        color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                                        color: PokoPalette.amber_500.withValues(alpha: 0.5),
                                         blurRadius: 3,
                                       ),
                                     ]
@@ -1123,12 +1129,12 @@ class KittenNightLamp extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: isNight ? const Color(0xFF1E293B) : Colors.white,
-                borderRadius: BorderRadius.circular(8),
+                color: isNight ? PokoPalette.slate_800 : Colors.white,
+                borderRadius: BorderRadius.circular(PokoRadius.xs),
                 border: Border.all(
                   color: isNightLampOn
-                      ? const Color(0xFFF59E0B).withValues(alpha: 0.6)
-                      : (isNight ? const Color(0xFF475569) : const Color(0xFFE2E8F0)),
+                      ? PokoPalette.amber_500.withValues(alpha: 0.6)
+                      : (isNight ? PokoPalette.slate_600 : PokoPalette.slate_200),
                   width: 1.0,
                 ),
                 boxShadow: [
@@ -1147,18 +1153,18 @@ class KittenNightLamp extends StatelessWidget {
                     height: 5,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: isNightLampOn ? const Color(0xFF10B981) : const Color(0xFF94A3B8),
+                      color: isNightLampOn ? PokoPalette.emerald_500 : PokoPalette.slate_400,
                     ),
                   ),
                   const SizedBox(width: 3),
                   Text(
                     isNightLampOn ? 'ON' : 'OFF',
                     style: TextStyle(
-                      fontSize: 8.5,
+                      fontSize: PokoFont.micro,
                       fontWeight: FontWeight.bold,
                       color: isNightLampOn
-                          ? (isNight ? const Color(0xFFFDE68A) : const Color(0xFFD97706))
-                          : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                          ? (isNight ? PokoPalette.amber_200 : PokoPalette.amber_600)
+                          : (isNight ? PokoPalette.slate_500 : PokoPalette.slate_400),
                     ),
                   ),
                 ],
@@ -1196,13 +1202,14 @@ class SakuraPetalsBuilder {
         key: ValueKey('sakura_petal_$index'),
         left: floatX,
         top: floatY,
-        child: GestureDetector(
-          onTap: () => onPetalTap(index, floatX, floatY),
+        child: BouncyTouchFeedback(
+          scaleDown: 0.88,
+        onTap: () => onPetalTap(index, floatX, floatY),
           child: Transform.rotate(
             angle: angle,
             child: Container(
               padding: const EdgeInsets.all(4),
-              child: const Text('🌸', style: TextStyle(fontSize: 16)),
+              child: const Text('🌸', style: TextStyle(fontSize: PokoFont.titleSm)),
             ),
           ),
         ),

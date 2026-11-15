@@ -36,8 +36,8 @@ class BottomFloatingBar extends StatelessWidget {
       left: 10,
       right: 10,
       child: TweenAnimationBuilder<double>(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
+        duration: PokoDuration.settle,
+        curve: PokoCurves.standard,
         tween: Tween<double>(begin: 0.0, end: 1.0),
         builder: (context, animVal, child) {
           return Transform.translate(
@@ -243,7 +243,7 @@ class _DockItem extends StatelessWidget {
             boxShadow: primary
                 ? [
                     BoxShadow(
-                      color: PokoPalette.indigo.withValues(alpha: isNight ? 0.38 : 0.25),
+                      color: PokoPalette.indigo_500.withValues(alpha: isNight ? 0.38 : 0.25),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),

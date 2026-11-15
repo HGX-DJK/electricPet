@@ -1,3 +1,4 @@
+from pet.theme import Alpha, Palette, qss
 import sys
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt6.QtWidgets import (
@@ -11,37 +12,37 @@ from pet.qt_safe import safe_slot
 
 DOCK_PASTELS = {
     "feed": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#F59E0B", "hover_bg": "rgba(245, 158, 11, 0.2)", "hover_border": "#FBBF24", "pressed": "rgba(180, 83, 9, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.amber_500, "hover_bg": Alpha.amber_500_20, "hover_border": Palette.amber_400, "pressed": Alpha.amber_700_40
     },
     "wardrobe": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#A855F7", "hover_bg": "rgba(168, 85, 247, 0.2)", "hover_border": "#C084FC", "pressed": "rgba(126, 34, 206, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.violet_500, "hover_bg": Alpha.violet_500_20, "hover_border": Palette.violet_400, "pressed": "rgba(126, 34, 206, 0.4)"
     },
     "talent": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#FB7185", "hover_bg": "rgba(251, 113, 133, 0.2)", "hover_border": "#FDA4AF", "pressed": "rgba(190, 18, 60, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.rose_400, "hover_bg": "rgba(251, 113, 133, 0.2)", "hover_border": Palette.rose_300, "pressed": Alpha.rose_700_40
     },
     "play": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#38BDF8", "hover_bg": "rgba(56, 189, 248, 0.2)", "hover_border": "#7DD3FC", "pressed": "rgba(2, 132, 199, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.sky_400, "hover_bg": Alpha.sky_400_20, "hover_border": Palette.sky_300, "pressed": Alpha.sky_600_40
     },
     "bath": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#34D399", "hover_bg": "rgba(52, 211, 153, 0.2)", "hover_border": "#6EE7B7", "pressed": "rgba(5, 150, 105, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.emerald_400, "hover_bg": Alpha.emerald_400_20, "hover_border": Palette.emerald_300, "pressed": Alpha.emerald_600_40
     },
     "sleep": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#818CF8", "hover_bg": "rgba(129, 140, 248, 0.2)", "hover_border": "#A5B4FC", "pressed": "rgba(67, 56, 202, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.indigo_400, "hover_bg": Alpha.indigo_400_20, "hover_border": Palette.indigo_300, "pressed": Alpha.indigo_700_40
     },
     "wake": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#FACC15", "hover_bg": "rgba(250, 204, 21, 0.2)", "hover_border": "#FDE047", "pressed": "rgba(161, 98, 7, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.yellow_400, "hover_bg": Alpha.yellow_400_20, "hover_border": Palette.yellow_300, "pressed": Alpha.yellow_700_40
     },
     "memo": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#0EA5E9", "hover_bg": "rgba(14, 165, 233, 0.2)", "hover_border": "#38BDF8", "pressed": "rgba(3, 105, 161, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.sky_500, "hover_bg": Alpha.sky_500_20, "hover_border": Palette.sky_400, "pressed": Alpha.sky_700_40
     },
     "focus": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#EF4444", "hover_bg": "rgba(239, 68, 68, 0.2)", "hover_border": "#F87171", "pressed": "rgba(185, 28, 28, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.red_500, "hover_bg": Alpha.red_500_20, "hover_border": Palette.red_400, "pressed": Alpha.red_700_40
     },
     "focus_active": {
-        "bg": "rgba(14, 165, 233, 0.25)", "border": "#38BDF8", "hover_bg": "rgba(56, 189, 248, 0.35)", "hover_border": "#7DD3FC", "pressed": "rgba(2, 132, 199, 0.4)"
+        "bg": Alpha.sky_500_25, "border": Palette.sky_400, "hover_bg": Alpha.sky_400_35, "hover_border": Palette.sky_300, "pressed": Alpha.sky_600_40
     },
     "more": {
-        "bg": "rgba(30, 41, 59, 0.8)", "border": "#64748B", "hover_bg": "rgba(100, 116, 139, 0.2)", "hover_border": "#94A3B8", "pressed": "rgba(51, 65, 85, 0.4)"
+        "bg": Alpha.slate_800_80, "border": Palette.slate_500, "hover_bg": Alpha.slate_500_20, "hover_border": Palette.slate_400, "pressed": Alpha.slate_700_40
     }
 }
 
@@ -68,7 +69,7 @@ class DockIconButton(QPushButton):
                 border: 1.5px solid {pal["border"]};
                 border-radius: 18px;
                 padding: 0px;
-                color: #F8FAFC;
+                color: {Palette.slate_50};
             }}
             QPushButton:hover {{
                 background-color: {pal["hover_bg"]};
@@ -107,14 +108,14 @@ class PetCompanionDock(QWidget):
 
         # 赛博深空全息微透胶囊底座 (带天青霓虹微光反射)
         self.capsule = QFrame(self)
-        self.capsule.setStyleSheet("""
+        self.capsule.setStyleSheet(qss("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(11, 15, 25, 0.95), stop:1 rgba(17, 24, 39, 0.95));
-                border: 1.5px solid #0EA5E9;
-                border-top: 1.5px solid #38BDF8;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ink_95@, stop:1 @gray_900_95@);
+                border: 1.5px solid @sky_500@;
+                border-top: 1.5px solid @sky_400@;
                 border-radius: 24px;
             }
-        """)
+        """))
 
         # 赛博天青全息多阶环境阴影
         shadow = QGraphicsDropShadowEffect(self)
@@ -164,7 +165,7 @@ class PetCompanionDock(QWidget):
         # 竖向细微分割线
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.VLine)
-        sep.setStyleSheet("background-color: #334155; min-width: 1px; max-width: 1px; margin: 4px 1px;")
+        sep.setStyleSheet(qss("background-color: @slate_700@; min-width: 1px; max-width: 1px; margin: 4px 1px;"))
         dock_layout.addWidget(sep)
 
         # 9. 全部菜单与设置

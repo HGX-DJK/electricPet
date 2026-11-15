@@ -101,10 +101,10 @@ class SmartDialogueBubble extends StatelessWidget {
                   boxShadow: PokoShadow.card(t.shadow),
                 ),
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 240),
+                  duration: PokoDuration.soft,
                   transitionBuilder: (child, anim) {
                     return ScaleTransition(
-                      scale: CurvedAnimation(parent: anim, curve: Curves.easeOutBack),
+                      scale: CurvedAnimation(parent: anim, curve: PokoCurves.playful),
                       child: FadeTransition(opacity: anim, child: child),
                     );
                   },
@@ -112,7 +112,7 @@ class SmartDialogueBubble extends StatelessWidget {
                     key: ValueKey(currentDialogue),
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: 14)),
+                      Text(isNight ? '✨' : '💬', style: const TextStyle(fontSize: PokoFont.bodyMd)),
                       const SizedBox(width: PokoSpacing.sm),
                       Expanded(
                         child: Text(

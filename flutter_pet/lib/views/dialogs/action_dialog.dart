@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/bouncy_touch_feedback.dart';
 import 'package:flutter/services.dart';
 import '../../theme/poko_theme.dart';
 
@@ -56,7 +57,7 @@ class ActionDialog extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Text('✨', style: TextStyle(fontSize: 22)),
+                    const Text('✨', style: TextStyle(fontSize: PokoFont.displayMd)),
                     const SizedBox(width: PokoSpacing.sm),
                     Text(
                       '波可的才艺才华秀',
@@ -68,8 +69,9 @@ class ActionDialog extends StatelessWidget {
                     ),
                   ],
                 ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                BouncyTouchFeedback(
+                  scaleDown: 0.9,
+        onTap: () => Navigator.pop(context),
                   child: Container(
                     padding: const EdgeInsets.all(PokoSpacing.xs),
                     decoration: BoxDecoration(
@@ -106,8 +108,9 @@ class ActionDialog extends StatelessWidget {
                 itemCount: actions.length,
                 itemBuilder: (context, index) {
                   final act = actions[index];
-                  return GestureDetector(
-                    onTap: () {
+                  return BouncyTouchFeedback(
+                    scaleDown: 0.96,
+        onTap: () {
                       HapticFeedback.mediumImpact();
                       onActionSelected(act['id']!);
                     },
@@ -125,7 +128,7 @@ class ActionDialog extends StatelessWidget {
                         children: [
                           Text(
                             act['icon']!,
-                            style: const TextStyle(fontSize: 22),
+                            style: const TextStyle(fontSize: PokoFont.displayMd),
                           ),
                           const SizedBox(width: PokoSpacing.sm),
                           Expanded(

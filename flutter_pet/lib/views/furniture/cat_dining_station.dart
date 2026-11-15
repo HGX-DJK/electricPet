@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/poko_theme.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 
 /// 软装家具：左侧就餐角 · 萌宠立式三联食水一体托盘
@@ -34,11 +35,11 @@ class CatDiningStation extends StatelessWidget {
         color: isNight
             ? const Color(0xFF1B1635).withValues(alpha: 0.92)
             : Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(PokoRadius.lg),
         border: Border.all(
           color: isNight
-              ? const Color(0xFF6366F1).withValues(alpha: 0.35)
-              : const Color(0xFFE2E8F0),
+              ? PokoPalette.indigo_500.withValues(alpha: 0.35)
+              : PokoPalette.slate_200,
           width: 1.4,
         ),
         boxShadow: [
@@ -49,7 +50,7 @@ class CatDiningStation extends StatelessWidget {
           ),
           BoxShadow(
             color: isNight
-                ? const Color(0xFF6366F1).withValues(alpha: 0.12)
+                ? PokoPalette.indigo_500.withValues(alpha: 0.12)
                 : Colors.white.withValues(alpha: 0.85),
             blurRadius: 2,
             offset: const Offset(0, 1),
@@ -68,7 +69,7 @@ class CatDiningStation extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 3),
             color: isNight
                 ? const Color(0xFF3730A3).withValues(alpha: 0.4)
-                : const Color(0xFFE2E8F0),
+                : PokoPalette.slate_200,
           ),
           // 中间：清澈小水碗 (点击波光粼粼涟漪，解渴补水)
           _buildWaterBowl(),
@@ -79,7 +80,7 @@ class CatDiningStation extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 3),
             color: isNight
                 ? const Color(0xFF3730A3).withValues(alpha: 0.4)
-                : const Color(0xFFE2E8F0),
+                : PokoPalette.slate_200,
           ),
           // 底部：敲敲罐头召唤按钮 (点击发出清脆开饭叮叮声，猫咪全速冲刺狂奔而来)
           _buildCanSummonButton(),
@@ -102,23 +103,23 @@ class CatDiningStation extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
             decoration: BoxDecoration(
               color: showFoodTray
-                  ? const Color(0xFFF43F5E).withValues(alpha: 0.18)
-                  : (isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9)),
-              borderRadius: BorderRadius.circular(14),
+                  ? PokoPalette.rose_500.withValues(alpha: 0.18)
+                  : (isNight ? const Color(0xFF140F2A) : PokoPalette.slate_100),
+              borderRadius: BorderRadius.circular(PokoRadius.md),
               border: Border.all(
                 color: showFoodTray
-                    ? const Color(0xFFF43F5E)
+                    ? PokoPalette.rose_500
                     : (isHungry
-                        ? const Color(0xFFF43F5E)
+                        ? PokoPalette.rose_500
                         : (isNight
-                            ? const Color(0xFF4338CA).withValues(alpha: 0.3)
-                            : const Color(0xFFE2E8F0))),
+                            ? PokoPalette.indigo_700.withValues(alpha: 0.3)
+                            : PokoPalette.slate_200)),
                 width: isHungry ? 1.4 : 1.0,
               ),
               boxShadow: isHungry
                   ? [
                       BoxShadow(
-                        color: const Color(0xFFF43F5E).withValues(alpha: 0.28),
+                        color: PokoPalette.rose_500.withValues(alpha: 0.28),
                         blurRadius: 6,
                         offset: const Offset(0, 1.5),
                       ),
@@ -131,20 +132,20 @@ class CatDiningStation extends StatelessWidget {
                 const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('🥣', style: TextStyle(fontSize: 14)),
+                    Text('🥣', style: TextStyle(fontSize: PokoFont.bodyMd)),
                     SizedBox(width: 2),
-                    Text('🐟', style: TextStyle(fontSize: 11)),
+                    Text('🐟', style: TextStyle(fontSize: PokoFont.caption)),
                   ],
                 ),
                 const SizedBox(height: 1.5),
                 Text(
                   showFoodTray ? '投喂中' : '食碗',
                   style: TextStyle(
-                    fontSize: 8.5,
+                    fontSize: PokoFont.micro,
                     fontWeight: FontWeight.bold,
                     color: showFoodTray
-                        ? const Color(0xFFF43F5E)
-                        : (isNight ? const Color(0xFFA5B4FC) : const Color(0xFF64748B)),
+                        ? PokoPalette.rose_500
+                        : (isNight ? PokoPalette.indigo_300 : PokoPalette.slate_500),
                   ),
                 ),
               ],
@@ -162,12 +163,12 @@ class CatDiningStation extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [Color(0xFFEF4444), Color(0xFFF97316)],
+                      colors: [PokoPalette.red_500, Color(0xFFF97316)],
                     ),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(PokoRadius.xs),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.35),
+                        color: PokoPalette.red_500.withValues(alpha: 0.35),
                         blurRadius: 4,
                       ),
                     ],
@@ -175,7 +176,7 @@ class CatDiningStation extends StatelessWidget {
                   child: const Text(
                     '求投喂 🥣',
                     style: TextStyle(
-                      fontSize: 7,
+                      fontSize: PokoFont.nano,
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
@@ -199,21 +200,21 @@ class CatDiningStation extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         decoration: BoxDecoration(
           color: isNight
-              ? (active ? const Color(0xFF1E293B) : const Color(0xFF140F2A))
-              : (active ? const Color(0xFFE0F2FE) : const Color(0xFFF8FAFC)),
-          borderRadius: BorderRadius.circular(14),
+              ? (active ? PokoPalette.slate_800 : const Color(0xFF140F2A))
+              : (active ? PokoPalette.sky_100 : PokoPalette.slate_50),
+          borderRadius: BorderRadius.circular(PokoRadius.md),
           border: Border.all(
             color: active
-                ? const Color(0xFF0284C7)
+                ? PokoPalette.sky_600
                 : (isNight
-                    ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
-                    : const Color(0xFFBAE6FD)),
+                    ? PokoPalette.sky_400.withValues(alpha: 0.4)
+                    : PokoPalette.sky_200),
             width: active ? 1.4 : 1.0,
           ),
           boxShadow: active
               ? [
                   BoxShadow(
-                    color: const Color(0xFF0284C7).withValues(alpha: 0.28),
+                    color: PokoPalette.sky_600.withValues(alpha: 0.28),
                     blurRadius: 6,
                     offset: const Offset(0, 1.5),
                   ),
@@ -235,10 +236,10 @@ class CatDiningStation extends StatelessWidget {
                     width: 32,
                     height: 19,
                     decoration: BoxDecoration(
-                      color: isNight ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(10),
+                      color: isNight ? PokoPalette.slate_700 : PokoPalette.slate_200,
+                      borderRadius: BorderRadius.circular(PokoRadius.sm),
                       border: Border.all(
-                        color: isNight ? const Color(0xFF475569) : Colors.white,
+                        color: isNight ? PokoPalette.slate_600 : Colors.white,
                         width: 1.2,
                       ),
                       boxShadow: [
@@ -258,9 +259,9 @@ class CatDiningStation extends StatelessWidget {
                       gradient: const LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0xFF38BDF8), Color(0xFF0284C7)],
+                        colors: [PokoPalette.sky_400, PokoPalette.sky_600],
                       ),
-                      borderRadius: BorderRadius.circular(7),
+                      borderRadius: BorderRadius.circular(PokoRadius.xs),
                     ),
                   ),
                   // 水面高光与波光涟漪
@@ -284,7 +285,7 @@ class CatDiningStation extends StatelessWidget {
                   Center(
                     child: Text(
                       isDrinking ? '🫧' : (active ? '💧' : ''),
-                      style: const TextStyle(fontSize: 8.5),
+                      style: const TextStyle(fontSize: PokoFont.micro),
                     ),
                   ),
                 ],
@@ -294,11 +295,11 @@ class CatDiningStation extends StatelessWidget {
             Text(
               isDrinking ? '舔水中' : (active ? '波光粼粼' : '水碗'),
               style: TextStyle(
-                fontSize: 8.5,
+                fontSize: PokoFont.micro,
                 fontWeight: FontWeight.bold,
                 color: active
-                    ? const Color(0xFF0284C7)
-                    : (isNight ? const Color(0xFF7DD3FC) : const Color(0xFF0369A1)),
+                    ? PokoPalette.sky_600
+                    : (isNight ? PokoPalette.sky_300 : PokoPalette.sky_700),
               ),
             ),
           ],
@@ -316,12 +317,12 @@ class CatDiningStation extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
         decoration: BoxDecoration(
-          color: isNight ? const Color(0xFF140F2A) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(14),
+          color: isNight ? const Color(0xFF140F2A) : PokoPalette.slate_100,
+          borderRadius: BorderRadius.circular(PokoRadius.md),
           border: Border.all(
             color: isNight
-                ? const Color(0xFFF59E0B).withValues(alpha: 0.4)
-                : const Color(0xFFFDE68A),
+                ? PokoPalette.amber_500.withValues(alpha: 0.4)
+                : PokoPalette.amber_200,
             width: 1.0,
           ),
         ),
@@ -331,18 +332,18 @@ class CatDiningStation extends StatelessWidget {
             const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('🥫', style: TextStyle(fontSize: 14)),
+                Text('🥫', style: TextStyle(fontSize: PokoFont.bodyMd)),
                 SizedBox(width: 2),
-                Text('🔔', style: TextStyle(fontSize: 11)),
+                Text('🔔', style: TextStyle(fontSize: PokoFont.caption)),
               ],
             ),
             const SizedBox(height: 1.5),
             Text(
               '敲罐',
               style: TextStyle(
-                fontSize: 8.5,
+                fontSize: PokoFont.micro,
                 fontWeight: FontWeight.bold,
-                color: isNight ? const Color(0xFFFBBF24) : const Color(0xFFD97706),
+                color: isNight ? PokoPalette.amber_400 : PokoPalette.amber_600,
               ),
             ),
           ],

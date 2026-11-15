@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../theme/poko_theme.dart';
+import '../widgets/bouncy_touch_feedback.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -356,24 +358,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 触碰 Q 弹形变动画
     _squishController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 320),
+      duration: PokoDuration.lazy,
     );
     _squishScaleX = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.15).chain(CurveTween(curve: Curves.easeOut)), weight: 35),
-      TweenSequenceItem(tween: Tween(begin: 1.15, end: 0.94).chain(CurveTween(curve: Curves.easeInOut)), weight: 35),
-      TweenSequenceItem(tween: Tween(begin: 0.94, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)), weight: 30),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.15).chain(CurveTween(curve: PokoCurves.enter)), weight: 35),
+      TweenSequenceItem(tween: Tween(begin: 1.15, end: 0.94).chain(CurveTween(curve: PokoCurves.gentle)), weight: 35),
+      TweenSequenceItem(tween: Tween(begin: 0.94, end: 1.0).chain(CurveTween(curve: PokoCurves.playful)), weight: 30),
     ]).animate(_squishController);
 
     _squishScaleY = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.85).chain(CurveTween(curve: Curves.easeOut)), weight: 35),
-      TweenSequenceItem(tween: Tween(begin: 0.85, end: 1.06).chain(CurveTween(curve: Curves.easeInOut)), weight: 35),
-      TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)), weight: 30),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.85).chain(CurveTween(curve: PokoCurves.enter)), weight: 35),
+      TweenSequenceItem(tween: Tween(begin: 0.85, end: 1.06).chain(CurveTween(curve: PokoCurves.gentle)), weight: 35),
+      TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0).chain(CurveTween(curve: PokoCurves.playful)), weight: 30),
     ]).animate(_squishController);
 
     // 探身朝向家具动画（0 = 站直不动，1 = 头与视线完全转过去）
     _focusController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 420),
+      duration: PokoDuration.deliberate,
     );
 
     // 三个动画控制器的合并监听器 —— 建一次就够，别在 build() 里反复 new。
@@ -546,8 +548,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               _spawnParticles(ballPos, emoji: '🧶', count: 4);
               _spawnParticles(ballPos, emoji: '✨', count: 3);
               _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐾', count: 3);
-              _spawnTextParticle(Offset(_petX - 35, _petY - 55), '抓牢抱球滚滚玩耍！🐾🧶', const Color(0xFFF43F5E));
-              _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验 ✨', const Color(0xFF6366F1));
+              _spawnTextParticle(Offset(_petX - 35, _petY - 55), '抓牢抱球滚滚玩耍！🐾🧶', PokoPalette.rose_500);
+              _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验 ✨', PokoPalette.indigo_500);
               widget.petModel.addExp(10.0);
               widget.petModel.addIntimacy(4);
               _showDialogueBubble('哇！猛虎飞扑抓住毛线球啦！两只小爪爪抱紧紧滚来滚去~ 🧶🐾💕', duration: const Duration(seconds: 4), speak: true);
@@ -575,7 +577,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           widget.petModel.feed('fish');
           _playAction('EATING');
           _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 4);
-          _spawnTextParticle(Offset(_petX - 30, _petY - 50), '+12 饱腹 ❤️', const Color(0xFFF59E0B));
+          _spawnTextParticle(Offset(_petX - 30, _petY - 50), '+12 饱腹 ❤️', PokoPalette.amber_500);
           _showDialogueBubble('嗷呜！波可一口接住了小碗里跳出来的小鲜鱼！(๑´ڡ`๑)🐟');
         } else {
           _poppingFishPos = current + delta * 0.22;
@@ -607,7 +609,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _squishController.forward(from: 0.0);
           _vibrate('medium');
           _spawnParticles(_laserPos!, emoji: '💥', count: 3);
-          _spawnTextParticle(Offset(_petX - 25, _petY - 45), '扑到啦！🐾', const Color(0xFFEF4444));
+          _spawnTextParticle(Offset(_petX - 25, _petY - 45), '扑到啦！🐾', PokoPalette.red_500);
           // 激光点受惊随机跳向旁边（模拟真实手抖跳跃）
           final randomAngle = math.Random().nextDouble() * 2 * math.pi;
           final jumpDist = 90.0 + math.Random().nextDouble() * 70.0;
@@ -843,17 +845,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        backgroundColor: const Color(0xFFFFFDF9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.lg)),
+        backgroundColor: PokoPalette.cream,
         title: const Row(
           children: [
-            Text('🐾 ', style: TextStyle(fontSize: 22)),
+            Text('🐾 ', style: TextStyle(fontSize: PokoFont.displayMd)),
             Text(
               '想要找回历史波可吗？',
               style: TextStyle(
-                fontSize: 16.5,
+                fontSize: PokoFont.titleSm,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF78350F),
+                color: PokoPalette.amber_900,
               ),
             ),
           ],
@@ -861,15 +863,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         content: const Text(
           '检测到您当前波可处于初生状态。若您之前曾安装过波可，授权存储访问后即可自动扫描手机公共下载目录，找回以往的等级、金币与全部装扮！',
           style: TextStyle(
-            fontSize: 12.5,
+            fontSize: PokoFont.small,
             height: 1.5,
-            color: Color(0xFF92400E),
+            color: PokoPalette.orange_800,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('从头开始', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('从头开始', style: TextStyle(color: PokoPalette.slate_400)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -880,9 +882,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               });
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEA580C),
+              backgroundColor: PokoPalette.orange_500,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
             ),
             child: const Text('授权并扫描档案 ✨'),
           ),
@@ -943,17 +945,17 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        backgroundColor: const Color(0xFFFFFDF9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.lg)),
+        backgroundColor: PokoPalette.cream,
         title: const Row(
           children: [
-            Text('📥 ', style: TextStyle(fontSize: 22)),
+            Text('📥 ', style: TextStyle(fontSize: PokoFont.displayMd)),
             Text(
               '导入口令码恢复档案',
               style: TextStyle(
-                fontSize: 16.5,
+                fontSize: PokoFont.titleSm,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF78350F),
+                color: PokoPalette.amber_900,
               ),
             ),
           ],
@@ -964,25 +966,25 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           children: [
             const Text(
               '请粘贴之前导出的波可防丢口令码 (以 POKO# 开头)：',
-              style: TextStyle(fontSize: 12.5, color: Color(0xFF92400E), height: 1.45),
+              style: TextStyle(fontSize: PokoFont.small, color: PokoPalette.orange_800, height: 1.45),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: textCtrl,
               maxLines: 3,
-              style: const TextStyle(fontSize: 12),
+              style: const TextStyle(fontSize: PokoFont.small),
               decoration: InputDecoration(
                 hintText: 'POKO#v2#...',
-                hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                hintStyle: const TextStyle(color: PokoPalette.slate_400),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding: const EdgeInsets.all(10),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFFED7AA)),
+                  borderRadius: BorderRadius.circular(PokoRadius.sm),
+                  borderSide: const BorderSide(color: PokoPalette.orange_200),
                 ),
                 suffixIcon: IconButton(
-                  icon: const Icon(Icons.paste_rounded, color: Color(0xFFEA580C)),
+                  icon: const Icon(Icons.paste_rounded, color: PokoPalette.orange_500),
                   tooltip: '读取剪贴板',
                   onPressed: () async {
                     final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -998,7 +1000,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('取消', style: TextStyle(color: Color(0xFF94A3B8))),
+            child: const Text('取消', style: TextStyle(color: PokoPalette.slate_400)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1016,9 +1018,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               _showHeritageInheritDialog(backupPayload);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEA580C),
+              backgroundColor: PokoPalette.orange_500,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
             ),
             child: const Text('解析并恢复 🚀'),
           ),
@@ -1240,7 +1242,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (_isCoveredWithBlanket) {
       widget.petModel.addIntimacy(3);
       _spawnParticles(Offset(_petX, _petY - 15), emoji: '🛏️', count: 3);
-      _spawnTextParticle(Offset(_petX - 35, _petY - 50), '盖好小被子 💤 +3亲密', const Color(0xFFF43F5E));
+      _spawnTextParticle(Offset(_petX - 35, _petY - 50), '盖好小被子 💤 +3亲密', PokoPalette.rose_500);
       _showDialogueBubble('盖好暖和的小被子啦~ 呼噜噜好舒服 (ฅ˘ω˘ฅ)🛌💕');
     } else {
       _showDialogueBubble('掀开小被子起床伸个大懒腰啦~ 🥱🐾');
@@ -1260,7 +1262,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _vibrate('light');
         _squishController.forward(from: 0.0);
         _spawnParticles(petHeadPos, emoji: '😋', count: 3);
-        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', const Color(0xFFF59E0B));
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', PokoPalette.amber_500);
         final fullQuotes = [
           '嗝~ 肚皮已经圆滚滚啦，实在吃不下啦！留着下一顿再吃好不好呀~',
           '波可的小肚子已经装得满满当当啦，再喂要变成猫猫球啦！',
@@ -1281,7 +1283,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       final fed = widget.petModel.feed(_draggingFoodId ?? 'dried_fish', allowWhenFull: false);
       if (!fed) {
         _vibrate('light');
-        _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', const Color(0xFF94A3B8));
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', PokoPalette.slate_400);
         _showDialogueBubble('呼噜噜... 波可睡得正香呢，等它醒来再喂好不好~ 💤', duration: const Duration(seconds: 4));
         setState(() {
           _draggingFoodPos = null;
@@ -1295,7 +1297,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       widget.petModel.addIntimacy(intimacyGain);
       _spawnParticles(petHeadPos, emoji: foodIcon, count: 5);
       _spawnParticles(petHeadPos, emoji: '💖', count: 3);
-      _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹  +$intimacyGain 亲密 💖', const Color(0xFFF43F5E));
+      _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹  +$intimacyGain 亲密 💖', PokoPalette.rose_500);
       _triggerWink();
       if (math.Random().nextBool()) {
         _triggerBlep();
@@ -1348,7 +1350,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _windowScale = 0.88;
       _windowWeather = (_windowWeather + 1) % 4;
     });
-    Timer(const Duration(milliseconds: 140), () {
+    Timer(PokoDuration.brisk, () {
       if (mounted) setState(() => _windowScale = 1.0);
     });
 
@@ -1379,7 +1381,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       '星光闪烁，浪漫星空与静谧月牙升起啦~ 🌙✨',
     ];
     _spawnParticles(Offset(MediaQuery.of(context).size.width - 70, 100), emoji: ['☀️', '🌧️', '🌸', '⭐'][_windowWeather], count: 4);
-    _spawnTextParticle(Offset(MediaQuery.of(context).size.width - 95, 75), names[_windowWeather], const Color(0xFF6366F1));
+    _spawnTextParticle(Offset(MediaQuery.of(context).size.width - 95, 75), names[_windowWeather], PokoPalette.indigo_500);
     _showDialogueBubble(quotes[_windowWeather]);
   }
 
@@ -1407,8 +1409,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       builder: (ctx) {
         return Container(
           decoration: BoxDecoration(
-            color: isNight ? const Color(0xFF1E1B4B) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            color: isNight ? PokoPalette.night_canvas : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(PokoRadius.xl)),
             boxShadow: const [
               BoxShadow(color: Color(0x33000000), blurRadius: 24, offset: Offset(0, -6)),
             ],
@@ -1423,7 +1425,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   width: 38,
                   height: 4.5,
                   decoration: BoxDecoration(
-                    color: isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1),
+                    color: isNight ? PokoPalette.slate_600 : PokoPalette.slate_300,
                     borderRadius: BorderRadius.circular(3),
                   ),
                 ),
@@ -1434,14 +1436,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 children: [
                   Row(
                     children: [
-                      Text(icon, style: const TextStyle(fontSize: 24)),
+                      Text(icon, style: const TextStyle(fontSize: PokoFont.display)),
                       const SizedBox(width: 8),
                       Text(
                         '波可与你的亲密羁绊',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: PokoFont.subtitle,
                           fontWeight: FontWeight.bold,
-                          color: isNight ? Colors.white : const Color(0xFF1E293B),
+                          color: isNight ? Colors.white : PokoPalette.slate_800,
                         ),
                       ),
                     ],
@@ -1452,10 +1454,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: isNight ? const Color(0xFF332D73) : const Color(0xFFF1F5F9),
+                        color: isNight ? const Color(0xFF332D73) : PokoPalette.slate_100,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.close, size: 18, color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                      child: Icon(Icons.close, size: 18, color: isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
                     ),
                   ),
                 ],
@@ -1468,7 +1470,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   gradient: LinearGradient(
                     colors: [color.withValues(alpha: 0.18), color.withValues(alpha: 0.06)],
                   ),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(PokoRadius.lg),
                   border: Border.all(color: color.withValues(alpha: 0.4), width: 1.5),
                 ),
                 child: Column(
@@ -1480,30 +1482,30 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: color,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(PokoRadius.sm),
                           ),
                           child: Text(
                             '第 $stage 阶段 · $title',
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(color: Colors.white, fontSize: PokoFont.small, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const Spacer(),
                         Text(
                           '📅 陪伴第 ${widget.petModel.totalDays} 天 · 亲密值: ${widget.petModel.intimacy}',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
+                          style: TextStyle(fontSize: PokoFont.small, fontWeight: FontWeight.bold, color: color),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
                     Text(
                       '波可对你的专属称谓：',
-                      style: TextStyle(fontSize: 11, color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                      style: TextStyle(fontSize: PokoFont.caption, color: isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '「$ownerTitle」',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: PokoFont.subtitle,
                         fontWeight: FontWeight.bold,
                         color: color,
                       ),
@@ -1512,8 +1514,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     Text(
                       desc,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: isNight ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                        fontSize: PokoFont.small,
+                        color: isNight ? PokoPalette.slate_300 : PokoPalette.slate_700,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1522,14 +1524,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       child: LinearProgressIndicator(
                         value: progress,
                         minHeight: 7,
-                        backgroundColor: isNight ? const Color(0xFF332D73) : const Color(0xFFE2E8F0),
+                        backgroundColor: isNight ? const Color(0xFF332D73) : PokoPalette.slate_200,
                         valueColor: AlwaysStoppedAnimation<Color>(color),
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       stage < 5 ? '距下一阶段还需 ${nextThreshold - widget.petModel.intimacy} 点亲密值' : '已达成最高灵魂羁绊！✨',
-                      style: TextStyle(fontSize: 10, color: isNight ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
+                      style: TextStyle(fontSize: PokoFont.tiny, color: isNight ? PokoPalette.slate_400 : PokoPalette.slate_500),
                     ),
                   ],
                 ),
@@ -1538,9 +1540,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               Text(
                 '💎 羁绊阶段专属特权',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: PokoFont.body,
                   fontWeight: FontWeight.bold,
-                  color: isNight ? Colors.white : const Color(0xFF1E293B),
+                  color: isNight ? Colors.white : PokoPalette.slate_800,
                 ),
               ),
               const SizedBox(height: 8),
@@ -1565,13 +1567,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             _spawnParticles(Offset(_petX, _petY - 20), emoji: '🦸‍♂️', count: 4);
                             _showDialogueBubble('披上帅气的皇家丝绒披风啦！威风凛凛~ ✨');
                           },
-                          icon: const Text('🦸‍♂️', style: TextStyle(fontSize: 16)),
+                          icon: const Text('🦸‍♂️', style: TextStyle(fontSize: PokoFont.titleSm)),
                           label: Text(widget.petModel.decorations['neck'] == 'royal_cape' ? '卸下披风' : '穿上披风'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF6B21A8),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
                           ),
                         ),
                       ),
@@ -1588,13 +1590,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                             _spawnParticles(Offset(_petX, _petY - 20), emoji: '👑', count: 4);
                             _showDialogueBubble('戴上闪闪发光的璀璨星辉皇冠啦！波可是全世界最棒的小猫~ 👑✨');
                           },
-                          icon: const Text('✨', style: TextStyle(fontSize: 16)),
+                          icon: const Text('✨', style: TextStyle(fontSize: PokoFont.titleSm)),
                           label: Text(widget.petModel.decorations['head'] == 'gold_crown_sparkle' ? '摘下皇冠' : '戴上星冠'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF59E0B),
+                            backgroundColor: PokoPalette.amber_500,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
                           ),
                         ),
                       ),
@@ -1615,7 +1617,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           Icon(
             unlocked ? Icons.check_circle_rounded : Icons.lock_outline_rounded,
             size: 16,
-            color: unlocked ? const Color(0xFF10B981) : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+            color: unlocked ? PokoPalette.emerald_500 : (isNight ? PokoPalette.slate_500 : PokoPalette.slate_400),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1623,21 +1625,21 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               TextSpan(
                 text: '$title: ',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: PokoFont.caption,
                   fontWeight: FontWeight.bold,
                   color: unlocked
-                      ? (isNight ? Colors.white : const Color(0xFF1E293B))
-                      : (isNight ? const Color(0xFF64748B) : const Color(0xFF94A3B8)),
+                      ? (isNight ? Colors.white : PokoPalette.slate_800)
+                      : (isNight ? PokoPalette.slate_500 : PokoPalette.slate_400),
                 ),
                 children: [
                   TextSpan(
                     text: desc,
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: PokoFont.tiny,
                       fontWeight: FontWeight.normal,
                       color: unlocked
-                          ? (isNight ? const Color(0xFFCBD5E1) : const Color(0xFF475569))
-                          : (isNight ? const Color(0xFF475569) : const Color(0xFFCBD5E1)),
+                          ? (isNight ? PokoPalette.slate_300 : PokoPalette.slate_600)
+                          : (isNight ? PokoPalette.slate_600 : PokoPalette.slate_300),
                     ),
                   ),
                 ],
@@ -1732,7 +1734,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _particles.add(_Particle(
         position: Offset(pos.dx + offsetX, pos.dy + offsetY),
         text: emojis[rnd.nextInt(emojis.length)],
-        fontSize: 13,
+        fontSize: PokoFont.body,
       ));
     }
   }
@@ -1743,7 +1745,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       position: pos,
       text: text,
       color: color,
-      fontSize: 13,
+      fontSize: PokoFont.body,
     ));
   }
 
@@ -2078,7 +2080,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _playAction('DOZE_OFF');
         widget.petModel.addIntimacy(2);
         _spawnParticles(Offset(_petX, _petY - 20), emoji: '☀️', count: 4);
-        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '暖洋洋晒肚皮 ☀️', const Color(0xFFF59E0B));
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '暖洋洋晒肚皮 ☀️', PokoPalette.amber_500);
         _showDialogueBubble('阳光晒得背上暖烘烘的~ 伸直小爪子晒肚皮打个盹！☀️🐾');
         break;
       case 'COZY_NEST':
@@ -2129,7 +2131,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
           _playAction('EAT_FISH');
           _spawnParticles(Offset(_petX, _petY - 20), emoji: '🐟', count: 5);
         } else {
-          _spawnTextParticle(Offset(_petX - 35, _petY - 55), '吃不下啦 🐾', const Color(0xFF94A3B8));
+          _spawnTextParticle(Offset(_petX - 35, _petY - 55), '吃不下啦 🐾', PokoPalette.slate_400);
         }
         break;
       case 'SLEEP':
@@ -2195,7 +2197,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   // 而下面那段会无条件播进食动画、飘「+饱腹/+经验」字 —— 数值纹丝不动，
                   // 用户却看着它吃得香喷喷，属于最伤信任感的假反馈。
                   _vibrate('light');
-                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', const Color(0xFF94A3B8));
+                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), 'zzz 睡得正香... 🐾', PokoPalette.slate_400);
                   _showDialogueBubble('呼噜噜... 波可睡得正香呢，等它醒来再喂好不好~ 💤', duration: const Duration(seconds: 4));
                   return;
                 }
@@ -2204,7 +2206,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   _vibrate('light');
                   _squishController.forward(from: 0.0);
                   _spawnParticles(Offset(_petX, _petY - 25), emoji: '😋', count: 3);
-                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', const Color(0xFFF59E0B));
+                  _spawnTextParticle(Offset(_petX - 35, _petY - 55), '肚皮圆滚滚~ (吃饱啦) 🐾', PokoPalette.amber_500);
                   final fullQuotes = [
                     '嗝~ 肚皮已经圆滚滚啦，实在吃不下啦！留着下一顿再吃好不好呀~',
                     '波可的小肚子已经装得满满当当啦，再喂要变成猫猫球啦！',
@@ -2227,8 +2229,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
                 // 飞出食物与属性增加飘字
                 _spawnParticles(Offset(_petX, _petY - 25), emoji: foodIcon, count: 5);
-                _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹 ❤️', const Color(0xFFF59E0B));
-                _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+$expGain 经验 ✨', const Color(0xFF6366F1));
+                _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+$hungerGain 饱腹 ❤️', PokoPalette.amber_500);
+                _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+$expGain 经验 ✨', PokoPalette.indigo_500);
 
                 _showDialogueBubble('哇！$foodName 太美味啦~ 肚子饱饱的，好幸福！(๑´ڡ`๑)', duration: const Duration(seconds: 4));
               },
@@ -2322,7 +2324,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _vibrate('light');
     _spawnParticles(Offset(_petX - 30, _petY - 60), emoji: '🌠', count: 2);
     _spawnParticles(Offset(_petX + 30, _petY - 80), emoji: '⭐', count: 4);
-    _spawnTextParticle(Offset(_petX - 30, _petY - 95), '流星许愿 +10 ⭐', const Color(0xFFFDE047));
+    _spawnTextParticle(Offset(_petX - 30, _petY - 95), '流星许愿 +10 ⭐', PokoPalette.yellow_300);
     widget.petModel.addExp(10.0);
     _showDialogueBubble('哇！流星划过静谧星空啦~ 愿主人的愿望全部实现！⭐✨', duration: const Duration(seconds: 4));
   }
@@ -2331,7 +2333,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   void _onSunTap() {
     _vibrate('light');
     _spawnParticles(Offset(_petX - 60, _petY - 60), emoji: '🌈', count: 3);
-    _spawnTextParticle(Offset(_petX - 25, _petY - 95), '晴空温煦 +10 ☀️', const Color(0xFFF59E0B));
+    _spawnTextParticle(Offset(_petX - 25, _petY - 95), '晴空温煦 +10 ☀️', PokoPalette.amber_500);
     widget.petModel.addExp(10.0);
     _showDialogueBubble('微风拂过晴空，有波可陪伴的每一天都是大晴天~ ☀️🌈', duration: const Duration(seconds: 4));
   }
@@ -2363,7 +2365,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnTextParticle(
       Offset(_petX - 35, _petY - 95),
       currentTheme.isManual ? '光影 · ${currentTheme.name} +10 ☀️' : '自然天文 · 自动流转 🌍✨',
-      currentTheme.isNight ? const Color(0xFFC4B5FD) : const Color(0xFFF59E0B),
+      currentTheme.isNight ? const Color(0xFFC4B5FD) : PokoPalette.amber_500,
     );
     widget.petModel.addExp(10.0);
 
@@ -2402,7 +2404,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     });
     _spawnParticles(Offset(_petX, _petY - 30), emoji: '🎉', count: 4);
     _spawnParticles(Offset(_petX, _petY - 30), emoji: '💖', count: 4);
-    _spawnTextParticle(Offset(_petX - 35, _petY - 65), '躲猫猫大成功！✨', const Color(0xFFEC4899));
+    _spawnTextParticle(Offset(_petX - 35, _petY - 65), '躲猫猫大成功！✨', PokoPalette.pink_500);
     _showDialogueBubble('哈哈！发现主人啦！扑个大满怀~ 喵呜！(✧ω✧)💕', duration: const Duration(seconds: 4), speak: true);
     _actionTimer?.cancel();
     _actionTimer = Timer(const Duration(milliseconds: 3200), () {
@@ -2421,13 +2423,13 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 弹性轻摆多段物理回弹
     _plantAnimTimer?.cancel();
     setState(() => _plantTilt = 0.16);
-    _plantAnimTimer = Timer(const Duration(milliseconds: 180), () {
+    _plantAnimTimer = Timer(PokoDuration.base, () {
       if (mounted) {
         setState(() => _plantTilt = -0.10);
-        _plantAnimTimer = Timer(const Duration(milliseconds: 160), () {
+        _plantAnimTimer = Timer(PokoDuration.fast, () {
           if (mounted) {
             setState(() => _plantTilt = 0.05);
-            _plantAnimTimer = Timer(const Duration(milliseconds: 140), () {
+            _plantAnimTimer = Timer(PokoDuration.brisk, () {
               if (mounted) setState(() => _plantTilt = 0.0);
             });
           }
@@ -2445,7 +2447,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     // 盆栽处飘出鲜嫩草叶与清香微粒子
     _spawnParticles(Offset(plantCenterX, plantCenterY - 10), emoji: '🌿', count: 4);
     _spawnParticles(Offset(plantCenterX + 12, plantCenterY - 15), emoji: '✨', count: 2);
-    _spawnTextParticle(Offset(plantCenterX - 15, plantCenterY - 30), '猫草清香 🌿✨', const Color(0xFF10B981));
+    _spawnTextParticle(Offset(plantCenterX - 15, plantCenterY - 30), '猫草清香 🌿✨', PokoPalette.emerald_500);
 
     // 判断猫咪是否已经在猫草旁边
     final isNearPlant =
@@ -2474,14 +2476,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (on) {
       _focusController.animateTo(
         1.0,
-        duration: const Duration(milliseconds: 420),
-        curve: Curves.easeOutCubic,
+        duration: PokoDuration.deliberate,
+        curve: PokoCurves.standard,
       );
     } else {
       _focusController.animateTo(
         0.0,
-        duration: const Duration(milliseconds: 320),
-        curve: Curves.easeInCubic,
+        duration: PokoDuration.lazy,
+        curve: PokoCurves.exit,
       );
     }
   }
@@ -2513,7 +2515,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
       // 盆栽微摇
       setState(() => _plantTilt = 0.12);
-      Timer(const Duration(milliseconds: 180), () {
+      Timer(PokoDuration.base, () {
         if (mounted) setState(() => _plantTilt = -0.08);
       });
       Timer(const Duration(milliseconds: 360), () {
@@ -2532,8 +2534,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         widget.petModel.addMood(8);
         widget.petModel.addExp(10.0);
 
-        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '排出毛球 · 肠胃舒畅 🌱✨', const Color(0xFF10B981));
-        _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验  +8 愉悦  +4 亲密 💖', const Color(0xFF059669));
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '排出毛球 · 肠胃舒畅 🌱✨', PokoPalette.emerald_500);
+        _spawnTextParticle(Offset(_petX + 25, _petY - 75), '+10 经验  +8 愉悦  +4 亲密 💖', PokoPalette.emerald_600);
         _spawnParticles(Offset(_petX, _petY - 20), emoji: '💖', count: 4);
 
         _triggerBlep();
@@ -2573,7 +2575,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _vibrate('medium');
       Timer(const Duration(milliseconds: 100), () {
         _vibrate('heavy');
-        Timer(const Duration(milliseconds: 120), () {
+        Timer(PokoDuration.quick, () {
           _vibrate('light');
         });
       });
@@ -2588,10 +2590,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _postAnimTimer = Timer(const Duration(milliseconds: 70), () {
           if (mounted) {
             setState(() => _postWiggle = 3.5);
-            _postAnimTimer = Timer(const Duration(milliseconds: 80), () {
+            _postAnimTimer = Timer(PokoDuration.instant, () {
               if (mounted) {
                 setState(() => _postWiggle = -1.5);
-                _postAnimTimer = Timer(const Duration(milliseconds: 80), () {
+                _postAnimTimer = Timer(PokoDuration.instant, () {
                   if (mounted) setState(() => _postWiggle = 0.0);
                 });
               }
@@ -2619,7 +2621,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnParticles(Offset(postCenterX, postCenterY - 10), emoji: '🪵', count: 3);
     _spawnParticles(Offset(postCenterX - 10, postCenterY), emoji: '✨', count: 3);
     _spawnParticles(Offset(postCenterX + 5, postCenterY - 15), emoji: '🐾', count: 2);
-    _spawnTextParticle(Offset(postCenterX - 50, postCenterY - 35), '磨爪爪解压 +5 🐾', const Color(0xFFF59E0B));
+    _spawnTextParticle(Offset(postCenterX - 50, postCenterY - 35), '磨爪爪解压 +5 🐾', PokoPalette.amber_500);
     widget.petModel.addExp(5.0);
 
     // 猫咪动态响应：面朝右侧猫抓柱，伸展利爪微动作，并在磨完后满足地发出软萌耳语喵
@@ -2629,7 +2631,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _twitchEar = 'RIGHT';
       });
       _earTwitchTimer?.cancel();
-      _earTwitchTimer = Timer(const Duration(milliseconds: 600), () {
+      _earTwitchTimer = Timer(PokoDuration.steady, () {
         if (mounted) setState(() => _twitchEar = null);
       });
 
@@ -2686,24 +2688,24 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _isLampSwitchDepressed = true;
       _isNightLampOn = !_isNightLampOn;
     });
-    Timer(const Duration(milliseconds: 140), () {
+    Timer(PokoDuration.brisk, () {
       if (mounted) setState(() => _isLampSwitchDepressed = false);
     });
 
     if (_isNightLampOn) {
       setState(() => _twitchEar = 'RIGHT');
       _earTwitchTimer?.cancel();
-      _earTwitchTimer = Timer(const Duration(milliseconds: 600), () {
+      _earTwitchTimer = Timer(PokoDuration.steady, () {
         if (mounted) setState(() => _twitchEar = null);
       });
       _spawnParticles(Offset(_petX + 50, _petY), emoji: '💡', count: 4);
       _spawnParticles(Offset(_petX + 55, _petY - 20), emoji: '✨', count: 3);
-      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '暖光微亮 💡', const Color(0xFFFBBF24));
+      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '暖光微亮 💡', PokoPalette.amber_400);
       _showDialogueBubble('啪嗒~ 暖光小夜灯点亮啦，守护波可的香甜美梦 💡', duration: const Duration(seconds: 4));
     } else {
       _spawnParticles(Offset(_petX + 50, _petY), emoji: '💤', count: 4);
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🌙', count: 2);
-      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '小夜灯已熄灭 🌙', const Color(0xFF94A3B8));
+      _spawnTextParticle(Offset(_petX + 35, _petY - 35), '小夜灯已熄灭 🌙', PokoPalette.slate_400);
       _showDialogueBubble('啪嗒~ 小夜灯熄灭啦，房间暗下来好助眠，晚安好梦~ 💤🌙', duration: const Duration(seconds: 4));
     }
   }
@@ -2718,16 +2720,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (mode == 'rain') {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🌧️', count: 4);
       _spawnParticles(Offset(_petX + 55, _petY), emoji: '💧', count: 3);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启窗外细雨 🌧️', const Color(0xFF38BDF8));
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启窗外细雨 🌧️', PokoPalette.sky_400);
       _showDialogueBubble('🌧️ 窗外细雨沙沙作响，温柔雨声伴您进入深度专注心流~', duration: const Duration(seconds: 4));
     } else if (mode == 'purr') {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '🐱', count: 4);
       _spawnParticles(Offset(_petX + 55, _petY), emoji: '🫧', count: 3);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启深度呼噜 🐱', const Color(0xFFA855F7));
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '已开启深度呼噜 🐱', PokoPalette.violet_500);
       _showDialogueBubble('🐱 咕噜噜~ 波可发出深度解压呼噜声，超安神助眠~ (ฅ>ω<*ฅ)', duration: const Duration(seconds: 4));
     } else {
       _spawnParticles(Offset(_petX + 50, _petY - 20), emoji: '💡', count: 3);
-      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '房间回归宁静 💡', const Color(0xFFFBBF24));
+      _spawnTextParticle(Offset(_petX + 20, _petY - 45), '房间回归宁静 💡', PokoPalette.amber_400);
       _showDialogueBubble('💡 已关闭环境白噪音，房间回归温馨安宁~', duration: const Duration(seconds: 3));
     }
   }
@@ -2739,10 +2741,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _vibrate('light');
     _photoAnimTimer?.cancel();
     setState(() => _photoAngle = 0.10);
-    _photoAnimTimer = Timer(const Duration(milliseconds: 260), () {
+    _photoAnimTimer = Timer(PokoDuration.smooth, () {
       if (mounted) {
         setState(() => _photoAngle = -0.12);
-        _photoAnimTimer = Timer(const Duration(milliseconds: 260), () {
+        _photoAnimTimer = Timer(PokoDuration.smooth, () {
           if (mounted) setState(() => _photoAngle = -0.06);
         });
       }
@@ -2750,7 +2752,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     _spawnParticles(const Offset(45, 135), emoji: '💕', count: 3);
     _spawnParticles(const Offset(40, 115), emoji: '📸', count: 2);
-    _spawnTextParticle(const Offset(20, 105), '珍藏回忆 💕', const Color(0xFFEC4899));
+    _spawnTextParticle(const Offset(20, 105), '珍藏回忆 💕', PokoPalette.pink_500);
     _showDialogueBubble('相框里是初遇那天拍的纪念照~ 正在翻开波可的专属时光手账！🥰📷', duration: const Duration(seconds: 4));
 
     showModalBottomSheet(
@@ -2786,14 +2788,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _spawnParticles(Offset(nestX - 25, nestY - 20), emoji: '🥐', count: 3);
     _spawnParticles(Offset(nestX + 25, nestY - 25), emoji: '🐾', count: 3);
     _spawnParticles(Offset(nestX, nestY - 40), emoji: '💕', count: 4);
-    _spawnTextParticle(Offset(nestX - 45, nestY - 60), '幸福踩奶 +10 🥐', const Color(0xFFF59E0B));
+    _spawnTextParticle(Offset(nestX - 45, nestY - 60), '幸福踩奶 +10 🥐', PokoPalette.amber_500);
     widget.petModel.addExp(10.0);
 
     // 踩奶节奏细微触感
     _purrHapticTimer?.cancel();
     int kneadTick = 0;
     if (widget.petModel.enableHaptics) {
-      _purrHapticTimer = Timer.periodic(const Duration(milliseconds: 200), (t) {
+      _purrHapticTimer = Timer.periodic(PokoDuration.normal, (t) {
         if (kneadTick++ >= 12 || _state != 'KNEADING_BISCUITS') {
           t.cancel();
         } else {
@@ -2830,7 +2832,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _facingLeft = touchPos.dx < _petX;
     });
     _spawnParticles(touchPos, emoji: '✨', count: 1);
-    _spawnTextParticle(Offset(touchPos.dx - 35, touchPos.dy - 40), '默契击掌 🐾💖', const Color(0xFFF43F5E));
+    _spawnTextParticle(Offset(touchPos.dx - 35, touchPos.dy - 40), '默契击掌 🐾💖', PokoPalette.rose_500);
     widget.petModel.addIntimacy(3);
     _triggerWink();
     _showDialogueBubble('啪嗒！小爪爪和主人击掌啦~ 专属默契+100！(ฅ^ω^ฅ)🐾💕', duration: const Duration(seconds: 4), speak: true);
@@ -2852,7 +2854,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _state = 'ROLL_ON_BACK';
     });
     _spawnParticles(Offset(_petX, _petY - 20), emoji: '💕', count: 1);
-    _spawnTextParticle(Offset(_petX - 35, _petY - 50), '袒露软肚皮 💕', const Color(0xFFF43F5E));
+    _spawnTextParticle(Offset(_petX - 35, _petY - 50), '袒露软肚皮 💕', PokoPalette.rose_500);
     widget.petModel.addIntimacy(2);
     _showDialogueBubble('呀啊~ 被挠到痒痒肉啦！翻个身把软乎乎的小肚皮露给主人摸~ (ฅ>ω<*ฅ)💕', duration: const Duration(seconds: 4), speak: true);
     _bunnyKickTimer?.cancel();
@@ -2873,7 +2875,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _state = 'BUNNY_KICKS';
     });
     _spawnParticles(Offset(_petX, _petY - 15), emoji: '💖', count: 1);
-    _spawnTextParticle(Offset(_petX - 35, _petY - 55), '兔子蹬腿 🐾🚴', const Color(0xFFEC4899));
+    _spawnTextParticle(Offset(_petX - 35, _petY - 55), '兔子蹬腿 🐾🚴', PokoPalette.pink_500);
     widget.petModel.addIntimacy(3);
     _showDialogueBubble('咕噜噜噜~ 别挠肚皮啦，小爪爪在空中踩单车停不下来啦！🐾🚴💕', duration: const Duration(seconds: 4));
     _bunnyKickTimer?.cancel();
@@ -2915,7 +2917,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         widget.petModel.addCleanliness(8);
         widget.petModel.addMood(6);
         widget.petModel.addIntimacy(2);
-        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+8 清洁  +6 愉悦  +2 亲密 💧✨', const Color(0xFF0284C7));
+        _spawnTextParticle(Offset(_petX - 35, _petY - 55), '+8 清洁  +6 愉悦  +2 亲密 💧✨', PokoPalette.sky_600);
         _spawnParticles(Offset(_petX, _petY - 20), emoji: '💖', count: 3);
         _triggerBlep();
         _triggerWink();
@@ -2976,7 +2978,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _sprintTimer = Timer.periodic(const Duration(milliseconds: 28), (timer) {
       step++;
       final progress = (step / totalSteps).clamp(0.0, 1.0);
-      final curve = Curves.easeInOutCubic.transform(progress);
+      final curve = PokoCurves.balanced.transform(progress);
       if (mounted) {
         setState(() {
           _petX = startX + (targetX - startX) * curve;
@@ -3132,7 +3134,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _stopRoaming();
     if (widget.petModel.enableHaptics) {
       _vibrate('heavy');
-      Timer(const Duration(milliseconds: 120), () {
+      Timer(PokoDuration.quick, () {
         _vibrate('light');
       });
     }
@@ -3226,7 +3228,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _vibrate('light');
       setState(() => _isBlep = false);
       _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 1);
-      _spawnTextParticle(Offset(_petX - 35, _petY - 45), '收回小舌头~ (ฅ^ω^ฅ)', const Color(0xFFF43F5E));
+      _spawnTextParticle(Offset(_petX - 35, _petY - 45), '收回小舌头~ (ฅ^ω^ฅ)', PokoPalette.rose_500);
       _showDialogueBubble('呀！被主人戳到小舌头啦，哧溜缩回来！👅✨');
       return;
     }
@@ -3238,7 +3240,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _squishController.forward(from: 0.0);
       setState(() => _bodyTiltAngle = -0.04);
       _tiltTimer?.cancel();
-      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+      _tiltTimer = Timer(PokoDuration.smooth, () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _spawnParticles(Offset(_petX, _petY - 25), emoji: '✨', count: 1);
@@ -3260,7 +3262,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _bodyTiltAngle = -0.05;
       });
       _tiltTimer?.cancel();
-      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+      _tiltTimer = Timer(PokoDuration.smooth, () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _earTwitchTimer?.cancel();
@@ -3280,7 +3282,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         _bodyTiltAngle = 0.05;
       });
       _tiltTimer?.cancel();
-      _tiltTimer = Timer(const Duration(milliseconds: 260), () {
+      _tiltTimer = Timer(PokoDuration.smooth, () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _earTwitchTimer?.cancel();
@@ -3300,7 +3302,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       _squishController.forward(from: 0.0);
       setState(() => _bodyTiltAngle = isLeftCheek ? 0.07 : -0.07);
       _tiltTimer?.cancel();
-      _tiltTimer = Timer(const Duration(milliseconds: 280), () {
+      _tiltTimer = Timer(PokoDuration.swell, () {
         if (mounted) setState(() => _bodyTiltAngle = 0.0);
       });
       _spawnParticles(Offset(_petX, _petY - 20), emoji: '✨', count: 1);
@@ -3343,7 +3345,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     setState(() => _isSlowBlink = true);
     _vibrate('light');
     _spawnParticles(Offset(_petX, _petY - 35), emoji: '💖', count: 1);
-    _spawnTextParticle(Offset(_petX - 35, _petY - 60), '猫咪之吻 🐾💕', const Color(0xFFF43F5E));
+    _spawnTextParticle(Offset(_petX - 35, _petY - 60), '猫咪之吻 🐾💕', PokoPalette.rose_500);
     widget.petModel.addIntimacy(3);
     _showDialogueBubble('波可正在对主人慢眨眼哦~ 在小猫的世界里，这是表达最深爱意与信任的‘猫咪之吻’呢！(˘ω˘)💕', duration: const Duration(seconds: 4));
 
@@ -3485,7 +3487,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
 
     // 敲击地板处泛起微光小波纹与爪印
     _spawnParticles(targetPos, emoji: '🐾', count: 1);
-    _spawnTextParticle(Offset(targetPos.dx - 22, targetPos.dy - 24), '哒哒！✨', const Color(0xFF6366F1));
+    _spawnTextParticle(Offset(targetPos.dx - 22, targetPos.dy - 24), '哒哒！✨', PokoPalette.indigo_500);
 
     // 唤起波可敏捷小跑靠近指尖落点
     final floorTop = (screenSize.height * 0.33).clamp(240.0, 290.0);
@@ -3553,11 +3555,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (habitat == 'neon_matrix') {
       gradientColors = const [Color(0xFF0A0F1D), Color(0xFF131D36), Color(0xFF032238)];
     } else if (habitat == 'retro_arcade') {
-      gradientColors = const [Color(0xFF1E1035), Color(0xFF4C1D95), Color(0xFF831843), Color(0xFFD97706)];
+      gradientColors = const [PokoPalette.night_deep, PokoPalette.indigo_shadow, Color(0xFF831843), PokoPalette.amber_600];
     } else if (habitat == 'summer_beach') {
       gradientColors = isNight
-          ? const [Color(0xFF0B132B), Color(0xFF1C2541), Color(0xFF0F766E)]
-          : const [Color(0xFF38BDF8), Color(0xFF7DD3FC), Color(0xFFBAE6FD), Color(0xFFFEF3C7)];
+          ? const [PokoPalette.glow_deep, Color(0xFF1C2541), Color(0xFF0F766E)]
+          : const [PokoPalette.sky_400, PokoPalette.sky_300, PokoPalette.sky_200, PokoPalette.amber_100];
     } else if (habitat == 'zen_tatami') {
       gradientColors = isNight
           ? const [Color(0xFF1C1917), Color(0xFF292524), Color(0xFF3D3835)]
@@ -3586,8 +3588,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
         onPointerMove: (event) => _onPointerHoverOrMove(event.position),
         onPointerUp: (_) => _onPointerUpOrExit(),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 700),
-          curve: Curves.easeInOutCubic,
+          duration: PokoDuration.grand,
+          curve: PokoCurves.balanced,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
@@ -3633,33 +3635,37 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   Positioned(
                     top: 112,
                     left: 28,
-                    child: GestureDetector(
-                      onTap: _onMoonTap,
-                      child: Text('✨', style: TextStyle(fontSize: 16, color: const Color(0xFFFDE047).withValues(alpha: 0.7))),
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.88,
+        onTap: _onMoonTap,
+                      child: Text('✨', style: TextStyle(fontSize: PokoFont.titleSm, color: PokoPalette.yellow_300.withValues(alpha: 0.7))),
                     ),
                   ),
                   Positioned(
                     top: 150,
                     right: 70,
-                    child: GestureDetector(
-                      onTap: _onMoonTap,
-                      child: Text('⭐', style: TextStyle(fontSize: 13, color: Colors.amber.shade100.withValues(alpha: 0.6))),
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.88,
+        onTap: _onMoonTap,
+                      child: Text('⭐', style: TextStyle(fontSize: PokoFont.body, color: Colors.amber.shade100.withValues(alpha: 0.6))),
                     ),
                   ),
                   Positioned(
                     top: 205,
                     left: 50,
-                    child: GestureDetector(
-                      onTap: _onMoonTap,
-                      child: Text('✨', style: TextStyle(fontSize: 14, color: Colors.yellow.shade100.withValues(alpha: 0.5))),
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.88,
+        onTap: _onMoonTap,
+                      child: Text('✨', style: TextStyle(fontSize: PokoFont.bodyMd, color: Colors.yellow.shade100.withValues(alpha: 0.5))),
                     ),
                   ),
                   Positioned(
                     top: 170,
                     left: 110,
-                    child: GestureDetector(
-                      onTap: _onMoonTap,
-                      child: Text('⭐', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4))),
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.88,
+        onTap: _onMoonTap,
+                      child: Text('⭐', style: TextStyle(fontSize: PokoFont.caption, color: Colors.white.withValues(alpha: 0.4))),
                     ),
                   ),
                 ] else ...[
@@ -3667,9 +3673,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   Positioned(
                     top: 145,
                     left: 24,
-                    child: GestureDetector(
-                      onTap: _onSunTap,
-                      child: Text('☁️', style: TextStyle(fontSize: 22, color: Colors.white.withValues(alpha: 0.6))),
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.88,
+        onTap: _onSunTap,
+                      child: Text('☁️', style: TextStyle(fontSize: PokoFont.displayMd, color: Colors.white.withValues(alpha: 0.6))),
                     ),
                   ),
                 ],
@@ -3744,7 +3751,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     left: _poppingFishPos!.dx,
                     top: _poppingFishPos!.dy,
                     child: const IgnorePointer(
-                      child: Text('🐟', style: TextStyle(fontSize: 22)),
+                      child: Text('🐟', style: TextStyle(fontSize: PokoFont.displayMd)),
                     ),
                   ),
                 ),
@@ -3768,8 +3775,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                               shape: BoxShape.circle,
                               gradient: RadialGradient(
                                 colors: [
-                                  (isNight ? const Color(0xFFFDE047) : const Color(0xFFFBBF24)).withValues(alpha: 0.38),
-                                  (isNight ? const Color(0xFFF59E0B) : const Color(0xFFF59E0B)).withValues(alpha: 0.14),
+                                  (isNight ? PokoPalette.yellow_300 : PokoPalette.amber_400).withValues(alpha: 0.38),
+                                  (isNight ? PokoPalette.amber_500 : PokoPalette.amber_500).withValues(alpha: 0.14),
                                   Colors.transparent,
                                 ],
                               ),
@@ -3806,7 +3813,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 top: nestY + 86.0,
                 child: AnimatedOpacity(
                   opacity: _isWardrobeMode ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: PokoDuration.normal,
                   child: IgnorePointer(
                     ignoring: _isWardrobeMode,
                     child: KittenNightLamp(
@@ -3833,7 +3840,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     _vibrate('light');
                     _spawnParticles(Offset(x + 10, y + 10), emoji: '🌸', count: 3);
                     _spawnParticles(Offset(x + 10, y + 10), emoji: '✨', count: 2);
-                    _spawnTextParticle(Offset(x - 15, y - 20), '落樱轻抚 🌸+1💖', const Color(0xFFF43F5E));
+                    _spawnTextParticle(Offset(x - 15, y - 20), '落樱轻抚 🌸+1💖', PokoPalette.rose_500);
                     widget.petModel.addIntimacy(1);
                     _showDialogueBubble('轻触飘落的樱花瓣~ 化作粉红微尘消散在风中啦！(🌸´▽`🌸)', duration: const Duration(seconds: 3));
                   },
@@ -4135,7 +4142,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 top: floorTop + _kPlantTopOffset,
                 child: AnimatedOpacity(
                   opacity: _isWardrobeMode ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: PokoDuration.normal,
                   child: IgnorePointer(
                     ignoring: _isWardrobeMode,
                     child: CatGrassPlanter(isNight: isNight, plantTilt: _plantTilt, onTap: _onPlantTap),
@@ -4147,7 +4154,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 top: floorTop + 16.0,
                 child: AnimatedOpacity(
                   opacity: _isWardrobeMode ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: PokoDuration.normal,
                   child: IgnorePointer(
                     ignoring: _isWardrobeMode,
                     child: CatScratchingPost(isNight: isNight, postWiggle: _postWiggle, onTap: _onScratcherTap),
@@ -4169,7 +4176,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 top: nestY + 36.0,
                 child: AnimatedOpacity(
                   opacity: _isWardrobeMode ? 0.0 : 1.0,
-                  duration: const Duration(milliseconds: 200),
+                  duration: PokoDuration.normal,
                   child: IgnorePointer(
                     ignoring: _isWardrobeMode,
                     child: RepaintBoundary(
@@ -4203,7 +4210,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         });
                         _spawnParticles(Offset(42, nestY + 80), emoji: '💧', count: 5);
                         _spawnParticles(Offset(48, nestY + 70), emoji: '✨', count: 3);
-                        _spawnTextParticle(Offset(32, nestY + 55), '注满清冽甘泉 💧✨', const Color(0xFF0284C7));
+                        _spawnTextParticle(Offset(32, nestY + 55), '注满清冽甘泉 💧✨', PokoPalette.sky_600);
 
                         if (_state == 'DRINK_WATER') {
                           _showDialogueBubble('添入新鲜甘泉啦！水质格外清冽冰凉~ 咕嘟咕嘟！💧✨', duration: const Duration(seconds: 3), speak: true);
@@ -4339,12 +4346,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFEC4899), Color(0xFFF43F5E)],
+                            colors: [PokoPalette.pink_500, PokoPalette.rose_500],
                           ),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(PokoRadius.md),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFF43F5E).withValues(alpha: 0.32),
+                              color: PokoPalette.rose_500.withValues(alpha: 0.32),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -4354,7 +4361,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                           _petCombo >= 5 ? '🔥 MAX COMBO x$_petCombo' : '💖 COMBO x$_petCombo',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 11,
+                            fontSize: PokoFont.caption,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.5,
                           ),
@@ -4371,7 +4378,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                     child: Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: const Color(0xFFF43F5E).withValues(alpha: 0.2),
+                          color: PokoPalette.rose_500.withValues(alpha: 0.2),
                           width: 4.5,
                         ),
                       ),
@@ -4400,8 +4407,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   right: 0,
                   top: screenSize.height * 0.38 + 72,
                   child: Center(
-                    child: GestureDetector(
-                      onTap: () {
+                    child: BouncyTouchFeedback(
+                      scaleDown: 0.97,
+        onTap: () {
                         setState(() {
                           _hasGlassPawPrints = false;
                           _pawPrints = [];
@@ -4417,11 +4425,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFBCFE8), width: 1.2),
+                          borderRadius: BorderRadius.circular(PokoRadius.md),
+                          border: Border.all(color: PokoPalette.pink_200, width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFEC4899).withValues(alpha: 0.12),
+                              color: PokoPalette.pink_500.withValues(alpha: 0.12),
                               blurRadius: 10,
                               offset: const Offset(0, 3),
                             ),
@@ -4430,12 +4438,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('🫧', style: TextStyle(fontSize: 13)),
+                            Text('🫧', style: TextStyle(fontSize: PokoFont.body)),
                             SizedBox(width: 4),
                             Text(
                               '点击屏幕擦掉小猫肉垫印',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: PokoFont.caption,
                                 color: Color(0xFFBE185D),
                                 fontWeight: FontWeight.bold,
                               ),
@@ -4485,7 +4493,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                           ]
                                         : [
                                             Shadow(
-                                              color: const Color(0xFFF472B6).withValues(alpha: 0.35),
+                                              color: PokoPalette.pink_400.withValues(alpha: 0.35),
                                               blurRadius: 4,
                                             ),
                                           ],
@@ -4560,8 +4568,8 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                 shape: BoxShape.circle,
                                 gradient: RadialGradient(
                                   colors: [
-                                    const Color(0xFFEF4444).withValues(alpha: 0.55),
-                                    const Color(0xFFEF4444).withValues(alpha: 0.0),
+                                    PokoPalette.red_500.withValues(alpha: 0.55),
+                                    PokoPalette.red_500.withValues(alpha: 0.0),
                                   ],
                                 ),
                               ),
@@ -4574,7 +4582,7 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Color(0xFFEF4444),
+                                    color: PokoPalette.red_500,
                                     blurRadius: 10,
                                     spreadRadius: 2,
                                   ),
@@ -4606,11 +4614,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
                           color: const Color(0xFF991B1B).withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFF87171), width: 1.2),
+                          borderRadius: BorderRadius.circular(PokoRadius.lg),
+                          border: Border.all(color: PokoPalette.red_400, width: 1.2),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFEF4444).withValues(alpha: 0.3),
+                              color: PokoPalette.red_500.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 3),
                             ),
@@ -4619,12 +4627,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text('🔴', style: TextStyle(fontSize: 12)),
+                            Text('🔴', style: TextStyle(fontSize: PokoFont.small)),
                             SizedBox(width: 6),
                             Text(
                               '激光笔逗猫中 · 点击收起',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: PokoFont.small,
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -4776,11 +4784,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 bottom: 74,
                 child: AnimatedScale(
                   scale: (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode) ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutBack,
+                  duration: PokoDuration.settle,
+                  curve: PokoCurves.playful,
                   child: AnimatedOpacity(
                     opacity: (!_isWardrobeMode && !_isActionMode && !_showFoodTray && !_isLaserMode) ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 180),
+                    duration: PokoDuration.base,
                     child: IgnorePointer(
                       ignoring: _isWardrobeMode || _isActionMode || _showFoodTray || _isLaserMode,
                       child: CyberGachaFab(
@@ -4825,12 +4833,12 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.xl)),
             title: const Row(
               children: [
-                Text('📱', style: TextStyle(fontSize: 24)),
+                Text('📱', style: TextStyle(fontSize: PokoFont.display)),
                 SizedBox(width: 8),
-                Text('全局桌面悬浮宠', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                Text('全局桌面悬浮宠', style: TextStyle(fontSize: PokoFont.title, fontWeight: FontWeight.bold)),
               ],
             ),
             content: Column(
@@ -4841,14 +4849,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   hasPermission
                       ? '✅ 系统悬浮窗权限已就绪！\n开启后波可将突破 App 边界，常驻在手机桌面、微信、浏览器等任意应用的最上层，随时随地陪伴您。\n💡 按住波可拖动即可挪到屏幕任意位置，轻戳跟你说话，双击逗它转圈。\n🐾 打开小窝时桌面波可会暂时隐身，回桌面自动出现，不会同时出现两只。'
                       : '⚠️ 尚未开启“显示在其他应用上层”权限。\n请先点击下方按钮前往系统设置开启悬浮窗权限，方可在手机桌面上显示波可。',
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF475569), height: 1.5),
+                  style: const TextStyle(fontSize: PokoFont.body, color: PokoPalette.slate_600, height: 1.5),
                 ),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFFEA580C),
-                    side: const BorderSide(color: Color(0xFFFED7AA)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    foregroundColor: PokoPalette.orange_500,
+                    side: const BorderSide(color: PokoPalette.orange_200),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.md)),
                   ),
                   icon: const Icon(Icons.tune_rounded, size: 18),
                   label: const Text('悬浮宠设置'),
@@ -4860,10 +4868,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF4F46E5),
+                    foregroundColor: PokoPalette.indigo_600,
                     side: const BorderSide(color: Color(0xFFC7D2FE)),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(PokoRadius.md)),
                   ),
                   icon: const Icon(Icons.widgets_rounded, size: 18),
                   label: const Text('添加桌面小组件'),
@@ -4883,19 +4891,19 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: isRunning ? const Color(0xFFECFDF5) : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(12),
+                      color: isRunning ? const Color(0xFFECFDF5) : PokoPalette.slate_100,
+                      borderRadius: BorderRadius.circular(PokoRadius.sm),
                       border: Border.all(
-                        color: isRunning ? const Color(0xFFA7F3D0) : const Color(0xFFE2E8F0),
+                        color: isRunning ? PokoPalette.emerald_200 : PokoPalette.slate_200,
                       ),
                     ),
                     child: Row(
                       children: [
                         Text(isRunning ? '🟢 悬浮萌宠：运行中 (已在屏幕边缘)' : '⚪ 悬浮萌宠：未开启',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: PokoFont.small,
                               fontWeight: FontWeight.bold,
-                              color: isRunning ? const Color(0xFF047857) : const Color(0xFF64748B),
+                              color: isRunning ? PokoPalette.emerald_700 : PokoPalette.slate_500,
                             )),
                       ],
                     ),
@@ -4905,14 +4913,14 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('稍后再说', style: TextStyle(color: Color(0xFF94A3B8))),
+                child: const Text('稍后再说', style: TextStyle(color: PokoPalette.slate_400)),
               ),
               if (!hasPermission)
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4F46E5),
+                    backgroundColor: PokoPalette.indigo_600,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.md)),
                   ),
                   icon: const Icon(Icons.settings_rounded, size: 18),
                   label: const Text('前往授权悬浮窗'),
@@ -4924,9 +4932,9 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
               else
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isRunning ? const Color(0xFFE11D48) : const Color(0xFF10B981),
+                    backgroundColor: isRunning ? PokoPalette.rose_600 : PokoPalette.emerald_500,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.md)),
                   ),
                   icon: Icon(isRunning ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded, size: 18),
                   label: Text(isRunning ? '收回悬浮宠' : '立即启动桌面悬浮'),
@@ -4998,15 +5006,15 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFF43F5E).withValues(alpha: 0.35),
+                color: PokoPalette.rose_500.withValues(alpha: 0.35),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
             ],
-            border: Border.all(color: const Color(0xFFFB7185), width: 2.0),
+            border: Border.all(color: PokoPalette.rose_400, width: 2.0),
           ),
           child: Center(
-            child: Text(_draggingFoodIcon ?? '🐟', style: const TextStyle(fontSize: 24)),
+            child: Text(_draggingFoodIcon ?? '🐟', style: const TextStyle(fontSize: PokoFont.display)),
           ),
         ),
       ),

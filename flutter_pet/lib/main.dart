@@ -23,7 +23,7 @@ void main() {
   // 容错与防黑屏安全兜底：渲染异常时展示温润萌宠占位，杜绝 Release 模式出现黑屏
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Material(
-      color: const Color(0xFF1E1B4B),
+      color: PokoPalette.night_canvas,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -32,7 +32,7 @@ void main() {
             const SizedBox(height: 12),
             Text(
               '波可正在努力苏醒中...',
-              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.8)),
+              style: TextStyle(fontSize: PokoFont.bodyMd, color: Colors.white.withValues(alpha: 0.8)),
             ),
           ],
         ),
@@ -105,7 +105,7 @@ class _DesktopElectricPetAppState extends State<DesktopElectricPetApp> {
     final isNight = brightness == Brightness.dark;
     final t = PokoTokens.of(isNight);
     final scheme = ColorScheme.fromSeed(
-      seedColor: PokoPalette.indigo,
+      seedColor: PokoPalette.indigo_500,
       brightness: brightness,
     ).copyWith(
       primary: t.accent,

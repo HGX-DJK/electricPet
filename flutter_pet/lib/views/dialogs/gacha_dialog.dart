@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/bouncy_touch_feedback.dart';
 import '../../models/pet_model.dart';
 import '../../services/haptic_service.dart';
 import '../../services/sound_service.dart';
@@ -86,7 +87,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
     super.initState();
     _animCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: PokoDuration.grand,
     );
   }
 
@@ -107,7 +108,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('⚡ 能量币不足 (需 $cost 币)，多陪波可玩耍或投喂可获得能量币！'),
-          backgroundColor: PokoPalette.rose,
+          backgroundColor: PokoPalette.rose_500,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(PokoRadius.sm),
@@ -172,14 +173,14 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
   Color _getRarityColor(String rarity) {
     switch (rarity) {
       case 'UR':
-        return PokoPalette.rose; // 绝品梦幻粉金
+        return PokoPalette.rose_500; // 绝品梦幻粉金
       case 'SSR':
-        return PokoPalette.amber; // 璀璨曜金
+        return PokoPalette.amber_500; // 璀璨曜金
       case 'SR':
-        return PokoPalette.violet; // 幻梦星紫
+        return PokoPalette.violet_500; // 幻梦星紫
       case 'R':
       default:
-        return PokoPalette.sky; // 清晨天青
+        return PokoPalette.sky_400; // 清晨天青
     }
   }
 
@@ -229,14 +230,14 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              PokoPalette.amberSoft,
-                              PokoPalette.amber.withValues(alpha: 0.35),
+                              PokoPalette.amber_50,
+                              PokoPalette.amber_500.withValues(alpha: 0.35),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(PokoRadius.sm),
                         ),
                         alignment: Alignment.center,
-                        child: const Text('✨', style: TextStyle(fontSize: 18)),
+                        child: const Text('✨', style: TextStyle(fontSize: PokoFont.subtitle)),
                       ),
                       const SizedBox(width: PokoSpacing.sm),
                       Expanded(
@@ -286,14 +287,14 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                         color: t.surfaceAlt,
                         borderRadius: BorderRadius.circular(PokoRadius.md),
                         border: Border.all(
-                          color: PokoPalette.amber.withValues(alpha: 0.5),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.5),
                           width: 1.0,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text('🪙', style: TextStyle(fontSize: 12)),
+                          const Text('🪙', style: TextStyle(fontSize: PokoFont.small)),
                           const SizedBox(width: PokoSpacing.xs),
                           Text(
                             '${model.coins}',
@@ -301,8 +302,8 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                               fontSize: PokoFont.small,
                               fontWeight: FontWeight.bold,
                               color: isNight
-                                  ? PokoPalette.amber
-                                  : PokoPalette.amberDeep,
+                                  ? PokoPalette.amber_500
+                                  : PokoPalette.amber_700,
                             ),
                           ),
                         ],
@@ -341,15 +342,15 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   vertical: PokoSpacing.xs,
                 ),
                 decoration: BoxDecoration(
-                  color: PokoPalette.emerald.withValues(alpha: 0.12),
+                  color: PokoPalette.emerald_500.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(PokoRadius.xs),
                   border: Border.all(
-                    color: PokoPalette.emerald.withValues(alpha: 0.4),
+                    color: PokoPalette.emerald_500.withValues(alpha: 0.4),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Text('🐾', style: TextStyle(fontSize: 13)),
+                    const Text('🐾', style: TextStyle(fontSize: PokoFont.body)),
                     const SizedBox(width: PokoSpacing.xs),
                     Expanded(
                       child: Text(
@@ -357,7 +358,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                         style: const TextStyle(
                           fontSize: PokoFont.caption,
                           fontWeight: FontWeight.w600,
-                          color: PokoPalette.emeraldDeep,
+                          color: PokoPalette.emerald_700,
                         ),
                       ),
                     ),
@@ -394,7 +395,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
         // 梦幻水晶球扭蛋仓
         RotationTransition(
           turns: Tween(begin: 0.0, end: _isPulling ? 1.0 : 0.0).animate(
-            CurvedAnimation(parent: _animCtrl, curve: Curves.easeInOutCubic),
+            CurvedAnimation(parent: _animCtrl, curve: PokoCurves.balanced),
           ),
           child: Container(
             width: 140,
@@ -403,9 +404,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               shape: BoxShape.circle,
               gradient: RadialGradient(
                 colors: [
-                  PokoPalette.amberSoft,
-                  PokoPalette.amber.withValues(alpha: 0.35),
-                  PokoPalette.amber.withValues(alpha: 0.2),
+                  PokoPalette.amber_50,
+                  PokoPalette.amber_500.withValues(alpha: 0.35),
+                  PokoPalette.amber_500.withValues(alpha: 0.2),
                   Colors.transparent,
                 ],
               ),
@@ -420,9 +421,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      PokoPalette.amberSoft,
+                      PokoPalette.amber_50,
                       _sunsetCoral,
-                      PokoPalette.amber,
+                      PokoPalette.amber_500,
                     ],
                   ),
                   boxShadow: [
@@ -453,7 +454,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                           style: TextStyle(
                             fontSize: PokoFont.micro,
                             fontWeight: FontWeight.w900,
-                            color: PokoPalette.amberDeep,
+                            color: PokoPalette.amber_700,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -477,21 +478,21 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                PokoPalette.amberSoft,
-                PokoPalette.amber.withValues(alpha: 0.22),
+                PokoPalette.amber_50,
+                PokoPalette.amber_500.withValues(alpha: 0.22),
               ],
             ),
             borderRadius: BorderRadius.circular(PokoRadius.md),
             border: Border.all(
-              color: PokoPalette.amber.withValues(alpha: 0.45),
+              color: PokoPalette.amber_500.withValues(alpha: 0.45),
               width: 1,
             ),
-            boxShadow: PokoShadow.soft(PokoPalette.amber),
+            boxShadow: PokoShadow.soft(PokoPalette.amber_500),
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('✨', style: TextStyle(fontSize: 14)),
+              Text('✨', style: TextStyle(fontSize: PokoFont.bodyMd)),
               SizedBox(width: PokoSpacing.xs),
               Flexible(
                 child: Text(
@@ -501,7 +502,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   style: TextStyle(
                     fontSize: PokoFont.caption,
                     fontWeight: FontWeight.bold,
-                    color: PokoPalette.amberDeep,
+                    color: PokoPalette.amber_700,
                   ),
                 ),
               ),
@@ -540,7 +541,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           children: [
             Row(
               children: [
-                const Text('🎉', style: TextStyle(fontSize: 16)),
+                const Text('🎉', style: TextStyle(fontSize: PokoFont.titleSm)),
                 const SizedBox(width: PokoSpacing.xs),
                 Text(
                   '愿望启封达成 (${results.length} 件心愿之礼)',
@@ -552,8 +553,9 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                 ),
               ],
             ),
-            GestureDetector(
-              onTap: () {
+            BouncyTouchFeedback(
+              scaleDown: 0.94,
+        onTap: () {
                 SoundService.playClick();
                 setState(() => _recentResults = null);
               },
@@ -615,7 +617,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
               return TweenAnimationBuilder<double>(
                 key: ValueKey('${item.id}_${index}_reveal'),
                 duration: Duration(milliseconds: 180 + (index * 35).clamp(0, 350)),
-                curve: Curves.easeOutBack,
+                curve: PokoCurves.playful,
                 tween: Tween<double>(begin: 0.0, end: 1.0),
                 builder: (context, animVal, child) {
                   return Transform.scale(
@@ -638,7 +640,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                       ...PokoShadow.card(rarityColor),
                       if (isHighRarity)
                         BoxShadow(
-                          color: PokoPalette.amber.withValues(alpha: 0.18),
+                          color: PokoPalette.amber_500.withValues(alpha: 0.18),
                           blurRadius: 6,
                           offset: const Offset(0, 1),
                         ),
@@ -661,7 +663,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                               borderRadius: BorderRadius.circular(PokoRadius.xs),
                             ),
                             alignment: Alignment.center,
-                            child: Text(item.icon, style: const TextStyle(fontSize: 20)),
+                            child: Text(item.icon, style: const TextStyle(fontSize: PokoFont.headline)),
                           ),
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -676,12 +678,12 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: PokoPalette.emerald.withValues(alpha: 0.16),
+                                    color: PokoPalette.emerald_500.withValues(alpha: 0.16),
                                     borderRadius: BorderRadius.circular(
                                       PokoRadius.xs,
                                     ),
                                     border: Border.all(
-                                      color: PokoPalette.emerald.withValues(
+                                      color: PokoPalette.emerald_500.withValues(
                                         alpha: 0.5,
                                       ),
                                       width: 1,
@@ -692,7 +694,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                                     style: TextStyle(
                                       fontSize: PokoFont.micro,
                                       fontWeight: FontWeight.bold,
-                                      color: PokoPalette.emeraldDeep,
+                                      color: PokoPalette.emerald_700,
                                     ),
                                   ),
                                 )
@@ -708,8 +710,8 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                                   decoration: BoxDecoration(
                                     gradient: const LinearGradient(
                                       colors: [
-                                        PokoPalette.rose,
-                                        PokoPalette.amber,
+                                        PokoPalette.rose_500,
+                                        PokoPalette.amber_500,
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(
@@ -868,7 +870,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                   '30 能量币',
                   style: TextStyle(
                     fontSize: PokoFont.caption,
-                    color: PokoPalette.amberDeep,
+                    color: PokoPalette.amber_700,
                   ),
                 ),
               ],
@@ -884,7 +886,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           child: Container(
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [_sunsetCoral, PokoPalette.amber],
+                colors: [_sunsetCoral, PokoPalette.amber_500],
               ),
               borderRadius: BorderRadius.circular(PokoRadius.md),
               boxShadow: [
@@ -924,7 +926,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                         '保底SSR/UR',
                         style: TextStyle(
                           fontSize: PokoFont.tiny,
-                          color: PokoPalette.amberSoft,
+                          color: PokoPalette.amber_50,
                         ),
                       ),
                     ],
@@ -934,7 +936,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
                     '270 能量币 (限时9折)',
                     style: TextStyle(
                       fontSize: PokoFont.caption,
-                      color: PokoPalette.amberSoft,
+                      color: PokoPalette.amber_50,
                     ),
                   ),
                 ],

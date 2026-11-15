@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/poko_theme.dart';
+import '../../widgets/poko_press_scale.dart';
 /// 实体物理毛线球组件 (支持手指轻点弹跳、自由拖拽甩动与猫咪疾速追球飞扑)
 class YarnBallWidget extends StatelessWidget {
   final double rollAngle;
@@ -23,7 +25,9 @@ class YarnBallWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return PokoPressScale(
+      scaleDown: 0.92,
+      child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onPanStart: onPanStart,
@@ -37,6 +41,7 @@ class YarnBallWidget extends StatelessWidget {
           isFlying: isFlying,
         ),
       ),
+    ),
     );
   }
 }
@@ -73,7 +78,7 @@ class YarnBallPainter extends CustomPainter {
 
     // 2. 拖尾解开的毛线小线头绳 (随滚动自然拖在身后地面上)
     final threadPaint = Paint()
-      ..color = isNight ? const Color(0xFFFB7185) : const Color(0xFFF43F5E)
+      ..color = isNight ? PokoPalette.rose_400 : PokoPalette.rose_500
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
@@ -89,8 +94,8 @@ class YarnBallPainter extends CustomPainter {
       center: const Alignment(-0.35, -0.35),
       radius: 0.95,
       colors: isNight
-          ? const [Color(0xFFFDA4AF), Color(0xFFF43F5E), Color(0xFF9F1239)]
-          : const [Color(0xFFFFE4E6), Color(0xFFFB7185), Color(0xFFE11D48)],
+          ? const [PokoPalette.rose_300, PokoPalette.rose_500, PokoPalette.rose_900]
+          : const [PokoPalette.rose_100, PokoPalette.rose_400, PokoPalette.rose_600],
       stops: const [0.0, 0.55, 1.0],
     ).createShader(ballRect);
 

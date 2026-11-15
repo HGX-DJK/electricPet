@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../widgets/bouncy_touch_feedback.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -142,8 +143,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent + 60,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOut,
+          duration: PokoDuration.swell,
+          curve: PokoCurves.enter,
         );
       }
     });
@@ -440,7 +441,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                         PokoSpacing.xl, PokoSpacing.sm, PokoSpacing.xl, 0),
                     child: Row(
                       children: [
-                        const Text('💭', style: TextStyle(fontSize: 20)),
+                        const Text('💭', style: TextStyle(fontSize: PokoFont.headline)),
                         const SizedBox(width: PokoSpacing.sm),
                         Text(
                           '想和波可说点什么？',
@@ -550,7 +551,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
           ),
           child: Row(
             children: [
-              Text(emoji, style: const TextStyle(fontSize: 16)),
+              Text(emoji, style: const TextStyle(fontSize: PokoFont.titleSm)),
               const SizedBox(width: PokoSpacing.md),
               Expanded(
                 child: Text(
@@ -638,7 +639,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                   horizontal: PokoSpacing.xl, vertical: PokoSpacing.sm),
               title: Row(
                 children: [
-                  const Text('⚙️', style: TextStyle(fontSize: 22)),
+                  const Text('⚙️', style: TextStyle(fontSize: PokoFont.displayMd)),
                   const SizedBox(width: PokoSpacing.sm),
                   Text(
                     'AI 大模型与语音配置',
@@ -679,8 +680,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     Row(
                       children: [
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () {
+                          child: BouncyTouchFeedback(
+                            scaleDown: 0.97,
+        onTap: () {
                               setDialogState(() {
                                 if (selectedProvider != 'minimax') {
                                   modelController.clear();
@@ -693,7 +695,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                               padding: const EdgeInsets.symmetric(vertical: PokoSpacing.sm),
                               decoration: BoxDecoration(
                                 color: selectedProvider == 'minimax'
-                                    ? PokoPalette.indigo
+                                    ? PokoPalette.indigo_500
                                     : t.surfaceAlt,
                                 borderRadius: BorderRadius.circular(PokoRadius.xs),
                               ),
@@ -714,8 +716,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                         ),
                         const SizedBox(width: PokoSpacing.sm),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () {
+                          child: BouncyTouchFeedback(
+                            scaleDown: 0.97,
+        onTap: () {
                               setDialogState(() {
                                 if (selectedProvider != 'deepseek') {
                                   modelController.clear();
@@ -728,7 +731,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                               padding: const EdgeInsets.symmetric(vertical: PokoSpacing.sm),
                               decoration: BoxDecoration(
                                 color: selectedProvider == 'deepseek'
-                                    ? PokoPalette.skyGlow
+                                    ? PokoPalette.sky_500
                                     : t.surfaceAlt,
                                 borderRadius: BorderRadius.circular(PokoRadius.xs),
                               ),
@@ -749,8 +752,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                         ),
                         const SizedBox(width: PokoSpacing.sm),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: () {
+                          child: BouncyTouchFeedback(
+                            scaleDown: 0.97,
+        onTap: () {
                               setDialogState(() {
                                 if (selectedProvider != 'openai') {
                                   modelController.clear();
@@ -763,7 +767,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                               padding: const EdgeInsets.symmetric(vertical: PokoSpacing.sm),
                               decoration: BoxDecoration(
                                 color: selectedProvider == 'openai'
-                                    ? PokoPalette.emerald
+                                    ? PokoPalette.emerald_500
                                     : t.surfaceAlt,
                                 borderRadius: BorderRadius.circular(PokoRadius.xs),
                               ),
@@ -872,7 +876,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                   height: 14,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
-                              : const Text('🧪', style: TextStyle(fontSize: 14)),
+                              : const Text('🧪', style: TextStyle(fontSize: PokoFont.bodyMd)),
                           label: Text(isTesting ? '正在测试...' : '测试大模型连接'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
@@ -902,7 +906,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                   height: 14,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
-                              : const Text('🔊', style: TextStyle(fontSize: 14)),
+                              : const Text('🔊', style: TextStyle(fontSize: PokoFont.bodyMd)),
                           label: Text(isTestingVoice ? '正在发声...' : '试听小奶音'),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
@@ -930,11 +934,11 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                         padding: const EdgeInsets.all(PokoSpacing.sm),
                         decoration: BoxDecoration(
                           color: (testSuccess == true)
-                              ? PokoPalette.emerald.withValues(alpha: 0.15)
-                              : PokoPalette.rose.withValues(alpha: 0.15),
+                              ? PokoPalette.emerald_500.withValues(alpha: 0.15)
+                              : PokoPalette.rose_500.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(PokoRadius.sm),
                           border: Border.all(
-                            color: (testSuccess == true) ? PokoPalette.emerald : PokoPalette.rose,
+                            color: (testSuccess == true) ? PokoPalette.emerald_500 : PokoPalette.rose_500,
                             width: 1,
                           ),
                         ),
@@ -969,7 +973,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     HapticService.light();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: PokoPalette.indigo,
+                    backgroundColor: PokoPalette.indigo_500,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(PokoRadius.sm)),
                   ),
@@ -995,13 +999,14 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
   Widget _statusPill(bool isNight) {
     final hasError = _ai.lastError != null;
     final color = hasError
-        ? PokoPalette.rose
-        : (_ai.hasApiKey ? PokoPalette.emerald : PokoPalette.amber);
+        ? PokoPalette.rose_500
+        : (_ai.hasApiKey ? PokoPalette.emerald_500 : PokoPalette.amber_500);
     final label = hasError
         ? '云端连接异常'
         : (_ai.hasApiKey ? '就绪' : '智能陪伴模式');
-    return GestureDetector(
-      onTap: _openSettingsDialog,
+    return BouncyTouchFeedback(
+      scaleDown: 0.94,
+        onTap: _openSettingsDialog,
       child: Container(
         padding: const EdgeInsets.fromLTRB(
           PokoSpacing.sm,
@@ -1053,8 +1058,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
-        child: GestureDetector(
-          onTap: () {
+        child: BouncyTouchFeedback(
+          scaleDown: 0.9,
+        onTap: () {
             HapticService.light();
             onTap();
           },
@@ -1103,18 +1109,18 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: _isRecording
-                      ? const [PokoPalette.rose, PokoPalette.roseDeep]
-                      : const [PokoPalette.violet, PokoPalette.indigo],
+                      ? const [PokoPalette.rose_500, PokoPalette.rose_600]
+                      : const [PokoPalette.violet_500, PokoPalette.indigo_500],
                 ),
                 borderRadius: BorderRadius.circular(PokoRadius.pill),
                 boxShadow: PokoShadow.card(
-                  _isRecording ? PokoPalette.rose : PokoPalette.indigo,
+                  _isRecording ? PokoPalette.rose_500 : PokoPalette.indigo_500,
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(_isRecording ? '🛑' : '🎙️', style: const TextStyle(fontSize: 19)),
+                  Text(_isRecording ? '🛑' : '🎙️', style: const TextStyle(fontSize: PokoFont.subheadline)),
                   const SizedBox(width: PokoSpacing.sm),
                   Flexible(
                     child: Text(
@@ -1177,8 +1183,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
             child: Row(
               children: [
                 // 回到语音输入
-                GestureDetector(
-                  onTap: () => setState(() => _showKeyboardInput = false),
+                BouncyTouchFeedback(
+                  scaleDown: 0.88,
+        onTap: () => setState(() => _showKeyboardInput = false),
                   child: Icon(
                     Icons.mic_rounded,
                     size: 18,
@@ -1238,8 +1245,8 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     height: 30,
                     decoration: BoxDecoration(
                       color: _isBusy
-                          ? PokoPalette.indigo.withValues(alpha: 0.45)
-                          : PokoPalette.indigo,
+                          ? PokoPalette.indigo_500.withValues(alpha: 0.45)
+                          : PokoPalette.indigo_500,
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
@@ -1279,8 +1286,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
       excludeSemantics: true,
       child: Tooltip(
         message: tooltip,
-        child: GestureDetector(
-          onTap: () {
+        child: BouncyTouchFeedback(
+          scaleDown: 0.9,
+        onTap: () {
             HapticService.light();
             onTap();
           },
@@ -1343,11 +1351,11 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: const LinearGradient(
-                        colors: [PokoPalette.violet, PokoPalette.indigo],
+                        colors: [PokoPalette.violet_500, PokoPalette.indigo_500],
                       ),
-                      boxShadow: PokoShadow.soft(PokoPalette.violet),
+                      boxShadow: PokoShadow.soft(PokoPalette.violet_500),
                     ),
-                    child: const Center(child: Text('🐱', style: TextStyle(fontSize: 19))),
+                    child: const Center(child: Text('🐱', style: TextStyle(fontSize: PokoFont.subheadline))),
                   ),
                   const SizedBox(width: PokoSpacing.sm),
                   Expanded(
@@ -1429,7 +1437,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                   color: t.accentSoft,
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Center(child: Text('🐱', style: TextStyle(fontSize: 16))),
+                                child: const Center(child: Text('🐱', style: TextStyle(fontSize: PokoFont.titleSm))),
                               ),
                               const SizedBox(width: PokoSpacing.sm),
                             ],
@@ -1438,7 +1446,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: PokoSpacing.md, vertical: PokoSpacing.sm),
                                 decoration: BoxDecoration(
-                                  color: isUser ? PokoPalette.indigo : t.surface,
+                                  color: isUser ? PokoPalette.indigo_500 : t.surface,
                                   borderRadius: BorderRadius.only(
                                     topLeft: const Radius.circular(PokoRadius.md),
                                     topRight: const Radius.circular(PokoRadius.md),
@@ -1446,7 +1454,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                     bottomRight: Radius.circular(isUser ? PokoRadius.xs : PokoRadius.md),
                                   ),
                                   border: Border.all(
-                                    color: isUser ? PokoPalette.indigoDeep : t.border,
+                                    color: isUser ? PokoPalette.indigo_600 : t.border,
                                   ),
                                   boxShadow: PokoShadow.soft(t.shadow),
                                 ),
@@ -1468,8 +1476,9 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                         alignment: Alignment.centerRight,
                                         child: Tooltip(
                                           message: _ai.isVoicePlaying ? '点击停止播放' : '重播小奶音',
-                                          child: GestureDetector(
-                                            onTap: () async {
+                                          child: BouncyTouchFeedback(
+                                            scaleDown: 0.88,
+        onTap: () async {
                                               HapticService.light();
                                               if (_ai.isVoicePlaying) {
                                                 await _ai.stopVoice();
@@ -1493,14 +1502,14 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                                               width: 26,
                                               height: 26,
                                               decoration: BoxDecoration(
-                                                color: _ai.isVoicePlaying ? PokoPalette.rose.withValues(alpha: 0.2) : t.accentSoft,
+                                                color: _ai.isVoicePlaying ? PokoPalette.rose_500.withValues(alpha: 0.2) : t.accentSoft,
                                                 shape: BoxShape.circle,
                                               ),
                                               alignment: Alignment.center,
                                               child: Icon(
                                                 _ai.isVoicePlaying ? Icons.stop_rounded : Icons.volume_up_rounded,
                                                 size: 14,
-                                                color: _ai.isVoicePlaying ? PokoPalette.rose : t.accent,
+                                                color: _ai.isVoicePlaying ? PokoPalette.rose_500 : t.accent,
                                               ),
                                             ),
                                           ),
@@ -1538,7 +1547,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                             width: 3.5,
                             height: height.clamp(4.0, 24.0),
                             decoration: BoxDecoration(
-                              color: _isRecording ? PokoPalette.rose : PokoPalette.violet,
+                              color: _isRecording ? PokoPalette.rose_500 : PokoPalette.violet_500,
                               borderRadius: BorderRadius.circular(PokoRadius.xs),
                             ),
                           );
@@ -1559,7 +1568,7 @@ class _AiVoiceChatDialogState extends State<AiVoiceChatDialog> with SingleTicker
                       style: TextStyle(
                         fontSize: PokoFont.caption,
                         fontWeight: FontWeight.w600,
-                        color: _isRecording ? PokoPalette.rose : t.accent,
+                        color: _isRecording ? PokoPalette.rose_500 : t.accent,
                       ),
                     ),
                   ),

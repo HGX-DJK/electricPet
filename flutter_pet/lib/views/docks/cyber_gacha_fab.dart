@@ -32,7 +32,7 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
     )..repeat(reverse: true);
 
     _glowAnimation = Tween<double>(begin: 0.85, end: 1.15).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pulseController, curve: PokoCurves.gentle),
     );
   }
 
@@ -69,8 +69,8 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
                     colors: [
-                      PokoPalette.violet.withValues(alpha: widget.isNight ? 0.35 : 0.22),
-                      PokoPalette.skyGlow.withValues(alpha: widget.isNight ? 0.18 : 0.10),
+                      PokoPalette.violet_500.withValues(alpha: widget.isNight ? 0.35 : 0.22),
+                      PokoPalette.sky_500.withValues(alpha: widget.isNight ? 0.18 : 0.10),
                       Colors.transparent,
                     ],
                   ),
@@ -88,22 +88,22 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                     end: Alignment.bottomRight,
                     colors: widget.isNight
                         ? [t.surfaceAlt, t.accentAlt]
-                        : const [PokoPalette.violetSoft, PokoPalette.skySoft],
+                        : const [PokoPalette.violet_50, PokoPalette.blue_50],
                   ),
                   border: Border.all(
                     color: widget.isNight
-                        ? PokoPalette.violet.withValues(alpha: 0.7)
-                        : PokoPalette.violet,
+                        ? PokoPalette.violet_500.withValues(alpha: 0.7)
+                        : PokoPalette.violet_500,
                     width: 1.8,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: PokoPalette.violet.withValues(alpha: 0.35),
+                      color: PokoPalette.violet_500.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 3),
                     ),
                     BoxShadow(
-                      color: PokoPalette.skyGlow.withValues(alpha: 0.25),
+                      color: PokoPalette.sky_500.withValues(alpha: 0.25),
                       blurRadius: 6,
                       offset: const Offset(0, 1),
                     ),
@@ -112,7 +112,7 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                 child: const Center(
                   child: Text(
                     '🔮',
-                    style: TextStyle(fontSize: 24),
+                    style: TextStyle(fontSize: PokoFont.display),
                   ),
                 ),
               ),
@@ -125,13 +125,13 @@ class _CyberGachaFabState extends State<CyberGachaFab> with SingleTickerProvider
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [PokoPalette.amber, PokoPalette.rose],
+                      colors: [PokoPalette.amber_500, PokoPalette.rose_500],
                     ),
                     borderRadius: BorderRadius.circular(PokoRadius.xs),
                     border: Border.all(color: Colors.white, width: 1.0),
                     boxShadow: [
                       BoxShadow(
-                        color: PokoPalette.rose.withValues(alpha: 0.45),
+                        color: PokoPalette.rose_500.withValues(alpha: 0.45),
                         blurRadius: 5,
                         offset: const Offset(0, 1.5),
                       ),

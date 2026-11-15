@@ -1,3 +1,4 @@
+from pet.theme import Alpha, Palette, qss
 import os
 import sys
 import copy
@@ -19,7 +20,7 @@ from pet.qt_safe import safe_slot
 from pet.diagnostics import log_exception
 
 # 赛博高科技全息毛玻璃与霓虹全局 QSS
-MODERN_STYLE = """
+MODERN_STYLE = qss("""
 QDialog {
     background: transparent;
 }
@@ -30,18 +31,18 @@ QScrollArea {
 /* 赛博极窄霓虹青半透明滚动条 */
 QScrollBar:vertical {
     border: none;
-    background: rgba(15, 23, 42, 0.6);
+    background: @slate_900_60@;
     width: 6px;
     margin: 0px 0px 0px 0px;
     border-radius: 3px;
 }
 QScrollBar::handle:vertical {
-    background: #0EA5E9;
+    background: @sky_500@;
     min-height: 24px;
     border-radius: 3px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #38BDF8;
+    background: @sky_400@;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
@@ -51,18 +52,18 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
 }
 QScrollBar:horizontal {
     border: none;
-    background: rgba(15, 23, 42, 0.6);
+    background: @slate_900_60@;
     height: 6px;
     margin: 0px 0px 0px 0px;
     border-radius: 3px;
 }
 QScrollBar::handle:horizontal {
-    background: #0EA5E9;
+    background: @sky_500@;
     min-width: 24px;
     border-radius: 3px;
 }
 QScrollBar::handle:horizontal:hover {
-    background: #38BDF8;
+    background: @sky_400@;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0px;
@@ -72,99 +73,99 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
 }
 QLabel {
     font-family: "Microsoft YaHei UI", sans-serif;
-    color: #F1F5F9;
+    color: @slate_100@;
 }
 QPushButton {
     font-family: "Microsoft YaHei UI", sans-serif;
-    background-color: rgba(30, 41, 59, 0.7);
-    border: 1px solid rgba(51, 65, 85, 0.8);
+    background-color: @slate_800_70@;
+    border: 1px solid @slate_700_80@;
     border-radius: 12px;
     padding: 8px 16px;
     font-size: 13px;
-    color: #F1F5F9;
+    color: @slate_100@;
     font-weight: 500;
 }
 QPushButton:hover {
-    background-color: rgba(51, 65, 85, 0.95);
-    border-color: #38BDF8;
-    color: #FFFFFF;
+    background-color: @slate_700_95@;
+    border-color: @sky_400@;
+    color: @white@;
 }
 QPushButton:pressed {
-    background-color: rgba(14, 165, 233, 0.25);
+    background-color: @sky_500_25@;
 }
 QPushButton#PrimaryBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-    color: #FFFFFF;
-    border: 1px solid #38BDF8;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+    color: @white@;
+    border: 1px solid @sky_400@;
     font-weight: bold;
     border-radius: 12px;
 }
 QPushButton#PrimaryBtn:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_700@, stop:1 @sky_400@);
 }
 QPushButton#PrimaryBtn:pressed {
-    background: #075985;
+    background: @sky_800@;
 }
 QPushButton#SelectedBtn {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(14, 165, 233, 0.25), stop:1 rgba(15, 23, 42, 0.85));
-    border: 1.5px solid #38BDF8;
-    color: #FFFFFF;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_500_25@, stop:1 @slate_900_85@);
+    border: 1.5px solid @sky_400@;
+    color: @white@;
     font-weight: bold;
 }
 QProgressBar {
-    border: 1px solid #1E293B;
-    background-color: rgba(15, 23, 42, 0.8);
+    border: 1px solid @slate_800@;
+    background-color: @slate_900_80@;
     border-radius: 6px;
     height: 12px;
     text-align: center;
     font-size: 9px;
-    color: #94A3B8;
+    color: @slate_400@;
     font-weight: bold;
 }
 QProgressBar::chunk {
     border-radius: 6px;
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @cyan_500@, stop:1 @blue_500@);
 }
 QTabWidget::pane {
-    border: 1px solid #1E293B;
+    border: 1px solid @slate_800@;
     border-radius: 16px;
     background: transparent;
     top: -1px;
 }
 QTabBar::tab {
-    background: rgba(30, 41, 59, 0.6);
-    border: 1px solid rgba(51, 65, 85, 0.6);
+    background: @slate_800_60@;
+    border: 1px solid @slate_700_60@;
     padding: 8px 18px;
     margin-right: 6px;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
     font-family: "Microsoft YaHei UI";
     font-size: 12px;
-    color: #94A3B8;
+    color: @slate_400@;
 }
 QTabBar::tab:selected {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-    border-bottom: 2px solid #38BDF8;
-    color: #FFFFFF;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+    border-bottom: 2px solid @sky_400@;
+    color: @white@;
     font-weight: bold;
 }
 QTabBar::tab:hover:!selected {
-    background: rgba(51, 65, 85, 0.8);
-    color: #F1F5F9;
-    border: 1px solid #0EA5E9;
+    background: @slate_700_80@;
+    color: @slate_100@;
+    border: 1px solid @sky_500@;
 }
 QSlider::groove:horizontal {
     height: 6px;
-    background: #1E293B;
+    background: @slate_800@;
     border-radius: 3px;
 }
 QSlider::sub-page:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
     border-radius: 3px;
 }
 QSlider::handle:horizontal {
-    background: #F8FAFC;
-    border: 2px solid #0EA5E9;
+    background: @slate_50@;
+    border: 2px solid @sky_500@;
     width: 18px;
     margin-top: -6px;
     margin-bottom: -6px;
@@ -173,56 +174,56 @@ QSlider::handle:horizontal {
 QCheckBox {
     font-family: "Microsoft YaHei UI", sans-serif;
     font-size: 13px;
-    color: #E2E8F0;
+    color: @slate_200@;
     spacing: 8px;
 }
 QCheckBox::indicator {
     width: 16px;
     height: 16px;
-    border: 1.5px solid #475569;
+    border: 1.5px solid @slate_600@;
     border-radius: 4px;
-    background-color: rgba(30, 41, 59, 0.8);
+    background-color: @slate_800_80@;
 }
 QCheckBox::indicator:hover {
-    border-color: #38BDF8;
+    border-color: @sky_400@;
 }
 QCheckBox::indicator:checked {
-    background-color: #0EA5E9;
-    border-color: #38BDF8;
+    background-color: @sky_500@;
+    border-color: @sky_400@;
     width: 16px;
     height: 16px;
 }
-"""
+""")
 
 PASTEL_PALETTE = {
-    "🍼": ("#FEF3C7", "#FDE68A"),
-    "🍰": ("#FCE7F3", "#FBCFE8"),
-    "🐟": ("#E0F2FE", "#BAE6FD"),
-    "🥩": ("#FEE2E2", "#FECACA"),
-    "🌟": ("#FEF9C3", "#FEF08A"),
-    "🧋": ("#FFEDD5", "#FED7AA"),
-    "👗": ("#EEF2FF", "#E0E7FF"),
-    "🎭": ("#F3E8FF", "#E9D5FF"),
-    "🎮": ("#FFE4E6", "#FECDD3"),
-    "🛁": ("#CFFAFE", "#A5F3FC"),
-    "☀️": ("#FEF9C3", "#FEF08A"),
-    "💤": ("#DBEAFE", "#BFDBFE"),
-    "🍅": ("#FEE2E2", "#FECACA"),
-    "📊": ("#D1FAE5", "#A7F3D0"),
-    "⚙️": ("#F1F5F9", "#E2E8F0"),
-    "🎲": ("#FEF3C7", "#FDE68A"),
-    "🪄": ("#F5F3FF", "#DDD6FE"),
-    "🐱": ("#FEF3C7", "#FDE68A"),
-    "🐾": ("#EEF2FF", "#E0E7FF"),
-    "🦋": ("#E0F2FE", "#BAE6FD"),
-    "🎧": ("#F3E8FF", "#E9D5FF"),
-    "❓": ("#FEF9C3", "#FEF08A"),
-    "💃": ("#FCE7F3", "#FBCFE8"),
-    "🥱": ("#DBEAFE", "#BFDBFE"),
-    "💫": ("#FEF9C3", "#FEF08A"),
-    "👀": ("#E0F2FE", "#BAE6FD"),
-    "🐭": ("#F1F5F9", "#CBD5E1"),
-    "🧶": ("#FFE4E6", "#FDA4AF"),
+    "🍼": (Palette.amber_100, Palette.amber_200),
+    "🍰": (Palette.pink_100, Palette.pink_200),
+    "🐟": (Palette.sky_100, Palette.sky_200),
+    "🥩": (Palette.red_100, Palette.red_200),
+    "🌟": (Palette.yellow_100, Palette.yellow_200),
+    "🧋": (Palette.orange_100, Palette.orange_200),
+    "👗": (Palette.indigo_50, Palette.indigo_100),
+    "🎭": (Palette.violet_100, Palette.violet_200),
+    "🎮": (Palette.rose_100, Palette.rose_200),
+    "🛁": (Palette.cyan_100, Palette.cyan_200),
+    "☀️": (Palette.yellow_100, Palette.yellow_200),
+    "💤": (Palette.blue_100, Palette.blue_200),
+    "🍅": (Palette.red_100, Palette.red_200),
+    "📊": (Palette.emerald_100, Palette.emerald_200),
+    "⚙️": (Palette.slate_100, Palette.slate_200),
+    "🎲": (Palette.amber_100, Palette.amber_200),
+    "🪄": (Palette.violet_50, Palette.indigo_200),
+    "🐱": (Palette.amber_100, Palette.amber_200),
+    "🐾": (Palette.indigo_50, Palette.indigo_100),
+    "🦋": (Palette.sky_100, Palette.sky_200),
+    "🎧": (Palette.violet_100, Palette.violet_200),
+    "❓": (Palette.yellow_100, Palette.yellow_200),
+    "💃": (Palette.pink_100, Palette.pink_200),
+    "🥱": (Palette.blue_100, Palette.blue_200),
+    "💫": (Palette.yellow_100, Palette.yellow_200),
+    "👀": (Palette.sky_100, Palette.sky_200),
+    "🐭": (Palette.slate_100, Palette.slate_300),
+    "🧶": (Palette.rose_100, Palette.rose_300),
 }
 
 class ActionCardButton(QPushButton):
@@ -233,26 +234,26 @@ class ActionCardButton(QPushButton):
         self.setMinimumHeight(54)
 
         if not bg_color or not border_color:
-            bg_c, brd_c = PASTEL_PALETTE.get(icon_str, ("rgba(15, 23, 42, 0.7)", "#0EA5E9"))
+            bg_c, brd_c = PASTEL_PALETTE.get(icon_str, (Alpha.slate_900_70, Palette.sky_500))
             bg_color = bg_color or bg_c
             border_color = border_color or brd_c
 
-        self.setStyleSheet("""
+        self.setStyleSheet(qss("""
             QPushButton {
-                background-color: rgba(30, 41, 59, 0.7);
-                border: 1px solid rgba(51, 65, 85, 0.8);
+                background-color: @slate_800_70@;
+                border: 1px solid @slate_700_80@;
                 border-radius: 14px;
                 padding: 0px;
                 text-align: left;
             }
             QPushButton:hover {
-                background-color: rgba(51, 65, 85, 0.95);
-                border: 1.5px solid #38BDF8;
+                background-color: @slate_700_95@;
+                border: 1.5px solid @sky_400@;
             }
             QPushButton:pressed {
-                background-color: rgba(14, 165, 233, 0.25);
+                background-color: @sky_500_25@;
             }
-        """)
+        """))
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(10, 6, 10, 6)
@@ -261,13 +262,13 @@ class ActionCardButton(QPushButton):
         # 全息高科技图标徽章容器
         icon_box = QFrame()
         icon_box.setFixedSize(38, 38)
-        icon_box.setStyleSheet("""
+        icon_box.setStyleSheet(qss("""
             QFrame {
-                background-color: rgba(15, 23, 42, 0.7);
-                border: 1.5px solid #0EA5E9;
+                background-color: @slate_900_70@;
+                border: 1.5px solid @sky_500@;
                 border-radius: 11px;
             }
-        """)
+        """))
         icon_box_layout = QVBoxLayout(icon_box)
         icon_box_layout.setContentsMargins(0, 0, 0, 0)
         icon_lbl = QLabel(icon_str)
@@ -285,14 +286,14 @@ class ActionCardButton(QPushButton):
 
         title_lbl = QLabel(title)
         title_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        title_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        title_lbl.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         text_layout.addWidget(title_lbl)
 
         if subtitle:
             sub_lbl = QLabel(subtitle)
             sub_lbl.setFont(QFont("Microsoft YaHei UI", 9))
             sub_lbl.setWordWrap(True)
-            sub_lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+            sub_lbl.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
             text_layout.addWidget(sub_lbl)
 
         layout.addLayout(text_layout, stretch=1)
@@ -315,13 +316,13 @@ class QuickActionMenu(QWidget):
 
         card = QFrame()
         card.setObjectName("MainCard")
-        card.setStyleSheet("""
+        card.setStyleSheet(qss("""
             QFrame#MainCard {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0B0F19, stop:1 #111827);
-                border: 1.5px solid #0EA5E9;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ink@, stop:1 @gray_900@);
+                border: 1.5px solid @sky_500@;
                 border-radius: 22px;
             }
-        """)
+        """))
 
         # 赛博天青全息多阶环境阴影
         shadow = QGraphicsDropShadowEffect(self)
@@ -340,13 +341,13 @@ class QuickActionMenu(QWidget):
 
         avatar_frame = QFrame()
         avatar_frame.setFixedSize(50, 50)
-        avatar_frame.setStyleSheet("""
+        avatar_frame.setStyleSheet(qss("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0369A1, stop:1 #0284C7);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @sky_700@, stop:1 @sky_600@);
                 border-radius: 25px;
-                border: 2px solid #38BDF8;
+                border: 2px solid @sky_400@;
             }
-        """)
+        """))
         av_layout = QVBoxLayout(avatar_frame)
         av_layout.setContentsMargins(0, 0, 0, 0)
         avatar = QLabel("🐱" if model.pet_type == "cat" else ("🐶" if model.pet_type == "dog" else ("🫧" if model.pet_type == "slime" else "🐧")))
@@ -361,20 +362,20 @@ class QuickActionMenu(QWidget):
         self.btn_mode_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
         self.btn_mode_pill.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_mode_pill.setToolTip("点击切换定位模式：\n【悬停】自由停靠屏幕任意位置\n【重力】落回底部任务栏")
-        self.btn_mode_pill.setStyleSheet("""
+        self.btn_mode_pill.setStyleSheet(qss("""
             QPushButton {
-                background: rgba(30, 41, 59, 0.8);
-                color: #94A3B8;
+                background: @slate_800_80@;
+                color: @slate_400@;
                 padding: 1px 7px;
                 border-radius: 6px;
-                border: 1px solid #334155;
+                border: 1px solid @slate_700@;
             }
             QPushButton:hover {
-                background: rgba(14, 165, 233, 0.2);
-                color: #38BDF8;
-                border-color: #38BDF8;
+                background: @sky_500_20@;
+                color: @sky_400@;
+                border-color: @sky_400@;
             }
-        """)
+        """))
         self.btn_mode_pill.clicked.connect(self._toggle_gravity_mode)
 
         name_box = QVBoxLayout()
@@ -383,24 +384,24 @@ class QuickActionMenu(QWidget):
         top_name.setSpacing(6)
         name_lbl = QLabel(model.name)
         name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
-        name_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        name_lbl.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
 
         stage_pill = QLabel(f"✨ {model.stage_info['name']}")
         stage_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
-        stage_pill.setStyleSheet("""
-            background: rgba(14, 165, 233, 0.15);
-            color: #38BDF8;
+        stage_pill.setStyleSheet(qss("""
+            background: @sky_500_15@;
+            color: @sky_400@;
             padding: 2px 7px;
             border-radius: 8px;
-            border: 1px solid #0EA5E9;
-        """)
+            border: 1px solid @sky_500@;
+        """))
         top_name.addWidget(name_lbl)
         top_name.addWidget(stage_pill)
 
         pers_pill = QLabel(model.personality_info["name"])
         pers_pill.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
         pers_pill.setStyleSheet(f"""
-            background: rgba(15, 23, 42, 0.8);
+            background: {Alpha.slate_900_80};
             color: {model.personality_info['color']};
             padding: 2px 7px;
             border-radius: 8px;
@@ -415,7 +416,7 @@ class QuickActionMenu(QWidget):
         sub_row = QHBoxLayout()
         sub_row.setSpacing(8)
         sub_info = QLabel(f"Lv.{model.level} · {model.weight}kg · 第{model.total_days}天")
-        sub_info.setStyleSheet("color: #94A3B8; font-size: 11px; background: transparent; border: none;")
+        sub_info.setStyleSheet(qss("color: @slate_400@; font-size: 11px; background: transparent; border: none;"))
         sub_row.addWidget(sub_info)
 
         # 硬件性能 HUD 状态药丸
@@ -428,13 +429,13 @@ class QuickActionMenu(QWidget):
             mem_txt = f"{hw_stats['memory']}%" if hw_stats.get("memory_ok") else "不可用"
             hw_pill = QLabel(f"💻 {cpu_txt} | 🧠 {mem_txt}")
             hw_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-            hw_pill.setStyleSheet("""
-                background: rgba(15, 23, 42, 0.8);
-                color: #34D399;
+            hw_pill.setStyleSheet(qss("""
+                background: @slate_900_80@;
+                color: @emerald_400@;
                 padding: 1px 6px;
                 border-radius: 6px;
-                border: 1px solid rgba(52, 211, 153, 0.35);
-            """)
+                border: 1px solid @emerald_400_35@;
+            """))
             uptime_txt = hw_stats.get("uptime", "0m") if hw_stats.get("uptime_ok") else "不可用"
             hw_pill.setToolTip(f"开机运行: {uptime_txt} · 物理内存: {hw_stats['mem_total_gb']}GB")
             sub_row.addWidget(hw_pill)
@@ -444,13 +445,13 @@ class QuickActionMenu(QWidget):
             log_exception("Menus.StatusDialog.HardwarePill", e)
             hw_pill = QLabel("💻 硬件读数不可用")
             hw_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-            hw_pill.setStyleSheet("""
-                background: rgba(15, 23, 42, 0.8);
-                color: #94A3B8;
+            hw_pill.setStyleSheet(qss("""
+                background: @slate_900_80@;
+                color: @slate_400@;
                 padding: 1px 6px;
                 border-radius: 6px;
-                border: 1px solid rgba(148, 163, 184, 0.35);
-            """)
+                border: 1px solid @slate_400_35@;
+            """))
             sub_row.addWidget(hw_pill)
 
         sub_row.addStretch()
@@ -461,22 +462,22 @@ class QuickActionMenu(QWidget):
         btn_close = QPushButton("✕")
         btn_close.setFixedSize(26, 26)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setStyleSheet("""
+        btn_close.setStyleSheet(qss("""
             QPushButton {
-                background: rgba(30, 41, 59, 0.8);
-                border: 1px solid #334155;
+                background: @slate_800_80@;
+                border: 1px solid @slate_700@;
                 border-radius: 13px;
-                color: #94A3B8;
+                color: @slate_400@;
                 font-size: 11px;
                 font-weight: bold;
                 padding: 0px;
             }
             QPushButton:hover {
-                background: #EF4444;
-                color: #FFFFFF;
-                border-color: #F87171;
+                background: @red_500@;
+                color: @white@;
+                border-color: @red_400@;
             }
-        """)
+        """))
         btn_close.clicked.connect(self.close)
         profile_box.addWidget(btn_close, alignment=Qt.AlignmentFlag.AlignTop)
         layout.addLayout(profile_box)
@@ -485,27 +486,27 @@ class QuickActionMenu(QWidget):
         status_grid = QGridLayout()
         status_grid.setSpacing(8)
         status_grid.addWidget(self._create_status_bento_item(
-            "🍗", "饱食度", int(model.hunger), "#F59E0B",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #F59E0B, stop:1 #D97706)"
+            "🍗", "饱食度", int(model.hunger), Palette.amber_500,
+            f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {Palette.amber_500}, stop:1 {Palette.amber_600})"
         ), 0, 0)
         status_grid.addWidget(self._create_status_bento_item(
-            "💖", "心情值", int(model.mood), "#EC4899",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FB7185, stop:1 #E11D48)"
+            "💖", "心情值", int(model.mood), Palette.pink_500,
+            f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {Palette.rose_400}, stop:1 {Palette.rose_600})"
         ), 0, 1)
         status_grid.addWidget(self._create_status_bento_item(
-            "⚡", "精力值", int(model.energy), "#38BDF8",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #38BDF8, stop:1 #0284C7)"
+            "⚡", "精力值", int(model.energy), Palette.sky_400,
+            f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {Palette.sky_400}, stop:1 {Palette.sky_600})"
         ), 1, 0)
         status_grid.addWidget(self._create_status_bento_item(
-            "🫧", "清洁度", int(model.cleanliness), "#34D399",
-            "qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #34D399, stop:1 #059669)"
+            "🫧", "清洁度", int(model.cleanliness), Palette.emerald_400,
+            f"qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {Palette.emerald_400}, stop:1 {Palette.emerald_600})"
         ), 1, 1)
         layout.addLayout(status_grid)
 
         # 分割线
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("border: none; background-color: #1E293B; max-height: 1px;")
+        line.setStyleSheet(qss("border: none; background-color: @slate_800@; max-height: 1px;"))
         layout.addWidget(line)
 
         # 3. 核心功能卡片网格 (2 列 x 4 行)
@@ -561,28 +562,28 @@ class QuickActionMenu(QWidget):
         btn_settings = QPushButton()
         btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_settings.setFixedHeight(46)
-        btn_settings.setStyleSheet("""
+        btn_settings.setStyleSheet(qss("""
             QPushButton {
-                background-color: rgba(30, 41, 59, 0.6);
-                border: 1px solid #334155;
+                background-color: @slate_800_60@;
+                border: 1px solid @slate_700@;
                 border-radius: 14px;
                 padding: 0px 12px;
             }
             QPushButton:hover {
-                background-color: rgba(51, 65, 85, 0.85);
-                border: 1.5px solid #38BDF8;
+                background-color: @slate_700_85@;
+                border: 1.5px solid @sky_400@;
             }
             QPushButton:pressed {
-                background-color: rgba(15, 23, 42, 0.95);
+                background-color: @slate_900_95@;
             }
-        """)
+        """))
         s_layout = QHBoxLayout(btn_settings)
         s_layout.setContentsMargins(10, 0, 12, 0)
         s_layout.setSpacing(10)
 
         s_icon_box = QFrame()
         s_icon_box.setFixedSize(30, 30)
-        s_icon_box.setStyleSheet("background-color: rgba(14, 165, 233, 0.2); border-radius: 8px; border: 1px solid #0EA5E9;")
+        s_icon_box.setStyleSheet(qss("background-color: @sky_500_20@; border-radius: 8px; border: 1px solid @sky_500@;"))
         s_ib_layout = QVBoxLayout(s_icon_box)
         s_ib_layout.setContentsMargins(0, 0, 0, 0)
         s_icon = QLabel("⚙️")
@@ -597,12 +598,12 @@ class QuickActionMenu(QWidget):
         s_title_box.setSpacing(1)
         s_title = QLabel("偏好设置")
         s_title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        s_title.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        s_title.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         s_title_box.addWidget(s_title)
 
         s_sub = QLabel("缩放调节 · 保持置顶 · 开机自启 · 音效")
         s_sub.setFont(QFont("Microsoft YaHei UI", 9))
-        s_sub.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+        s_sub.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
         s_title_box.addWidget(s_sub)
         s_layout.addLayout(s_title_box)
 
@@ -610,7 +611,7 @@ class QuickActionMenu(QWidget):
 
         s_arrow = QLabel("›")
         s_arrow.setFont(QFont("Microsoft YaHei UI", 16, QFont.Weight.Bold))
-        s_arrow.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
+        s_arrow.setStyleSheet(qss("color: @sky_400@; background: transparent; border: none;"))
         s_layout.addWidget(s_arrow)
 
         btn_settings.clicked.connect(self._on_settings)
@@ -635,16 +636,16 @@ class QuickActionMenu(QWidget):
     def _create_status_bento_item(self, icon, label, val_int, color_hex, track_gradient):
         card = QFrame()
         card.setFixedHeight(46)
-        card.setStyleSheet("""
+        card.setStyleSheet(qss("""
             QFrame {
-                background-color: rgba(15, 23, 42, 0.75);
-                border: 1px solid #1E293B;
+                background-color: @slate_900_75@;
+                border: 1px solid @slate_800@;
                 border-radius: 12px;
             }
             QFrame:hover {
-                border: 1px solid #0EA5E9;
+                border: 1px solid @sky_500@;
             }
-        """)
+        """))
         layout = QVBoxLayout(card)
         layout.setContentsMargins(10, 6, 10, 6)
         layout.setSpacing(4)
@@ -654,7 +655,7 @@ class QuickActionMenu(QWidget):
 
         lbl = QLabel(f"{icon} {label}")
         lbl.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+        lbl.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
         top_h.addWidget(lbl)
         top_h.addStretch()
 
@@ -671,7 +672,7 @@ class QuickActionMenu(QWidget):
         bar.setTextVisible(False)
         bar.setStyleSheet(f"""
             QProgressBar {{
-                background-color: rgba(30, 41, 59, 0.8);
+                background-color: {Alpha.slate_800_80};
                 border: none;
                 border-radius: 2px;
             }}
@@ -865,11 +866,11 @@ class CyberHoloChamberWidget(QWidget):
             # 13 个 QPen、7 个 QBrush、2 个 QFont），白白烧掉一个核的近两成。
             # 现在统一走 pet/renderer.py 里现成的缓存助手，建一次一直复用。
             painter.setBrush(_grad_brush(QLinearGradient, (0, 0, 0, h), [
-                (0.0, _color("#090D16")),
-                (0.7, _color("#0F172A")),
-                (1.0, _color("#0B132B")),
+                (0.0, _color(Palette.glow_ink)),
+                (0.7, _color(Palette.slate_900)),
+                (1.0, _color(Palette.glow_deep)),
             ]))
-            painter.setPen(_pen("#1E293B", 1.5))
+            painter.setPen(_pen(Palette.slate_800, 1.5))
             painter.drawRoundedRect(QRectF(3, 3, w - 6, h - 6), 18, 18)
 
             # 2. 绘制全息透视网格地台 (Perspective Hologram Floor)
@@ -922,9 +923,9 @@ class CyberHoloChamberWidget(QWidget):
 
             # 5. 顶部高科技读数
             painter.setFont(self._font_hud)
-            painter.setPen(_color("#06B6D4"))
+            painter.setPen(_color(Palette.cyan_500))
             painter.drawText(QRectF(16, 10, 110, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "● HOLO-POD v3.2")
-            painter.setPen(_color("#94A3B8"))
+            painter.setPen(_color(Palette.slate_400))
             painter.drawText(QRectF(w - 95, 10, 80, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, "SYNC 99.8%")
 
             # 6. 绘制高精度萌宠本体
@@ -942,9 +943,9 @@ class CyberHoloChamberWidget(QWidget):
                 text_w = fm.horizontalAdvance(self.speech_text) + 20
                 bubble_rect = QRectF((w - text_w) / 2.0, 32, text_w, 24)
                 painter.setBrush(_solid_brush(15, 23, 42, 220))
-                painter.setPen(_pen("#38BDF8", 1))
+                painter.setPen(_pen(Palette.sky_400, 1))
                 painter.drawRoundedRect(bubble_rect, 12, 12)
-                painter.setPen(_color("#E0F2FE"))
+                painter.setPen(_color(Palette.sky_100))
                 painter.drawText(bubble_rect, Qt.AlignmentFlag.AlignCenter, self.speech_text)
         finally:
             painter.end()
@@ -985,13 +986,13 @@ class ModernBaseDialog(QDialog):
 
         self.main_card = QFrame()
         self.main_card.setObjectName("ModernDialogCard")
-        self.main_card.setStyleSheet("""
+        self.main_card.setStyleSheet(qss("""
             QFrame#ModernDialogCard {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0B0F19, stop:1 #111827);
-                border: 1.5px solid #1E293B;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ink@, stop:1 @gray_900@);
+                border: 1.5px solid @slate_800@;
                 border-radius: 20px;
             }
-        """)
+        """))
 
         # 赛博多阶深邃阴影
         shadow = QGraphicsDropShadowEffect(self)
@@ -1015,13 +1016,13 @@ class ModernBaseDialog(QDialog):
         # 左侧全息晶片徽章
         self.header_icon_frame = QFrame()
         self.header_icon_frame.setFixedSize(38, 38)
-        self.header_icon_frame.setStyleSheet("""
+        self.header_icon_frame.setStyleSheet(qss("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0369A1, stop:1 #0284C7);
-                border: 1.5px solid #38BDF8;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 @sky_700@, stop:1 @sky_600@);
+                border: 1.5px solid @sky_400@;
                 border-radius: 12px;
             }
-        """)
+        """))
         icon_layout = QVBoxLayout(self.header_icon_frame)
         icon_layout.setContentsMargins(0, 0, 0, 0)
         icon_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1041,19 +1042,19 @@ class ModernBaseDialog(QDialog):
         title_row.setSpacing(8)
         self.header_title_lbl = QLabel(title)
         self.header_title_lbl.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
-        self.header_title_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        self.header_title_lbl.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         title_row.addWidget(self.header_title_lbl)
 
         if version_tag:
             self.header_ver_pill = QLabel(version_tag)
             self.header_ver_pill.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-            self.header_ver_pill.setStyleSheet("""
-                background: rgba(14, 165, 233, 0.15);
-                color: #38BDF8;
-                border: 1px solid #0EA5E9;
+            self.header_ver_pill.setStyleSheet(qss("""
+                background: @sky_500_15@;
+                color: @sky_400@;
+                border: 1px solid @sky_500@;
                 border-radius: 4px;
                 padding: 1px 6px;
-            """)
+            """))
             title_row.addWidget(self.header_ver_pill)
         title_row.addStretch()
         title_box.addLayout(title_row)
@@ -1061,7 +1062,7 @@ class ModernBaseDialog(QDialog):
         if subtitle:
             self.header_sub_lbl = QLabel(subtitle)
             self.header_sub_lbl.setFont(QFont("Microsoft YaHei UI", 9))
-            self.header_sub_lbl.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+            self.header_sub_lbl.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
             title_box.addWidget(self.header_sub_lbl)
         header_layout.addLayout(title_box, stretch=1)
 
@@ -1070,11 +1071,11 @@ class ModernBaseDialog(QDialog):
         status_box.setSpacing(5)
         dot_lbl = QLabel("●")
         dot_lbl.setFont(QFont("Microsoft YaHei UI", 8))
-        dot_lbl.setStyleSheet("color: #10B981; background: transparent; border: none;")
+        dot_lbl.setStyleSheet(qss("color: @emerald_500@; background: transparent; border: none;"))
         status_box.addWidget(dot_lbl)
         online_lbl = QLabel("量子链路")
         online_lbl.setFont(QFont("Microsoft YaHei UI", 9))
-        online_lbl.setStyleSheet("color: #64748B; background: transparent; border: none;")
+        online_lbl.setStyleSheet(qss("color: @slate_500@; background: transparent; border: none;"))
         status_box.addWidget(online_lbl)
         header_layout.addLayout(status_box)
 
@@ -1083,26 +1084,26 @@ class ModernBaseDialog(QDialog):
         self.btn_close.setFixedSize(28, 28)
         self.btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_close.setToolTip("关闭窗口 (Esc)")
-        self.btn_close.setStyleSheet("""
+        self.btn_close.setStyleSheet(qss("""
             QPushButton {
-                background: rgba(30, 41, 59, 0.8);
-                color: #94A3B8;
-                border: 1px solid #334155;
+                background: @slate_800_80@;
+                color: @slate_400@;
+                border: 1px solid @slate_700@;
                 border-radius: 14px;
                 font-size: 13px;
                 font-weight: bold;
                 padding: 0px;
             }
             QPushButton:hover {
-                background: #EF4444;
-                color: #FFFFFF;
-                border: 1px solid #F87171;
+                background: @red_500@;
+                color: @white@;
+                border: 1px solid @red_400@;
             }
             QPushButton:pressed {
-                background: #DC2626;
-                color: #FFFFFF;
+                background: @red_600@;
+                color: @white@;
             }
-        """)
+        """))
         self.btn_close.clicked.connect(self.reject)
         header_layout.addWidget(self.btn_close)
 
@@ -1111,7 +1112,7 @@ class ModernBaseDialog(QDialog):
         # 标题栏下方细分隔线
         sep = QFrame()
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: #1E293B; border: none;")
+        sep.setStyleSheet(qss("background-color: @slate_800@; border: none;"))
         self.card_layout.addWidget(sep)
 
         # 内容容器区域 (子类向 content_layout 中添加具体控件)
@@ -1202,11 +1203,11 @@ class CyberGearCard(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         rarity_colors = {
-            "UR": ("#F59E0B", "rgba(245, 158, 11, 0.15)", "#FEF3C7", "UR·神话"),
-            "SSR": ("#A855F7", "rgba(168, 85, 247, 0.15)", "#F3E8FF", "SSR·幻彩"),
-            "SR": ("#0EA5E9", "rgba(14, 165, 233, 0.15)", "#E0F2FE", "SR·稀有"),
-            "R": ("#10B981", "rgba(16, 185, 129, 0.15)", "#D1FAE5", "R·特装"),
-            "BASE": ("#64748B", "rgba(100, 116, 139, 0.15)", "#F1F5F9", "原生")
+            "UR": (Palette.amber_500, Alpha.amber_500_15, Palette.amber_100, "UR·神话"),
+            "SSR": (Palette.violet_500, Alpha.violet_500_15, Palette.violet_100, "SSR·幻彩"),
+            "SR": (Palette.sky_500, Alpha.sky_500_15, Palette.sky_100, "SR·稀有"),
+            "R": (Palette.emerald_500, Alpha.emerald_500_15, Palette.emerald_100, "R·特装"),
+            "BASE": (Palette.slate_500, Alpha.slate_500_15, Palette.slate_100, "原生")
         }
         self.border_color, self.badge_bg, self.badge_text, self.rarity_label = rarity_colors.get(
             rarity, rarity_colors["SR"]
@@ -1238,7 +1239,7 @@ class CyberGearCard(QFrame):
         top_row.setSpacing(6)
         lbl_name = QLabel(name)
         lbl_name.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        lbl_name.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        lbl_name.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         top_row.addWidget(lbl_name)
 
         lbl_rarity = QLabel(self.rarity_label)
@@ -1256,7 +1257,7 @@ class CyberGearCard(QFrame):
 
         lbl_desc = QLabel(desc)
         lbl_desc.setFont(QFont("Microsoft YaHei UI", 8))
-        lbl_desc.setStyleSheet("color: #CBD5E1; background: transparent; border: none;")
+        lbl_desc.setStyleSheet(qss("color: @slate_300@; background: transparent; border: none;"))
         mid_box.addWidget(lbl_desc)
         layout.addLayout(mid_box, stretch=1)
 
@@ -1276,52 +1277,52 @@ class CyberGearCard(QFrame):
 
     def update_style(self):
         if self.is_active:
-            self.setStyleSheet("""
+            self.setStyleSheet(qss("""
                 CyberGearCard {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(14, 165, 233, 0.25), stop:1 rgba(15, 23, 42, 0.85));
-                    border: 1.5px solid #38BDF8;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_500_25@, stop:1 @slate_900_85@);
+                    border: 1.5px solid @sky_400@;
                     border-radius: 12px;
                 }
-            """)
-            self.icon_frame.setStyleSheet("""
+            """))
+            self.icon_frame.setStyleSheet(qss("""
                 QFrame {
-                    background: rgba(14, 165, 233, 0.2);
-                    border: 1.5px solid #38BDF8;
+                    background: @sky_500_20@;
+                    border: 1.5px solid @sky_400@;
                     border-radius: 10px;
                 }
-            """)
-            self.lbl_status.setStyleSheet("""
-                background: #0284C7;
-                color: #FFFFFF;
+            """))
+            self.lbl_status.setStyleSheet(qss("""
+                background: @sky_600@;
+                color: @white@;
                 border-radius: 10px;
                 padding: 4px 0px;
-            """)
+            """))
         else:
-            self.setStyleSheet("""
+            self.setStyleSheet(qss("""
                 CyberGearCard {
-                    background: rgba(30, 41, 59, 0.7);
-                    border: 1px solid rgba(51, 65, 85, 0.8);
+                    background: @slate_800_70@;
+                    border: 1px solid @slate_700_80@;
                     border-radius: 12px;
                 }
                 CyberGearCard:hover {
-                    background: rgba(51, 65, 85, 0.85);
-                    border: 1.5px solid #38BDF8;
+                    background: @slate_700_85@;
+                    border: 1.5px solid @sky_400@;
                 }
-            """)
+            """))
             self.icon_frame.setStyleSheet(f"""
                 QFrame {{
-                    background: rgba(15, 23, 42, 0.6);
+                    background: {Alpha.slate_900_60};
                     border: 1px solid {self.border_color};
                     border-radius: 10px;
                 }}
             """)
-            self.lbl_status.setStyleSheet("""
-                background: rgba(15, 23, 42, 0.6);
-                color: #94A3B8;
-                border: 1px solid #475569;
+            self.lbl_status.setStyleSheet(qss("""
+                background: @slate_900_60@;
+                color: @slate_400@;
+                border: 1px solid @slate_600@;
                 border-radius: 10px;
                 padding: 4px 0px;
-            """)
+            """))
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and self.on_select:
@@ -1347,30 +1348,30 @@ class CyberTabButton(QPushButton):
 
     def update_style(self):
         if self.is_selected:
-            self.setStyleSheet("""
+            self.setStyleSheet(qss("""
                 QPushButton {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-                    color: #FFFFFF;
-                    border: 1px solid #38BDF8;
+                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+                    color: @white@;
+                    border: 1px solid @sky_400@;
                     border-radius: 8px;
                     padding: 0 12px;
                 }
-            """)
+            """))
         else:
-            self.setStyleSheet("""
+            self.setStyleSheet(qss("""
                 QPushButton {
-                    background: rgba(30, 41, 59, 0.6);
-                    color: #94A3B8;
-                    border: 1px solid rgba(51, 65, 85, 0.6);
+                    background: @slate_800_60@;
+                    color: @slate_400@;
+                    border: 1px solid @slate_700_60@;
                     border-radius: 8px;
                     padding: 0 12px;
                 }
                 QPushButton:hover {
-                    background: rgba(51, 65, 85, 0.8);
-                    color: #F1F5F9;
-                    border: 1px solid #0EA5E9;
+                    background: @slate_700_80@;
+                    color: @slate_100@;
+                    border: 1px solid @sky_500@;
                 }
-            """)
+            """))
 
 
 class CyberGachaDialog(ModernBaseDialog):
@@ -1408,22 +1409,22 @@ class CyberGachaDialog(ModernBaseDialog):
         wallet_bar = QHBoxLayout()
         self.coins_lbl = QLabel()
         self.coins_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.coins_lbl.setStyleSheet("""
-            background: rgba(245, 158, 11, 0.15);
-            color: #FBBF24;
-            border: 1px solid #F59E0B;
+        self.coins_lbl.setStyleSheet(qss("""
+            background: @amber_500_15@;
+            color: @amber_400@;
+            border: 1px solid @amber_500@;
             border-radius: 12px;
             padding: 4px 12px;
-        """)
+        """))
         self.exp_lbl = QLabel()
         self.exp_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.exp_lbl.setStyleSheet("""
-            background: rgba(14, 165, 233, 0.15);
-            color: #38BDF8;
-            border: 1px solid #0EA5E9;
+        self.exp_lbl.setStyleSheet(qss("""
+            background: @sky_500_15@;
+            color: @sky_400@;
+            border: 1px solid @sky_500@;
             border-radius: 12px;
             padding: 4px 12px;
-        """)
+        """))
         wallet_bar.addWidget(self.coins_lbl)
         wallet_bar.addStretch()
         wallet_bar.addWidget(self.exp_lbl)
@@ -1431,13 +1432,13 @@ class CyberGachaDialog(ModernBaseDialog):
 
         # 2. 中间全息扭蛋仓展示区
         center_frame = QFrame()
-        center_frame.setStyleSheet("""
+        center_frame.setStyleSheet(qss("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #0F172A, stop:1 #0B0F19);
-                border: 1.5px solid #0EA5E9;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @slate_900@, stop:1 @ink@);
+                border: 1.5px solid @sky_500@;
                 border-radius: 18px;
             }
-        """)
+        """))
         c_layout = QVBoxLayout(center_frame)
         c_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         c_layout.setSpacing(10)
@@ -1451,13 +1452,13 @@ class CyberGachaDialog(ModernBaseDialog):
         banner = QLabel("CYBER REWARD MATRIX")
         banner.setFont(QFont("Consolas", 11, QFont.Weight.Bold))
         banner.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        banner.setStyleSheet("color: #38BDF8; letter-spacing: 2px;")
+        banner.setStyleSheet(qss("color: @sky_400@; letter-spacing: 2px;"))
         c_layout.addWidget(banner)
 
         hint = QLabel("盲盒内含全套 5 插槽战术神装、手持道具及家园场景\n✨ 十连抽必得 SSR 或 UR 稀有配件！")
         hint.setFont(QFont("Microsoft YaHei UI", 10))
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hint.setStyleSheet("color: #94A3B8; line-height: 1.4;")
+        hint.setStyleSheet(qss("color: @slate_400@; line-height: 1.4;"))
         c_layout.addWidget(hint)
 
         layout.addWidget(center_frame, stretch=1)
@@ -1469,38 +1470,38 @@ class CyberGachaDialog(ModernBaseDialog):
         btn_single = QPushButton("🎲 单抽盲盒 (30 🪙)")
         btn_single.setFixedHeight(44)
         btn_single.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_single.setStyleSheet("""
+        btn_single.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-                color: #FFFFFF;
-                border: 1px solid #38BDF8;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+                color: @white@;
+                border: 1px solid @sky_400@;
                 border-radius: 12px;
                 font-weight: bold;
                 font-size: 12px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_700@, stop:1 @sky_400@);
             }
-        """)
+        """))
         btn_single.clicked.connect(lambda: self._do_draw(1))
         btn_box.addWidget(btn_single, stretch=1)
 
         btn_ten = QPushButton("✨ 豪华十连抽 (270 🪙 必中SSR)")
         btn_ten.setFixedHeight(44)
         btn_ten.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_ten.setStyleSheet("""
+        btn_ten.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #7C3AED, stop:1 #EC4899);
-                color: #FFFFFF;
-                border: 1px solid #F472B6;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @violet_700@, stop:1 @pink_500@);
+                color: @white@;
+                border: 1px solid @pink_400@;
                 border-radius: 12px;
                 font-weight: bold;
                 font-size: 12px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6D28D9, stop:1 #DB2777);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @violet_900@, stop:1 @pink_600@);
             }
-        """)
+        """))
         btn_ten.clicked.connect(lambda: self._do_draw(10))
         btn_box.addWidget(btn_ten, stretch=1)
 
@@ -1517,11 +1518,11 @@ class CyberGachaDialog(ModernBaseDialog):
         top_h = QHBoxLayout()
         self.res_title = QLabel("🎉 成功解构赛博奖励！")
         self.res_title.setFont(QFont("Microsoft YaHei UI", 12, QFont.Weight.Bold))
-        self.res_title.setStyleSheet("color: #38BDF8;")
+        self.res_title.setStyleSheet(qss("color: @sky_400@;"))
         top_h.addWidget(self.res_title)
         top_h.addStretch()
         self.res_coins_info = QLabel()
-        self.res_coins_info.setStyleSheet("color: #FBBF24; font-weight: bold;")
+        self.res_coins_info.setStyleSheet(qss("color: @amber_400@; font-weight: bold;"))
         top_h.addWidget(self.res_coins_info)
         layout.addLayout(top_h)
 
@@ -1542,34 +1543,34 @@ class CyberGachaDialog(ModernBaseDialog):
         btn_back = QPushButton("🔄 再来一发")
         btn_back.setFixedHeight(36)
         btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_back.setStyleSheet("""
+        btn_back.setStyleSheet(qss("""
             QPushButton {
-                background: rgba(30, 41, 59, 0.8);
-                color: #E2E8F0;
-                border: 1px solid #475569;
+                background: @slate_800_80@;
+                color: @slate_200@;
+                border: 1px solid @slate_600@;
                 border-radius: 10px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background: rgba(51, 65, 85, 0.9);
-                border: 1px solid #0EA5E9;
+                background: @slate_700_90@;
+                border: 1px solid @sky_500@;
             }
-        """)
+        """))
         btn_back.clicked.connect(self._back_to_pod)
         bot_h.addWidget(btn_back)
 
         btn_close = QPushButton("✨ 收下奖励并返回")
         btn_close.setFixedHeight(36)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setStyleSheet("""
+        btn_close.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-                color: #FFFFFF;
-                border: 1px solid #38BDF8;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+                color: @white@;
+                border: 1px solid @sky_400@;
                 border-radius: 10px;
                 font-weight: bold;
             }
-        """)
+        """))
         btn_close.clicked.connect(self.accept)
         bot_h.addWidget(btn_close, stretch=1)
 
@@ -1621,7 +1622,7 @@ class CyberGachaDialog(ModernBaseDialog):
                 item.widget().deleteLater()
 
         rarity_colors = {
-            "UR": "#F59E0B", "SSR": "#EC4899", "SR": "#38BDF8", "R": "#10B981"
+            "UR": Palette.amber_500, "SSR": Palette.pink_500, "SR": Palette.sky_400, "R": Palette.emerald_500
         }
 
         slot_names = {
@@ -1633,8 +1634,8 @@ class CyberGachaDialog(ModernBaseDialog):
             card = QFrame()
             card.setStyleSheet(f"""
                 QFrame {{
-                    background: rgba(15, 23, 42, 0.85);
-                    border: 1.5px solid {rarity_colors.get(item['rarity'], '#38BDF8')};
+                    background: {Alpha.slate_900_85};
+                    border: 1.5px solid {rarity_colors.get(item['rarity'], Palette.sky_400)};
                     border-radius: 12px;
                 }}
             """)
@@ -1646,7 +1647,7 @@ class CyberGachaDialog(ModernBaseDialog):
             icon_lbl.setFont(QFont("Segoe UI Emoji", 20))
             icon_lbl.setFixedSize(36, 36)
             icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            icon_lbl.setStyleSheet(f"background: rgba(30, 41, 59, 0.8); border: 1px solid {rarity_colors.get(item['rarity'], '#38BDF8')}; border-radius: 8px;")
+            icon_lbl.setStyleSheet(f"background: {Alpha.slate_800_80}; border: 1px solid {rarity_colors.get(item['rarity'], Palette.sky_400)}; border-radius: 8px;")
             card_h.addWidget(icon_lbl)
 
             info_v = QVBoxLayout()
@@ -1655,12 +1656,12 @@ class CyberGachaDialog(ModernBaseDialog):
             name_h.setSpacing(6)
             name_lbl = QLabel(f"{item['name']} [{item['rarity']}]")
             name_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-            name_lbl.setStyleSheet(f"color: {rarity_colors.get(item['rarity'], '#38BDF8')};")
+            name_lbl.setStyleSheet(f"color: {rarity_colors.get(item['rarity'], Palette.sky_400)};")
             name_h.addWidget(name_lbl)
             if item.get("is_new", False):
                 new_badge = QLabel("NEW! ✨")
                 new_badge.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
-                new_badge.setStyleSheet("color: #F59E0B; background: rgba(245, 158, 11, 0.15); border: 1px solid #F59E0B; border-radius: 4px; padding: 1px 4px;")
+                new_badge.setStyleSheet(qss("color: @amber_500@; background: @amber_500_15@; border: 1px solid @amber_500@; border-radius: 4px; padding: 1px 4px;"))
                 name_h.addWidget(new_badge)
             name_h.addStretch()
             info_v.addLayout(name_h)
@@ -1668,28 +1669,28 @@ class CyberGachaDialog(ModernBaseDialog):
             slot_str = slot_names.get(item["slot"], item["slot"])
             slot_lbl = QLabel(f"部位: {slot_str}")
             slot_lbl.setFont(QFont("Microsoft YaHei UI", 9))
-            slot_lbl.setStyleSheet("color: #94A3B8;")
+            slot_lbl.setStyleSheet(qss("color: @slate_400@;"))
             info_v.addWidget(slot_lbl)
             card_h.addLayout(info_v, stretch=1)
 
             btn_equip = QPushButton("⚡ 立即穿戴/使用")
             btn_equip.setFixedHeight(28)
             btn_equip.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_equip.setStyleSheet("""
+            btn_equip.setStyleSheet(qss("""
                 QPushButton {
-                    background: rgba(14, 165, 233, 0.2);
-                    color: #38BDF8;
-                    border: 1px solid #0EA5E9;
+                    background: @sky_500_20@;
+                    color: @sky_400@;
+                    border: 1px solid @sky_500@;
                     border-radius: 6px;
                     padding: 0 10px;
                     font-size: 10px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background: rgba(14, 165, 233, 0.4);
-                    color: #FFFFFF;
+                    background: @sky_500_40@;
+                    color: @white@;
                 }
-            """)
+            """))
             def _make_equip_func(slot=item['slot'], code=item['code'], b=btn_equip, nm=item['name']):
                 def _eq():
                     if slot == "habitat":
@@ -1775,13 +1776,13 @@ class WardrobeDialog(ModernBaseDialog):
             pill.setFont(QFont("Microsoft YaHei UI", 8))
             pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
             pill.setFixedHeight(22)
-            pill.setStyleSheet("""
-                background: rgba(15, 23, 42, 0.7);
-                color: #38BDF8;
-                border: 1px dashed #0284C7;
+            pill.setStyleSheet(qss("""
+                background: @slate_900_70@;
+                color: @sky_400@;
+                border: 1px dashed @sky_600@;
                 border-radius: 6px;
                 padding: 0 4px;
-            """)
+            """))
             row_target.addWidget(pill)
             self.slot_pills[s_key] = pill
         slots_col.addLayout(slots_row1)
@@ -1792,19 +1793,19 @@ class WardrobeDialog(ModernBaseDialog):
         btn_random = QPushButton("🎲 赛博随机混搭 (Cyber Shuffle)")
         btn_random.setFixedHeight(32)
         btn_random.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_random.setStyleSheet("""
+        btn_random.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #4F46E5, stop:1 #7C3AED);
-                color: #FFFFFF;
-                border: 1px solid #A78BFA;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @indigo_600@, stop:1 @violet_700@);
+                color: @white@;
+                border: 1px solid @violet_500@;
                 border-radius: 8px;
                 font-weight: bold;
                 font-size: 11px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366F1, stop:1 #8B5CF6);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @indigo_500@, stop:1 @violet_600@);
             }
-        """)
+        """))
         btn_random.clicked.connect(self._random_cyber_shuffle)
         left_box.addWidget(btn_random)
 
@@ -1812,19 +1813,19 @@ class WardrobeDialog(ModernBaseDialog):
         btn_gacha = QPushButton("🎰 赛博盲盒扭蛋机 (Cyber Gacha)")
         btn_gacha.setFixedHeight(32)
         btn_gacha.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_gacha.setStyleSheet("""
+        btn_gacha.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #EC4899, stop:1 #8B5CF6);
-                color: #FFFFFF;
-                border: 1px solid #F472B6;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @pink_500@, stop:1 @violet_600@);
+                color: @white@;
+                border: 1px solid @pink_400@;
                 border-radius: 8px;
                 font-weight: bold;
                 font-size: 11px;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #DB2777, stop:1 #7C3AED);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @pink_600@, stop:1 @violet_700@);
             }
-        """)
+        """))
         btn_gacha.clicked.connect(self._open_gacha_dialog)
         left_box.addWidget(btn_gacha)
 
@@ -1837,40 +1838,40 @@ class WardrobeDialog(ModernBaseDialog):
         btn_clear = QPushButton("🚫 卸下全部")
         btn_clear.setFixedHeight(36)
         btn_clear.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_clear.setStyleSheet("""
+        btn_clear.setStyleSheet(qss("""
             QPushButton {
-                background: rgba(30, 41, 59, 0.8);
-                color: #94A3B8;
-                border: 1px solid #334155;
+                background: @slate_800_80@;
+                color: @slate_400@;
+                border: 1px solid @slate_700@;
                 border-radius: 10px;
                 font-size: 11px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background: rgba(51, 65, 85, 0.9);
-                color: #F87171;
-                border: 1px solid #EF4444;
+                background: @slate_700_90@;
+                color: @red_400@;
+                border: 1px solid @red_500@;
             }
-        """)
+        """))
         btn_clear.clicked.connect(self._clear_all_decorations)
         action_row.addWidget(btn_clear)
 
         btn_save = QPushButton("✨ 保存并同步装配")
         btn_save.setFixedHeight(36)
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_save.setStyleSheet("""
+        btn_save.setStyleSheet(qss("""
             QPushButton {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #0EA5E9);
-                color: #FFFFFF;
-                border: 1px solid #38BDF8;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_500@);
+                color: @white@;
+                border: 1px solid @sky_400@;
                 border-radius: 10px;
                 font-size: 12px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0369A1, stop:1 #38BDF8);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_700@, stop:1 @sky_400@);
             }
-        """)
+        """))
         btn_save.clicked.connect(self._apply_and_close)
         action_row.addWidget(btn_save, stretch=1)
         left_box.addLayout(action_row)
@@ -2182,13 +2183,13 @@ class FeedingDialog(ModernBaseDialog):
         # 当前阶段与体重展示卡片 (使用精准 ID 作用域，彻底根治子标签样式污染)
         info_card = QFrame()
         info_card.setObjectName("FeedingInfoCard")
-        info_card.setStyleSheet("""
+        info_card.setStyleSheet(qss("""
             QFrame#FeedingInfoCard {
-                background: rgba(30, 41, 59, 0.7);
+                background: @slate_800_70@;
                 border-radius: 16px;
-                border: 1px solid #334155;
+                border: 1px solid @slate_700@;
             }
-        """)
+        """))
         info_layout = QVBoxLayout(info_card)
         info_layout.setContentsMargins(14, 12, 14, 12)
         info_layout.setSpacing(8)
@@ -2199,23 +2200,23 @@ class FeedingDialog(ModernBaseDialog):
         # 阶段与体重独立美化药丸
         self.stage_lbl = QLabel(f"🌟 当前阶梯: {stage_info['name']}")
         self.stage_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.stage_lbl.setStyleSheet("""
-            background: rgba(14, 165, 233, 0.15);
-            border: 1px solid #0EA5E9;
+        self.stage_lbl.setStyleSheet(qss("""
+            background: @sky_500_15@;
+            border: 1px solid @sky_500@;
             border-radius: 11px;
             padding: 3px 10px;
-            color: #38BDF8;
-        """)
+            color: @sky_400@;
+        """))
 
         self.weight_lbl = QLabel(f"⚖️ 体重: {self.model.weight} kg")
         self.weight_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.weight_lbl.setStyleSheet("""
-            background: rgba(16, 185, 129, 0.15);
-            border: 1px solid #10B981;
+        self.weight_lbl.setStyleSheet(qss("""
+            background: @emerald_500_15@;
+            border: 1px solid @emerald_500@;
             border-radius: 11px;
             padding: 3px 10px;
-            color: #34D399;
-        """)
+            color: @emerald_400@;
+        """))
 
         header_h.addWidget(self.stage_lbl)
         header_h.addStretch()
@@ -2225,7 +2226,7 @@ class FeedingDialog(ModernBaseDialog):
         growth_h = QHBoxLayout()
         growth_title = QLabel("🌱 成长蜕变积累:")
         growth_title.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        growth_title.setStyleSheet("color: #94A3B8; background: transparent; border: none;")
+        growth_title.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
         growth_h.addWidget(growth_title)
 
         target = stage_info["next_target"]
@@ -2235,7 +2236,7 @@ class FeedingDialog(ModernBaseDialog):
 
         self.growth_val_lbl = QLabel(display_growth)
         self.growth_val_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.growth_val_lbl.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
+        self.growth_val_lbl.setStyleSheet(qss("color: @sky_400@; background: transparent; border: none;"))
         growth_h.addWidget(self.growth_val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         info_layout.addLayout(growth_h)
 
@@ -2244,22 +2245,22 @@ class FeedingDialog(ModernBaseDialog):
         self.growth_bar.setTextVisible(False)
         self.growth_bar.setMaximum(target)
         self.growth_bar.setValue(min(target, curr_growth))
-        self.growth_bar.setStyleSheet("""
+        self.growth_bar.setStyleSheet(qss("""
             QProgressBar {
-                border: 1px solid #1E293B;
-                background-color: rgba(15, 23, 42, 0.8);
+                border: 1px solid @slate_800@;
+                background-color: @slate_900_80@;
                 border-radius: 6px;
                 height: 12px;
             }
             QProgressBar::chunk {
                 border-radius: 6px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @cyan_500@, stop:1 @blue_500@);
             }
-        """)
+        """))
         info_layout.addWidget(self.growth_bar)
 
         desc_lbl = QLabel(stage_info["desc"])
-        desc_lbl.setStyleSheet("color: #94A3B8; font-size: 11px; background: transparent; border: none;")
+        desc_lbl.setStyleSheet(qss("color: @slate_400@; font-size: 11px; background: transparent; border: none;"))
         desc_lbl.setWordWrap(True)
         info_layout.addWidget(desc_lbl)
         layout.addWidget(info_card)
@@ -2267,7 +2268,7 @@ class FeedingDialog(ModernBaseDialog):
         # 营养美食列表
         title = QLabel("选择给萌宠投喂的营养美食：")
         title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #F8FAFC; margin-top: 4px; background: transparent; border: none;")
+        title.setStyleSheet(qss("color: @slate_50@; margin-top: 4px; background: transparent; border: none;"))
         layout.addWidget(title)
 
         foods = [
@@ -2337,27 +2338,27 @@ class PlayDialog(ModernBaseDialog):
 
         title = QLabel("选择好玩的娱乐活动：")
         title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        title.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         layout.addWidget(title)
 
         # 猜拳游戏模块 (使用专用 ID 选择器，杜绝子标签边框污染)
         rps_group = QFrame()
         rps_group.setObjectName("RpsGroup")
-        rps_group.setStyleSheet("""
+        rps_group.setStyleSheet(qss("""
             QFrame#RpsGroup {
-                background: rgba(30, 41, 59, 0.7);
+                background: @slate_800_70@;
                 border-radius: 14px;
-                border: 1px solid #334155;
+                border: 1px solid @slate_700@;
                 padding: 10px;
             }
-        """)
+        """))
         rps_layout = QVBoxLayout(rps_group)
         rps_layout.setContentsMargins(10, 8, 10, 8)
         rps_layout.setSpacing(8)
 
         rps_lbl = QLabel("✂️ 猜拳大对决 (石头剪刀布)")
         rps_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        rps_lbl.setStyleSheet("color: #38BDF8; background: transparent; border: none;")
+        rps_lbl.setStyleSheet(qss("color: @sky_400@; background: transparent; border: none;"))
         rps_layout.addWidget(rps_lbl)
 
         btn_box = QHBoxLayout()
@@ -2389,7 +2390,7 @@ class PlayDialog(ModernBaseDialog):
         self.result_lbl = QLabel("")
         self.result_lbl.setWordWrap(True)
         self.result_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.result_lbl.setStyleSheet("color: #38BDF8; font-size: 12px; font-weight: bold; background: rgba(14, 165, 233, 0.15); border: 1.5px solid #0EA5E9; border-radius: 10px; padding: 10px;")
+        self.result_lbl.setStyleSheet(qss("color: @sky_400@; font-size: 12px; font-weight: bold; background: @sky_500_15@; border: 1.5px solid @sky_500@; border-radius: 10px; padding: 10px;"))
         self.result_lbl.hide()
         layout.addWidget(self.result_lbl)
 
@@ -2555,27 +2556,27 @@ class FocusDialog(ModernBaseDialog):
 
         # 正在专注全息 HUD 卡片
         hud_card = QFrame()
-        hud_card.setStyleSheet("""
+        hud_card.setStyleSheet(qss("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(11, 15, 25, 0.95), stop:1 rgba(15, 23, 42, 0.95));
-                border: 1.5px solid #0EA5E9;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 @ink_95@, stop:1 @slate_900_95@);
+                border: 1.5px solid @sky_500@;
                 border-radius: 16px;
             }
-        """)
+        """))
         card_l = QVBoxLayout(hud_card)
         card_l.setContentsMargins(18, 16, 18, 16)
         card_l.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         status_lbl = QLabel("🛡️ 深度心流守护力场已展开")
         status_lbl.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        status_lbl.setStyleSheet("color: #38BDF8;")
+        status_lbl.setStyleSheet(qss("color: @sky_400@;"))
         status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_l.addWidget(status_lbl)
 
         # 倒计时大字符
         self.time_lbl = QLabel(self._format_time_left())
         self.time_lbl.setFont(QFont("Consolas", 36, QFont.Weight.Bold))
-        self.time_lbl.setStyleSheet("color: #F8FAFC; letter-spacing: 2px; padding: 10px 0;")
+        self.time_lbl.setStyleSheet(qss("color: @slate_50@; letter-spacing: 2px; padding: 10px 0;"))
         self.time_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_l.addWidget(self.time_lbl)
 
@@ -2583,17 +2584,17 @@ class FocusDialog(ModernBaseDialog):
         self.pbar = QProgressBar()
         self.pbar.setFixedHeight(8)
         self.pbar.setTextVisible(False)
-        self.pbar.setStyleSheet("""
+        self.pbar.setStyleSheet(qss("""
             QProgressBar {
-                background-color: #1E293B;
+                background-color: @slate_800@;
                 border: none;
                 border-radius: 4px;
             }
             QProgressBar::chunk {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #0284C7, stop:1 #38BDF8);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @sky_600@, stop:1 @sky_400@);
                 border-radius: 4px;
             }
-        """)
+        """))
         total = max(1, int(self.model.study_duration))
         left = max(0, int(self.model.study_time_left))
         elapsed = max(0, total - left)
@@ -2603,7 +2604,7 @@ class FocusDialog(ModernBaseDialog):
 
         tip_lbl = QLabel(f"总时长: {int(total // 60)} 分钟 · 达成后自动奖励 50 EXP 与大量好心情 ✨")
         tip_lbl.setFont(QFont("Microsoft YaHei UI", 9))
-        tip_lbl.setStyleSheet("color: #94A3B8; margin-top: 6px;")
+        tip_lbl.setStyleSheet(qss("color: @slate_400@; margin-top: 6px;"))
         tip_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         card_l.addWidget(tip_lbl)
 
@@ -2614,19 +2615,19 @@ class FocusDialog(ModernBaseDialog):
         btn_box = QHBoxLayout()
         btn_cancel = QPushButton("⏹️ 提前结束专注")
         btn_cancel.setFixedHeight(38)
-        btn_cancel.setStyleSheet("""
+        btn_cancel.setStyleSheet(qss("""
             QPushButton {
-                background-color: rgba(244, 63, 94, 0.15);
-                border: 1px solid #F43F5E;
-                color: #FDA4AF;
+                background-color: @rose_500_15@;
+                border: 1px solid @rose_500@;
+                color: @rose_300@;
                 border-radius: 12px;
                 font-weight: 500;
             }
             QPushButton:hover {
-                background-color: rgba(244, 63, 94, 0.3);
-                color: #FFFFFF;
+                background-color: @rose_500_30@;
+                color: @white@;
             }
-        """)
+        """))
         btn_cancel.clicked.connect(self._stop_focus)
         btn_box.addWidget(btn_cancel)
 
@@ -2668,7 +2669,7 @@ class FocusDialog(ModernBaseDialog):
 
         title = QLabel("🎯 选择极客专注模式或滑动微调：")
         title.setFont(QFont("Microsoft YaHei UI", 11, QFont.Weight.Bold))
-        title.setStyleSheet("color: #F8FAFC;")
+        title.setStyleSheet(qss("color: @slate_50@;"))
         layout.addWidget(title)
 
         # 4 战术预设网格
@@ -2696,44 +2697,44 @@ class FocusDialog(ModernBaseDialog):
 
         # 滑块自由微调
         slider_card = QFrame()
-        slider_card.setStyleSheet("""
+        slider_card.setStyleSheet(qss("""
             QFrame {
-                background: rgba(15, 23, 42, 0.7);
-                border: 1px solid #334155;
+                background: @slate_900_70@;
+                border: 1px solid @slate_700@;
                 border-radius: 12px;
                 padding: 6px;
             }
-        """)
+        """))
         sl_layout = QVBoxLayout(slider_card)
         sl_layout.setContentsMargins(10, 6, 10, 6)
         sl_layout.setSpacing(4)
 
         self.custom_val_lbl = QLabel(f"自定义时长调节: {self.selected_minutes} 分钟")
         self.custom_val_lbl.setFont(QFont("Microsoft YaHei UI", 9, QFont.Weight.Bold))
-        self.custom_val_lbl.setStyleSheet("color: #38BDF8;")
+        self.custom_val_lbl.setStyleSheet(qss("color: @sky_400@;"))
         sl_layout.addWidget(self.custom_val_lbl)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(5, 120)
         self.slider.setValue(self.selected_minutes)
-        self.slider.setStyleSheet("""
+        self.slider.setStyleSheet(qss("""
             QSlider::groove:horizontal {
                 height: 6px;
-                background: #1E293B;
+                background: @slate_800@;
                 border-radius: 3px;
             }
             QSlider::sub-page:horizontal {
-                background: #0EA5E9;
+                background: @sky_500@;
                 border-radius: 3px;
             }
             QSlider::handle:horizontal {
-                background: #38BDF8;
+                background: @sky_400@;
                 width: 16px;
                 margin-top: -5px;
                 margin-bottom: -5px;
                 border-radius: 8px;
             }
-        """)
+        """))
         self.slider.valueChanged.connect(self._on_slider_change)
         sl_layout.addWidget(self.slider)
 
@@ -2770,28 +2771,28 @@ class FocusDialog(ModernBaseDialog):
     def _update_preset_button_styles(self):
         for m, btn in getattr(self, "preset_btns", []):
             if m == self.selected_minutes:
-                btn.setStyleSheet("""
+                btn.setStyleSheet(qss("""
                     QPushButton {
-                        background: rgba(14, 165, 233, 0.25);
-                        border: 1.5px solid #38BDF8;
-                        color: #FFFFFF;
+                        background: @sky_500_25@;
+                        border: 1.5px solid @sky_400@;
+                        color: @white@;
                         border-radius: 12px;
                         font-weight: bold;
                     }
-                """)
+                """))
             else:
-                btn.setStyleSheet("""
+                btn.setStyleSheet(qss("""
                     QPushButton {
-                        background: rgba(30, 41, 59, 0.7);
-                        border: 1px solid rgba(51, 65, 85, 0.8);
-                        color: #94A3B8;
+                        background: @slate_800_70@;
+                        border: 1px solid @slate_700_80@;
+                        color: @slate_400@;
                         border-radius: 12px;
                     }
                     QPushButton:hover {
-                        border-color: #0EA5E9;
-                        color: #F8FAFC;
+                        border-color: @sky_500@;
+                        color: @slate_50@;
                     }
-                """)
+                """))
 
     def _start_focus(self):
         self.model.start_focus_timer(self.selected_minutes)
@@ -2821,17 +2822,17 @@ class StatusDialog(ModernBaseDialog):
         avatar.setFont(QFont("Segoe UI Emoji", 30))
         avatar.setFixedSize(50, 50)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avatar.setStyleSheet("background-color: rgba(30, 41, 59, 0.8); border-radius: 25px; border: 2px solid #38BDF8;")
+        avatar.setStyleSheet(qss("background-color: @slate_800_80@; border-radius: 25px; border: 2px solid @sky_400@;"))
         header.addWidget(avatar)
 
         title_info = QVBoxLayout()
         title_info.setSpacing(2)
         name_lbl = QLabel(f"{model.name}  Lv.{model.level}")
         name_lbl.setFont(QFont("Microsoft YaHei UI", 13, QFont.Weight.Bold))
-        name_lbl.setStyleSheet("color: #F8FAFC; background: transparent; border: none;")
+        name_lbl.setStyleSheet(qss("color: @slate_50@; background: transparent; border: none;"))
         stage_info = model.stage_info
         title_lbl = QLabel(f"{stage_info['name']} · 陪伴第 {model.total_days} 天 · 亲密度: {model.intimacy} 点 · 体重: {model.weight}kg")
-        title_lbl.setStyleSheet("color: #38BDF8; font-weight: 500; font-size: 11px;")
+        title_lbl.setStyleSheet(qss("color: @sky_400@; font-weight: 500; font-size: 11px;"))
         title_info.addWidget(name_lbl)
         title_info.addWidget(title_lbl)
         header.addLayout(title_info)
@@ -2842,7 +2843,7 @@ class StatusDialog(ModernBaseDialog):
         growth_box.setSpacing(3)
         growth_h = QHBoxLayout()
         growth_title = QLabel("🌱 成长蜕变积累")
-        growth_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        growth_title.setStyleSheet(qss("font-size: 11px; font-weight: bold; color: @slate_400@;"))
         growth_h.addWidget(growth_title)
 
         target = stage_info["next_target"]
@@ -2851,7 +2852,7 @@ class StatusDialog(ModernBaseDialog):
         display_growth = f"{curr_growth} (已达满阶 ✨)" if is_max else f"{curr_growth} / {target}"
 
         g_val = QLabel(display_growth)
-        g_val.setStyleSheet("color: #38BDF8; font-size: 11px; font-weight: bold;")
+        g_val.setStyleSheet(qss("color: @sky_400@; font-size: 11px; font-weight: bold;"))
         growth_h.addWidget(g_val, alignment=Qt.AlignmentFlag.AlignRight)
         growth_box.addLayout(growth_h)
 
@@ -2860,17 +2861,17 @@ class StatusDialog(ModernBaseDialog):
         growth_bar.setTextVisible(False)
         growth_bar.setMaximum(target)
         growth_bar.setValue(min(target, curr_growth))
-        growth_bar.setStyleSheet("""
+        growth_bar.setStyleSheet(qss("""
             QProgressBar {
-                border: 1px solid #1E293B;
-                background-color: rgba(15, 23, 42, 0.8);
+                border: 1px solid @slate_800@;
+                background-color: @slate_900_80@;
                 border-radius: 4px;
             }
             QProgressBar::chunk {
                 border-radius: 4px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10B981, stop:1 #059669);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @emerald_500@, stop:1 @emerald_600@);
             }
-        """)
+        """))
         growth_box.addWidget(growth_bar)
         layout.addLayout(growth_box)
 
@@ -2879,10 +2880,10 @@ class StatusDialog(ModernBaseDialog):
         exp_box.setSpacing(3)
         exp_header = QHBoxLayout()
         exp_title = QLabel("陪伴经验值")
-        exp_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        exp_title.setStyleSheet(qss("font-size: 11px; font-weight: bold; color: @slate_400@;"))
         exp_header.addWidget(exp_title)
         exp_val = QLabel(f"{int(model.exp)} / {model.max_exp}")
-        exp_val.setStyleSheet("color: #38BDF8; font-size: 11px; font-weight: bold;")
+        exp_val.setStyleSheet(qss("color: @sky_400@; font-size: 11px; font-weight: bold;"))
         exp_header.addWidget(exp_val, alignment=Qt.AlignmentFlag.AlignRight)
         exp_box.addLayout(exp_header)
 
@@ -2891,36 +2892,36 @@ class StatusDialog(ModernBaseDialog):
         exp_bar.setTextVisible(False)
         exp_bar.setMaximum(model.max_exp)
         exp_bar.setValue(min(model.max_exp, int(model.exp)))
-        exp_bar.setStyleSheet("""
+        exp_bar.setStyleSheet(qss("""
             QProgressBar {
-                border: 1px solid #1E293B;
-                background-color: rgba(15, 23, 42, 0.8);
+                border: 1px solid @slate_800@;
+                background-color: @slate_900_80@;
                 border-radius: 4px;
             }
             QProgressBar::chunk {
                 border-radius: 4px;
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #06B6D4, stop:1 #3B82F6);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 @cyan_500@, stop:1 @blue_500@);
             }
-        """)
+        """))
         exp_box.addWidget(exp_bar)
         layout.addLayout(exp_box)
 
         # 4大基础体征条
-        self._add_stat_bar(layout, "🍗 饱食度", int(model.hunger), "#F59E0B")
-        self._add_stat_bar(layout, "💖 心情值", int(model.mood), "#EC4899")
-        self._add_stat_bar(layout, "⚡ 精力值", int(model.energy), "#3B82F6")
-        self._add_stat_bar(layout, "🫧 清洁度", int(model.cleanliness), "#06B6D4")
+        self._add_stat_bar(layout, "🍗 饱食度", int(model.hunger), Palette.amber_500)
+        self._add_stat_bar(layout, "💖 心情值", int(model.mood), Palette.pink_500)
+        self._add_stat_bar(layout, "⚡ 精力值", int(model.energy), Palette.blue_500)
+        self._add_stat_bar(layout, "🫧 清洁度", int(model.cleanliness), Palette.cyan_500)
 
         # 5. 性格树与行为塑造矩阵
         pers_info = model.personality_info
         pers_card = QFrame()
-        pers_card.setStyleSheet("""
+        pers_card.setStyleSheet(qss("""
             QFrame {
-                background: rgba(15, 23, 42, 0.85);
-                border: 1.2px solid #0EA5E9;
+                background: @slate_900_85@;
+                border: 1.2px solid @sky_500@;
                 border-radius: 12px;
             }
-        """)
+        """))
         pers_layout = QVBoxLayout(pers_card)
         pers_layout.setContentsMargins(10, 8, 10, 8)
         pers_layout.setSpacing(4)
@@ -2932,21 +2933,21 @@ class StatusDialog(ModernBaseDialog):
         p_header.addWidget(p_badge)
         p_header.addStretch()
         p_coins = QLabel(f"🪙 赛博金币: {model.coins}")
-        p_coins.setStyleSheet("color: #FBBF24; font-size: 10px; font-weight: bold; background: transparent; border: none;")
+        p_coins.setStyleSheet(qss("color: @amber_400@; font-size: 10px; font-weight: bold; background: transparent; border: none;"))
         p_header.addWidget(p_coins)
         pers_layout.addLayout(p_header)
 
         p_desc = QLabel(f"💡 {pers_info['desc']}\n✨ 特权: {pers_info['bonus']}")
         p_desc.setFont(QFont("Microsoft YaHei UI", 8))
-        p_desc.setStyleSheet("color: #94A3B8; background: transparent; border: none; line-height: 1.3;")
+        p_desc.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none; line-height: 1.3;"))
         p_desc.setWordWrap(True)
         pers_layout.addWidget(p_desc)
 
         # 3维性格倾向条 (以 50 点为满槽参考)
         stats = model.personality_stats
-        self._add_stat_bar(pers_layout, "⚡ 极客科技度 (Tech)", min(100, int(stats.get("tech", 0) * 2)), "#0EA5E9")
-        self._add_stat_bar(pers_layout, "🏃 元气运动度 (Sport)", min(100, int(stats.get("sport", 0) * 2)), "#10B981")
-        self._add_stat_bar(pers_layout, "🍵 佛系闲适度 (Lazy)", min(100, int(stats.get("lazy", 0) * 2)), "#F59E0B")
+        self._add_stat_bar(pers_layout, "⚡ 极客科技度 (Tech)", min(100, int(stats.get("tech", 0) * 2)), Palette.sky_500)
+        self._add_stat_bar(pers_layout, "🏃 元气运动度 (Sport)", min(100, int(stats.get("sport", 0) * 2)), Palette.emerald_500)
+        self._add_stat_bar(pers_layout, "🍵 佛系闲适度 (Lazy)", min(100, int(stats.get("lazy", 0) * 2)), Palette.amber_500)
 
         layout.addWidget(pers_card)
 
@@ -2955,10 +2956,10 @@ class StatusDialog(ModernBaseDialog):
         box.setSpacing(3)
         h = QHBoxLayout()
         lbl = QLabel(label_text)
-        lbl.setStyleSheet("font-size: 11px; font-weight: bold; color: #94A3B8;")
+        lbl.setStyleSheet(qss("font-size: 11px; font-weight: bold; color: @slate_400@;"))
         h.addWidget(lbl)
         val_lbl = QLabel(f"{value}%")
-        val_lbl.setStyleSheet("color: #E2E8F0; font-size: 11px; font-weight: bold;")
+        val_lbl.setStyleSheet(qss("color: @slate_200@; font-size: 11px; font-weight: bold;"))
         h.addWidget(val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         box.addLayout(h)
 
@@ -2969,8 +2970,8 @@ class StatusDialog(ModernBaseDialog):
         bar.setValue(value)
         bar.setStyleSheet(f"""
             QProgressBar {{
-                border: 1px solid #1E293B;
-                background-color: rgba(15, 23, 42, 0.8);
+                border: 1px solid {Palette.slate_800};
+                background-color: {Alpha.slate_900_80};
                 border-radius: 5px;
             }}
             QProgressBar::chunk {{
@@ -3008,7 +3009,7 @@ class SettingsDialog(ModernBaseDialog):
         scale_title_box.addWidget(scale_lbl)
         self.scale_val_lbl = QLabel(f"{int(model.user_scale_offset * 100)}%")
         self.scale_val_lbl.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
-        self.scale_val_lbl.setStyleSheet("color: #38BDF8;")
+        self.scale_val_lbl.setStyleSheet(qss("color: @sky_400@;"))
         scale_title_box.addWidget(self.scale_val_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         scale_box.addLayout(scale_title_box)
 
