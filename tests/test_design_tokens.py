@@ -29,6 +29,16 @@ if REPO_ROOT not in sys.path:
 
 from pet.theme import Alpha, Font, Motion, Palette, Radius, qss  # noqa: E402
 
+# ⚠️ CI 的 ubuntu runner **没有装 PyQt6**。
+# 凡是碰 Qt 的用例都必须先探测再挂 skipUnless，
+# 否则在没有 PyQt6 的机器上会直接 ModuleNotFoundError —— 那是**报错**，
+# 不是跳过，会把整个 CI 拉红。
+try:
+    from PyQt6.QtWidgets import QApplication  # noqa: F401
+    HAS_QT = True
+except ImportError:                                   # pragma: no cover
+    HAS_QT = False
+
 # 桌面端 UI 文件（角色美术 pet/renderer.py 不在其中 —— 那是画面内容，不是装饰）
 UI_FILES = ("menus.py", "memo.py", "dock.py", "tray.py", "dialogue.py")
 UI_DIR = os.path.join(REPO_ROOT, "pet")
@@ -261,6 +271,7 @@ class TestCrossEndParity(unittest.TestCase):
             seen[value] = name
 
 
+@unittest.skipUnless(HAS_QT, "需要 PyQt6（CI 的 ubuntu 任务会跳过）")
 class TestBubbleInteraction(unittest.TestCase):
     """气泡永久鼠标穿透 + 戳宠物关气泡。"""
 
