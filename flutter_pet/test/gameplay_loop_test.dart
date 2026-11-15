@@ -31,6 +31,21 @@ import 'package:flutter_pet/models/pet_model.dart';
 import 'package:flutter_pet/services/backup_service.dart';
 import 'package:flutter_pet/views/dialogs/gacha_dialog.dart';
 
+/// 定位 Flutter 包根目录（向上查找 pubspec.yaml），兼容在不同工作目录下执行测试。
+Directory _findPackageRoot() {
+  var dir = Directory.current.absolute;
+  while (true) {
+    if (File('${dir.path}${Platform.pathSeparator}pubspec.yaml').existsSync()) {
+      return dir;
+    }
+    final parent = dir.parent;
+    if (parent.path == dir.path) {
+      throw StateError('未找到 Flutter 包根目录 (pubspec.yaml)');
+    }
+    dir = parent;
+  }
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -218,6 +233,78 @@ void main() {
       final before = pet.coins;
       expect(await pet.creditRefund(0), before);
       expect(pet.coins, before);
+    });
+  });
+
+  group('执行顺序守护', () {
+    // ⚠ 这是一条**确定性**守护，不是靠跑运气。
+    //
+    // 背景：抽卡结算在 450ms 定时器回调里完成。那次回调里如果先 await 了
+    // 退款落盘（落盘链末端是 BackupService.writeSilentBackup —— 真实文件 I/O
+    // + flush），那么「出结果卡」的 setState 就会整整晚一拍：
+    // flutter_test 的 fake-async 沙箱里，这个完成回调不在微任务队列中，
+    // tester.pump(600ms) 那一拍根本渲染不出结果卡 —— CI 上随机红。
+    //
+    // 修法：加币同步生效、落盘丢给后台；界面绝不 await 落盘。
+    test('退款落盘绝不能挡在「出结果卡」前面', () {
+      final root = _findPackageRoot();
+      final src = File(
+        '${root.path}${Platform.pathSeparator}lib${Platform.pathSeparator}'
+        'views${Platform.pathSeparator}dialogs${Platform.pathSeparator}'
+        'gacha_dialog.dart',
+      ).readAsStringSync();
+
+      final start = src.indexOf('if (totalRefund > 0) {');
+      expect(start, greaterThan(-1), reason: '找不到退款兑现分支');
+      final end = src.indexOf('widget.onUpdated();', start);
+      expect(end, greaterThan(start), reason: '找不到退款兑现分支的终点');
+
+      final block = src.substring(start, end);
+      expect(
+        block,
+        contains('unawaited('),
+        reason: '退款必须「不等落盘」—— 加币同步生效、落盘在后台跑',
+      );
+      expect(
+        block,
+        isNot(contains('await widget.model.creditRefund')),
+        reason: 'await 落盘会把「出结果卡」整整拖晚一拍（真实文件 I/O）',
+      );
+    });
+
+    test('creditRefund 必须同步加币（不等落盘也能立刻拿到余额）', () {
+      final root = _findPackageRoot();
+      final src = File(
+        '${root.path}${Platform.pathSeparator}lib${Platform.pathSeparator}'
+        'models${Platform.pathSeparator}pet_model.dart',
+      ).readAsStringSync();
+
+      final start = src.indexOf('Future<int> creditRefund');
+      expect(start, greaterThan(-1), reason: '找不到 creditRefund');
+      // 用「方法结尾」切片，而不是找某个具体语句 ——
+      // 否则代码形态一变（await 写法 vs 后台写法）守护自己先崩，
+      // 报错信息还完全指不到真正的问题上。
+      final end = src.indexOf('\n  }', start);
+      expect(end, greaterThan(start), reason: '找不到 creditRefund 的方法体结尾');
+      final body = src.substring(start, end);
+
+      expect(
+        body,
+        isNot(contains('async {')),
+        reason: 'creditRefund 不能是 async 函数 —— 它的加币必须同步生效，'
+            '否则界面拿到的余额是旧的',
+      );
+      expect(
+        body,
+        contains('coins += amount;'),
+        reason: '加币必须在函数返回前同步完成',
+      );
+      expect(
+        body,
+        contains('return saveToDisk()'),
+        reason: '落盘必须真的发起 —— 不能只加币不写盘，'
+            '否则 App 被杀就是「扣了币、退款没了」',
+      );
     });
   });
 }

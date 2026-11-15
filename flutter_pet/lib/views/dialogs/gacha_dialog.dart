@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../widgets/bouncy_touch_feedback.dart';
 import '../../models/pet_model.dart';
@@ -159,9 +161,11 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           totalRefund += item.refundCoins;
         }
         if (totalRefund > 0) {
-          // 退款由模型统一兑现（加币 + 立刻落盘），不能只改内存 ——
-          // 否则 App 被杀就是「扣了币、退款没了」。
-          await widget.model.creditRefund(totalRefund);
+          // 退款：加币**同步**生效，落盘在后台继续跑。
+          // ⚠ 这里绝不能 await：落盘链末端是真实文件 I/O，
+          //   等它会让「出结果卡」整整晚一拍（CI 上直接查无此卡）。
+          //   落盘照样会发生 —— App 被杀也不至于「扣了币、退款没了」。
+          unawaited(widget.model.creditRefund(totalRefund));
         }
         if (!mounted) return;
         setState(() {

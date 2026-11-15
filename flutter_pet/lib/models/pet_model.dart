@@ -759,18 +759,24 @@ class PetModel extends ChangeNotifier {
     return results;
   }
 
-  /// 兑现重复件退款：加币，并**立刻落盘**。
+  /// 兑现重复件退款：**同步**加币，并在后台立刻落盘。
   ///
   /// ⚠ 为什么要单独一个方法：drawGacha() 自己在返回前已经 saveToDisk() 过，
   /// 而退款是在它**之后**由界面兑现的 —— 不补这一次落盘，
   /// App 被杀就会变成「扣了币、退款没了」，玩家资产被静默吞掉。
   /// 桌面端 pet/model.py 的 credit_refund() 是同一套语义。
-  Future<int> creditRefund(int amount) async {
-    if (amount <= 0) return coins;
+  ///
+  /// ⚠ 为什么加币是**同步**的、落盘却不能挡在前面：
+  /// 落盘链末端是 BackupService.writeSilentBackup() —— 真实文件 I/O + flush。
+  /// 它的完成回调不在 flutter_test 的微任务队列里，await 它会让
+  /// 「出结果卡」的 setState 整整晚一拍（CI 上直接查无此卡）。
+  /// 所以这里只同步改余额，落盘丢给后台；
+  /// 调用方需要确认「已持久化」时，await 返回的 Future 即可。
+  Future<int> creditRefund(int amount) {
+    if (amount <= 0) return Future<int>.value(coins);
     coins += amount;
     notifyListeners();
-    await saveToDisk();
-    return coins;
+    return saveToDisk().then((_) => coins);
   }
 
   SkinConfig get currentSkin => availableSkins[skinId] ?? availableSkins['cat_calico']!;
