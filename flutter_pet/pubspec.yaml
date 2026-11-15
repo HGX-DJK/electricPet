@@ -10,7 +10,7 @@ dependencies:
   audioplayers: ^6.8.1
   flutter:
     sdk: flutter
-  record: ^7.1.2
+  record: ^7.2.0
   sensors_plus: ^7.1.1
   shared_preferences: ^2.2.2
 
