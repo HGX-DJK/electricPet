@@ -262,6 +262,32 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
   String _currentDialogue = '喵呜~ 戳戳我或者摸摸我的小脑瓜吧！(ฅ\'ω\'ฅ)';
   bool _showDialogue = true;
 
+  /// 生理需求的「边沿触发」状态：需求键 -> 上一次是否已跌破阈值。
+  final Map<String, bool> _needLowState = <String, bool>{};
+
+  /// 生理需求上次提醒的时间戳（用于长时未理时的语气升级）。
+  final Map<String, int> _needAskedAt = <String, int>{};
+
+  /// 上次普通自言自语的时间戳。
+  int _lastChitchatAt = DateTime.now().millisecondsSinceEpoch;
+
+  /// 生理需求提醒的冷却策略（与桌面端 `pet/dialogue.py` 保持一致）。
+  ///
+  /// ⚠️ 为什么必须有闸门：`_checkAutoDialogue` 由**每秒**定时器驱动，
+  /// 而原来的分支只靠 `Random().nextDouble() < 0.35` 判定 ——
+  /// 期望 3 秒就弹一次，气泡又要挂 4 秒，于是形成「几乎一直在说话」的循环。
+  /// 状态一旦跌破阈值（饿了 / 困了），用户不理它也会被反复打断。
+  ///
+  /// 现在改成两级：
+  ///   1. **边沿触发** —— 只在状态刚跌破阈值那一刻说一次；
+  ///      用户喂了 / 状态回升后再次跌破，才会再说。
+  ///   2. **长时未理才升级** —— 持续低迷超过 [_needNagInterval]，
+  ///      换成「主人是不是把波可忘了」的语气再说一次 —— 语气递进，而不是复读。
+  static const int _needNagInterval = 30 * 60 * 1000; // 30 分钟
+
+  /// 普通自言自语的最小间隔 —— 桌面上 3 分钟一句，手机端同理。
+  static const int _chitchatInterval = 3 * 60 * 1000; // 3 分钟
+
   // 手机端专属硬件感知与多指手势 (陀螺仪重力倾角与双指缩放)
   double _userScale = 1.0;
   double _baseScale = 1.0;
@@ -315,6 +341,10 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     HapticService.enabled = widget.petModel.enableHaptics;
+    // 升级回调 —— 以前升级**完全静默**：模型里 level += 1、intimacy += 25、
+    // coins += 20，还记了一张纪念卡，可界面上什么都没发生，
+    // 用户只在相册里某天多出一张「升级啦 · Lv.7」才知道自己升了级。
+    widget.petModel.onLevelUp = _celebrateLevelUp;
 
     _userScale = widget.petModel.userScale;
 
@@ -1400,6 +1430,11 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     final desc = bondInfo['desc'] as String;
     final progress = (bondInfo['progress'] as double).clamp(0.0, 1.0);
     final nextThreshold = bondInfo['nextThreshold'] as int;
+    // 距离下一级还差多少经验（模型里的 expProgress 一直没人消费，
+    // 玩家攒的经验全沉在黑洞里 —— 这里让它变成看得见的数字）
+    final expRemain = (widget.petModel.maxExpForLevel - widget.petModel.exp)
+        .clamp(0, 99999)
+        .ceil();
     final isNight = _windowWeather == 3;
 
     showModalBottomSheet(
@@ -1519,6 +1554,48 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // ── 等级成长（短期）──
+                    // ⚠️ 模型里的 expProgress 一直**没有任何消费方**：
+                    // 喂食、摸头、逗猫攒的经验全沉进黑洞里，用户看得见的只有
+                    // 一个会跳变的等级数字 —— 于是"我明明养了很久，怎么什么都没变"。
+                    // 这里和下面的羁绊进度条并列：短期等级 / 长期羁绊两条阶梯同时可见。
+                    Row(
+                      children: [
+                        Text(
+                          '⭐ Lv.${widget.petModel.level}',
+                          style: TextStyle(
+                            fontSize: PokoFont.small,
+                            fontWeight: FontWeight.bold,
+                            color: isNight ? PokoPalette.amber_400 : PokoPalette.amber_600,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: widget.petModel.expProgress,
+                              minHeight: 6,
+                              backgroundColor:
+                                  isNight ? const Color(0xFF332D73) : PokoPalette.slate_200,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                isNight ? PokoPalette.amber_400 : PokoPalette.amber_500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '距 Lv.${widget.petModel.level + 1} 还需 $expRemain 点经验',
+                          style: TextStyle(
+                            fontSize: PokoFont.tiny,
+                            color: isNight ? PokoPalette.slate_400 : PokoPalette.slate_500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // ── 亲密羁绊（长期）──
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: LinearProgressIndicator(
@@ -1691,28 +1768,22 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     if (_showDialogue) return;
 
     // 自发生理需求提醒 (优先于普通自言自语)
-    if (widget.petModel.hunger < 35 && math.Random().nextDouble() < 0.35) {
-      final hungryLines = [
-        '咕噜噜... (肚子悄悄叫啦) 好想吃香喷喷的小鱼干呀~ 🥣🐟',
-        '小肚肚空落落的... 主人，波可的小食碗在招手呢~ 🥣✨',
-        '波可闻到零食的香味啦，主人要不要投喂一口酥脆酥罐呀？🥫🐾',
-      ];
-      _spawnParticles(Offset(_petX + 15, _petY - 35), emoji: '🐟', count: 1);
-      _showDialogueBubble(hungryLines[math.Random().nextInt(hungryLines.length)]);
+    // ⚠️ 以前这里是 `hunger < 35 && Random().nextDouble() < 0.35` ——
+    // 每秒判一次 ⇒ 期望 3 秒就弹一次，气泡又要挂 4 秒，
+    // 于是「几乎一直在说话」。改成边沿触发，见 [_pickNeedAlert]。
+    final need = _pickNeedAlert();
+    if (need != null) {
+      _spawnParticles(Offset(_petX + 15, _petY - 35), emoji: need.$2, count: 1);
+      _showDialogueBubble(need.$1);
       return;
     }
 
-    if (widget.petModel.energy < 25 && math.Random().nextDouble() < 0.35) {
-      final tiredLines = [
-        '哈欠~ (揉眼睛) 困意袭来啦，要不要早点盖被被呼呼睡呢~ 🥱💤',
-        '眼皮有点打架啦... 主人长按小窝毛毯，让波可就寝吧~ 🛌✨',
-      ];
-      _spawnParticles(Offset(_petX + 15, _petY - 35), emoji: '💤', count: 1);
-      _showDialogueBubble(tiredLines[math.Random().nextInt(tiredLines.length)]);
-      return;
-    }
-
-    if (math.Random().nextDouble() < 0.20) {
+    // 普通自言自语 —— 也要有冷却闸门。
+    // 原来 0.20/秒 ⇒ 每 5 秒一句，桌面端是 3 分钟一句（差 36 倍）。
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastChitchatAt >= _chitchatInterval &&
+        math.Random().nextDouble() < 0.20) {
+      _lastChitchatAt = nowMs;
       final lines = [
         '主人看屏幕累了吗？眨眨眼睛休息一下吧~ 🐾',
         '咕噜噜... 只要在主人身边就最安心了~ ✨',
@@ -1722,6 +1793,57 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
       ];
       _showDialogueBubble(lines[math.Random().nextInt(lines.length)]);
     }
+  }
+
+  /// 挑一条「该说的」生理需求提醒；没有该说的返回 null。
+  ///
+  /// 返回 `(台词, 伴随粒子emoji)`。关键在**边沿触发**：状态刚跌破阈值时说一次，
+  /// 之后即使一直不达标也不重复说，直到状态回升后再次跌破
+  /// （或者冷却到期后升级语气再说一次）。
+  (String, String)? _pickNeedAlert() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final specs = <(String, double, double, String, String, String)>[
+      (
+        'hunger',
+        widget.petModel.hunger,
+        35,
+        '咕噜噜... (肚子悄悄叫啦) 好想吃香喷喷的小鱼干呀~ 🥣🐟',
+        '主人是不是把波可忘啦...小鱼干在碗里等了好久好久了🥺',
+        '🐟',
+      ),
+      (
+        'energy',
+        widget.petModel.energy,
+        25,
+        '哈欠~ (揉眼睛) 困意袭来啦，要不要早点盖被被呼呼睡呢~ 🥱💤',
+        '波可眼睛都睁不开啦...主人陪波可睡好不好~ 🥱💤',
+        '💤',
+      ),
+    ];
+
+    for (final s in specs) {
+      final key = s.$1;
+      final value = s.$2;
+      final threshold = s.$3;
+      if (value >= threshold) {
+        // 状态回升 → 下次跌破时还能再提醒
+        _needLowState[key] = false;
+        continue;
+      }
+      if (!(_needLowState[key] ?? false)) {
+        // 刚跌破阈值：说一次
+        _needLowState[key] = true;
+        _needAskedAt[key] = now;
+        return (s.$4, s.$6);
+      }
+      // 持续低迷：冷却到了才升级语气再说一次
+      final askedAt = _needAskedAt[key] ?? now;
+      if (now - askedAt >= _needNagInterval) {
+        _needAskedAt[key] = now;
+        return (s.$5, s.$6);
+      }
+    }
+    return null;
   }
 
   /// 释放轻柔微光特效粒子 (温润微光、柔和心芒，避免大串杂乱 emoji 喷射)
@@ -1799,6 +1921,25 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _playAction('HAPPY_SPIN');
     _spawnParticles(Offset(_petX, _petY - 40), emoji: '⭐', count: 1);
     _showDialogueBubble('看波可开心大回旋！主人笑一个嘛~ 🌀✨', speak: true);
+  }
+
+  /// 升级庆祝 —— 把「养了很久终于升级」这个时刻做成看得见的仪式。
+  ///
+  /// 触发源是模型的 [PetModel.onLevelUp] 回调，不是轮询等级 ——
+  /// 读档后 level 可能从 1 直接跳到 7，那不是"升级"，不该放烟花。
+  void _celebrateLevelUp(int newLevel) {
+    if (!mounted) return;
+    _playAction('HAPPY_SPIN');
+    _vibrate('heavy');
+    _spawnParticles(Offset(_petX, _petY - 32), emoji: '⭐', count: 6);
+    _spawnTextParticle(
+        Offset(_petX - 36, _petY - 58), '升级啦 Lv.$newLevel', PokoPalette.amber_500);
+    _spawnTextParticle(Offset(_petX + 20, _petY - 46), '+20 🪙', PokoPalette.amber_400);
+    SoundService.playCanChime();
+    _showDialogueBubble(
+      '🎉 升级啦！波可升到了 Lv.$newLevel，和主人的感情又更深了一层~ ✨',
+      duration: const Duration(seconds: 5),
+    );
   }
 
   void _playAction(String actionId) {

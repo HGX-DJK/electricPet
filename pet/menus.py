@@ -226,6 +226,35 @@ PASTEL_PALETTE = {
     "🧶": (Palette.rose_100, Palette.rose_300),
 }
 
+# ---- 皮肤目录（唯一真源）----
+#
+# 界面上的「N 款」文案一律从这里取长度 —— 以前写死"11 款"，
+# 实际有 21 款，用户打开衣橱数一遍就发现数字对不上。
+SKIN_CATALOG = [
+    ("cat_golden_shaded", "👑 金渐层英短 (Ny25)", "暖金发腮包子脸与祖母绿宝石眸，尊贵优雅", "👑", "SSR"),
+    ("cat_silver_shaded", "💎 银渐层英短 (Ns11)", "如银霜覆顶，天然纯黑眼线与薄荷碧玉眸", "💎", "SSR"),
+    ("cat_ragdoll", "🌸 蓝双布偶仙女猫", "丝滑雪白被毛，柔雾蓝灰面具与海蓝宝石眸", "🌸", "SSR"),
+    ("cat_tuxedo", "🎩 燕尾服奶牛警长", "经典黑白燕尾服、白围脖八字开脸、四蹄踏雪", "🎩", "SR"),
+    ("cat_maine_coon", "🦁 霸气森林缅因", "猞猁耳尖羽、霸气狮鬃领圈与野生虎斑", "🦁", "SSR"),
+    ("cat_sakura_peach", "🍡 樱花蜜桃粉晶猫", "春日梦幻柔粉渐变、樱花肉垫与玫瑰晶眸", "🍡", "UR"),
+    ("cat_calico", "萌萌日系三花猫", "柔和杏色加墨灰花斑，粉嫩软萌肉垫", "🐱", "BASE"),
+    ("cat_orange", "温暖大头橘猫", "金橘温暖虎斑毛色，圆润治愈", "🐱", "R"),
+    ("cat_black", "暗夜黑曜猫", "玄黑优雅皮毛与明亮金黄大眼", "🐱", "SR"),
+    ("cat_white", "纯白雪球猫", "纯白底色与梦幻异色双瞳 (左冰蓝/右翠绿)", "🐱", "SSR"),
+    ("cat_british_blue", "经典英短蓝猫", "蓝灰缎面毛发，肉嘟嘟大包子脸与暖金琥珀眼", "🍊", "SSR"),
+    ("cat_american_tabby", "美短银虎斑", "银白底色配灵动黑灰鱼骨斑，额头 M 纹活泼敏捷", "🐯", "SR"),
+    ("cat_persian_white", "异瞳临清狮子猫", "雪白丝绸长毛配自带仙气的金银双色鸳鸯异瞳", "❄️", "SSR"),
+    ("cat_siamese", "焦糖拿铁暹罗", "贵族重点色大尖耳与电光天青蓝宝石双眸", "☕", "SSR"),
+    ("dog_shiba", "阳光赤柴", "元气金橙赤柴，经典白眉点", "🐶", "SR"),
+    ("dog_black", "帅气黑柴", "俊俏黑柴，系着帅气蓝色领巾", "🐶", "SR"),
+    ("dog_corgi", "软萌柯基", "暖金白领胸毛与呆萌大耳朵", "🐶", "R"),
+    ("slime_blue", "海蓝果冻史莱姆", "清透海蓝通透渐变与星芒天线", "🫧", "SSR"),
+    ("slime_pink", "草莓甜心史莱姆", "粉嫩果冻身躯与爱心天线", "🌸", "SR"),
+    ("slime_gold", "欧皇黄金史莱姆", "金光闪闪尊贵身躯，吸金转运", "🌟", "UR"),
+    ("penguin_tux", "燕尾服小企鹅", "呆萌企鹅幼崽，摇晃小脚丫", "🐧", "SSR"),
+]
+
+
 class ActionCardButton(QPushButton):
     """具有赛博高科技微光质感的交互卡片按钮"""
     def __init__(self, icon_str, title, subtitle="", bg_color=None, border_color=None, parent=None):
@@ -517,7 +546,9 @@ class QuickActionMenu(QWidget):
         btn_feed.clicked.connect(self._on_feed)
         grid.addWidget(btn_feed, 0, 0)
 
-        btn_wardrobe = ActionCardButton("👗", "萌宠衣橱", "11款换装")
+        btn_wardrobe = ActionCardButton(
+            "👗", "萌宠衣橱", f"{len(SKIN_CATALOG)}款换装"
+        )
         btn_wardrobe.clicked.connect(self._on_wardrobe)
         grid.addWidget(btn_wardrobe, 0, 1)
 
@@ -1721,7 +1752,10 @@ class WardrobeDialog(ModernBaseDialog):
     def __init__(self, model, pet_window=None, parent=None):
         super().__init__(
             title="萌宠衣橱 · 赛博换装舱",
-            subtitle="全息投影实时试衣 · 11 款生物基因与 5 维微机甲装扮自由搭载 · 家园场景DIY",
+            subtitle=(
+                f"全息投影实时试衣 · {len(SKIN_CATALOG)} 款生物基因与 5 维微机甲装扮自由搭载"
+                " · 家园场景DIY"
+            ),
             icon_emoji="👗",
             parent=pet_window or parent,
             fixed_width=840,
@@ -1951,29 +1985,7 @@ class WardrobeDialog(ModernBaseDialog):
         self.card_widgets = {}
 
         if tab_key == "skin":
-            skins = [
-                ("cat_golden_shaded", "👑 金渐层英短 (Ny25)", "暖金发腮包子脸与祖母绿宝石眸，尊贵优雅", "👑", "SSR"),
-                ("cat_silver_shaded", "💎 银渐层英短 (Ns11)", "如银霜覆顶，天然纯黑眼线与薄荷碧玉眸", "💎", "SSR"),
-                ("cat_ragdoll", "🌸 蓝双布偶仙女猫", "丝滑雪白被毛，柔雾蓝灰面具与海蓝宝石眸", "🌸", "SSR"),
-                ("cat_tuxedo", "🎩 燕尾服奶牛警长", "经典黑白燕尾服、白围脖八字开脸、四蹄踏雪", "🎩", "SR"),
-                ("cat_maine_coon", "🦁 霸气森林缅因", "猞猁耳尖羽、霸气狮鬃领圈与野生虎斑", "🦁", "SSR"),
-                ("cat_sakura_peach", "🍡 樱花蜜桃粉晶猫", "春日梦幻柔粉渐变、樱花肉垫与玫瑰晶眸", "🍡", "UR"),
-                ("cat_calico", "萌萌日系三花猫", "柔和杏色加墨灰花斑，粉嫩软萌肉垫", "🐱", "BASE"),
-                ("cat_orange", "温暖大头橘猫", "金橘温暖虎斑毛色，圆润治愈", "🐱", "R"),
-                ("cat_black", "暗夜黑曜猫", "玄黑优雅皮毛与明亮金黄大眼", "🐱", "SR"),
-                ("cat_white", "纯白雪球猫", "纯白底色与梦幻异色双瞳 (左冰蓝/右翠绿)", "🐱", "SSR"),
-                ("cat_british_blue", "经典英短蓝猫", "蓝灰缎面毛发，肉嘟嘟大包子脸与暖金琥珀眼", "🍊", "SSR"),
-                ("cat_american_tabby", "美短银虎斑", "银白底色配灵动黑灰鱼骨斑，额头 M 纹活泼敏捷", "🐯", "SR"),
-                ("cat_persian_white", "异瞳临清狮子猫", "雪白丝绸长毛配自带仙气的金银双色鸳鸯异瞳", "❄️", "SSR"),
-                ("cat_siamese", "焦糖拿铁暹罗", "贵族重点色大尖耳与电光天青蓝宝石双眸", "☕", "SSR"),
-                ("dog_shiba", "阳光赤柴", "元气金橙赤柴，经典白眉点", "🐶", "SR"),
-                ("dog_black", "帅气黑柴", "俊俏黑柴，系着帅气蓝色领巾", "🐶", "SR"),
-                ("dog_corgi", "软萌柯基", "暖金白领胸毛与呆萌大耳朵", "🐶", "R"),
-                ("slime_blue", "海蓝果冻史莱姆", "清透海蓝通透渐变与星芒天线", "🫧", "SSR"),
-                ("slime_pink", "草莓甜心史莱姆", "粉嫩果冻身躯与爱心天线", "🌸", "SR"),
-                ("slime_gold", "欧皇黄金史莱姆", "金光闪闪尊贵身躯，吸金转运", "🌟", "UR"),
-                ("penguin_tux", "燕尾服小企鹅", "呆萌企鹅幼崽，摇晃小脚丫", "🐧", "SSR")
-            ]
+            skins = SKIN_CATALOG
             for code, name, desc, icon, rarity in skins:
                 is_active = (self.temp_skin == code)
                 card = CyberGearCard(

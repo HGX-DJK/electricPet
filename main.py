@@ -2,7 +2,7 @@ import sys
 import os
 import ctypes
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 
 from pet.model import PetModel
@@ -150,6 +150,27 @@ def main():
     window.activateWindow()
     window.register_boss_hotkey()
     tray.show()
+
+    # ── 打招呼 ──
+    #
+    # ⚠️ 必须在 window.show() **之后**发：DialogueManager 构造时也会发一次问候，
+    # 但那一刻窗口还没 show，say() 里"宠物不可见就不弹气泡"的守卫会把它直接吞掉 ——
+    # 于是用户装完只看到一只一声不吭的猫，完全不知道它会说话、会互动。
+    window.dialogue.say(window.dialogue.get_time_greeting(), duration=6.0)
+
+    # ── 首次运行引导（只播一次）──
+    #
+    # 桌面端此前**零新手引导**：用户不知道能摸摸、能右键、也不知道 Alt+P 能一键隐身。
+    # 两句引导各自对应一个真实的"不知道"，播完即止，不会变成打扰。
+    if getattr(model, "first_run", False):
+        model.first_run = False
+        model.save_to_disk()
+        guide = [
+            (6500, "我是波可呀~ 以后就住在主人的桌面上啦！摸摸我、点我右键都能玩哦🥺"),
+            (13000, "工作的时候按 Alt+P 就能一键隐身，需要我再按一下就好 🕶️"),
+        ]
+        for delay, text in guide:
+            QTimer.singleShot(delay, lambda t=text: window.dialogue.say(t, duration=5.0))
 
     # 升级提示回调绑定
     def on_level_up(new_lvl):

@@ -7,7 +7,10 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QColor, QCursor
 from pet.audio import sound_manager
-from pet.menus import FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialog, QuickActionMenu, FocusDialog
+from pet.menus import (
+    FeedingDialog, WardrobeDialog, ActionShowDialog, PlayDialog, QuickActionMenu, FocusDialog,
+    SKIN_CATALOG,
+)
 from pet.qt_safe import safe_slot
 
 DOCK_PASTELS = {
@@ -133,7 +136,10 @@ class PetCompanionDock(QWidget):
         dock_layout.addWidget(self.btn_feed)
 
         # 2. 萌宠衣橱
-        self.btn_wardrobe = DockIconButton("👗", "👗 萌宠衣橱 (11款皮肤与饰品换装)", self._on_wardrobe, "wardrobe", self)
+        self.btn_wardrobe = DockIconButton(
+            "👗", f"👗 萌宠衣橱 ({len(SKIN_CATALOG)}款皮肤与饰品换装)",
+            self._on_wardrobe, "wardrobe", self
+        )
         dock_layout.addWidget(self.btn_wardrobe)
 
         # 3. 动作才艺

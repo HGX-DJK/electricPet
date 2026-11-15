@@ -267,7 +267,7 @@ class _MemoryAlbumDialogState extends State<MemoryAlbumDialog> {
                         ),
                         _buildStatItem(
                           '亲密羁绊',
-                          'Lv.${widget.model.level} (${widget.model.intimacy}%)',
+                          "${widget.model.intimacyBondInfo['title']} · ${widget.model.intimacy} 点",
                           '💖',
                         ),
                       ],

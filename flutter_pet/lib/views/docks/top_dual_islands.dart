@@ -285,14 +285,39 @@ class TopDualIslands extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Text(
-                'Lv.${petModel.level}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: PokoFont.nano,
-                  fontWeight: FontWeight.w900,
-                  height: 1.1,
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Lv.${petModel.level}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: PokoFont.nano,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
+                  ),
+                  // 经验进度细线 —— 让等级徽章自己说明「离下一级还有多远」。
+                  // ⚠️ 用 AnimatedBuilder 单独订阅模型：exp 刻意**不进**
+                  // pet_screen 的 _modelTreeSignature（那会毁掉
+                  // 「每秒只重建必要子树」的整树重建优化）。
+                  SizedBox(
+                    height: 2,
+                    width: 20,
+                    child: AnimatedBuilder(
+                      animation: petModel,
+                      builder: (context, _) => Stack(
+                        children: [
+                          Container(color: Colors.white.withValues(alpha: 0.35)),
+                          FractionallySizedBox(
+                            widthFactor: petModel.expProgress,
+                            child: Container(color: PokoPalette.amber_400),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

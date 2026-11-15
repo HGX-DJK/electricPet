@@ -322,6 +322,25 @@ class PetModel extends ChangeNotifier {
   /// 上次检查陪伴天数里程碑时的天数（避免每秒重复扫描）
   int _lastMilestoneDays = 0;
 
+  /// 升级回调（桌面端 pet/model.py 的 on_level_up 同源）。
+  ///
+  /// ⚠️ 走回调而不是靠 UI 轮询等级，是为了避开「读档导致等级跳变被误判成升级」
+  /// 的坑 —— loadFromDisk 之后 level 可能从 1 直接变成 7，那不是升级。
+  void Function(int newLevel)? onLevelUp;
+
+  /// 已领取跨天陪伴津贴的最后一天 —— 跨天奖励的**幂等凭据**。
+  ///
+  /// 初值是 1（而不是 0）：刚形为天的宠物属于「第 1 天」，**首日不算跨天**，从第 2 天起才发。
+  /// 桌面端 pet/model.py 同样是 1，两端保持同源同语义。
+  ///
+  ///
+  /// ⚠️ 不能用 [totalDays] 当凭据：它是按初生时间**动态算**的，
+  /// 重启后直接就是"今天"，于是没法区分"今天刚跨天"和"早就跨过了"。
+  /// 桌面端 pet/model.py 早就有每日津贴，但它一开始也踩了同一个坑
+  /// （用 total_days 判断），于是「关掉程序、明天再打开」永远拿不到奖励 ——
+  /// 那已经修掉了，这里保持同源同语义。
+  int lastDailyClaimDay = 1;
+
   /// 记一条纪念（同一个 id 只记一次）。
   ///
   /// [timestamp] 允许传入"这件事真正发生的时间"——
@@ -403,6 +422,28 @@ class PetModel extends ChangeNotifier {
       emoji: bond['icon'] as String,
       badge: '羁绊$stage阶段',
     );
+  }
+
+  /// 跨天陪伴津贴 —— 「明天再来」的钩子。
+  ///
+  /// 每天第一次打开 App 自动到账：+30 经验、+20 赛博金币，并留一张纪念卡。
+  /// 桌面端 pet/model.py 有同名机制，这里保持同源同值。
+  void _syncDailyClaim() {
+    if (birthTime <= 0) return;
+    final days = totalDays;
+    // 幂等：同一天只会发一次（哪怕 App 一直在前台，tickDecay 每秒都在调）
+    if (days <= lastDailyClaimDay) return;
+    lastDailyClaimDay = days;
+    addExp(30);
+    coins += 20;
+    recordMemory(
+      id: 'checkin_$days',
+      title: '陪伴津贴 · 第 $days 天',
+      note: '又陪主人走过一天啦！自动领取每日陪伴津贴：+30 经验、+20 赛博金币 💰',
+      emoji: '🎁',
+      badge: '每日签到',
+    );
+    saveToDisk();
   }
 
   /// 检查陪伴天数里程碑（第 7 / 30 / 100 / 365 天）
@@ -643,8 +684,11 @@ class PetModel extends ChangeNotifier {
     if (coins >= cost) {
       coins -= cost;
     } else {
-      final expCost = (cost * 2).toDouble();
-      exp = math.max(0.0, exp - expCost);
+      // ⚠️ 余额不足时**绝不能**偷偷扣经验当作"折算" ——
+      // 那是玩家辛苦攒出来的，扣掉时用户根本不知道发生了什么，
+      // 而且任何新入口漏做余额校验都会白烧玩家一次。
+      // 现在直接空手而归：没扣币、没扣经验、没产出。
+      return <Map<String, dynamic>>[];
     }
 
     final totalWeight = pool.fold<int>(0, (sum, item) => sum + (item['weight'] as int));
@@ -960,6 +1004,7 @@ class PetModel extends ChangeNotifier {
 
   /// 获得经验升级
   void addExp(double amount) {
+    final levelBefore = level;
     exp += amount;
     while (exp >= maxExpForLevel) {
       exp -= maxExpForLevel;
@@ -974,6 +1019,9 @@ class PetModel extends ChangeNotifier {
         emoji: '⭐',
         badge: '等级里程碑',
       );
+    }
+    if (level > levelBefore) {
+      onLevelUp?.call(level);
     }
     notifyListeners();
     saveToDisk();
@@ -1006,6 +1054,8 @@ class PetModel extends ChangeNotifier {
     notifyListeners();
     // 陪伴天数的里程碑（每跨过一天才检查一次）
     _syncDayMilestones();
+    // 跨天陪伴津贴（同源：桌面端 pet/model.py 的每日里程碑）
+    _syncDailyClaim();
   }
 
   /// 离线期间的状态补算：按 stateSavedAt 推算流逝时长并扣减。
@@ -1049,6 +1099,7 @@ class PetModel extends ChangeNotifier {
       'intimacy': intimacy,
       'weight': weight,
       'totalFedCount': totalFedCount,
+      'lastDailyClaimDay': lastDailyClaimDay,
       'birthTime': birthTime > 0 ? birthTime : DateTime.now().millisecondsSinceEpoch,
       'decorations': Map<String, String>.from(decorations),
       'personalityStats': Map<String, int>.from(personalityStats),
@@ -1076,6 +1127,7 @@ class PetModel extends ChangeNotifier {
     intimacy = data['intimacy'] ?? intimacy;
     weight = (data['weight'] as num?)?.toDouble() ?? weight;
     totalFedCount = data['totalFedCount'] ?? totalFedCount;
+    lastDailyClaimDay = (data['lastDailyClaimDay'] as num?)?.toInt() ?? lastDailyClaimDay;
     final rawBirth = (data['birthTime'] ?? data['birth_time']) as num?;
     if (rawBirth != null && rawBirth.toInt() > 0) {
       birthTime = rawBirth.toInt();

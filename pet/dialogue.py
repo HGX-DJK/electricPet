@@ -349,6 +349,12 @@ class DialogueManager:
 
         self.last_random_chat_time = time.time()
         self.last_health_reminder_time = time.time()
+        # 专注鼓励上次触发的时间戳（专注时最不能被气泡打断）
+        self._last_study_chat_time = time.time()
+        # 生理需求的「边沿触发」状态：需求名 -> 上一次是否已跌破阈值
+        self._need_low = {}
+        # 生理需求上次提醒的时间戳（用于长时未理时的语气升级）
+        self._need_asked_at = {}
 
         # 随机闲聊语录库
         self.random_chats = [
@@ -394,6 +400,85 @@ class DialogueManager:
 
         # 初始问候
         self.say(self.get_time_greeting())
+
+    # ---- 生理需求提醒策略 ----
+    #
+    # ⚠️ 背景：这段逻辑以前写成
+    #     ``if self.model.hunger < 25 and random.random() < 0.003:``
+    # 而 ``update()`` 跟着 **60FPS** 动画定时器走 —— **每秒被调 60 次**。
+    # 0.003 × 60 ⇒ 每秒 18% 的触发概率 ⇒ 期望**约 5.6 秒**就弹一次气泡，
+    # 而且这条分支**没有任何时间闸门**（闲聊有 180 秒、健康提醒有 1800 秒）。
+    # 结果就是：用户一不理，波可就在桌面上没完没了地喊"肚肚好饿"。
+    #
+    # 现在的规则：
+    #   1. **边沿触发** —— 只在状态刚跌破阈值那一刻说一次；
+    #      用户喂了、状态回升之后再次跌破，才会再说。
+    #   2. **长时未理才升级** —— 持续低迷超过半小时，换成
+    #      "主人是不是把我忘啦"的语气再说一次 —— 语气递进，而不是复读。
+    #
+    # 这样波可依然会表达需求（这是养宠的乐趣），但不会变成噪音。
+    _NEED_ALERTS = {
+        "hunger": (
+            25,
+            "肚肚好饿呀...主人能给波可投喂一点小零食吗？🥺",
+            "主人是不是把波可忘啦...小肚肚咕咕叫了好久好久了🥺",
+        ),
+        "cleanliness": (
+            25,
+            "身上有点灰尘啦，好想洗一个香喷喷的泡泡浴~ 🛁",
+            "波可身上都沾灰灰了...主人帮波可搓个泡泡澡好不好嘛~ 🛁",
+        ),
+        "mood": (
+            30,
+            "波可有点寂寞呢...主人摸摸我或者陪我玩会游戏嘛~",
+            "波可等了好久好久，主人都不来陪波可玩...🥺",
+        ),
+    }
+
+    # 同一类需求持续低迷时，两次提醒之间的最小间隔（秒）
+    _NEED_ALERT_COOLDOWN = 30 * 60
+
+    # 专注鼓励的最小间隔（秒）—— 专注时最不能被气泡反复打断
+    _STUDY_CHAT_INTERVAL = 5 * 60
+
+    def _pet_on_screen(self):
+        
+        """宠物此刻是不是真的显示在屏幕上。
+
+        老板键 / 托盘隐藏时为 False。用来避开「需求告警被吞掉」的坑：
+        say() 会因为宠物不可见而静默返回，
+        但边沿状态已经被标记成「已提醒」了。
+        """
+        if self.pet_window is None:
+            return True
+        try:
+            return bool(self.pet_window.isVisible())
+        except Exception:
+            return True
+
+    def _pick_need_alert(self, now):
+        """挑一条「该说的」生理需求提醒；没有该说的就返回 None。
+
+        见 :attr:`_NEED_ALERTS` 的注释 —— 这里的关键是**边沿触发**：
+        状态刚跌破阈值时说一次，之后即使一直不达标也不重复说，
+        直到状态回升后再次跌破（或者冷却到期后升级语气）。
+        """
+        for key, (threshold, first_line, later_line) in self._NEED_ALERTS.items():
+            value = getattr(self.model, key, 100.0)
+            if value >= threshold:
+                # 状态回升 → 下次跌破时还能再提醒
+                self._need_low[key] = False
+                continue
+            if not self._need_low.get(key, False):
+                # 刚跌破阈值：说一次
+                self._need_low[key] = True
+                self._need_asked_at[key] = now
+                return first_line
+            # 持续低迷：冷却到了才升级语气再说一次
+            if now - self._need_asked_at.get(key, now) >= self._NEED_ALERT_COOLDOWN:
+                self._need_asked_at[key] = now
+                return later_line
+        return None
 
     def set_pet_window(self, pet_window):
         self.pet_window = pet_window
@@ -456,16 +541,23 @@ class DialogueManager:
         now = time.time()
         # 定期健康关怀与状态提醒
         if not self.bubble.isVisible() and not self.model.is_sleeping:
-            # 状态告警优先
-            if self.model.hunger < 25 and random.random() < 0.003:
-                self.say("肚肚好饿呀...主人能给波可投喂一点小零食吗？🥺")
-            elif self.model.cleanliness < 25 and random.random() < 0.003:
-                self.say("身上有点灰尘啦，好想洗一个香喷喷的泡泡浴~ 🛁")
-            elif self.model.mood < 30 and random.random() < 0.003:
-                self.say("波可有点寂寞呢...主人摸摸我或者陪我玩会游戏嘛~")
+            # 状态告警优先（边沿触发：跌破阈值说一次，不复读）
+            #
+            # ⚠️ 在宠物不在屏幕上时**不评估**：say() 会因为「宠物不可见」静默返回，
+            # 但边沿状态却已经被标记成「已提醒」。
+            # 把判断一并推迟到它真的能开口的时候，
+            # 用户从托盘把波可唤回来时它会马上开口。
+            need_line = self._pick_need_alert(now) if self._pet_on_screen() else None
+            if need_line:
+                self.say(need_line)
             elif self.model.is_studying:
-                mins = int(self.model.study_time_left // 60)
-                if random.random() < 0.002:
+                # ⚠️ 专注鼓励也得有闸门：以前这里只有 0.002 的随机概率，
+                # 而 update() 每秒跑 60 次 ⇒ 专注时每 8 秒就弹一次"加油"。
+                # 用户正在专注，被气泡反复打断是最劝退的一种体验。
+                if (now - self._last_study_chat_time > self._STUDY_CHAT_INTERVAL
+                        and random.random() < 0.002):
+                    self._last_study_chat_time = now
+                    mins = int(self.model.study_time_left // 60)
                     self.say(f"专注中...加油主人！波可静静陪着你✨ (还剩 {mins} 分钟)")
             # 健康提醒 (每 30 分钟)
             elif self.model.health_reminders and (now - self.last_health_reminder_time > 1800):

@@ -29,6 +29,13 @@ class PetModel:
         self.exp = 0.0               # 经验值
         self.intimacy = 10           # 亲密度
         self.total_days = 1          # 陪伴天数
+        # 「已领取每日陪伴津贴的最后一天」—— 每日奖励的**幂等凭据**。
+        # ⚠️ 千万不能用 total_days 当凭据：load_from_disk 末尾会把 total_days
+        # 覆盖成"按出生时间推算的当前天数"，于是「关掉程序、明天再打开」
+        # 这条最常见的路径永远拿不到每日奖励。
+        self.last_daily_claim_day = 1
+        # 首次运行引导（只播一次）
+        self.first_run = True
         self.birth_time = time.time()
         self.last_tick_time = time.time()
 
@@ -515,14 +522,23 @@ class PetModel:
             return
 
         # 每日跨天陪伴里程碑自动检测与签到奖励
+        #
+        # ⚠️ 幂等凭据必须是**独立的** last_daily_claim_day，不能用 total_days：
+        # load_from_disk 末尾会把 total_days 直接覆盖成"按出生时间推算的当前天数"
+        # （用户关掉程序、明天再打开，走的正是这条路径），于是
+        # `current_days > self.total_days` 永远不成立 ——
+        # 「关掉再开」这种最常见的用法，**永远拿不到每日陪伴津贴**，
+        # 产品最核心的「明天再来」钩子就这么哑了。
         current_days = max(1, int((time.time() - self.birth_time) / 86400) + 1)
         if current_days > self.total_days:
             self.total_days = current_days
+        if current_days > self.last_daily_claim_day:
+            self.last_daily_claim_day = current_days
             self.add_exp(30.0)
             self.coins += 20
             sound_manager.play("level_up")
             if self.on_daily_milestone:
-                self.on_daily_milestone(self.total_days)
+                self.on_daily_milestone(current_days)
             self.save_to_disk()
 
         if self.is_sleeping:
@@ -598,6 +614,8 @@ class PetModel:
             "exp": self.exp,
             "intimacy": self.intimacy,
             "total_days": self.total_days,
+            "last_daily_claim_day": self.last_daily_claim_day,
+            "first_run": self.first_run,
             "birth_time": self.birth_time,
             "last_tick_time": time.time(),
             "growth": self.growth,
@@ -698,6 +716,12 @@ class PetModel:
             self.exp = min(self.exp, self.max_exp)
         self.intimacy = self._to_int(data.get("intimacy"), self.intimacy, None, None, "intimacy")
         self.total_days = self._to_int(data.get("total_days"), self.total_days, 1, None, "total_days")
+        # 老存档没有 last_daily_claim_day，就以存档里的 total_days 当基准
+        # （意思是"之前已经领到这一天了"，不重复发奖）。
+        self.last_daily_claim_day = self._to_int(
+            data.get("last_daily_claim_day"), self.total_days, 0, None, "last_daily_claim_day"
+        )
+        self.first_run = bool(data.get("first_run", False))
         self.birth_time = self._to_num(data.get("birth_time"), self.birth_time, 0.0, None, "birth_time")
         self.growth = self._to_num(data.get("growth"), 0.0, 0.0, None, "growth")
         self.weight = self._to_num(data.get("weight"), 1.20, 0.1, None, "weight")
