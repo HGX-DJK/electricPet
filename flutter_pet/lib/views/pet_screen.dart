@@ -1887,7 +1887,16 @@ class _PetScreenState extends State<PetScreen> with TickerProviderStateMixin, Wi
     _squishController.forward(from: 0.0);
     _spawnParticles(Offset(_petX, _petY - 30), emoji: '💕', count: 1);
 
-    widget.petModel.petHead();
+    final gain = widget.petModel.petHead();
+
+    // ⚠️ 数值回显：摸头是全 App 点击频次最高的动作，
+    // 但它是**唯一没有数值回显**的路径——玩家摸了半天，
+    // 不知道自己到底拿到了什么。这里补上。
+    _spawnTextParticle(
+      Offset(_petX - 35, _petY - 55),
+      '+${gain['exp']!.round()} 经验  +${gain['intimacy']!.round()} 亲密  💖',
+      PokoPalette.rose_500,
+    );
 
     // 连续轻抚摸头连击判定 (连续轻抚 5 次触发贴贴屏幕惊喜，仅在地面非拖拽时触发)
     _petCombo++;

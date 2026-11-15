@@ -128,7 +128,7 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
     HapticService.medium();
     _animCtrl.forward(from: 0.0);
 
-    Future.delayed(const Duration(milliseconds: 450), () {
+    Future.delayed(const Duration(milliseconds: 450), () async {
       // ⚠️ 必须先判「面板还在不在」，再抽卡：
       // 抽卡动画期间（这 450ms）用户可以点右上角 ✕ 或遮罩把面板关掉。
       // 以前这里是无条件抽取的 —— 面板没了、结果卡没了，**币却扣了**，
@@ -159,8 +159,11 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
           totalRefund += item.refundCoins;
         }
         if (totalRefund > 0) {
-          widget.model.coins += totalRefund;
+          // 退款由模型统一兑现（加币 + 立刻落盘），不能只改内存 ——
+          // 否则 App 被杀就是「扣了币、退款没了」。
+          await widget.model.creditRefund(totalRefund);
         }
+        if (!mounted) return;
         setState(() {
           _isPulling = false;
           _recentResults = results;
@@ -386,6 +389,110 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
     );
   }
 
+  /// 扭蛋图鉴：把「在收集什么」和「还差几件」摆到台面上。
+  ///
+  /// ⚠️ 背景：此前扭卡面板只有钱袋数字和一行宣传文案，
+  /// 玩家看不到自己在收集什么 —— 抽到什么是随机的、还差几件是未知的。
+  /// 而 unlockedItems 一直存在，只是从没被展示过。
+  Widget _buildCodex(bool isNight) {
+    final owned = widget.model.unlockedItems.toSet();
+    const pool = PetModel.gachaPool;
+    final got = pool.where((e) => owned.contains(e['code'])).length;
+
+    Color rarityColor(String rarity) {
+      switch (rarity) {
+        case 'UR':
+          return PokoPalette.violet_400;
+        case 'SSR':
+          return PokoPalette.amber_400;
+        case 'SR':
+          return PokoPalette.sky_400;
+        default:
+          return PokoPalette.slate_400;
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(PokoSpacing.sm),
+      decoration: BoxDecoration(
+        color: isNight
+            ? PokoPalette.slate_800.withValues(alpha: 0.55)
+            : PokoPalette.slate_100,
+        borderRadius: BorderRadius.circular(PokoRadius.md),
+        border: Border.all(
+          color: PokoPalette.slate_300.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('🎖', style: TextStyle(fontSize: PokoFont.body)),
+              const SizedBox(width: PokoSpacing.xs),
+              Text(
+                '扭蛋图鉴 · 已收集 $got/${pool.length}',
+                style: TextStyle(
+                  fontSize: PokoFont.caption,
+                  fontWeight: FontWeight.bold,
+                  color: isNight
+                      ? PokoPalette.amber_400
+                      : PokoPalette.amber_700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '带框=已收集 · 虚线=还没出',
+                style: TextStyle(
+                  fontSize: PokoFont.micro,
+                  color: isNight
+                      ? PokoPalette.slate_400
+                      : PokoPalette.slate_500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: PokoSpacing.xs),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            children: [
+              for (final e in pool)
+                Tooltip(
+                  message: '${e['name']}\n${e['rarity']}\n'
+                      '${owned.contains(e['code']) ? '已收集 ✓' : '尚未获得'}',
+                  child: Container(
+                    width: 26,
+                    height: 24,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: owned.contains(e['code'])
+                          ? (isNight ? PokoPalette.slate_700 : Colors.white)
+                          : (isNight ? PokoPalette.slate_900 : PokoPalette.slate_200),
+                      borderRadius: BorderRadius.circular(PokoRadius.xs),
+                      border: Border.all(
+                        color: owned.contains(e['code'])
+                            ? rarityColor(e['rarity'] as String)
+                            : PokoPalette.slate_400.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: Opacity(
+                      opacity: owned.contains(e['code']) ? 1.0 : 0.45,
+                      child: Text(
+                        e['icon'] as String,
+                        style: const TextStyle(fontSize: PokoFont.body),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 萌趣梦幻扭蛋机展示视图
   Widget _buildPodShowcase(bool isNight) {
     final t = context.poko(isNight);
@@ -509,6 +616,11 @@ class _GachaDialogState extends State<GachaDialog> with SingleTickerProviderStat
             ],
           ),
         ),
+
+        const SizedBox(height: PokoSpacing.md),
+
+        // 图鉴：把「在收集什么」摆到台面上
+        _buildCodex(isNight),
 
         const SizedBox(height: PokoSpacing.md),
 

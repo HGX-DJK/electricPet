@@ -651,7 +651,12 @@ class _WardrobeDialogState extends State<WardrobeDialog> with SingleTickerProvid
         final minStageStr = item['minStage'];
         final minStage = minStageStr != null ? int.parse(minStageStr) : 0;
         final currentStage = (model.intimacyBondInfo['stage'] as int?) ?? 1;
-        final isLocked = minStage > currentStage;
+        // ⚠️ 抽到过就签收：
+        // gold_crown_sparkle 既是 UR 奖池项、又是 4 阶羞绑专属。
+        // 只看羞绑阶的话，1 阶玩家抽到它却穿不上 —— 看起来像抽卡骗人。
+        // 接口前验收：「羞绑阶不够 **且** 没抽到过」才锁。
+        final isLocked = minStage > currentStage &&
+            !model.unlockedItems.contains(id);
 
         return BouncyTouchFeedback(
           scaleDown: 0.97,

@@ -6,12 +6,42 @@ from pet.audio import sound_manager
 from pet.console_safe import safe_print
 from pet.diagnostics import log_exception
 
+# ---- 扭卡奖池（唯一真源）----
+#
+# 界面上的「图鉴」面板也读这份表，避免奖池在模型和界面里各写一份、
+# 改一处漏一处。字段：稀有度, 插槽类型, 物品代号, 物品名称, 图标, 权重
+GACHA_POOL = [
+    # 稀有度, 插槽类型, 物品代号, 物品名称, 图标, 权重
+    ("UR", "habitat", "neon_matrix", "暗夜霓虹极客房", "🌃", 4),
+    ("UR", "habitat", "retro_arcade", "复古像素游戏机房", "🕹️", 4),
+    ("UR", "back", "wings", "反重力光子羽翼", "🪽", 5),
+    ("UR", "head", "crown", "黄金华贵王冠", "👑", 5),
+    ("SSR", "face", "hacker_viser", "赛博战术目镜", "🥽", 10),
+    ("SSR", "head", "band_sport", "热血运动发带", "🥊", 10),
+    ("SSR", "back", "cushion_zen", "禅意榻榻米软垫", "🍵", 10),
+    ("SSR", "hand", "keyboard", "RGB机械键盘", "⌨️", 12),
+    ("SSR", "hand", "gamepad", "8-bit 复古掌机", "🎮", 12),
+    ("SSR", "habitat", "summer_beach", "夏日阳光海滩", "🏖️", 10),
+    ("SSR", "habitat", "zen_tatami", "佛系禅意蒲团室", "🌸", 10),
+    ("SR", "hand", "fish_wand", "全息光纤逗猫棒", "🪄", 18),
+    ("SR", "hand", "coffee", "极客外带咖啡", "☕", 18),
+    ("SR", "hand", "dumbbell", "能量健身哑铃", "🏋️", 18),
+    ("SR", "face", "sunglasses", "酷炫战术黑超", "🕶️", 20),
+    ("SR", "head", "hat_wizard", "魔法巫师尖帽", "🧙", 20),
+    ("R", "neck", "bow", "优雅赤红蝴蝶结", "🎀", 25),
+    ("R", "neck", "bell", "招财金小挂铃", "🔔", 25),
+    ("R", "face", "blush_hearts", "心动爱心面贴", "💖", 25)
+]
+
 class PetModel:
     """
     电子宠物核心数据模型与状态仿真器
     支持成长进化阶段 (幼崽期 -> 成长期 -> 成熟期 -> 究极体)、
     多部位自由装扮与丰富皮肤毛色切换
     """
+
+    # 重复抽到的退款（与 Flutter 端 pet_model.dart 的 gachaDuplicateRefund 同值）
+    GACHA_DUPLICATE_REFUND = 15
     def __init__(self):
         self.app_dir = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "ElectricPet")
         os.makedirs(self.app_dir, exist_ok=True)
@@ -260,28 +290,8 @@ class PetModel:
         现在：金币优先付，不足部分按 1 金币 = 2 EXP 用经验补齐；
         **全额付不起就不抽**（返回空列表），UI 会明确告诉他差多少。
         """
-        pool = [
-            # 稀有度, 插槽类型, 物品代号, 物品名称, 图标, 权重
-            ("UR", "habitat", "neon_matrix", "暗夜霓虹极客房", "🌃", 4),
-            ("UR", "habitat", "retro_arcade", "复古像素游戏机房", "🕹️", 4),
-            ("UR", "back", "wings", "反重力光子羽翼", "🪽", 5),
-            ("UR", "head", "crown", "黄金华贵王冠", "👑", 5),
-            ("SSR", "face", "hacker_viser", "赛博战术目镜", "🥽", 10),
-            ("SSR", "head", "band_sport", "热血运动发带", "🥊", 10),
-            ("SSR", "back", "cushion_zen", "禅意榻榻米软垫", "🍵", 10),
-            ("SSR", "hand", "keyboard", "RGB机械键盘", "⌨️", 12),
-            ("SSR", "hand", "gamepad", "8-bit 复古掌机", "🎮", 12),
-            ("SSR", "habitat", "summer_beach", "夏日阳光海滩", "🏖️", 10),
-            ("SSR", "habitat", "zen_tatami", "佛系禅意蒲团室", "🌸", 10),
-            ("SR", "hand", "fish_wand", "全息光纤逗猫棒", "🪄", 18),
-            ("SR", "hand", "coffee", "极客外带咖啡", "☕", 18),
-            ("SR", "hand", "dumbbell", "能量健身哑铃", "🏋️", 18),
-            ("SR", "face", "sunglasses", "酷炫战术黑超", "🕶️", 20),
-            ("SR", "head", "hat_wizard", "魔法巫师尖帽", "🧙", 20),
-            ("R", "neck", "bow", "优雅赤红蝴蝶结", "🎀", 25),
-            ("R", "neck", "bell", "招财金小挂铃", "🔔", 25),
-            ("R", "face", "blush_hearts", "心动爱心面贴", "💖", 25)
-        ]
+
+        pool = GACHA_POOL
 
         cost = 30 if count == 1 else 270
         # 本次抽取实际抵扣的经验值（0 = 全额用金币支付）。
@@ -338,6 +348,9 @@ class PetModel:
             is_new = code not in self.unlocked_items
             if is_new:
                 self.unlocked_items.append(code)
+            # 重复件的退钱不在模型里兑现，而是写进结果里由 UI 统一兑现
+            # （与 Flutter 端 gacha_dialog.dart 同构）。模型层保持确定性，
+            # 否则「抽一次金币减多少」会随机而变。
 
             results.append({
                 "rarity": rarity,
@@ -345,13 +358,30 @@ class PetModel:
                 "code": code,
                 "name": name,
                 "icon": icon,
-                "is_new": is_new
+                "is_new": is_new,
+                "refund_coins": 0 if is_new else self.GACHA_DUPLICATE_REFUND,
             })
 
         sound_manager.play("sparkle")
         self.save_to_disk()
         self._notify_change()
         return results
+
+    def credit_refund(self, amount):
+        """兑现重复件退款：加币，并**立刻落盘**。
+
+        ⚠ 为什么要单独一个方法：draw_gacha() 自己在返回前已经 save_to_disk() 过，
+        而退款是在它**之后**由界面兑现的 —— 不补这一次落盘，
+        App 被强杀就会变成「币扣了、退款没了」，玩家资产被静默吞掉。
+
+        Flutter 端 PetModel.creditRefund() 是同一套语义。
+        """
+        if not amount:
+            return self.coins
+        self.coins += int(amount)
+        self.save_to_disk()
+        self._notify_change()
+        return self.coins
 
     @property
     def max_exp(self):
@@ -467,10 +497,30 @@ class PetModel:
             sound_manager.play("pop")
             self._notify_change()
 
+    # 摸头的固定收益（UI 用它组装数值反馈）
+    PET_MOOD_GAIN = 8.0
+    PET_EXP_GAIN = 5.0
+
     def pet_head(self):
-        self.mood = min(100.0, self.mood + 8.0)
+        """摸头。返回本次的数值增量。
+
+        ⚠为什么要返回值：推进进度条“只增长不可见”。
+        之前摸头只有视觉 + 音效 + 台词，**数值增量从不显示**；
+        用户挤了十次头也不知道自己拿到了多少经验。
+        Flutter 端每一次交互都有「+X 饱腹 / +Y 经验」飘字，
+        桌面端这一环是空白的 —— 现在补上。
+        """
+        mood_before = self.mood
+        self.mood = min(100.0, self.mood + self.PET_MOOD_GAIN)
         sound_manager.play("purr")
-        self.add_exp(5)
+        self.add_exp(self.PET_EXP_GAIN)
+        return {
+            # 返回**实际**增量而不是标称值：心情已经 99 时只能加 1 点，
+            # 台词里写「+8 心情」就是说假话。Flutter 端 petHead() 同理。
+            "mood": round(self.mood - mood_before, 1),
+            "exp": self.PET_EXP_GAIN,
+            "intimacy": int(self.PET_EXP_GAIN * 0.8),
+        }
 
     def play_minigame(self, game_type="rps"):
         self.mood = min(100.0, self.mood + 25.0)

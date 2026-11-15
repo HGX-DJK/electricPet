@@ -655,30 +655,39 @@ class PetModel extends ChangeNotifier {
     saveToDisk();
   }
 
+  /// 重复抽到的退钱（与桌面端 pet/model.py 的 GACHA_DUPLICATE_REFUND 同值）
+  static const int gachaDuplicateRefund = 15;
+
+  /// 赛池（唯一真源）。
+  ///
+  /// 界面上的「图鉴」面板也读这份表，避免奖池在模型和界面里各写一份、
+  /// 改一处漏一处。桌面端 pet/model.py 的 GACHA_POOL 与此同源同语义。
+  static const List<Map<String, dynamic>> gachaPool = <Map<String, dynamic>>[
+{'rarity': 'UR', 'slot': 'habitat', 'code': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '💻', 'weight': 4, 'desc': '全景赛博代码雨，专注效率提升+20%'},
+{'rarity': 'UR', 'slot': 'habitat', 'code': 'retro_arcade', 'name': '复古像素电玩厅', 'icon': '🕹️', 'weight': 4, 'desc': '80s 霓虹晚霞与十字星，心情回复加速'},
+{'rarity': 'UR', 'slot': 'back', 'code': 'wings_angel', 'name': '圣洁天使羽翼', 'icon': '🪽', 'weight': 5, 'desc': '神圣光翼展开，高空轻盈缓降，飘落治愈爱心'},
+{'rarity': 'UR', 'slot': 'head', 'code': 'gold_crown_sparkle', 'name': '璀璨星辉皇冠', 'icon': '👑', 'weight': 5, 'desc': '纯金钻石皇冠，闪烁星辉尊贵非凡'},
+{'rarity': 'SSR', 'slot': 'face', 'code': 'hacker_viser', 'name': '赛博战术目镜', 'icon': '🥽', 'weight': 10, 'desc': '战术全息HUD扫描，周围触发二进制流动光环'},
+{'rarity': 'SSR', 'slot': 'head', 'code': 'band_sport', 'name': '热血运动发带', 'icon': '🥊', 'weight': 10, 'desc': '元气运动加成，步履矫健，移动速度+30%'},
+{'rarity': 'SSR', 'slot': 'back', 'code': 'cushion_zen', 'name': '禅意榻榻米软垫', 'icon': '🍵', 'weight': 10, 'desc': '随心躺平蒲团，安睡体力恢复+35%'},
+{'rarity': 'SSR', 'slot': 'hand', 'code': 'keyboard_rgb', 'name': 'RGB机械键盘', 'icon': '⌨️', 'weight': 12, 'desc': '敲击彩色发光键帽，经验获取速度+25%'},
+{'rarity': 'SSR', 'slot': 'hand', 'code': 'gamepad_retro', 'name': '8-bit 复古掌机', 'icon': '🎮', 'weight': 12, 'desc': '怀旧像素游戏快乐，玩耍兴奋度+30%'},
+{'rarity': 'SSR', 'slot': 'habitat', 'code': 'summer_beach', 'name': '夏日阳光海滩', 'icon': '🏖️', 'weight': 10, 'desc': '碧海金沙与椰树微风，清凉舒爽海浪'},
+{'rarity': 'SSR', 'slot': 'habitat', 'code': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🌸', 'weight': 10, 'desc': '和室障子与漫天落樱，静心禅意'},
+{'rarity': 'SR', 'slot': 'back', 'code': 'cape_cyber', 'name': '赛博霓虹披风', 'icon': '🦸‍♂️', 'weight': 15, 'desc': '暗夜流光披风，霓虹电路线路'},
+{'rarity': 'SR', 'slot': 'hand', 'code': 'teaser_laser', 'name': '全息光纤逗猫棒', 'icon': '🪄', 'weight': 18, 'desc': '发光小鱼摇曳，猫咪最爱逗趣神器'},
+{'rarity': 'SR', 'slot': 'hand', 'code': 'coffee_cyber', 'name': '极客外带咖啡', 'icon': '☕', 'weight': 18, 'desc': '冷萃浓郁提神，陪伴学习专注Buff'},
+{'rarity': 'SR', 'slot': 'hand', 'code': 'dumbbell_power', 'name': '能量健身哑铃', 'icon': '🏋️', 'weight': 18, 'desc': '活力力量训练，健康值提升'},
+{'rarity': 'SR', 'slot': 'face', 'code': 'sunglasses_cool', 'name': '酷炫战术黑超', 'icon': '🕶️', 'weight': 20, 'desc': '飞行员金色边框墨镜，帅气逼人'},
+{'rarity': 'SR', 'slot': 'head', 'code': 'wizard_hat', 'name': '魔法巫师尖帽', 'icon': '🧙', 'weight': 20, 'desc': '神秘星夜魔术帽，智慧气息'},
+{'rarity': 'R', 'slot': 'neck', 'code': 'ribbon', 'name': '优雅赤红蝴蝶结', 'icon': '🎀', 'weight': 25, 'desc': '精致红丝绸结，淑女气质'},
+{'rarity': 'R', 'slot': 'neck', 'code': 'bell', 'name': '招财金小挂铃', 'icon': '🔔', 'weight': 25, 'desc': '清脆招财金铃铛，叮当悦耳'},
+{'rarity': 'R', 'slot': 'face', 'code': 'glasses_black', 'name': '黑框智能平光镜', 'icon': '🤓', 'weight': 25, 'desc': '学霸文青标配，斯文温和'},
+  ];
+
   /// 赛博盲盒抽卡系统 (单抽 / 十连保底 SSR/UR)
   List<Map<String, dynamic>> drawGacha(int count) {
-    final pool = [
-      {'rarity': 'UR', 'slot': 'habitat', 'code': 'neon_matrix', 'name': '暗夜霓虹极客房', 'icon': '💻', 'weight': 4, 'desc': '全景赛博代码雨，专注效率提升+20%'},
-      {'rarity': 'UR', 'slot': 'habitat', 'code': 'retro_arcade', 'name': '复古像素电玩厅', 'icon': '🕹️', 'weight': 4, 'desc': '80s 霓虹晚霞与十字星，心情回复加速'},
-      {'rarity': 'UR', 'slot': 'back', 'code': 'wings_angel', 'name': '圣洁天使羽翼', 'icon': '🪽', 'weight': 5, 'desc': '神圣光翼展开，高空轻盈缓降，飘落治愈爱心'},
-      {'rarity': 'UR', 'slot': 'head', 'code': 'gold_crown_sparkle', 'name': '璀璨星辉皇冠', 'icon': '👑', 'weight': 5, 'desc': '纯金钻石皇冠，闪烁星辉尊贵非凡'},
-      {'rarity': 'SSR', 'slot': 'face', 'code': 'hacker_viser', 'name': '赛博战术目镜', 'icon': '🥽', 'weight': 10, 'desc': '战术全息HUD扫描，周围触发二进制流动光环'},
-      {'rarity': 'SSR', 'slot': 'head', 'code': 'band_sport', 'name': '热血运动发带', 'icon': '🥊', 'weight': 10, 'desc': '元气运动加成，步履矫健，移动速度+30%'},
-      {'rarity': 'SSR', 'slot': 'back', 'code': 'cushion_zen', 'name': '禅意榻榻米软垫', 'icon': '🍵', 'weight': 10, 'desc': '随心躺平蒲团，安睡体力恢复+35%'},
-      {'rarity': 'SSR', 'slot': 'hand', 'code': 'keyboard_rgb', 'name': 'RGB机械键盘', 'icon': '⌨️', 'weight': 12, 'desc': '敲击彩色发光键帽，经验获取速度+25%'},
-      {'rarity': 'SSR', 'slot': 'hand', 'code': 'gamepad_retro', 'name': '8-bit 复古掌机', 'icon': '🎮', 'weight': 12, 'desc': '怀旧像素游戏快乐，玩耍兴奋度+30%'},
-      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'summer_beach', 'name': '夏日阳光海滩', 'icon': '🏖️', 'weight': 10, 'desc': '碧海金沙与椰树微风，清凉舒爽海浪'},
-      {'rarity': 'SSR', 'slot': 'habitat', 'code': 'zen_tatami', 'name': '佛系禅意蒲团室', 'icon': '🌸', 'weight': 10, 'desc': '和室障子与漫天落樱，静心禅意'},
-      {'rarity': 'SR', 'slot': 'back', 'code': 'cape_cyber', 'name': '赛博霓虹披风', 'icon': '🦸‍♂️', 'weight': 15, 'desc': '暗夜流光披风，霓虹电路线路'},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'teaser_laser', 'name': '全息光纤逗猫棒', 'icon': '🪄', 'weight': 18, 'desc': '发光小鱼摇曳，猫咪最爱逗趣神器'},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'coffee_cyber', 'name': '极客外带咖啡', 'icon': '☕', 'weight': 18, 'desc': '冷萃浓郁提神，陪伴学习专注Buff'},
-      {'rarity': 'SR', 'slot': 'hand', 'code': 'dumbbell_power', 'name': '能量健身哑铃', 'icon': '🏋️', 'weight': 18, 'desc': '活力力量训练，健康值提升'},
-      {'rarity': 'SR', 'slot': 'face', 'code': 'sunglasses_cool', 'name': '酷炫战术黑超', 'icon': '🕶️', 'weight': 20, 'desc': '飞行员金色边框墨镜，帅气逼人'},
-      {'rarity': 'SR', 'slot': 'head', 'code': 'wizard_hat', 'name': '魔法巫师尖帽', 'icon': '🧙', 'weight': 20, 'desc': '神秘星夜魔术帽，智慧气息'},
-      {'rarity': 'R', 'slot': 'neck', 'code': 'ribbon', 'name': '优雅赤红蝴蝶结', 'icon': '🎀', 'weight': 25, 'desc': '精致红丝绸结，淑女气质'},
-      {'rarity': 'R', 'slot': 'neck', 'code': 'bell', 'name': '招财金小挂铃', 'icon': '🔔', 'weight': 25, 'desc': '清脆招财金铃铛，叮当悦耳'},
-      {'rarity': 'R', 'slot': 'face', 'code': 'glasses_black', 'name': '黑框智能平光镜', 'icon': '🤓', 'weight': 25, 'desc': '学霸文青标配，斯文温和'},
-    ];
+    const pool = gachaPool;
 
     final cost = count == 1 ? 30 : 270;
     if (coins >= cost) {
@@ -725,7 +734,10 @@ class PetModel extends ChangeNotifier {
 
       final code = chosen['code'] as String;
       final isNew = !unlockedItems.contains(code);
-      final refundCoins = isNew ? 0 : 15;
+      // 重复件退钱的金额。桌面端 pet/model.py 的 GACHA_DUPLICATE_REFUND 同值。
+      // ⚠️ 模型层**不兑现**（由 UI 统一兑现）—— 两端同构，
+      // 不然「抽一次花多少」会在两端走异。
+      final refundCoins = isNew ? 0 : gachaDuplicateRefund;
       if (isNew) {
         unlockedItems.add(code);
       }
@@ -745,6 +757,20 @@ class PetModel extends ChangeNotifier {
     notifyListeners();
     saveToDisk();
     return results;
+  }
+
+  /// 兑现重复件退款：加币，并**立刻落盘**。
+  ///
+  /// ⚠ 为什么要单独一个方法：drawGacha() 自己在返回前已经 saveToDisk() 过，
+  /// 而退款是在它**之后**由界面兑现的 —— 不补这一次落盘，
+  /// App 被杀就会变成「扣了币、退款没了」，玩家资产被静默吞掉。
+  /// 桌面端 pet/model.py 的 credit_refund() 是同一套语义。
+  Future<int> creditRefund(int amount) async {
+    if (amount <= 0) return coins;
+    coins += amount;
+    notifyListeners();
+    await saveToDisk();
+    return coins;
   }
 
   SkinConfig get currentSkin => availableSkins[skinId] ?? availableSkins['cat_calico']!;
@@ -895,8 +921,14 @@ class PetModel extends ChangeNotifier {
     await saveToDisk();
   }
 
-  /// 抚摸头部
-  void petHead() {
+  /// 抚摸头部。返回本次的数值增量。
+  ///
+  /// ⚠️ 为什么要返回值：摸头是全 App 点击频次最高的动作，
+  /// 却是**唯一没有数值回显**的路径——玩家摸了半天，
+  /// 不知道自己到底拿到了什么。
+  /// 桌面端 pet/model.py 的 pet_head() 是同一套设计。
+  Map<String, double> petHead() {
+    final moodBefore = mood;
     mood = (mood + 4.5).clamp(0.0, 100.0);
     intimacy += 3;
     addExp(4.0);
@@ -904,6 +936,11 @@ class PetModel extends ChangeNotifier {
     notifyListeners();
     saveToDisk();
     _syncBondMilestone();
+    return {
+      'mood': (mood - moodBefore).clamp(0.0, 9999),
+      'exp': 4.0,
+      'intimacy': 3,
+    };
   }
 
   /// 洗澡清洁

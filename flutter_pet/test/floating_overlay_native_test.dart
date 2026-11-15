@@ -3576,7 +3576,10 @@ class Demo {
       final dartBlock = _between(
         petModelSource,
         'Future<void> applyExternalFeeding',
-        'void petHead()',
+        // 终点只锚方法名、不锚返回类型：petHead 的签名改过几轮
+        // （void -> Map<String, double>），锚死 'void petHead()'
+        // 会让这条守护测试被一次无关的签名重构打断。
+        'petHead()',
       );
       expect(dartBlock, contains('await isReady'),
           reason: '模型还没从磁盘加载完就结算，会用默认值覆盖存档里真实的状态');
@@ -3588,7 +3591,10 @@ class Demo {
       final dartBlock = _between(
         petModelSource,
         'Future<void> applyExternalFeeding',
-        'void petHead()',
+        // 终点只锚方法名、不锚返回类型：petHead 的签名改过几轮
+        // （void -> Map<String, double>），锚死 'void petHead()'
+        // 会让这条守护测试被一次无关的签名重构打断。
+        'petHead()',
       );
       final localBlock = _between(
         serviceSource,

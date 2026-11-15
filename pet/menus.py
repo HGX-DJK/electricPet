@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QFont, QIcon, QColor, QPainter, QCursor, QBrush, QPen, QLinearGradient, QRadialGradient
 from pet.audio import sound_manager
+from pet.model import GACHA_POOL
 from pet.renderer import PetRenderer
 from pet.renderer import _color, _pen, _solid_brush, _grad_brush
 from pet.qt_safe import safe_slot
@@ -1430,6 +1431,79 @@ class CyberGachaDialog(ModernBaseDialog):
         self._init_results_page()
         self._refresh_pod_wallet()
 
+    # ---- 扭卡图鉴 ----
+    #
+    # ⚠️ 背景：此前扭卡面板只有钱包数字，玩家**看不到自己在收集什么** ——
+    # 抽到什么是随机的、还差几件是未知的，整个收集循环没有目标感。
+    # 而 unlocked_items 其实一直存在，只是从来没被展示过。
+    # 现在把奖池一览和「已收集 X/N」摆到台面上：抽卡才第一次有了「追求」的样子。
+    _RARITY_COLORS = {
+        "UR": "@violet_400@",
+        "SSR": "@amber_400@",
+        "SR": "@sky_400@",
+        "R": "@slate_400@",
+    }
+
+    def _build_gacha_codex(self):
+        """构建扭卡图鉴控件：已收集进度 + 奖池一览。"""
+        owned = set(getattr(self.model, "unlocked_items", []))
+        total = len(GACHA_POOL)
+        got = sum(1 for item in GACHA_POOL if item[2] in owned)
+
+        box = QFrame()
+        box.setObjectName("GachaCodex")
+        box.setStyleSheet(qss("""
+            QFrame {
+                background: @slate_800_70@;
+                border: 1px solid @slate_600@;
+                border-radius: 12px;
+            }
+        """))
+        outer = QVBoxLayout(box)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(6)
+
+        header = QLabel("🎖 扭蛋图鉴   已收集 %d / %d" % (got, total))
+        header.setFont(QFont("Microsoft YaHei UI", 10, QFont.Weight.Bold))
+        header.setStyleSheet(qss("color: @amber_400@; background: transparent; border: none;"))
+        outer.addWidget(header)
+
+        grid = QGridLayout()
+        grid.setSpacing(4)
+        for idx, (rarity, _slot, code, _name, icon, _weight) in enumerate(GACHA_POOL):
+            is_owned = code in owned
+            chip = QLabel(icon)
+            chip.setFixedSize(30, 26)
+            chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            chip.setFont(QFont("Segoe UI Emoji", 13))
+            chip.setToolTip("%s %s\n%s" % (rarity, _name, "已收集 ✓" if is_owned else "尚未获得"))
+            if is_owned:
+                color = self._RARITY_COLORS.get(rarity, "@slate_400@")
+                chip.setStyleSheet(qss("""
+                    QLabel {
+                        background: @slate_700@;
+                        border: 1px solid %s;
+                        border-radius: 6px;
+                    }
+                """ % color))
+            else:
+                # 未获得：压暗 + 虚线框，明确告诉玩家「这是在追的东西」
+                chip.setStyleSheet(qss("""
+                    QLabel {
+                        background: @slate_900@;
+                        border: 1px dashed @slate_600@;
+                        border-radius: 6px;
+                    }
+                """))
+            grid.addWidget(chip, idx // 10, idx % 10)
+        outer.addLayout(grid)
+
+        tip = QLabel("带框 = 已收集 · 虚线框 = 还没出 · 十连抽必中 SSR")
+        tip.setFont(QFont("Microsoft YaHei UI", 8))
+        tip.setStyleSheet(qss("color: @slate_400@; background: transparent; border: none;"))
+        outer.addWidget(tip)
+        return box
+
     def _init_pod_page(self):
         self.page_pod = QWidget()
         layout = QVBoxLayout(self.page_pod)
@@ -1460,6 +1534,9 @@ class CyberGachaDialog(ModernBaseDialog):
         wallet_bar.addStretch()
         wallet_bar.addWidget(self.exp_lbl)
         layout.addLayout(wallet_bar)
+
+        # 图鉴：把「在收集什么」和「还差几件」摆到台面上
+        layout.addWidget(self._build_gacha_codex())
 
         # 2. 中间全息扭蛋仓展示区
         center_frame = QFrame()
@@ -1636,6 +1713,14 @@ class CyberGachaDialog(ModernBaseDialog):
         self.stack.setCurrentWidget(self.page_results)
 
     def _show_results(self, results):
+        # ⚠️ 重复件退钱在 **UI 层** 兑现（与 Flutter 端 gacha_dialog.dart 同构）：
+        # 模型只负责算好「退多少」并写在结果里，兑现的事由界面做。
+        # 这样两端的「抽一次实际花多少」才会一致。
+        refund_total = sum(int(r.get("refund_coins", 0)) for r in results)
+        if refund_total:
+            # 退款由模型统一兑现（加币 + 立刻落盘），不能只改内存 ——
+            # 否则 App 被强杀就是「扣了币、退款没了」。
+            self.model.credit_refund(refund_total)
         self.res_title.setText(f"🎉 成功解构 {len(results)} 件赛博奖励！")
         # 金币不够时用经验值补齐了 —— 必须写出来，不能让资产无声流失
         exp_cost = getattr(self.model, "last_draw_exp_cost", 0.0)
@@ -1644,7 +1729,12 @@ class CyberGachaDialog(ModernBaseDialog):
                 f"剩余金币: {self.model.coins} 🪙　|　金币不足，本次抵扣 {int(exp_cost)} EXP ✨"
             )
         else:
-            self.res_coins_info.setText(f"剩余金币: {self.model.coins} 🪙")
+            if refund_total:
+                self.res_coins_info.setText(
+                    f"剩余金币: {self.model.coins} 🫰｜重复件退还 +{refund_total} 🫰"
+                )
+            else:
+                self.res_coins_info.setText(f"剩余金币: {self.model.coins} 🪙")
 
         # 清空旧卡片
         while self.res_cards_layout.count():

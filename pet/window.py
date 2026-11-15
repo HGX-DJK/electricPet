@@ -144,6 +144,31 @@ class GlobalBossKeyFilter(QAbstractNativeEventFilter):
             pass
         return False, 0
 
+# 连摸连击（可交互性）
+#
+# ⚠️ 背景：以前「摸一下」的反馈完全是平的 —— 每次都是同一套音效 + 40% 概率的一句台词，
+#   连摸十次和摸一次完全没区别。Flutter 端有「连续轻抚 5 次 → 贴贴惊喜」，
+#   桌面端一直没有 —— 两端可交互性不对等。
+#   现在补上同一套：2.6 秒窗口、5 下爆点。
+PET_COMBO_WINDOW_MS = 2600
+PET_COMBO_TARGET = 5
+
+# 连摸递进台词：第 1 下保留原有的 40% 随机台词，
+# 从第 2 下开始每一次都会开口 —— 用户明确在反复触碰时才应该有反馈，
+# 这样不会突然变噪。台词里带上真实数值增量 ——
+# 桌面端之前**从不显示**摸头拿到了什么。
+PET_TOUCH_LINES = [
+    "呼噜呼噜~ 主人的手好温暖啊 ✨ (+{mood} 心情 · +{exp} 经验)",
+    "再摸一下嘛~波可已经赖上这只手啦 💕 (+{mood} 心情 · +{exp} 经验)",
+    "碰碰碰！波可原地打滚中～ 🐾 (+{mood} 心情 · +{exp} 经验)",
+    "呼噜呼噜~ 再摸最后一下就要化掉啦 ✨ (+{mood} 心情 · +{exp} 经验)",
+]
+
+# 连摸 5 下的惊喜彩蛋
+PET_COMBO_LINE = (
+    "连摸五下！波可把小脸贴上来啦～超级满足！🎉 (+5 金币 · +10 经验) ✨"
+)
+
 class PetWindow(QWidget):
     """
     桌面透明无边框宠物主窗口
@@ -202,6 +227,9 @@ class PetWindow(QWidget):
         self._last_mouse_move_pos = QPoint()
         self._stroke_triggered = False
         self.stroke_distance = 0.0
+        # 连摸连击计数与重置定时器
+        self._pet_combo = 0
+        self._pet_combo_timer = None
         self.anchor_y = None
         self.drag_vx = 0.0
         self.drag_vy = 0.0
@@ -903,6 +931,72 @@ class PetWindow(QWidget):
             self.memo.show()
             self._memo_was_open = False
 
+    # ---- 摸头交互：连击计数 + 数值反馈 ----
+
+    def _reset_pet_combo(self):
+        """连击断开：2.6 秒内没有继续摸就归零。"""
+        self._pet_combo = 0
+
+    def _register_pet_touch(self):
+        """记一次摸头，返回当前连击数。"""
+        self._pet_combo += 1
+        if self._pet_combo_timer is not None:
+            self._pet_combo_timer.stop()
+        else:
+            self._pet_combo_timer = QTimer(self)
+            self._pet_combo_timer.setSingleShot(True)
+            self._pet_combo_timer.timeout.connect(self._reset_pet_combo)
+        self._pet_combo_timer.start(PET_COMBO_WINDOW_MS)
+        return self._pet_combo
+
+    def _handle_pet_touch(self, is_click=False):
+        """摸头的统一出口：结算数值 → 记连击 → 给反馈。
+
+        :param is_click: 是否为单击（单击保留原有的 40% 随机台词，
+            轻抚则安静，避免一连挥下来就是一连串台词）。
+        """
+        gain = self.model.pet_head()
+        combo = self._register_pet_touch()
+
+        if combo >= PET_COMBO_TARGET:
+            self._pet_combo = 0
+            self._celebrate_pet_combo()
+            return gain
+
+        if combo >= 2:
+            # 用户明确在反复触碰 —— 此时给反馈才不会变噪
+            line = PET_TOUCH_LINES[min(combo, len(PET_TOUCH_LINES)) - 1]
+            self.dialogue.say(
+                line.format(mood=int(gain["mood"]), exp=int(gain["exp"])),
+                duration=3.0,
+            )
+        elif is_click and random.random() < 0.4:
+            self.dialogue.say(random.choice([
+                "摸摸头好舒服因~",
+                "主人最温柔啦！呼噜呼噜~",
+                "被主人关爱的感觉真好~ ✨"
+            ]))
+        return gain
+
+    def _celebrate_pet_combo(self):
+        """连摸 5 下：波可直接贴上来，给一次真奖励。
+
+        ⚠️ 专注时不打断番茄钟：allow_interrupt_focus=False。
+        专注期间用户不应该被波可反复打扰，
+        但奖励仍然发放（专注是主动去做的，不是被打断的）。
+        """
+        self.model.coins += 5
+        self.model.add_exp(10)
+        # 奖励必须立刻落盘 —— 这是对玩家的一笔承诺，不能只活在内存里。
+        self.model.save_to_disk()
+        self.play_action(
+            "HAPPY_SPIN",
+            show_dialogue=False,
+            allow_interrupt_focus=False,
+        )
+        if not self.model.is_studying:
+            self.dialogue.say(PET_COMBO_LINE, duration=4.0)
+
     def mousePressEvent(self, event: QMouseEvent):
         if self.state in ("PEEK_LEFT", "PEEK_RIGHT"):
             self.pop_out_from_edge()
@@ -1003,7 +1097,7 @@ class PetWindow(QWidget):
                 if self.stroke_distance > 40:
                     self.stroke_distance = 0.0
                     self._stroke_triggered = True
-                    self.model.pet_head()
+                    self._handle_pet_touch()
                     self.renderer.trigger_pet()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
@@ -1074,18 +1168,12 @@ class PetWindow(QWidget):
                 self.setCursor(Qt.CursorShape.OpenHandCursor)
                 # 单击宠物触发抚摸并平滑浮现伴侣操作岛
                 if not getattr(self, '_stroke_triggered', False):
-                    self.model.pet_head()
+                    self._handle_pet_touch(is_click=True)
                     self.renderer.trigger_pet()
                 if self.model.sound_enabled and random.random() < 0.35:
                     sound_manager.play("meow")
                 if hasattr(self, "dock"):
                     self.dock.show_dock()
-                if random.random() < 0.4:
-                    self.dialogue.say(random.choice([
-                        "摸摸头好舒服呀~ (ฅ'ω'ฅ)",
-                        "主人最温柔啦！呼噜呼噜~",
-                        "被主人关爱的感觉真好~ ✨"
-                    ]))
 
     def start_edge_peek(self, side, border_x):
         """贴边探头偷看模式 (Screen-Edge Peek-a-boo)"""
